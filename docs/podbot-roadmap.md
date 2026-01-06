@@ -361,7 +361,7 @@ Automate image building and distribution.
 **Tasks:**
 
 - Add a Makefile target for local image builds.
-- Configure CI workflow to build on changes.
+- Configure Continuous Integration (CI) workflow to build on changes.
 - Push images to a container registry.
 - Document the image versioning strategy.
 - Add image verification tests.
