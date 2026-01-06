@@ -16,14 +16,14 @@ GitHub integration, and cross-platform filesystem operations.
 
 **Tasks:**
 
-- Add tokio as the async runtime with full features enabled.
-- Add bollard for Docker and Podman API access.
-- Add octocrab for GitHub App authentication.
-- Add thiserror for semantic error enums.
-- Add eyre for opaque error handling at the application boundary.
-- Add cap_std and camino for capabilities-oriented filesystem access.
-- Add OrthoConfig for layered configuration with derive support.
-- Add clap for command-line argument parsing.
+- Use tokio as the async runtime with full features enabled.
+- Integrate bollard for Docker and Podman API access.
+- Enable octocrab for GitHub App authentication.
+- Define semantic error enums with thiserror.
+- Employ eyre for opaque error handling at the application boundary.
+- Leverage cap_std and camino for capabilities-oriented filesystem access.
+- Introduce OrthoConfig for layered configuration with derive support.
+- Use clap for command-line argument parsing.
 
 **Completion criteria:** All dependencies compile, `make lint` passes, and the
 crate builds without warnings.
@@ -244,7 +244,7 @@ Launch the agent in permissive mode and attach the terminal.
 **Completion criteria:** Agents start successfully in permissive mode. Terminal
 interaction works correctly. Container cleanup occurs on agent exit.
 
-## Phase 5: CLI interface
+## Phase 5: CLI
 
 Complete the user-facing command interface with all subcommands.
 
