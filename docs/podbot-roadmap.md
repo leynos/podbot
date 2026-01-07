@@ -50,10 +50,10 @@ defaults.
 **Tasks:**
 
 - Define AppConfig as the root configuration structure.
-- Define GithubConfig for App ID, installation ID, and private key path.
-- Define SandboxConfig for privileged mode and /dev/fuse mount options.
-- Define AgentConfig for agent kind and execution mode.
-- Define WorkspaceConfig for base directory.
+- Create GithubConfig for App ID, installation ID, and private key path.
+- Establish SandboxConfig for privileged mode and /dev/fuse mount options.
+- Specify AgentConfig for agent kind and execution mode.
+- Add WorkspaceConfig for base directory.
 - Implement OrthoConfig derive for layered precedence.
 - Support configuration file at ~/.config/yolo/config.toml.
 - Add validation ensuring required fields are present.
@@ -168,7 +168,7 @@ Implement the background daemon that refreshes tokens before expiry.
 
 **Tasks:**
 
-- Create the runtime directory at $XDG_RUNTIME_DIR/yolo/&lt;container_id&gt;/.
+- Create the runtime directory at $XDG_RUNTIME_DIR/yolo/<container_id>/.
 - Set directory mode 0700 and file mode 0600.
 - Write the initial token to ghapp_token within the directory.
 - Implement a refresh loop with a five-minute buffer before expiry.
@@ -255,10 +255,10 @@ Implement the argument parsing and subcommand routing.
 **Tasks:**
 
 - Define the run subcommand for launching agent sessions.
-- Define the token-daemon subcommand for standalone token management.
-- Define the ps subcommand for listing containers.
-- Define the stop subcommand for terminating containers.
-- Define the exec subcommand for running commands in containers.
+- Add the token-daemon subcommand for standalone token management.
+- Create the ps subcommand for listing containers.
+- Implement the stop subcommand for terminating containers.
+- Provide the exec subcommand for running commands in containers.
 - Validate required arguments per subcommand.
 
 **Completion criteria:** All subcommands parse correctly. Help text describes
@@ -285,9 +285,9 @@ Implement commands for managing running containers.
 
 **Tasks:**
 
-- Implement ps to list active yolo containers with status.
-- Implement stop to terminate a container by ID or name.
-- Implement exec to run arbitrary commands within a container.
+- Add ps to list active yolo containers with status.
+- Create stop to terminate a container by ID or name.
+- Provide exec to run arbitrary commands within a container.
 - Format output for readability.
 
 **Completion criteria:** Management commands operate correctly against running
