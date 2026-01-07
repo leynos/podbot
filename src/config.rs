@@ -1,0 +1,408 @@
+//! Configuration system for podbot.
+//!
+//! This module provides the configuration structures and loading logic for the
+//! podbot application. Configuration follows layered precedence: CLI flags override
+//! environment variables, which override configuration files, which override defaults.
+//!
+//! The configuration file is expected at `~/.config/podbot/config.toml` by default.
+//!
+//! # Example Configuration
+//!
+//! ```toml
+//! engine_socket = "unix:///run/user/1000/podman/podman.sock"
+//! image = "ghcr.io/example/podbot-sandbox:latest"
+//!
+//! [github]
+//! app_id = 12345
+//! installation_id = 67890
+//! private_key_path = "/home/user/.config/podbot/github-app.pem"
+//!
+//! [workspace]
+//! base_dir = "/work"
+//!
+//! [sandbox]
+//! privileged = false
+//! mount_dev_fuse = true
+//!
+//! [agent]
+//! kind = "claude"
+//! ```
+
+use camino::Utf8PathBuf;
+use clap::{Parser, Subcommand, ValueEnum};
+use serde::{Deserialize, Serialize};
+
+/// The kind of AI agent to run.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentKind {
+    /// Claude Code agent.
+    #[default]
+    Claude,
+    /// `OpenAI` Codex agent.
+    Codex,
+}
+
+/// GitHub App configuration.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct GitHubConfig {
+    /// The GitHub App ID.
+    pub app_id: Option<u64>,
+
+    /// The GitHub App installation ID.
+    pub installation_id: Option<u64>,
+
+    /// Path to the GitHub App private key file.
+    pub private_key_path: Option<Utf8PathBuf>,
+}
+
+/// Sandbox security configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SandboxConfig {
+    /// Run the container in privileged mode (less secure but more compatible).
+    #[serde(default)]
+    pub privileged: bool,
+
+    /// Mount /dev/fuse in the container for fuse-overlayfs support.
+    #[serde(default = "default_true")]
+    pub mount_dev_fuse: bool,
+}
+
+/// Returns `true` for use as a serde default.
+const fn default_true() -> bool {
+    true
+}
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            privileged: false,
+            mount_dev_fuse: true,
+        }
+    }
+}
+
+/// Agent execution configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AgentConfig {
+    /// The type of agent to run.
+    #[serde(default)]
+    pub kind: AgentKind,
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            kind: AgentKind::Claude,
+        }
+    }
+}
+
+/// Workspace configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WorkspaceConfig {
+    /// Base directory for cloned repositories inside the container.
+    #[serde(default = "default_base_dir")]
+    pub base_dir: Utf8PathBuf,
+}
+
+/// Returns the default base directory for workspaces.
+fn default_base_dir() -> Utf8PathBuf {
+    Utf8PathBuf::from("/work")
+}
+
+impl Default for WorkspaceConfig {
+    fn default() -> Self {
+        Self {
+            base_dir: default_base_dir(),
+        }
+    }
+}
+
+/// Credential copying configuration.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CredsConfig {
+    /// Copy ~/.claude credentials into the container.
+    #[serde(default = "default_true")]
+    pub copy_claude: bool,
+
+    /// Copy ~/.codex credentials into the container.
+    #[serde(default = "default_true")]
+    pub copy_codex: bool,
+}
+
+impl Default for CredsConfig {
+    fn default() -> Self {
+        Self {
+            copy_claude: true,
+            copy_codex: true,
+        }
+    }
+}
+
+/// Root application configuration.
+///
+/// This structure is loaded from configuration files, environment variables,
+/// and command-line arguments with layered precedence.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct AppConfig {
+    /// The container engine socket path or URL.
+    pub engine_socket: Option<String>,
+
+    /// The container image to use for the sandbox.
+    pub image: Option<String>,
+
+    /// GitHub App configuration.
+    #[serde(default)]
+    pub github: GitHubConfig,
+
+    /// Sandbox security configuration.
+    #[serde(default)]
+    pub sandbox: SandboxConfig,
+
+    /// Agent configuration.
+    #[serde(default)]
+    pub agent: AgentConfig,
+
+    /// Workspace configuration.
+    #[serde(default)]
+    pub workspace: WorkspaceConfig,
+
+    /// Credential copying configuration.
+    #[serde(default)]
+    pub creds: CredsConfig,
+}
+
+/// Command-line interface for podbot.
+#[derive(Debug, Parser)]
+#[command(name = "podbot")]
+#[command(
+    author,
+    version,
+    about = "Sandboxed execution environment for AI coding agents"
+)]
+pub struct Cli {
+    /// Subcommand to execute.
+    #[command(subcommand)]
+    pub command: Commands,
+
+    /// Path to configuration file.
+    #[arg(long, global = true)]
+    pub config: Option<Utf8PathBuf>,
+
+    /// Container engine socket path or URL.
+    #[arg(long, global = true)]
+    pub engine_socket: Option<String>,
+
+    /// Container image to use.
+    #[arg(long, global = true)]
+    pub image: Option<String>,
+}
+
+/// Available subcommands.
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    /// Run an AI agent in a sandboxed container.
+    Run(RunArgs),
+
+    /// Run the token refresh daemon.
+    TokenDaemon(TokenDaemonArgs),
+
+    /// List running podbot containers.
+    Ps,
+
+    /// Stop a running container.
+    Stop(StopArgs),
+
+    /// Execute a command in a running container.
+    Exec(ExecArgs),
+}
+
+/// Arguments for the `run` subcommand.
+#[derive(Debug, Parser)]
+pub struct RunArgs {
+    /// Repository to clone in owner/name format.
+    #[arg(long, required = true)]
+    pub repo: String,
+
+    /// Branch to check out.
+    #[arg(long, required = true)]
+    pub branch: String,
+
+    /// Agent type to run.
+    #[arg(long, value_enum, default_value_t = AgentKind::Claude)]
+    pub agent: AgentKind,
+}
+
+/// Arguments for the `token-daemon` subcommand.
+#[derive(Debug, Parser)]
+pub struct TokenDaemonArgs {
+    /// Container ID to manage tokens for.
+    #[arg(required = true)]
+    pub container_id: String,
+}
+
+/// Arguments for the `stop` subcommand.
+#[derive(Debug, Parser)]
+pub struct StopArgs {
+    /// Container ID or name to stop.
+    #[arg(required = true)]
+    pub container: String,
+}
+
+/// Arguments for the `exec` subcommand.
+#[derive(Debug, Parser)]
+pub struct ExecArgs {
+    /// Container ID or name.
+    #[arg(required = true)]
+    pub container: String,
+
+    /// Command to execute.
+    #[arg(required = true, trailing_var_arg = true)]
+    pub command: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::{fixture, rstest};
+
+    /// Fixture providing a default `AppConfig`.
+    #[fixture]
+    fn app_config() -> AppConfig {
+        AppConfig::default()
+    }
+
+    /// Fixture providing a default `SandboxConfig`.
+    #[fixture]
+    fn sandbox_config() -> SandboxConfig {
+        SandboxConfig::default()
+    }
+
+    /// Fixture providing a default `WorkspaceConfig`.
+    #[fixture]
+    fn workspace_config() -> WorkspaceConfig {
+        WorkspaceConfig::default()
+    }
+
+    /// Fixture providing a default `CredsConfig`.
+    #[fixture]
+    fn creds_config() -> CredsConfig {
+        CredsConfig::default()
+    }
+
+    #[rstest]
+    fn agent_kind_default_is_claude() {
+        assert_eq!(AgentKind::default(), AgentKind::Claude);
+    }
+
+    #[rstest]
+    #[case(AgentKind::Claude, "claude")]
+    #[case(AgentKind::Codex, "codex")]
+    fn agent_kind_serialises_to_lowercase(#[case] kind: AgentKind, #[case] expected: &str) {
+        let serialised = serde_json::to_string(&kind).expect("serialisation should succeed");
+        assert_eq!(serialised, format!("\"{expected}\""));
+    }
+
+    #[rstest]
+    #[case("\"claude\"", AgentKind::Claude)]
+    #[case("\"codex\"", AgentKind::Codex)]
+    fn agent_kind_deserialises_from_lowercase(#[case] input: &str, #[case] expected: AgentKind) {
+        let kind: AgentKind = serde_json::from_str(input).expect("deserialisation should succeed");
+        assert_eq!(kind, expected);
+    }
+
+    #[rstest]
+    fn sandbox_config_default_values(sandbox_config: SandboxConfig) {
+        assert!(!sandbox_config.privileged);
+        assert!(sandbox_config.mount_dev_fuse);
+    }
+
+    #[rstest]
+    fn workspace_config_default_base_dir(workspace_config: WorkspaceConfig) {
+        assert_eq!(workspace_config.base_dir.as_str(), "/work");
+    }
+
+    #[rstest]
+    fn creds_config_default_copies_both(creds_config: CredsConfig) {
+        assert!(creds_config.copy_claude);
+        assert!(creds_config.copy_codex);
+    }
+
+    #[rstest]
+    fn app_config_has_sensible_defaults(app_config: AppConfig) {
+        assert!(app_config.engine_socket.is_none());
+        assert!(app_config.image.is_none());
+        assert!(app_config.sandbox.mount_dev_fuse);
+        assert!(!app_config.sandbox.privileged);
+    }
+
+    #[rstest]
+    fn app_config_nested_configs_have_defaults(app_config: AppConfig) {
+        assert!(app_config.github.app_id.is_none());
+        assert!(app_config.github.installation_id.is_none());
+        assert!(app_config.github.private_key_path.is_none());
+        assert_eq!(app_config.agent.kind, AgentKind::Claude);
+        assert_eq!(app_config.workspace.base_dir.as_str(), "/work");
+    }
+
+    #[rstest]
+    fn app_config_deserialises_from_toml() {
+        let toml = r#"
+            engine_socket = "unix:///run/podman/podman.sock"
+            image = "ghcr.io/example/sandbox:latest"
+
+            [github]
+            app_id = 12345
+            installation_id = 67890
+
+            [sandbox]
+            privileged = true
+            mount_dev_fuse = false
+
+            [agent]
+            kind = "codex"
+
+            [workspace]
+            base_dir = "/home/user/work"
+        "#;
+
+        let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
+
+        assert_eq!(
+            config.engine_socket.as_deref(),
+            Some("unix:///run/podman/podman.sock")
+        );
+        assert_eq!(
+            config.image.as_deref(),
+            Some("ghcr.io/example/sandbox:latest")
+        );
+        assert_eq!(config.github.app_id, Some(12345));
+        assert_eq!(config.github.installation_id, Some(67890));
+        assert!(config.sandbox.privileged);
+        assert!(!config.sandbox.mount_dev_fuse);
+        assert_eq!(config.agent.kind, AgentKind::Codex);
+        assert_eq!(config.workspace.base_dir.as_str(), "/home/user/work");
+    }
+
+    #[rstest]
+    fn app_config_uses_defaults_for_missing_fields() {
+        let toml = r#"
+            engine_socket = "unix:///tmp/docker.sock"
+        "#;
+
+        let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
+
+        assert_eq!(
+            config.engine_socket.as_deref(),
+            Some("unix:///tmp/docker.sock")
+        );
+        // All other fields should have defaults
+        assert!(config.image.is_none());
+        assert!(config.github.app_id.is_none());
+        assert!(!config.sandbox.privileged);
+        assert!(config.sandbox.mount_dev_fuse);
+        assert_eq!(config.agent.kind, AgentKind::Claude);
+        assert_eq!(config.workspace.base_dir.as_str(), "/work");
+    }
+}
