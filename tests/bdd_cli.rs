@@ -2,13 +2,6 @@
 //!
 //! These tests validate the command-line interface behaviour using rstest-bdd.
 
-// Test-specific lint exceptions: expect and unwrap are standard practice in tests
-#![expect(clippy::expect_used, reason = "expect is standard practice in tests")]
-#![expect(
-    clippy::str_to_string,
-    reason = "String conversion clarity is more important than micro-optimization in tests"
-)]
-
 use clap::{CommandFactory, Parser};
 use podbot::config::Cli;
 use rstest::fixture;
@@ -45,7 +38,7 @@ fn invoke_with_help(cli_state: &CliState) {
 #[given("the CLI is invoked with --version")]
 fn invoke_with_version(cli_state: &CliState) {
     let cmd = Cli::command();
-    let version = cmd.get_version().unwrap_or("unknown").to_string();
+    let version = cmd.get_version().unwrap_or("unknown").to_owned();
     let name = cmd.get_name();
     cli_state.output.set(format!("{name} {version}"));
     cli_state.success.set(true);
@@ -83,6 +76,10 @@ fn invoke_run_with_repo(cli_state: &CliState) {
 }
 
 #[then("the output contains {text}")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn output_contains(cli_state: &CliState, text: String) {
     let output = cli_state
         .output
@@ -95,6 +92,10 @@ fn output_contains(cli_state: &CliState, text: String) {
 }
 
 #[then("an error is returned")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn error_is_returned(cli_state: &CliState) {
     let success = cli_state
         .success
@@ -104,6 +105,10 @@ fn error_is_returned(cli_state: &CliState) {
 }
 
 #[then("the error mentions --repo")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn error_mentions_repo(cli_state: &CliState) {
     let error = cli_state
         .error
@@ -116,6 +121,10 @@ fn error_mentions_repo(cli_state: &CliState) {
 }
 
 #[then("the error mentions --branch")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn error_mentions_branch(cli_state: &CliState) {
     let error = cli_state
         .error
@@ -187,6 +196,10 @@ fn invoke_exec(cli_state: &CliState) {
 }
 
 #[then("the invocation succeeds")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn invocation_succeeds(cli_state: &CliState) {
     let success = cli_state
         .success

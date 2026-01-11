@@ -1,8 +1,9 @@
 //! Configuration system for podbot.
 //!
-//! This module provides the configuration structures and loading logic for the
-//! podbot application. Configuration follows layered precedence: CLI flags override
-//! environment variables, which override configuration files, which override defaults.
+//! This module provides the configuration structures and CLI definitions for the
+//! podbot application. Configuration loading and precedence merging is handled by
+//! the `ortho_config` crate. Intended precedence: CLI flags override environment
+//! variables, which override configuration files, which override defaults.
 //!
 //! The configuration file is expected at `~/.config/podbot/config.toml` by default.
 //!
@@ -112,10 +113,10 @@ impl Default for WorkspaceConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct CredsConfig {
-    /// Copy ~/.claude credentials into the container.
+    /// Copy `~/.claude` credentials into the container.
     pub copy_claude: bool,
 
-    /// Copy ~/.codex credentials into the container.
+    /// Copy `~/.codex` credentials into the container.
     pub copy_codex: bool,
 }
 

@@ -21,7 +21,7 @@ Run an AI agent against a GitHub repository:
 podbot run --repo owner/name --branch feature-branch
 ```
 
-## Command-line interface
+## Command-line interface (CLI)
 
 ### Global options
 

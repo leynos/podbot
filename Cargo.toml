@@ -12,10 +12,10 @@ repository = "https://github.com/leynos/podbot"
 tokio = { version = "1.49.0", features = ["full"] }
 
 # Container management
-bollard = "0.19.4"
+bollard = "0.20.0"
 
 # GitHub integration
-octocrab = "0.49.3"
+octocrab = "0.49.5"
 
 # Error handling
 thiserror = "2.0.17"
