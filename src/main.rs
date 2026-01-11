@@ -6,7 +6,7 @@
 
 use clap::Parser;
 use eyre::Result;
-use podbot::config::{Cli, Commands};
+use podbot::config::{Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs};
 
 /// Application entry point.
 ///
@@ -28,9 +28,9 @@ fn main() -> Result<()> {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "Stub: will return errors when implementation is complete"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when container orchestration is implemented"
 )]
-fn run_agent(_cli: &Cli, args: &podbot::config::RunArgs) -> Result<()> {
+fn run_agent(_cli: &Cli, args: &RunArgs) -> Result<()> {
     println!(
         "Running {:?} agent for repository {} on branch {}",
         args.agent, args.repo, args.branch
@@ -43,9 +43,9 @@ fn run_agent(_cli: &Cli, args: &podbot::config::RunArgs) -> Result<()> {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "Stub: will return errors when implementation is complete"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when token daemon is implemented"
 )]
-fn run_token_daemon(args: &podbot::config::TokenDaemonArgs) -> Result<()> {
+fn run_token_daemon(args: &TokenDaemonArgs) -> Result<()> {
     println!("Starting token daemon for container {}", args.container_id);
     println!("Token daemon not yet implemented.");
     Ok(())
@@ -55,7 +55,7 @@ fn run_token_daemon(args: &podbot::config::TokenDaemonArgs) -> Result<()> {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "Stub: will return errors when implementation is complete"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when container listing is implemented"
 )]
 fn list_containers() -> Result<()> {
     println!("Listing podbot containers...");
@@ -67,9 +67,9 @@ fn list_containers() -> Result<()> {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "Stub: will return errors when implementation is complete"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when container stop is implemented"
 )]
-fn stop_container(args: &podbot::config::StopArgs) -> Result<()> {
+fn stop_container(args: &StopArgs) -> Result<()> {
     println!("Stopping container {}", args.container);
     println!("Container stop not yet implemented.");
     Ok(())
@@ -79,9 +79,9 @@ fn stop_container(args: &podbot::config::StopArgs) -> Result<()> {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "Stub: will return errors when implementation is complete"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when container exec is implemented"
 )]
-fn exec_in_container(args: &podbot::config::ExecArgs) -> Result<()> {
+fn exec_in_container(args: &ExecArgs) -> Result<()> {
     println!(
         "Executing command in container {}: {:?}",
         args.container, args.command

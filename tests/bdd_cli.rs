@@ -127,6 +127,74 @@ fn error_mentions_branch(cli_state: &CliState) {
     );
 }
 
+#[given("the CLI is invoked with run --repo owner/name --branch main")]
+fn invoke_run_with_all_args(cli_state: &CliState) {
+    let result: Result<Cli, clap::Error> =
+        Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", "main"]);
+    match result {
+        Ok(_) => {
+            cli_state.success.set(true);
+        }
+        Err(e) => {
+            cli_state.error.set(e.to_string());
+            cli_state.success.set(false);
+        }
+    }
+}
+
+#[given("the CLI is invoked with ps")]
+fn invoke_ps(cli_state: &CliState) {
+    let result: Result<Cli, clap::Error> = Cli::try_parse_from(["podbot", "ps"]);
+    match result {
+        Ok(_) => {
+            cli_state.success.set(true);
+        }
+        Err(e) => {
+            cli_state.error.set(e.to_string());
+            cli_state.success.set(false);
+        }
+    }
+}
+
+#[given("the CLI is invoked with token-daemon abc123")]
+fn invoke_token_daemon(cli_state: &CliState) {
+    let result: Result<Cli, clap::Error> =
+        Cli::try_parse_from(["podbot", "token-daemon", "abc123"]);
+    match result {
+        Ok(_) => {
+            cli_state.success.set(true);
+        }
+        Err(e) => {
+            cli_state.error.set(e.to_string());
+            cli_state.success.set(false);
+        }
+    }
+}
+
+#[given("the CLI is invoked with exec my-container -- echo hello")]
+fn invoke_exec(cli_state: &CliState) {
+    let result: Result<Cli, clap::Error> =
+        Cli::try_parse_from(["podbot", "exec", "my-container", "--", "echo", "hello"]);
+    match result {
+        Ok(_) => {
+            cli_state.success.set(true);
+        }
+        Err(e) => {
+            cli_state.error.set(e.to_string());
+            cli_state.success.set(false);
+        }
+    }
+}
+
+#[then("the invocation succeeds")]
+fn invocation_succeeds(cli_state: &CliState) {
+    let success = cli_state
+        .success
+        .get()
+        .expect("success should be set before checking");
+    assert!(success, "Expected invocation to succeed");
+}
+
 // Scenario bindings
 
 #[scenario(path = "tests/features/cli.feature", name = "Display help information")]
@@ -155,5 +223,37 @@ fn run_requires_repository(cli_state: CliState) {
     name = "Run command requires branch"
 )]
 fn run_requires_branch(cli_state: CliState) {
+    let _ = cli_state;
+}
+
+#[scenario(
+    path = "tests/features/cli.feature",
+    name = "Run command succeeds with required arguments"
+)]
+fn run_succeeds_with_all_args(cli_state: CliState) {
+    let _ = cli_state;
+}
+
+#[scenario(
+    path = "tests/features/cli.feature",
+    name = "Ps command succeeds without arguments"
+)]
+fn ps_succeeds(cli_state: CliState) {
+    let _ = cli_state;
+}
+
+#[scenario(
+    path = "tests/features/cli.feature",
+    name = "Token-daemon command succeeds with container ID"
+)]
+fn token_daemon_succeeds(cli_state: CliState) {
+    let _ = cli_state;
+}
+
+#[scenario(
+    path = "tests/features/cli.feature",
+    name = "Exec command succeeds with container and command"
+)]
+fn exec_succeeds(cli_state: CliState) {
     let _ = cli_state;
 }

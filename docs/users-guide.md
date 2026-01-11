@@ -148,7 +148,7 @@ All configuration options can be set via environment variables using the
 
 Podbot's security model is based on capability-based containment:
 
-1. **Host socket isolation**: The Rust CLI holds the host Podman/Docker socket.
+1. **Host socket isolation**: The Rust command-line interface (CLI) holds the host Podman/Docker socket.
    The agent container never receives access to this socket.
 
 2. **Nested containers**: The agent container can run an inner Podman service

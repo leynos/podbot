@@ -58,19 +58,13 @@ pub struct GitHubConfig {
 
 /// Sandbox security configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct SandboxConfig {
     /// Run the container in privileged mode (less secure but more compatible).
-    #[serde(default)]
     pub privileged: bool,
 
     /// Mount /dev/fuse in the container for fuse-overlayfs support.
-    #[serde(default = "default_true")]
     pub mount_dev_fuse: bool,
-}
-
-/// Returns `true` for use as a serde default.
-const fn default_true() -> bool {
-    true
 }
 
 impl Default for SandboxConfig {
@@ -84,9 +78,9 @@ impl Default for SandboxConfig {
 
 /// Agent execution configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct AgentConfig {
     /// The type of agent to run.
-    #[serde(default)]
     pub kind: AgentKind,
 }
 
@@ -100,34 +94,28 @@ impl Default for AgentConfig {
 
 /// Workspace configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct WorkspaceConfig {
     /// Base directory for cloned repositories inside the container.
-    #[serde(default = "default_base_dir")]
     pub base_dir: Utf8PathBuf,
-}
-
-/// Returns the default base directory for workspaces.
-fn default_base_dir() -> Utf8PathBuf {
-    Utf8PathBuf::from("/work")
 }
 
 impl Default for WorkspaceConfig {
     fn default() -> Self {
         Self {
-            base_dir: default_base_dir(),
+            base_dir: Utf8PathBuf::from("/work"),
         }
     }
 }
 
 /// Credential copying configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct CredsConfig {
     /// Copy ~/.claude credentials into the container.
-    #[serde(default = "default_true")]
     pub copy_claude: bool,
 
     /// Copy ~/.codex credentials into the container.
-    #[serde(default = "default_true")]
     pub copy_codex: bool,
 }
 

@@ -23,3 +23,19 @@ Feature: Command-line interface
     Given the CLI is invoked with run --repo owner/name
     Then an error is returned
     And the error mentions --branch
+
+  Scenario: Run command succeeds with required arguments
+    Given the CLI is invoked with run --repo owner/name --branch main
+    Then the invocation succeeds
+
+  Scenario: Ps command succeeds without arguments
+    Given the CLI is invoked with ps
+    Then the invocation succeeds
+
+  Scenario: Token-daemon command succeeds with container ID
+    Given the CLI is invoked with token-daemon abc123
+    Then the invocation succeeds
+
+  Scenario: Exec command succeeds with container and command
+    Given the CLI is invoked with exec my-container -- echo hello
+    Then the invocation succeeds
