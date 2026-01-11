@@ -9,24 +9,24 @@ steps grouping related work and tasks defining atomic execution units.
 Establish the project's dependency graph and configuration system, providing
 the scaffolding upon which all other modules depend.
 
-### Step 1.1: Core dependencies
+### Step 1.1: Core dependencies ✓
 
 Add the foundational crates required for async runtime, container management,
 GitHub integration, and cross-platform filesystem operations.
 
 **Tasks:**
 
-- [ ] Use tokio as the async runtime with full features enabled.
-- [ ] Integrate bollard for Docker and Podman API access.
-- [ ] Enable octocrab for GitHub App authentication.
-- [ ] Define semantic error enums with thiserror.
-- [ ] Employ eyre for opaque error handling at the application boundary.
-- [ ] Leverage cap_std and camino for capabilities-oriented filesystem access.
-- [ ] Introduce OrthoConfig for layered configuration with derive support.
-- [ ] Use clap for command-line argument parsing.
+- [x] Use tokio as the async runtime with full features enabled.
+- [x] Integrate bollard for Docker and Podman API access.
+- [x] Enable octocrab for GitHub App authentication.
+- [x] Define semantic error enums with thiserror.
+- [x] Employ eyre for opaque error handling at the application boundary.
+- [x] Leverage cap_std and camino for capabilities-oriented filesystem access.
+- [x] Introduce OrthoConfig for layered configuration with derive support.
+- [x] Use clap for command-line argument parsing.
 
 **Completion criteria:** All dependencies compile, `make lint` passes, and the
-crate builds without warnings.
+crate builds without warnings. ✓
 
 ### Step 1.2: Error handling foundation
 
