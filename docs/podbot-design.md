@@ -212,6 +212,15 @@ and isolation. Privileged mode enables more Podman-in-Podman configurations but
 expands the attack surface. The minimal mode mounts only `/dev/fuse` and avoids
 the privileged flag.
 
+## Error handling
+
+Podbot defines semantic error enums in `src/error.rs` for configuration,
+container, GitHub, and filesystem operations. These enums are aggregated by
+`PodbotError`, and modules return `podbot::error::Result<T>` so callers can
+match on domain failures. The binary keeps opaque reporting at the boundary by
+returning `eyre::Result<()>` from `main` and converting domain errors into
+`eyre::Report` only when presenting messages to the operator.
+
 ## CLI interface
 
 The CLI exposes a minimal surface area.

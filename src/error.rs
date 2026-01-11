@@ -251,6 +251,17 @@ mod tests {
     }
 
     #[rstest]
+    fn config_error_parse_error_displays_message() {
+        let error = ConfigError::ParseError {
+            message: String::from("unexpected token"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "failed to parse configuration file: unexpected token"
+        );
+    }
+
+    #[rstest]
     fn container_error_permission_denied_displays_correctly(socket_path: PathBuf) {
         let error = ContainerError::PermissionDenied { path: socket_path };
         assert_eq!(
@@ -285,6 +296,18 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "GitHub App authentication failed: invalid signature"
+        );
+    }
+
+    #[rstest]
+    fn filesystem_error_io_error_displays_message(config_path: PathBuf) {
+        let error = FilesystemError::IoError {
+            path: config_path,
+            message: String::from("disk full"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "I/O error at '/etc/podbot/config.toml': disk full"
         );
     }
 

@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 PLANS.md is not present in the repository root, so this plan stands alone.
 
@@ -12,11 +12,12 @@ PLANS.md is not present in the repository root, so this plan stands alone.
 
 The podbot codebase needs a consistent error handling foundation so every
 module can return semantic errors and the CLI can report failures cleanly at
-the application boundary. The outcome is a single root error module that defines
-semantic error enums, a top-level application error type, and a shared Result
-alias, with unit tests (rstest) and behavioural tests (rstest-bdd) proving both
-happy and unhappy paths. Success is observable by running the test suite and
-seeing the new error tests pass while existing behaviour remains unchanged.
+the application boundary. The outcome is a single root error module that
+defines semantic error enums, a top-level application error type, and a shared
+Result alias, with unit tests (rstest) and behavioural tests (rstest-bdd)
+proving both happy and unhappy paths. Success is observable by running the test
+suite and seeing the new error tests pass while existing behaviour remains
+unchanged.
 
 ## Constraints
 
@@ -62,32 +63,51 @@ seeing the new error tests pass while existing behaviour remains unchanged.
 
 ## Progress
 
-    - [ ] (2026-01-11 00:00Z) Review current error handling files and confirm
-      deltas versus the roadmap step.
-    - [ ] (2026-01-11 00:00Z) Implement or refine the root error module and
-      propagate usage where needed.
-    - [ ] (2026-01-11 00:00Z) Add rstest unit coverage for error types and edge
-      cases.
-    - [ ] (2026-01-11 00:00Z) Add rstest-bdd behavioural coverage for error
+    - [x] (2026-01-11 01:05Z) Reviewed current error handling files and roadmap
+      deltas.
+    - [x] (2026-01-11 01:15Z) Refined the root error module with additional
+      unit coverage.
+    - [x] (2026-01-11 01:20Z) Added rstest unit coverage for error types and
+      edge cases.
+    - [x] (2026-01-11 01:25Z) Added rstest-bdd behavioural coverage for error
       reporting behaviour.
-    - [ ] (2026-01-11 00:00Z) Update design/user docs and mark roadmap entry
+    - [x] (2026-01-11 01:30Z) Updated design docs and marked the roadmap entry
       done.
-    - [ ] (2026-01-11 00:00Z) Run `make check-fmt`, `make lint`, and
+    - [x] (2026-01-11 01:45Z) Ran `make check-fmt`, `make lint`, and
       `make test` with logs.
 
 ## Surprises & Discoveries
 
-    - None yet.
+    - Observation: Qdrant notes lookup failed with "Unexpected response type".
+      Evidence: `qdrant-find` returned a tool call error.
+      Impact: Proceeded without project memory.
+
+    - Observation: `make markdownlint` failed because `markdownlint-cli2` was
+      not on PATH.
+      Evidence: Makefile error 127 until `MDLINT` was set explicitly.
+      Impact: Validation used `MDLINT=/root/.bun/bin/markdownlint-cli2`.
 
 ## Decision Log
 
-    - Decision: None yet.
-      Rationale: Plan drafted; implementation has not started.
+    - Decision: Keep `src/error.rs` as the root error module and extend tests
+      instead of refactoring error types.
+      Rationale: The existing design already matches the roadmap; tests and
+      docs were the remaining gaps.
+      Date/Author: 2026-01-11 / Codex
+
+    - Decision: Store `Arc<PodbotError>` in BDD state fixtures.
+      Rationale: `rstest_bdd::Slot::get` requires `Clone`; `Arc` preserves
+      shared ownership without changing the error types.
       Date/Author: 2026-01-11 / Codex
 
 ## Outcomes & Retrospective
 
-    - Not started.
+    - Outcome: Added unit and behavioural coverage for error handling, updated
+      design documentation, and marked the roadmap task complete.
+    - Outcome: `make check-fmt`, `make lint`, and `make test` all succeed with
+      logs captured.
+    - Lesson: When BDD state needs to store non-`Clone` errors, wrap them in
+      `Arc` to satisfy `Slot` requirements.
 
 ## Context and Orientation
 
@@ -109,11 +129,11 @@ documentation updates required by the roadmap. Relevant references:
 
 ## Plan of Work
 
-Stage A: inspect and confirm requirements. Review `src/error.rs`, `src/main.rs`,
-`src/lib.rs`, and related modules to confirm the existing error handling pattern
-matches the roadmap. Use ripgrep to confirm there are no `unwrap` or `expect`
-calls outside test code. Capture any gaps (missing error variants, missing
-Result alias, missing module exports).
+Stage A: inspect and confirm requirements. Review `src/error.rs`,
+`src/main.rs`, `src/lib.rs`, and related modules to confirm the existing error
+handling pattern matches the roadmap. Use ripgrep to confirm there are no
+`unwrap` or `expect` calls outside test code. Capture any gaps (missing error
+variants, missing Result alias, missing module exports).
 
 Stage B: implement or refine the root error module. If gaps exist, adjust
 `src/error.rs` to define the canonical semantic error enums, the top-level
@@ -126,9 +146,9 @@ Stage C: tests. Add unit tests in `src/error.rs` (or a dedicated test module)
 using `rstest` to cover happy and unhappy paths plus edge cases such as missing
 fields, invalid values, and error wrapping. Add rstest-bdd behavioural tests in
 `tests/bdd_error_handling.rs` with a feature file under
-`tests/features/error_handling.feature`, asserting user-visible messages derived
-from error displays. Ensure behaviour tests cover at least one success case
-(e.g., mapping to a friendly message) and one failure case (e.g., invalid
+`tests/features/error_handling.feature`, asserting user-visible messages
+derived from error displays. Ensure behaviour tests cover at least one success
+case (e.g., mapping to a friendly message) and one failure case (e.g., invalid
 configuration message).
 
 Stage D: documentation and roadmap. Record any design decisions in
@@ -221,3 +241,10 @@ Expected successful command signals (examples):
 - Tests: `tests/bdd_error_handling.rs` and
   `tests/features/error_handling.feature` for behavioural coverage.
 - No new dependencies; reuse `thiserror`, `eyre`, `rstest`, and `rstest-bdd`.
+
+## Revision note
+
+- Updated status, progress, decisions, and outcomes after implementing the
+  error handling tests and documentation changes.
+- Noted tooling surprises around Qdrant notes and markdownlint PATH.
+- No remaining work; the plan is complete.
