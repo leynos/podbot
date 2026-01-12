@@ -47,19 +47,15 @@ unchanged.
 
 ## Risks
 
-    - Risk: Existing error handling already satisfies the roadmap, so changes
-      could be redundant or cause unnecessary churn.
-      Severity: low
-      Likelihood: medium
-      Mitigation: Audit current `src/error.rs` and only change what is required
-      for the roadmap criteria and tests.
+- Risk: Existing error handling already satisfies the roadmap, so changes
+  could be redundant or cause unnecessary churn. Severity: low. Likelihood:
+  medium. Mitigation: Audit current `src/error.rs` and only change what is
+  required for the roadmap criteria and tests.
 
-    - Risk: Behavioural tests might struggle to express error handling without
-      a running CLI path.
-      Severity: medium
-      Likelihood: medium
-      Mitigation: Treat error display as behaviour by driving error values
-      through step definitions and asserting user-visible messages.
+- Risk: Behavioural tests might struggle to express error handling without a
+  running CLI path. Severity: medium. Likelihood: medium. Mitigation: Treat
+  error display as behaviour by driving error values through step definitions
+  and asserting user-visible messages.
 
 ## Progress
 

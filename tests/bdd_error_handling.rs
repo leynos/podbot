@@ -2,8 +2,6 @@
 //!
 //! These tests validate user-visible error messages using rstest-bdd.
 
-#![expect(clippy::expect_used, reason = "expect is standard practice in tests")]
-
 use std::sync::Arc;
 
 use podbot::error::{ConfigError, ContainerError, PodbotError};
@@ -57,19 +55,25 @@ fn result_is_inspected(error_state: &ErrorState) {
 
 #[when("the error is formatted")]
 fn error_is_formatted(error_state: &ErrorState) {
-    let error = error_state.error.get().expect("error should be set");
+    let Some(error) = error_state.error.get() else {
+        panic!("error should be set");
+    };
     error_state.message.set(error.as_ref().to_string());
 }
 
 #[then("the outcome is ok")]
 fn outcome_is_ok(error_state: &ErrorState) {
-    let success = error_state.success.get().expect("success should be set");
+    let Some(success) = error_state.success.get() else {
+        panic!("success should be set");
+    };
     assert!(success, "expected the operation to succeed");
 }
 
 #[then("the error message is {expected}")]
 fn error_message_is(error_state: &ErrorState, expected: String) {
-    let message = error_state.message.get().expect("message should be set");
+    let Some(message) = error_state.message.get() else {
+        panic!("message should be set");
+    };
     assert_eq!(message, expected);
 }
 
