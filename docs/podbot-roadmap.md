@@ -28,18 +28,18 @@ GitHub integration, and cross-platform filesystem operations.
 **Completion criteria:** All dependencies compile, `make lint` passes, and the
 crate builds without warnings. ✓
 
-### Step 1.2: Error handling foundation
+### Step 1.2: Error handling foundation ✓
 
 Establish the error handling patterns that propagate through all modules.
 
 **Tasks:**
 
 - [x] Create a root error module defining the pattern for semantic error enums.
-- [ ] Configure eyre::Report as the return type for the main entry point.
-- [ ] Ensure no unwrap or expect calls appear outside test code.
+- [x] Configure eyre::Report as the return type for the main entry point.
+- [x] Ensure no unwrap or expect calls appear outside test code.
 
 **Completion criteria:** Error handling compiles, clippy raises no warnings
-about error patterns, and the expect_used lint remains strict.
+about error patterns, and the expect_used lint remains strict. ✓
 
 ### Step 1.3: Configuration module
 

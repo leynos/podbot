@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 PLANS.md is not present in the repository root, so this plan stands alone.
 
@@ -60,29 +60,43 @@ error boundary. Success means `make all` passes without warnings.
 
 ## Progress
 
-    - [ ] (YYYY-MM-DD HH:MMZ) Review current error boundary and existing tests.
-    - [ ] Implement boundary adjustments and remove non-test unwrap/expect.
-    - [ ] Add rstest unit coverage for report conversion paths.
-    - [ ] Add rstest-bdd scenarios for report output.
-    - [ ] Update design and user documentation as needed.
-    - [ ] Mark roadmap step complete and run validation commands.
+    - [x] (2026-01-12 10:00Z) Review current error boundary and existing tests.
+    - [x] (2026-01-12 10:25Z) Implement boundary adjustments and confirm no
+      non-test unwrap/expect usage.
+    - [x] (2026-01-12 10:40Z) Add rstest unit coverage for report conversion
+      paths, including an edge case with no message payload.
+    - [x] (2026-01-12 10:55Z) Add rstest-bdd scenarios for report output in
+      unhappy and edge cases.
+    - [x] (2026-01-12 11:05Z) Update design documentation and roadmap entry;
+      confirm no user-guide changes are required.
+    - [x] (2026-01-12 11:20Z) Run `make check-fmt`, `make lint`, `make test`,
+      `make markdownlint`, and `make nixie` with logs.
 
 ## Surprises & Discoveries
 
-    - Observation:
-      Evidence:
-      Impact:
+    - Observation: `cargo doc` emits a warning about the renamed
+      `missing_crate_level_docs` lint.
+      Evidence: `make lint` output during the `cargo doc --no-deps` step.
+      Impact: The warning does not fail `make lint`, but it is worth tracking
+      for future lint clean-up.
 
 ## Decision Log
 
-    - Decision:
-      Rationale:
-      Date/Author:
+    - Decision: Route CLI execution through a `run` helper returning
+      `podbot::error::Result<()>`, converting to `eyre::Report` in `main`.
+      Rationale: Keeps semantic errors inside the domain and enforces the
+      boundary at the entry point without changing public APIs.
+      Date/Author: 2026-01-12 / Codex
 
 ## Outcomes & Retrospective
 
-    - Outcome:
-    - Lesson:
+    - Outcome: The CLI boundary now converts domain errors to
+      `eyre::Report`, with unit and behavioural tests covering success, failure
+      and edge paths.
+    - Outcome: `docs/podbot-design.md` and `docs/podbot-roadmap.md` reflect the
+      error-handling boundary and Step 1.2 completion.
+    - Lesson: Keep an eye on `cargo doc` lint rename warnings to avoid noise in
+      future linting runs.
 
 ## Context and Orientation
 
@@ -126,8 +140,8 @@ formatting a report and asserting its output for at least one success case and
 one failure case, plus any relevant edge case (such as an empty error message
 field).
 
-Stage D: documentation and roadmap. Record any design decisions about the
-error boundary in `docs/podbot-design.md`. Update `docs/users-guide.md` only if
+Stage D: documentation and roadmap. Record any design decisions about the error
+boundary in `docs/podbot-design.md`. Update `docs/users-guide.md` only if
 user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
 `docs/podbot-roadmap.md` once all validations pass.
 
@@ -201,9 +215,9 @@ step should modify state outside the repository other than temporary log files.
 Capture short log excerpts that demonstrate success, such as:
 
     make all
-    ...
+    …
     Finished `test` [unoptimized + debuginfo] target(s) in 0.42s
-    Running unittests ... ok
+    Running unittests … ok
 
 ## Interfaces and Dependencies
 
@@ -211,3 +225,11 @@ Capture short log excerpts that demonstrate success, such as:
 - Domain modules should continue to return `podbot::error::Result<T>`.
 - No new dependencies are expected; rely on existing `eyre` and `thiserror`.
 - Tests should use `rstest` and `rstest-bdd` per existing patterns.
+
+## Revision note
+
+Updated the status to IN PROGRESS and marked the initial review step as
+complete to reflect execution starting.
+
+Updated progress, decision log, surprises, and outcomes with the completed
+implementation and validation work, and marked the plan COMPLETE.

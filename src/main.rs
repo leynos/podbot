@@ -5,18 +5,25 @@
 //! domain-specific errors into human-readable reports.
 
 use clap::Parser;
-use eyre::Result;
+use eyre::{Report, Result as EyreResult};
 use podbot::config::{Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs};
+use podbot::error::Result as PodbotResult;
 
 /// Application entry point.
 ///
 /// Uses `eyre::Result` as the return type to provide human-readable error reports
 /// with backtraces when available.
-fn main() -> Result<()> {
+fn main() -> EyreResult<()> {
     let cli = Cli::parse();
 
+    run(&cli).map_err(Report::from)
+}
+
+// Keep semantic errors inside the run loop so the CLI boundary owns
+// conversion to `eyre::Report`.
+fn run(cli: &Cli) -> PodbotResult<()> {
     match &cli.command {
-        Commands::Run(args) => run_agent(&cli, args),
+        Commands::Run(args) => run_agent(cli, args),
         Commands::TokenDaemon(args) => run_token_daemon(args),
         Commands::Ps => list_containers(),
         Commands::Stop(args) => stop_container(args),
@@ -30,7 +37,7 @@ fn main() -> Result<()> {
     clippy::unnecessary_wraps,
     reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when container orchestration is implemented"
 )]
-fn run_agent(_cli: &Cli, args: &RunArgs) -> Result<()> {
+fn run_agent(_cli: &Cli, args: &RunArgs) -> PodbotResult<()> {
     println!(
         "Running {:?} agent for repository {} on branch {}",
         args.agent, args.repo, args.branch
@@ -45,7 +52,7 @@ fn run_agent(_cli: &Cli, args: &RunArgs) -> Result<()> {
     clippy::unnecessary_wraps,
     reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when token daemon is implemented"
 )]
-fn run_token_daemon(args: &TokenDaemonArgs) -> Result<()> {
+fn run_token_daemon(args: &TokenDaemonArgs) -> PodbotResult<()> {
     println!("Starting token daemon for container {}", args.container_id);
     println!("Token daemon not yet implemented.");
     Ok(())
@@ -57,7 +64,7 @@ fn run_token_daemon(args: &TokenDaemonArgs) -> Result<()> {
     clippy::unnecessary_wraps,
     reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when container listing is implemented"
 )]
-fn list_containers() -> Result<()> {
+fn list_containers() -> PodbotResult<()> {
     println!("Listing podbot containers...");
     println!("Container listing not yet implemented.");
     Ok(())
@@ -69,7 +76,7 @@ fn list_containers() -> Result<()> {
     clippy::unnecessary_wraps,
     reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when container stop is implemented"
 )]
-fn stop_container(args: &StopArgs) -> Result<()> {
+fn stop_container(args: &StopArgs) -> PodbotResult<()> {
     println!("Stopping container {}", args.container);
     println!("Container stop not yet implemented.");
     Ok(())
@@ -81,7 +88,7 @@ fn stop_container(args: &StopArgs) -> Result<()> {
     clippy::unnecessary_wraps,
     reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub returns Ok; will return errors when container exec is implemented"
 )]
-fn exec_in_container(args: &ExecArgs) -> Result<()> {
+fn exec_in_container(args: &ExecArgs) -> PodbotResult<()> {
     println!(
         "Executing command in container {}: {:?}",
         args.container, args.command
