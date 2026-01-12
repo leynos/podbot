@@ -33,7 +33,7 @@ impl ErrorSnapshot {
 }
 
 /// State shared across error handling scenarios.
-#[derive(Default, ScenarioState)]
+#[derive(ScenarioState)]
 struct ErrorState {
     /// The last error captured during a scenario.
     error: Slot<ErrorSnapshot>,
@@ -41,6 +41,20 @@ struct ErrorState {
     message: Slot<String>,
     /// Whether the operation succeeded.
     success: Slot<bool>,
+}
+
+#[expect(
+    clippy::derivable_impls,
+    reason = "ScenarioState guidance discourages deriving Default in this module"
+)]
+impl Default for ErrorState {
+    fn default() -> Self {
+        Self {
+            error: Slot::default(),
+            message: Slot::default(),
+            success: Slot::default(),
+        }
+    }
 }
 
 /// Fixture providing a fresh error state.
@@ -108,9 +122,7 @@ fn error_is_reported(error_state: &ErrorState) {
     reason = "test assertion - panic on missing state is intentional"
 )]
 fn outcome_is_ok(error_state: &ErrorState) {
-    let Some(success) = error_state.success.get() else {
-        panic!("success should be set");
-    };
+    let success = error_state.success.get().expect("success should be set");
     assert!(success, "expected the operation to succeed");
 }
 

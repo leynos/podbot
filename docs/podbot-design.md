@@ -233,6 +233,9 @@ returning `eyre::Result<()>` from `main` and converting domain errors into
 For screen readers: The following diagram summarizes the error types and how
 they flow from library modules to the CLI entry point.
 
+For screen readers: The following diagram summarises the error types and how
+they flow from library modules to the CLI entry point.
+
 ```mermaid
 classDiagram
     direction TB
