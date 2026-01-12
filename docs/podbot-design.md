@@ -315,6 +315,97 @@ classDiagram
     BddTestsErrorHandling --> PodbotError : scenarios_cover
 ```
 
+```mermaid
+classDiagram
+    direction TB
+
+    class ConfigError {
+        +message: String
+        +source: OptionError
+    }
+    <<enumeration>> ConfigError
+
+    class ContainerError {
+        +message: String
+        +source: OptionError
+    }
+    <<enumeration>> ContainerError
+
+    class GitHubError {
+        +message: String
+        +source: OptionError
+    }
+    <<enumeration>> GitHubError
+
+    class FilesystemError {
+        +message: String
+        +path: OptionPathBuf
+        +source: OptionError
+    }
+    <<enumeration>> FilesystemError
+
+    class PodbotError {
+        +from_config(error: ConfigError)
+        +from_container(error: ContainerError)
+        +from_github(error: GitHubError)
+        +from_filesystem(error: FilesystemError)
+        +display() String
+        +source() OptionError
+    }
+
+    class ResultAlias {
+        +ResultAliasT
+    }
+
+    class EyreReport {
+        +from_error(error: PodbotError)
+    }
+
+    class PodbotLib {
+        +public_api_functions_return_ResultAlias()
+    }
+
+    class MainCli {
+        +main() eyreResultUnit
+    }
+
+    class UnitTestsErrorModule {
+        +test_error_display()
+        +test_from_conversions()
+        +test_result_alias_usage()
+    }
+
+    class BddTestsErrorHandling {
+        +given_invalid_configuration()
+        +when_running_cli()
+        +then_user_sees_friendly_error_message()
+    }
+
+    PodbotError --> ConfigError : wraps
+    PodbotError --> ContainerError : wraps
+    PodbotError --> GitHubError : wraps
+    PodbotError --> FilesystemError : wraps
+
+    ResultAlias --> PodbotError : error_type
+
+    PodbotLib --> ResultAlias : uses
+
+    MainCli --> EyreReport : returns
+    MainCli --> PodbotLib : calls
+
+    EyreReport --> PodbotError : constructed_from
+
+    UnitTestsErrorModule --> PodbotError : tests
+    UnitTestsErrorModule --> ConfigError : tests
+    UnitTestsErrorModule --> ContainerError : tests
+    UnitTestsErrorModule --> GitHubError : tests
+    UnitTestsErrorModule --> FilesystemError : tests
+
+    BddTestsErrorHandling --> MainCli : drives
+    BddTestsErrorHandling --> EyreReport : observes
+    BddTestsErrorHandling --> PodbotError : scenarios_cover
+```
+
 ## CLI interface
 
 The CLI exposes a minimal surface area.
