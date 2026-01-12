@@ -10,7 +10,7 @@ use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 
 /// State shared across error handling scenarios.
-#[derive(ScenarioState)]
+#[derive(Default, ScenarioState)]
 struct ErrorState {
     /// The last error captured during a scenario.
     error: Slot<Arc<PodbotError>>,
@@ -18,20 +18,6 @@ struct ErrorState {
     message: Slot<String>,
     /// Whether the operation succeeded.
     success: Slot<bool>,
-}
-
-#[expect(
-    clippy::derivable_impls,
-    reason = "ScenarioState guidance discourages deriving Default in this module"
-)]
-impl Default for ErrorState {
-    fn default() -> Self {
-        Self {
-            error: Slot::default(),
-            message: Slot::default(),
-            success: Slot::default(),
-        }
-    }
 }
 
 /// Fixture providing a fresh error state.
