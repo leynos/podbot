@@ -214,12 +214,12 @@ the privileged flag.
 
 ## Error handling
 
-The podbot crate defines semantic error enums in `src/error.rs` for
-configuration, container, GitHub, and filesystem operations. These enums are
-aggregated by `PodbotError`, and modules return `podbot::error::Result<T>` so
-callers can match on domain failures. The binary keeps opaque reporting at the
-boundary by returning `eyre::Result<()>` from `main` and converting domain
-errors into `eyre::Report` only when presenting messages to the operator.
+Podbot defines semantic error enums in `src/error.rs` for configuration,
+container, GitHub, and filesystem operations. These enums are aggregated by
+`PodbotError`, and modules return `podbot::error::Result<T>` so callers can
+match on domain failures. The binary keeps opaque reporting at the boundary by
+returning `eyre::Result<()>` from `main` and converting domain errors into
+`eyre::Report` only when presenting messages to the operator.
 
 For screen readers: The following diagram summarizes the error types and how
 they flow from library modules to the CLI entry point.
@@ -314,10 +314,6 @@ classDiagram
     BddTestsErrorHandling --> EyreReport : observes
     BddTestsErrorHandling --> PodbotError : scenarios_cover
 ```
-
-```mermaid
-classDiagram
-    direction TB
 
     class ConfigError {
         +message: String
