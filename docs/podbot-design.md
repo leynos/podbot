@@ -324,10 +324,6 @@ classDiagram
     BddTestsErrorHandling --> PodbotError : scenarios_cover
 ```
 
-```mermaid
-classDiagram
-    direction TB
-
     class ConfigError {
         +message: String
         +source: OptionError

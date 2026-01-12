@@ -108,7 +108,9 @@ fn error_is_reported(error_state: &ErrorState) {
     reason = "test assertion - panic on missing state is intentional"
 )]
 fn outcome_is_ok(error_state: &ErrorState) {
-    let success = error_state.success.get().expect("success should be set");
+    let Some(success) = error_state.success.get() else {
+        panic!("success should be set");
+    };
     assert!(success, "expected the operation to succeed");
 }
 
