@@ -10,7 +10,7 @@ use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 
 /// State shared across error handling scenarios.
-#[derive(Default, ScenarioState)]
+#[derive(ScenarioState)]
 struct ErrorState {
     /// The last error captured during a scenario.
     error: Slot<Arc<PodbotError>>,
@@ -18,6 +18,20 @@ struct ErrorState {
     message: Slot<String>,
     /// Whether the operation succeeded.
     success: Slot<bool>,
+}
+
+#[expect(
+    clippy::derivable_impls,
+    reason = "ScenarioState guidance discourages deriving Default in this module"
+)]
+impl Default for ErrorState {
+    fn default() -> Self {
+        Self {
+            error: Slot::default(),
+            message: Slot::default(),
+            success: Slot::default(),
+        }
+    }
 }
 
 /// Fixture providing a fresh error state.
@@ -54,26 +68,32 @@ fn result_is_inspected(error_state: &ErrorState) {
 }
 
 #[when("the error is formatted")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn error_is_formatted(error_state: &ErrorState) {
-    let Some(error) = error_state.error.get() else {
-        panic!("error should be set");
-    };
+    let error = error_state.error.get().expect("error should be set");
     error_state.message.set(error.as_ref().to_string());
 }
 
 #[then("the outcome is ok")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn outcome_is_ok(error_state: &ErrorState) {
-    let Some(success) = error_state.success.get() else {
-        panic!("success should be set");
-    };
+    let success = error_state.success.get().expect("success should be set");
     assert!(success, "expected the operation to succeed");
 }
 
 #[then("the error message is {expected}")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn error_message_is(error_state: &ErrorState, expected: String) {
-    let Some(message) = error_state.message.get() else {
-        panic!("message should be set");
-    };
+    let message = error_state.message.get().expect("message should be set");
     assert_eq!(message, expected);
 }
 
