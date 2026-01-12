@@ -1,9 +1,9 @@
 # `podbot` user's guide
 
 `podbot` is a sandboxed execution environment for AI coding agents. It provides
-a secure container-based sandbox for running AI coding assistants such as Claude
-Code and Codex, treating the host container engine as high-trust infrastructure
-while the agent container operates in a low-trust playpen.
+a secure container-based sandbox for running AI coding assistants such as
+Claude Code and Codex, treating the host container engine as high-trust
+infrastructure while the agent container operates in a low-trust playpen.
 
 ## Installation
 
@@ -25,11 +25,11 @@ podbot run --repo owner/name --branch feature-branch
 
 ### Global options
 
-| Option             | Description                            |
-| ------------------ | -------------------------------------- |
-| `--config PATH`    | Path to a custom configuration file    |
-| `--engine-socket`  | Container engine socket path or URL    |
-| `--image`          | Container image to use for the sandbox |
+| Option            | Description                            |
+| ----------------- | -------------------------------------- |
+| `--config PATH`   | Path to a custom configuration file    |
+| `--engine-socket` | Container engine socket path or URL    |
+| `--image`         | Container image to use for the sandbox |
 
 ### Subcommands
 
@@ -41,11 +41,11 @@ Run an AI agent in a sandboxed container.
 podbot run --repo owner/name --branch main --agent claude
 ```
 
-| Option     | Required | Default  | Description                        |
-| ---------- | -------- | -------- | ---------------------------------- |
-| `--repo`   | Yes      | -        | Repository in owner/name format    |
-| `--branch` | Yes      | -        | Branch to check out                |
-| `--agent`  | No       | `claude` | Agent type: `claude` or `codex`    |
+| Option     | Required | Default  | Description                     |
+| ---------- | -------- | -------- | ------------------------------- |
+| `--repo`   | Yes      | -        | Repository in owner/name format |
+| `--branch` | Yes      | -        | Branch to check out             |
+| `--agent`  | No       | `claude` | Agent type: `claude` or `codex` |
 
 #### `token-daemon`
 
@@ -130,27 +130,27 @@ copy_codex = true
 All configuration options can be set via environment variables using the
 `PODBOT_` prefix:
 
-| Variable                      | Configuration key            |
-| ----------------------------- | ---------------------------- |
-| `PODBOT_ENGINE_SOCKET`        | `engine_socket`              |
-| `PODBOT_IMAGE`                | `image`                      |
-| `PODBOT_GITHUB_APP_ID`        | `github.app_id`              |
-| `PODBOT_GITHUB_INSTALLATION_ID` | `github.installation_id`   |
+| Variable                         | Configuration key         |
+| -------------------------------- | ------------------------- |
+| `PODBOT_ENGINE_SOCKET`           | `engine_socket`           |
+| `PODBOT_IMAGE`                   | `image`                   |
+| `PODBOT_GITHUB_APP_ID`           | `github.app_id`           |
+| `PODBOT_GITHUB_INSTALLATION_ID`  | `github.installation_id`  |
 | `PODBOT_GITHUB_PRIVATE_KEY_PATH` | `github.private_key_path` |
-| `PODBOT_SANDBOX_PRIVILEGED`   | `sandbox.privileged`         |
-| `PODBOT_SANDBOX_MOUNT_DEV_FUSE` | `sandbox.mount_dev_fuse`   |
-| `PODBOT_AGENT_KIND`           | `agent.kind`                 |
-| `PODBOT_WORKSPACE_BASE_DIR`   | `workspace.base_dir`         |
-| `PODBOT_CREDS_COPY_CLAUDE`    | `creds.copy_claude`          |
-| `PODBOT_CREDS_COPY_CODEX`     | `creds.copy_codex`           |
+| `PODBOT_SANDBOX_PRIVILEGED`      | `sandbox.privileged`      |
+| `PODBOT_SANDBOX_MOUNT_DEV_FUSE`  | `sandbox.mount_dev_fuse`  |
+| `PODBOT_AGENT_KIND`              | `agent.kind`              |
+| `PODBOT_WORKSPACE_BASE_DIR`      | `workspace.base_dir`      |
+| `PODBOT_CREDS_COPY_CLAUDE`       | `creds.copy_claude`       |
+| `PODBOT_CREDS_COPY_CODEX`        | `creds.copy_codex`        |
 
 ## Security model
 
 Podbot's security model is based on capability-based containment:
 
 1. **Host socket isolation**: The Rust command-line interface (CLI) holds
-   the host Podman/Docker socket. The agent container never receives access
-   to this socket.
+   the host Podman/Docker socket. The agent container never receives access to
+   this socket.
 
 2. **Nested containers**: The agent container can run an inner Podman service
    for any nested container operations, isolated from the host.
@@ -172,8 +172,8 @@ inspect, retry, or map to specific responses:
 - `GitHubError`: GitHub App authentication errors
 - `FilesystemError`: Filesystem operation errors
 
-At the application boundary, these are converted to human-readable error reports
-using `eyre`.
+At the application boundary, these are converted to human-readable error
+reports using `eyre`.
 
 ## Development
 

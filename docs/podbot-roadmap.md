@@ -34,7 +34,7 @@ Establish the error handling patterns that propagate through all modules.
 
 **Tasks:**
 
-- [ ] Create a root error module defining the pattern for semantic error enums.
+- [x] Create a root error module defining the pattern for semantic error enums.
 - [ ] Configure eyre::Report as the return type for the main entry point.
 - [ ] Ensure no unwrap or expect calls appear outside test code.
 

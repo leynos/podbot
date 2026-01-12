@@ -212,6 +212,109 @@ and isolation. Privileged mode enables more Podman-in-Podman configurations but
 expands the attack surface. The minimal mode mounts only `/dev/fuse` and avoids
 the privileged flag.
 
+## Error handling
+
+The podbot crate defines semantic error enums in `src/error.rs` for
+configuration, container, GitHub, and filesystem operations. These enums are
+aggregated by `PodbotError`, and modules return `podbot::error::Result<T>` so
+callers can match on domain failures. The binary keeps opaque reporting at the
+boundary by returning `eyre::Result<()>` from `main` and converting domain
+errors into `eyre::Report` only when presenting messages to the operator.
+
+For screen readers: The following diagram summarizes the error types and how
+they flow from library modules to the CLI entry point.
+
+```mermaid
+classDiagram
+    direction TB
+
+    class ConfigError {
+        +message: String
+        +source: OptionError
+    }
+    <<enumeration>> ConfigError
+
+    class ContainerError {
+        +message: String
+        +source: OptionError
+    }
+    <<enumeration>> ContainerError
+
+    class GitHubError {
+        +message: String
+        +source: OptionError
+    }
+    <<enumeration>> GitHubError
+
+    class FilesystemError {
+        +message: String
+        +path: OptionPathBuf
+        +source: OptionError
+    }
+    <<enumeration>> FilesystemError
+
+    class PodbotError {
+        +from_config(error: ConfigError)
+        +from_container(error: ContainerError)
+        +from_github(error: GitHubError)
+        +from_filesystem(error: FilesystemError)
+        +display() String
+        +source() OptionError
+    }
+
+    class ResultAlias {
+        +ResultAliasT
+    }
+
+    class EyreReport {
+        +from_error(error: PodbotError)
+    }
+
+    class PodbotLib {
+        +public_api_functions_return_ResultAlias()
+    }
+
+    class MainCli {
+        +main() eyreResultUnit
+    }
+
+    class UnitTestsErrorModule {
+        +test_error_display()
+        +test_from_conversions()
+        +test_result_alias_usage()
+    }
+
+    class BddTestsErrorHandling {
+        +given_invalid_configuration()
+        +when_running_cli()
+        +then_user_sees_friendly_error_message()
+    }
+
+    PodbotError --> ConfigError : wraps
+    PodbotError --> ContainerError : wraps
+    PodbotError --> GitHubError : wraps
+    PodbotError --> FilesystemError : wraps
+
+    ResultAlias --> PodbotError : error_type
+
+    PodbotLib --> ResultAlias : uses
+
+    MainCli --> EyreReport : returns
+    MainCli --> PodbotLib : calls
+
+    EyreReport --> PodbotError : constructed_from
+
+    UnitTestsErrorModule --> PodbotError : tests
+    UnitTestsErrorModule --> ConfigError : tests
+    UnitTestsErrorModule --> ContainerError : tests
+    UnitTestsErrorModule --> GitHubError : tests
+    UnitTestsErrorModule --> FilesystemError : tests
+
+    BddTestsErrorHandling --> MainCli : drives
+    BddTestsErrorHandling --> EyreReport : observes
+    BddTestsErrorHandling --> PodbotError : scenarios_cover
+```
+
 ## CLI interface
 
 The CLI exposes a minimal surface area.
