@@ -11,11 +11,12 @@ PLANS.md is not present in the repository root, so this plan stands alone.
 ## Purpose / Big Picture
 
 The podbot CLI needs a clear error boundary: domain modules return semantic
-errors, and the application entry point returns `eyre::Report` for human-
-readable diagnostics. The outcome is observable by inspecting `src/main.rs`,
-verifying no `unwrap` or `expect` calls remain outside test code, and running
-unit and behavioural tests that cover success, failure, and edge cases for the
-error boundary. Success means `make all` passes without warnings.
+errors, and the application entry point returns `eyre::Report` for
+human-readable diagnostics. The outcome is observable by inspecting
+`src/main.rs`, verifying no `unwrap` or `expect` calls remain outside test
+code, and running unit and behavioural tests that cover success, failure, and
+edge cases for the error boundary. Success means `make all` passes without
+warnings.
 
 ## Constraints
 
@@ -149,43 +150,52 @@ user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
 
 1. Inspect the entry point and error modules, and search for unwrap/expect:
 
-    rg --hidden --line-number "unwrap\(|expect\(" src
+<!-- markdownlint-disable-next-line MD046 -->
+```shell
+rg --hidden --line-number "unwrap\(|expect\(" src
+```
 
-2. Update `src/main.rs` to use `eyre::Result<()>` at the boundary and keep
+1. Update `src/main.rs` to use `eyre::Result<()>` at the boundary and keep
    domain logic returning `podbot::error::Result<T>` if needed.
 
-3. If any unwrap/expect calls exist outside tests, replace them with error
+2. If any unwrap/expect calls exist outside tests, replace them with error
    returns or `?` propagation.
 
-4. Add rstest unit coverage for the eyre boundary in a suitable test module
+3. Add rstest unit coverage for the eyre boundary in a suitable test module
    (for example, `src/error.rs` or `tests/error_report.rs`). Use fixtures and
    parameterized cases for both happy and unhappy paths.
 
-5. Extend behavioural tests:
+4. Extend behavioural tests:
 
     - Update `tests/features/error_handling.feature` with scenarios that
       mention the report boundary.
     - Update `tests/bdd_error_handling.rs` to format `eyre::Report` values and
       assert user-visible messages.
 
-6. Update documentation:
+5. Update documentation:
 
     - `docs/podbot-design.md` for any new decisions about the error boundary.
     - `docs/users-guide.md` if user-facing error output changes.
 
-7. Mark Step 1.2 as done in `docs/podbot-roadmap.md`.
+6. Mark Step 1.2 as done in `docs/podbot-roadmap.md`.
 
-8. Run validation commands with logs (use tee + pipefail):
+7. Run validation commands with logs (use tee + pipefail):
 
-    set -o pipefail
-    make all | tee /tmp/podbot-make-all.log
+<!-- markdownlint-disable-next-line MD046 -->
+```shell
+set -o pipefail
+make all | tee /tmp/podbot-make-all.log
+```
 
    If documentation changed, also run:
 
-    make fmt | tee /tmp/podbot-fmt.log
-    MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint | \
-      tee /tmp/podbot-markdownlint.log
-    make nixie | tee /tmp/podbot-nixie.log
+<!-- markdownlint-disable-next-line MD046 -->
+```shell
+make fmt | tee /tmp/podbot-fmt.log
+MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint | \
+  tee /tmp/podbot-markdownlint.log
+make nixie | tee /tmp/podbot-nixie.log
+```
 
 ## Validation and Acceptance
 
@@ -214,10 +224,13 @@ step should modify state outside the repository other than temporary log files.
 
 Capture short log excerpts that demonstrate success, such as:
 
-    make all
-    …
-    Finished `test` [unoptimized + debuginfo] target(s) in 0.42s
-    Running unittests … ok
+<!-- markdownlint-disable-next-line MD046 -->
+```text
+make all
+…
+Finished `test` [unoptimized + debuginfo] target(s) in 0.42s
+Running unittests … ok
+```
 
 ## Interfaces and Dependencies
 
