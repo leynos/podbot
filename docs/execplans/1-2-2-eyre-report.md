@@ -45,59 +45,53 @@ warnings.
 
 ## Risks
 
-    - Risk: The entry point already returns `eyre::Result`, so changes might be
-      minimal and tests could feel redundant.
-      Severity: low
-      Likelihood: medium
-      Mitigation: Verify current behaviour, then scope tests to the exact
-      boundary behaviour (converting `PodbotError` to `eyre::Report`).
+- Risk: The entry point already returns `eyre::Result`, so changes might be
+  minimal and tests could feel redundant. Severity: low Likelihood: medium
+  Mitigation: Verify current behaviour, then scope tests to the exact boundary
+  behaviour (converting `PodbotError` to `eyre::Report`).
 
-    - Risk: Behavioural tests may struggle to model `eyre` output without
-      invoking the CLI.
-      Severity: medium
-      Likelihood: medium
-      Mitigation: Treat `eyre::Report` formatting as the observable behaviour
-      and validate it through rstest-bdd fixtures and steps.
+- Risk: Behavioural tests may struggle to model `eyre` output without invoking
+  the CLI. Severity: medium Likelihood: medium Mitigation: Treat `eyre::Report`
+  formatting as the observable behaviour and validate it through rstest-bdd
+  fixtures and steps.
 
 ## Progress
 
-    - [x] (2026-01-12 10:00Z) Review current error boundary and existing tests.
-    - [x] (2026-01-12 10:25Z) Implement boundary adjustments and confirm no
-      non-test unwrap/expect usage.
-    - [x] (2026-01-12 10:40Z) Add rstest unit coverage for report conversion
-      paths, including an edge case with no message payload.
-    - [x] (2026-01-12 10:55Z) Add rstest-bdd scenarios for report output in
-      unhappy and edge cases.
-    - [x] (2026-01-12 11:05Z) Update design documentation and roadmap entry;
-      confirm no user-guide changes are required.
-    - [x] (2026-01-12 11:20Z) Run `make check-fmt`, `make lint`, `make test`,
-      `make markdownlint`, and `make nixie` with logs.
+- [x] (2026-01-12 10:00Z) Review current error boundary and existing tests.
+- [x] (2026-01-12 10:25Z) Implement boundary adjustments and confirm no non-test
+  unwrap/expect usage.
+- [x] (2026-01-12 10:40Z) Add rstest unit coverage for report conversion paths,
+  including an edge case with no message payload.
+- [x] (2026-01-12 10:55Z) Add rstest-bdd scenarios for report output in unhappy
+  and edge cases.
+- [x] (2026-01-12 11:05Z) Update design documentation and roadmap entry; confirm
+  no user-guide changes are required.
+- [x] (2026-01-12 11:20Z) Run `make check-fmt`, `make lint`, `make test`, `make
+  markdownlint`, and `make nixie` with logs.
 
 ## Surprises & Discoveries
 
-    - Observation: `cargo doc` emits a warning about the renamed
-      `missing_crate_level_docs` lint.
-      Evidence: `make lint` output during the `cargo doc --no-deps` step.
-      Impact: The warning does not fail `make lint`, but it is worth tracking
-      for future lint clean-up.
+- Observation: `cargo doc` emits a warning about the renamed
+  `missing_crate_level_docs` lint. Evidence: `make lint` output during the
+  `cargo doc --no-deps` step. Impact: The warning does not fail `make lint`,
+  but it is worth tracking for future lint clean-up.
 
 ## Decision Log
 
-    - Decision: Route CLI execution through a `run` helper returning
-      `podbot::error::Result<()>`, converting to `eyre::Report` in `main`.
-      Rationale: Keeps semantic errors inside the domain and enforces the
-      boundary at the entry point without changing public APIs.
-      Date/Author: 2026-01-12 / Codex
+- Decision: Route CLI execution through a `run` helper returning
+  `podbot::error::Result<()>`, converting to `eyre::Report` in `main`.
+  Rationale: Keeps semantic errors inside the domain and enforces the boundary
+  at the entry point without changing public APIs. Date/Author: 2026-01-12 /
+  Codex
 
 ## Outcomes & Retrospective
 
-    - Outcome: The CLI boundary now converts domain errors to
-      `eyre::Report`, with unit and behavioural tests covering success, failure
-      and edge paths.
-    - Outcome: `docs/podbot-design.md` and `docs/podbot-roadmap.md` reflect the
-      error-handling boundary and Step 1.2 completion.
-    - Lesson: Keep an eye on `cargo doc` lint rename warnings to avoid noise in
-      future linting runs.
+- Outcome: The CLI boundary now converts domain errors to `eyre::Report`, with
+  unit and behavioural tests covering success, failure and edge paths.
+- Outcome: `docs/podbot-design.md` and `docs/podbot-roadmap.md` reflect the
+  error-handling boundary and Step 1.2 completion.
+- Lesson: Keep an eye on `cargo doc` lint rename warnings to avoid noise in
+  future linting runs.
 
 ## Context and Orientation
 
