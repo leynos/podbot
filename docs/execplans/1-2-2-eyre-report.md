@@ -133,7 +133,7 @@ returning errors instead. Keep public APIs stable outside the error module.
 
 Stage C: tests. Add rstest unit tests to validate that converting each
 `PodbotError` variant to an `eyre::Report` preserves the expected user-facing
-message. Use parameterised cases for happy and unhappy paths (for example, a
+message. Use parameterized cases for happy and unhappy paths (for example, a
 successful stub returns `Ok(())`, and a missing configuration field reports a
 clear error). Extend rstest-bdd scenarios to exercise the eyre boundary by
 formatting a report and asserting its output for at least one success case and
@@ -159,7 +159,7 @@ user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
 
 4. Add rstest unit coverage for the eyre boundary in a suitable test module
    (for example, `src/error.rs` or `tests/error_report.rs`). Use fixtures and
-   parameterised cases for both happy and unhappy paths.
+   parameterized cases for both happy and unhappy paths.
 
 5. Extend behavioural tests:
 
@@ -210,7 +210,7 @@ All steps are repeatable. If a validation command fails, fix the issue and
 re-run the same command; keep the log files so failures can be inspected. No
 step should modify state outside the repository other than temporary log files.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Capture short log excerpts that demonstrate success, such as:
 
@@ -227,9 +227,6 @@ Capture short log excerpts that demonstrate success, such as:
 - Tests should use `rstest` and `rstest-bdd` per existing patterns.
 
 ## Revision note
-
-Updated the status to IN PROGRESS and marked the initial review step as
-complete to reflect execution starting.
 
 Updated progress, decision log, surprises, and outcomes with the completed
 implementation and validation work, and marked the plan COMPLETE.

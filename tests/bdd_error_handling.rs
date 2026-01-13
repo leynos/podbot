@@ -112,24 +112,23 @@ fn outcome_is_ok(error_state: &ErrorState) {
     assert!(success, "expected the operation to succeed");
 }
 
-#[then("the error message is {expected}")]
 #[expect(
     clippy::expect_used,
     reason = "test assertion - panic on missing state is intentional"
 )]
-fn error_message_is(error_state: &ErrorState, expected: String) {
+fn assert_message_is(error_state: &ErrorState, expected: &str) {
     let message = error_state.message.get().expect("message should be set");
     assert_eq!(message, expected);
 }
 
+#[then("the error message is {expected}")]
+fn error_message_is(error_state: &ErrorState, expected: String) {
+    assert_message_is(error_state, &expected);
+}
+
 #[then("the report message is {expected}")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
 fn report_message_is(error_state: &ErrorState, expected: String) {
-    let message = error_state.message.get().expect("message should be set");
-    assert_eq!(message, expected);
+    assert_message_is(error_state, &expected);
 }
 
 #[scenario(
