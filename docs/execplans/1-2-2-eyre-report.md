@@ -217,7 +217,7 @@ Quality criteria:
 ## Idempotence and Recovery
 
 All steps are repeatable. If a validation command fails, fix the issue and
-re-run the same command; keep the log files so failures can be inspected. No
+re-run the same command; keep the log files, so failures can be inspected. No
 step should modify state outside the repository other than temporary log files.
 
 ## Artefacts and Notes
