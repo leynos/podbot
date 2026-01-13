@@ -128,7 +128,7 @@ returning errors instead. Keep public APIs stable outside the error module.
 
 Stage C: tests. Add rstest unit tests to validate that converting each
 `PodbotError` variant to an `eyre::Report` preserves the expected user-facing
-message. Use parameterised cases for happy and unhappy paths (for example, a
+message. Use parameterized cases for happy and unhappy paths (for example, a
 successful stub returns `Ok(())`, and a missing configuration field reports a
 clear error). Extend rstest-bdd scenarios to exercise the eyre boundary by
 formatting a report and asserting its output for at least one success case and
@@ -157,7 +157,7 @@ rg --hidden --line-number "unwrap\(|expect\(" src
 
 3. Add rstest unit coverage for the eyre boundary in a suitable test module
    (for example, `src/error.rs` or `tests/error_report.rs`). Use fixtures and
-   parameterised cases for both happy and unhappy paths.
+   parameterized cases for both happy and unhappy paths.
 
 4. Extend behavioural tests:
 
