@@ -198,6 +198,7 @@ pub type Result<T> = std::result::Result<T, PodbotError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use eyre::Report;
     use rstest::{fixture, rstest};
 
     /// Fixture providing a sample configuration file path.
@@ -356,5 +357,28 @@ mod tests {
             podbot_error.to_string(),
             "path not found: /etc/podbot/config.toml"
         );
+    }
+
+    #[rstest]
+    #[case(
+        PodbotError::from(ConfigError::MissingRequired {
+            field: String::from("github.app_id"),
+        }),
+        "missing required configuration: github.app_id"
+    )]
+    #[case(
+        PodbotError::from(ContainerError::StartFailed {
+            container_id: String::from("abc123"),
+            message: String::from("image missing"),
+        }),
+        "failed to start container 'abc123': image missing"
+    )]
+    #[case(
+        PodbotError::from(GitHubError::TokenExpired),
+        "installation token expired"
+    )]
+    fn eyre_report_preserves_error_messages(#[case] error: PodbotError, #[case] expected: &str) {
+        let report = Report::from(error);
+        assert_eq!(report.to_string(), expected);
     }
 }

@@ -10,7 +10,17 @@ Feature: Root error handling
     When the error is formatted
     Then the error message is missing required configuration: github.app_id
 
+  Scenario: Missing configuration is reported via eyre
+    Given a missing configuration field github.app_id
+    When the error is reported
+    Then the report message is missing required configuration: github.app_id
+
   Scenario: Container start failures include identifiers
     Given a container start failure for abc with message image missing
     When the error is formatted
     Then the error message is failed to start container 'abc': image missing
+
+  Scenario: Token expiry is reported via eyre
+    Given an expired GitHub token
+    When the error is reported
+    Then the report message is installation token expired

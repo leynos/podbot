@@ -110,6 +110,15 @@ For additional hardening, network egress could be restricted to model endpoints
 and GitHub. Both Claude Code and Codex documentation note prompt injection
 risks when broad network access is enabled.[^4][^5]
 
+## Error handling boundary
+
+Podbot uses semantic error enums in `src/error.rs` for all domain failures and
+reserves `eyre::Report` for the application boundary. The CLI entry point calls
+a `run` helper that returns `podbot::error::Result<()>`, then converts the
+error into an `eyre::Report` before returning from `main`. This keeps opaque
+error reporting at the boundary while preserving precise, inspectable errors
+inside the codebase.
+
 ## Token management
 
 GitHub App installation tokens present a credential lifecycle challenge: they
@@ -214,12 +223,12 @@ the privileged flag.
 
 ## Error handling
 
-The podbot crate defines semantic error enums in `src/error.rs` for
-configuration, container, GitHub, and filesystem operations. These enums are
-aggregated by `PodbotError`, and modules return `podbot::error::Result<T>` so
-callers can match on domain failures. The binary keeps opaque reporting at the
-boundary by returning `eyre::Result<()>` from `main` and converting domain
-errors into `eyre::Report` only when presenting messages to the operator.
+Podbot defines semantic error enums in `src/error.rs` for configuration,
+container, GitHub, and filesystem operations. These enums are aggregated by
+`PodbotError`, and modules return `podbot::error::Result<T>` so callers can
+match on domain failures. The binary keeps opaque reporting at the boundary by
+returning `eyre::Result<()>` from `main` and converting domain errors into
+`eyre::Report` only when presenting messages to the operator.
 
 For screen readers: The following diagram summarizes the error types and how
 they flow from library modules to the CLI entry point.
