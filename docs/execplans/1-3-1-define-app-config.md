@@ -257,7 +257,7 @@ The steps above are safe to rerun. If a command fails, fix the underlying issue
 and re-run the same command. If a test or lint failure is not understood after
 two attempts, stop and escalate with the captured log file path.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Keep the following log files for review if needed:
 
