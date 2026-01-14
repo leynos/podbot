@@ -94,9 +94,13 @@ elevated privileges.
 
 ## Technology stack
 
-- **Rust 1.85+** with Edition 2024
+- **Rust nightly** (required for unstable const features in OrthoConfig)
+  - Edition 2024
+  - Minimum rust-version: 1.85
 - **Tokio** for async runtime
 - **Bollard** for Docker/Podman API access
+  - Primary target: Podman with nested container support
+  - Docker support via compatible API (untested)
 - **Octocrab** for GitHub App integration
 - **OrthoConfig** for layered configuration
 - **Cap-std** for capability-based filesystem access
