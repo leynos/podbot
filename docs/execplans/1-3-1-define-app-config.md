@@ -153,7 +153,8 @@ Stage E runs formatting, linting, and test gates. Use Makefile targets and the
 
 1) Inspect current configuration definitions and documentation.
 
-    - Command: `rg -n "AppConfig|GitHubConfig|SandboxConfig|AgentConfig|WorkspaceConfig|CredsConfig" src/config.rs`
+    - Command:
+      `rg -n "AppConfig|GitHubConfig|SandboxConfig|AgentConfig|WorkspaceConfig|CredsConfig" src/config.rs`
     - Command: `sed -n '1,220p' src/config.rs`
     - Command: `sed -n '1,200p' docs/podbot-design.md`
     - Command: `sed -n '1,200p' docs/users-guide.md`
