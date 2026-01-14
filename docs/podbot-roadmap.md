@@ -49,13 +49,13 @@ defaults.
 
 **Tasks:**
 
-- [ ] Define AppConfig as the root configuration structure.
+- [x] Define AppConfig as the root configuration structure.
 - [ ] Create GithubConfig for App ID, installation ID, and private key path.
 - [ ] Establish SandboxConfig for privileged mode and /dev/fuse mount options.
 - [ ] Specify AgentConfig for agent kind and execution mode.
 - [ ] Add WorkspaceConfig for base directory.
 - [ ] Implement OrthoConfig derive for layered precedence.
-- [ ] Support configuration file at ~/.config/yolo/config.toml.
+- [ ] Support configuration file at ~/.config/podbot/config.toml.
 - [ ] Add validation ensuring required fields are present.
 
 **Completion criteria:** Configuration loads from file, environment, and CLI
@@ -168,7 +168,7 @@ Implement the background daemon that refreshes tokens before expiry.
 
 **Tasks:**
 
-- [ ] Create the runtime directory at $XDG_RUNTIME_DIR/yolo/<container_id>/.
+- [ ] Create the runtime directory at $XDG_RUNTIME_DIR/podbot/<container_id>/.
 - [ ] Set directory mode 0700 and file mode 0600.
 - [ ] Write the initial token to ghapp_token within the directory.
 - [ ] Implement a refresh loop with a five-minute buffer before expiry.
@@ -237,7 +237,8 @@ Launch the agent in permissive mode and attach the terminal.
 - [ ] Implement the orchestration of steps one through seven from the design
   document.
 - [ ] Start Claude Code with --dangerously-skip-permissions flag.
-- [ ] Start Codex with --yolo flag.
+- [ ] Start Codex with --dangerously-bypass-approvals-and-sandbox
+  flag.
 - [ ] Attach the terminal to the agent process.
 - [ ] Handle agent exit and cleanup.
 
@@ -285,7 +286,7 @@ Implement commands for managing running containers.
 
 **Tasks:**
 
-- [ ] Add ps to list active yolo containers with status.
+- [ ] Add ps to list active podbot containers with status.
 - [ ] Create stop to terminate a container by ID or name.
 - [ ] Provide exec to run arbitrary commands within a container.
 - [ ] Format output for readability.

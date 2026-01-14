@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: BLOCKED
+Status: COMPLETE
 
 PLANS.md is not present in the repository.
 
@@ -42,8 +42,8 @@ from a sample config file while preserving defaults for missing fields.
 - Iterations: if tests fail after two fix attempts, stop and ask for
   confirmation with details.
 - Ambiguity: if documentation disagrees on the default config file path (for
-  example `~/.config/podbot/config.toml` vs `~/.config/yolo/config.toml`), stop
-  and confirm which is authoritative before proceeding.
+  example `~/.config/podbot/config.toml` vs another location), stop and confirm
+  which is authoritative before proceeding.
 
 ## Risks
 
@@ -72,39 +72,40 @@ from a sample config file while preserving defaults for missing fields.
 
     - [x] (2026-01-14 09:31Z) Inspect existing configuration structs and
           documentation for alignment.
-    - [ ] (2026-01-13 00:00Z) Implement or refine `AppConfig` and nested config
+    - [x] (2026-01-14 13:20Z) Implement or refine `AppConfig` and nested config
           defaults in `src/config.rs`.
-    - [ ] (2026-01-13 00:00Z) Add/update unit tests (`rstest`) and behavioural
+    - [x] (2026-01-14 13:20Z) Add/update unit tests (`rstest`) and behavioural
           tests (`rstest-bdd`) for happy, unhappy, and edge cases.
-    - [ ] (2026-01-13 00:00Z) Update `docs/podbot-design.md` with any design
+    - [x] (2026-01-14 13:20Z) Update `docs/podbot-design.md` with any design
           decisions and `docs/users-guide.md` with user-facing behaviour.
-    - [ ] (2026-01-13 00:00Z) Mark Step 1.3 task as done in
+    - [x] (2026-01-14 13:20Z) Mark Step 1.3 task as done in
           `docs/podbot-roadmap.md`.
-    - [ ] (2026-01-13 00:00Z) Run formatting, linting, tests, and full validation
-          (`make all`) with logs captured.
+    - [x] (2026-01-14 13:20Z) Run formatting, linting, tests, and full
+          validation (`make all`) with logs captured.
 
 ## Surprises & Discoveries
 
-    - Observation: Configuration file path differs between
-      `docs/podbot-design.md` (`~/.config/yolo/config.toml`) and
-      `docs/users-guide.md` plus `src/config.rs`
-      (`~/.config/podbot/config.toml`).
-      Evidence: `docs/podbot-design.md` "Configuration" section; module docs in
-      `src/config.rs`; `docs/users-guide.md` "Configuration file" section.
-      Impact: Need confirmation before updating documentation or tests that
-      reference the default path.
+    - Observation: The design documentation used the legacy project naming.
+      Evidence: `docs/podbot-design.md` "Configuration" and CLI sections.
+      Impact: Updated documentation and examples to `podbot` once confirmed.
+    - Observation: `cargo doc` emits a warning about the renamed
+      `missing_crate_level_docs` lint.
+      Evidence: `make lint` and `make all` output includes the rename warning.
+      Impact: No functional impact, but documentation builds remain noisy until
+      the lint name is updated.
 
 ## Decision Log
 
-    - Decision: Pause implementation to confirm the canonical default config
-      path.
-      Rationale: The plan's ambiguity tolerance requires confirmation when
-      documentation disagrees.
+    - Decision: Replace legacy project-name references with `podbot` for paths,
+      directories, and CLI examples.
+      Rationale: User confirmed the canonical naming and default path.
       Date/Author: 2026-01-14 / Codex
 
 ## Outcomes & Retrospective
 
-Pending implementation.
+Completed AppConfig validation and documentation alignment, added unhappy-path
+coverage, and validated with formatting, lint, and test gates. The remaining
+noise is a pre-existing rustdoc lint rename warning.
 
 ## Context and Orientation
 
@@ -146,7 +147,8 @@ invalid agent kind or missing nested sections. Behavioural tests should use
 scenario, such as a malformed configuration entry leading to a reported error
 or a missing optional section remaining `None`. Keep tests isolated and avoid
 mutating global environment variables; if environment interaction is needed,
-use dependency injection per `docs/reliable-testing-in-rust-via-dependency-injection.md`.
+use dependency injection per
+`docs/reliable-testing-in-rust-via-dependency-injection.md`.
 
 Stage D updates documentation and the roadmap. Record any design decisions in
 `docs/podbot-design.md`, update `docs/users-guide.md` for user-visible changes,
@@ -161,7 +163,9 @@ Stage E runs formatting, linting, and test gates. Use Makefile targets and the
 1) Inspect current configuration definitions and documentation.
 
     - Command:
-      `rg -n "AppConfig|GitHubConfig|SandboxConfig|AgentConfig|WorkspaceConfig|CredsConfig" src/config.rs`
+
+          rg -n "AppConfig|GitHubConfig|SandboxConfig|AgentConfig|WorkspaceConfig|CredsConfig" \
+            src/config.rs
     - Command: `sed -n '1,220p' src/config.rs`
     - Command: `sed -n '1,200p' docs/podbot-design.md`
     - Command: `sed -n '1,200p' docs/users-guide.md`
@@ -281,12 +285,11 @@ At completion, the root configuration interface should be available at
     }
 
 Nested types should live in `src/config.rs` and remain serialisable with
-`serde`. Any path fields should use `camino::Utf8PathBuf`. If this task requires
-`OrthoConfig` derive attributes, they should be minimal and compatible with the
-layered precedence described in `docs/ortho-config-users-guide.md`.
+`serde`. Any path fields should use `camino::Utf8PathBuf`. If this task
+requires `OrthoConfig` derive attributes, they should be minimal and compatible
+with the layered precedence described in `docs/ortho-config-users-guide.md`.
 
 ## Revision note (required when editing an ExecPlan)
 
-Updated status to BLOCKED, recorded the configuration path mismatch, and
-documented the decision to pause pending confirmation so documentation updates
-stay consistent.
+Updated status to COMPLETE, marked all progress steps done, and recorded the
+lint warning observation plus the final outcomes summary.

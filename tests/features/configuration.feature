@@ -19,3 +19,7 @@ Feature: Configuration loading
     Then the app ID is absent
     And the installation ID is absent
     And the private key path is absent
+
+  Scenario: Invalid agent kind is rejected
+    Given a configuration file with an invalid agent kind
+    Then the configuration load fails
