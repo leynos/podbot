@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: BLOCKED
 
 PLANS.md is not present in the repository.
 
@@ -70,7 +70,7 @@ from a sample config file while preserving defaults for missing fields.
 
 ## Progress
 
-    - [ ] (2026-01-13 00:00Z) Inspect existing configuration structs and
+    - [x] (2026-01-14 09:31Z) Inspect existing configuration structs and
           documentation for alignment.
     - [ ] (2026-01-13 00:00Z) Implement or refine `AppConfig` and nested config
           defaults in `src/config.rs`.
@@ -85,15 +85,22 @@ from a sample config file while preserving defaults for missing fields.
 
 ## Surprises & Discoveries
 
-    - Observation: None yet.
-      Evidence: N/A
-      Impact: N/A
+    - Observation: Configuration file path differs between
+      `docs/podbot-design.md` (`~/.config/yolo/config.toml`) and
+      `docs/users-guide.md` plus `src/config.rs`
+      (`~/.config/podbot/config.toml`).
+      Evidence: `docs/podbot-design.md` "Configuration" section; module docs in
+      `src/config.rs`; `docs/users-guide.md` "Configuration file" section.
+      Impact: Need confirmation before updating documentation or tests that
+      reference the default path.
 
 ## Decision Log
 
-    - Decision: None yet.
-      Rationale: N/A
-      Date/Author: N/A
+    - Decision: Pause implementation to confirm the canonical default config
+      path.
+      Rationale: The plan's ambiguity tolerance requires confirmation when
+      documentation disagrees.
+      Date/Author: 2026-01-14 / Codex
 
 ## Outcomes & Retrospective
 
@@ -277,3 +284,9 @@ Nested types should live in `src/config.rs` and remain serialisable with
 `serde`. Any path fields should use `camino::Utf8PathBuf`. If this task requires
 `OrthoConfig` derive attributes, they should be minimal and compatible with the
 layered precedence described in `docs/ortho-config-users-guide.md`.
+
+## Revision note (required when editing an ExecPlan)
+
+Updated status to BLOCKED, recorded the configuration path mismatch, and
+documented the decision to pause pending confirmation so documentation updates
+stay consistent.
