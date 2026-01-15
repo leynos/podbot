@@ -151,7 +151,7 @@ Stage E runs validation gates with captured logs.
 
     - Add `impl GitHubConfig` block with `validate()` and `is_configured()`.
     - `validate()` returns `crate::error::Result<()>`.
-    - `is_configured()` returns `bool` (const if stable).
+    - `is_configured()` returns `bool`.
 
 2) Add unit tests to `src/config.rs` test module.
 
@@ -234,11 +234,12 @@ Keep the following log files for review if needed:
 At completion, `GitHubConfig` should expose:
 
     impl GitHubConfig {
-        /// Validates that all required GitHub fields are present.
+        /// Validates that all required GitHub fields are present and non-zero.
         ///
         /// # Errors
         ///
-        /// Returns `ConfigError::MissingRequired` if any required field is `None`.
+        /// Returns `ConfigError::MissingRequired` if any required field is `None`
+        /// or if numeric IDs are zero.
         pub fn validate(&self) -> crate::error::Result<()>;
 
         /// Returns whether all GitHub credentials are configured.
