@@ -6,7 +6,8 @@
 // Test-specific lint exceptions: expect is standard practice in tests
 #![expect(clippy::expect_used, reason = "expect is standard practice in tests")]
 
-use podbot::config::{AgentKind, AppConfig, SandboxConfig};
+use camino::Utf8PathBuf;
+use podbot::config::{AgentKind, AppConfig, GitHubConfig, SandboxConfig};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then};
@@ -172,6 +173,116 @@ fn configuration_load_fails(config_state: &ConfigState) {
     );
 }
 
+// GitHub configuration validation step definitions
+
+#[given("a complete GitHub configuration")]
+fn complete_github_configuration(config_state: &ConfigState) {
+    let config = AppConfig {
+        github: GitHubConfig {
+            app_id: Some(12345),
+            installation_id: Some(67890),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
+#[given("a GitHub configuration missing the app ID")]
+fn github_config_missing_app_id(config_state: &ConfigState) {
+    let config = AppConfig {
+        github: GitHubConfig {
+            app_id: None,
+            installation_id: Some(67890),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
+#[given("a GitHub configuration with no fields set")]
+fn github_config_all_fields_missing(config_state: &ConfigState) {
+    config_state.config.set(AppConfig::default());
+}
+
+#[then("GitHub validation succeeds")]
+fn github_validation_succeeds(config_state: &ConfigState) {
+    let config = config_state
+        .config
+        .get()
+        .expect("configuration should be set");
+    let result = config.github.validate();
+    assert!(
+        result.is_ok(),
+        "Expected GitHub validation to succeed: {result:?}"
+    );
+}
+
+#[then("GitHub validation fails")]
+fn github_validation_fails(config_state: &ConfigState) {
+    let config = config_state
+        .config
+        .get()
+        .expect("configuration should be set");
+    let result = config.github.validate();
+    assert!(result.is_err(), "Expected GitHub validation to fail");
+    let error = result.expect_err("validation should fail");
+    config_state.parse_error.set(error.to_string());
+}
+
+#[then("the validation error mentions \"github.app_id\"")]
+fn validation_error_mentions_app_id(config_state: &ConfigState) {
+    let error = config_state
+        .parse_error
+        .get()
+        .expect("parse error should be set");
+    assert!(
+        error.contains("github.app_id"),
+        "Expected error to mention 'github.app_id', got: {error}"
+    );
+}
+
+#[then("the validation error mentions all missing GitHub fields")]
+fn validation_error_mentions_all_github_fields(config_state: &ConfigState) {
+    let error = config_state
+        .parse_error
+        .get()
+        .expect("parse error should be set");
+    assert!(
+        error.contains("github.app_id"),
+        "Error should mention app_id: {error}"
+    );
+    assert!(
+        error.contains("github.installation_id"),
+        "Error should mention installation_id: {error}"
+    );
+    assert!(
+        error.contains("github.private_key_path"),
+        "Error should mention private_key_path: {error}"
+    );
+}
+
+#[then("the configuration loads successfully")]
+fn configuration_loads_successfully(config_state: &ConfigState) {
+    assert!(
+        config_state.config.get().is_some(),
+        "Configuration should be set"
+    );
+}
+
+#[then("GitHub is not configured")]
+fn github_is_not_configured(config_state: &ConfigState) {
+    let config = config_state
+        .config
+        .get()
+        .expect("configuration should be set");
+    assert!(
+        !config.github.is_configured(),
+        "GitHub should not be configured"
+    );
+}
+
 // Scenario bindings
 
 #[scenario(
@@ -203,5 +314,37 @@ fn missing_optional_configuration_acceptable(config_state: ConfigState) {
     name = "Invalid agent kind is rejected"
 )]
 fn invalid_agent_kind_is_rejected(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "GitHub configuration validates successfully when complete"
+)]
+fn github_config_validates_when_complete(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "GitHub configuration validation fails when app ID is missing"
+)]
+fn github_config_fails_when_app_id_missing(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "GitHub configuration validation fails when all fields missing"
+)]
+fn github_config_fails_when_all_fields_missing(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "GitHub configuration is not required for non-GitHub operations"
+)]
+fn github_config_not_required_for_non_github_ops(config_state: ConfigState) {
     let _ = config_state;
 }

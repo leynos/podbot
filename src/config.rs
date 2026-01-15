@@ -57,6 +57,48 @@ pub struct GitHubConfig {
     pub private_key_path: Option<Utf8PathBuf>,
 }
 
+impl GitHubConfig {
+    /// Validates that all required GitHub fields are present.
+    ///
+    /// This method checks that `app_id`, `installation_id`, and `private_key_path`
+    /// are all set. Call this before performing GitHub operations that require
+    /// authentication.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConfigError::MissingRequired` if any required field is `None`,
+    /// with the field names listed in the error message.
+    pub fn validate(&self) -> crate::error::Result<()> {
+        let mut missing = Vec::new();
+        if self.app_id.is_none() {
+            missing.push("github.app_id");
+        }
+        if self.installation_id.is_none() {
+            missing.push("github.installation_id");
+        }
+        if self.private_key_path.is_none() {
+            missing.push("github.private_key_path");
+        }
+        if !missing.is_empty() {
+            return Err(crate::error::ConfigError::MissingRequired {
+                field: missing.join(", "),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
+    /// Returns whether all GitHub credentials are configured.
+    ///
+    /// This is a quick check that does not validate the values themselves,
+    /// only that all three fields (`app_id`, `installation_id`, `private_key_path`)
+    /// are present.
+    #[must_use]
+    pub const fn is_configured(&self) -> bool {
+        self.app_id.is_some() && self.installation_id.is_some() && self.private_key_path.is_some()
+    }
+}
+
 /// Sandbox security configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -277,6 +319,16 @@ mod tests {
         CredsConfig::default()
     }
 
+    /// Fixture providing a fully configured `GitHubConfig`.
+    #[fixture]
+    fn github_config_complete() -> GitHubConfig {
+        GitHubConfig {
+            app_id: Some(12345),
+            installation_id: Some(67890),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        }
+    }
+
     #[rstest]
     fn agent_kind_default_is_claude() {
         assert_eq!(AgentKind::default(), AgentKind::Claude);
@@ -404,5 +456,100 @@ mod tests {
             error.to_string().contains("unknown variant"),
             "Expected unknown-variant error, got: {error}"
         );
+    }
+
+    // GitHubConfig validation tests
+
+    #[rstest]
+    fn github_config_validate_succeeds_when_complete(github_config_complete: GitHubConfig) {
+        let result = github_config_complete.validate();
+        assert!(
+            result.is_ok(),
+            "Expected validation to succeed for complete config"
+        );
+    }
+
+    #[rstest]
+    fn github_config_validate_fails_when_app_id_missing() {
+        let config = GitHubConfig {
+            app_id: None,
+            installation_id: Some(67890),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        let result = config.validate();
+        assert!(result.is_err(), "Expected validation to fail");
+        let error = result.expect_err("validation should fail");
+        assert!(
+            error.to_string().contains("github.app_id"),
+            "Error should mention missing field: {error}"
+        );
+    }
+
+    #[rstest]
+    #[case(
+        None,
+        None,
+        None,
+        "github.app_id, github.installation_id, github.private_key_path"
+    )]
+    #[case(
+        Some(123),
+        None,
+        None,
+        "github.installation_id, github.private_key_path"
+    )]
+    #[case(None, Some(456), None, "github.app_id, github.private_key_path")]
+    #[case(
+        None,
+        None,
+        Some(Utf8PathBuf::from("/k.pem")),
+        "github.app_id, github.installation_id"
+    )]
+    #[case(Some(123), Some(456), None, "github.private_key_path")]
+    #[case(
+        Some(123),
+        None,
+        Some(Utf8PathBuf::from("/k.pem")),
+        "github.installation_id"
+    )]
+    #[case(None, Some(456), Some(Utf8PathBuf::from("/k.pem")), "github.app_id")]
+    fn github_config_validate_reports_missing_fields(
+        #[case] app_id: Option<u64>,
+        #[case] installation_id: Option<u64>,
+        #[case] private_key_path: Option<Utf8PathBuf>,
+        #[case] expected_fields: &str,
+    ) {
+        let config = GitHubConfig {
+            app_id,
+            installation_id,
+            private_key_path,
+        };
+        let result = config.validate();
+        let error = result.expect_err("validation should fail with missing fields");
+        assert!(
+            error.to_string().contains(expected_fields),
+            "Expected error to contain '{expected_fields}', got: {error}"
+        );
+    }
+
+    #[rstest]
+    fn github_config_is_configured_true_when_complete(github_config_complete: GitHubConfig) {
+        assert!(github_config_complete.is_configured());
+    }
+
+    #[rstest]
+    fn github_config_is_configured_false_when_default() {
+        let config = GitHubConfig::default();
+        assert!(!config.is_configured());
+    }
+
+    #[rstest]
+    fn github_config_is_configured_false_when_partial() {
+        let config = GitHubConfig {
+            app_id: Some(12345),
+            installation_id: None,
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        assert!(!config.is_configured());
     }
 }
