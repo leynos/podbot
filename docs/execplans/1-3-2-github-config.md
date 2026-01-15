@@ -10,10 +10,10 @@ Status: COMPLETE
 
 Complete the `GitHubConfig` implementation by adding validation methods and
 comprehensive test coverage. The struct already exists with all required fields
-(`app_id`, `installation_id`, `private_key_path`); this task adds a `validate()`
-method that checks all required fields are present, an `is_configured()` helper,
-and both unit tests (rstest) and behavioural tests (rstest-bdd) covering happy,
-unhappy, and edge cases.
+(`app_id`, `installation_id`, `private_key_path`); this task adds a
+`validate()` method that checks all required fields are present, an
+`is_configured()` helper, and both unit tests (rstest) and behavioural tests
+(rstest-bdd) covering happy, unhappy, and edge cases.
 
 Success is observable when `make test` passes with new validation coverage and
 the roadmap task is marked complete.
@@ -48,22 +48,19 @@ the roadmap task is marked complete.
 ## Risks
 
 - Risk: `src/config.rs` is currently 409 lines; adding validation methods and
-  tests may push it over the 400-line limit.
-  Severity: low
-  Likelihood: medium
+  tests may push it over the 400-line limit. Severity: low Likelihood: medium
   Mitigation: keep implementation compact; the impl block adds ~20 lines and
   tests add ~50 lines to the existing test module, which should remain within
   tolerance given the file already has tests.
 
 - Risk: The `is_configured()` method cannot be `const` if `Option::is_some()` is
-  not const-stable.
-  Severity: low
-  Likelihood: low
-  Mitigation: check Rust 1.85 const stability; if not available, remove `const`.
+  not const-stable. Severity: low Likelihood: low Mitigation: check Rust 1.85
+  const stability; if not available, remove `const`.
 
 ## Progress
 
-- [x] (2026-01-15 UTC) Create execplan at `docs/execplans/1-3-2-github-config.md`.
+- [x] (2026-01-15 UTC) Create execplan at
+      `docs/execplans/1-3-2-github-config.md`.
 - [x] (2026-01-15 UTC) Add `validate()` and `is_configured()` methods to
   `GitHubConfig`.
 - [x] (2026-01-15 UTC) Add unit tests for validation (happy, unhappy, edge
@@ -80,32 +77,27 @@ the roadmap task is marked complete.
 ## Surprises & Discoveries
 
 - Observation: `src/config.rs` grew from 409 to 537 lines, exceeding the 400-
-  line constraint.
-  Evidence: `wc -l src/config.rs` shows 537 lines after adding validation
-  methods and tests.
-  Impact: The file was already over the limit before this task. The existing
-  test module was extended rather than creating a separate test file. Future
-  work should consider splitting the config module.
+  line constraint. Evidence: `wc -l src/config.rs` shows 537 lines after adding
+  validation methods and tests. Impact: The file was already over the limit
+  before this task. The existing test module was extended rather than creating
+  a separate test file. Future work should consider splitting the config module.
 
 - Observation: rstest-bdd does not support the `regex` attribute for step
-  definitions with capture groups.
-  Evidence: Compilation error when using `#[then(regex = r#"...(.+)..."#)]`.
-  Impact: Changed to a literal string match for the specific field name instead
-  of a parameterised step.
+  definitions with capture groups. Evidence: Compilation error when using
+  `#[then(regex = r#"...(.+)..."#)]`. Impact: Changed to a literal string match
+  for the specific field name instead of a parameterised step.
 
 ## Decision Log
 
 - Decision: Use literal step definition for "the validation error mentions
-  \"github.app_id\"" rather than a regex capture.
-  Rationale: rstest-bdd does not support regex capture groups in step
-  definitions.
-  Date/Author: 2026-01-15 / Terry.
+  \"github.app_id\"" rather than a regex capture. Rationale: rstest-bdd does
+  not support regex capture groups in step definitions. Date/Author: 2026-01-15
+  / Terry.
 
 - Decision: Keep tests in the existing `src/config.rs` test module rather than
-  creating a separate file.
-  Rationale: The file was already over the 400-line limit and the tests are
-  closely related to the configuration struct implementation.
-  Date/Author: 2026-01-15 / Terry.
+  creating a separate file. Rationale: The file was already over the 400-line
+  limit and the tests are closely related to the configuration struct
+  implementation. Date/Author: 2026-01-15 / Terry.
 
 ## Outcomes & Retrospective
 
@@ -122,11 +114,11 @@ Successfully completed the GithubConfig task:
 ## Context and Orientation
 
 Configuration lives in `src/config.rs`, which currently defines CLI arguments
-and configuration structs including `GitHubConfig`. Behavioural coverage resides
-in `tests/bdd_config.rs` with feature definitions in
+and configuration structs including `GitHubConfig`. Behavioural coverage
+resides in `tests/bdd_config.rs` with feature definitions in
 `tests/features/configuration.feature`. The error module at `src/error.rs`
-already defines `ConfigError::MissingRequired` which will be used for validation
-errors.
+already defines `ConfigError::MissingRequired` which will be used for
+validation errors.
 
 The roadmap entry for this task is in `docs/podbot-roadmap.md` under Step 1.3:
 "Create GithubConfig for App ID, installation ID, and private key path."

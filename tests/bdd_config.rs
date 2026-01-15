@@ -12,6 +12,45 @@ use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then};
 
+// Helper functions to reduce duplication in step definitions
+
+/// Extracts the configuration from state with consistent error handling.
+fn get_config(config_state: &ConfigState) -> AppConfig {
+    config_state
+        .config
+        .get()
+        .expect("configuration should be set")
+}
+
+/// Creates and sets an `AppConfig` with a custom `GitHubConfig`.
+///
+/// # Arguments
+/// * `config_state` - The test state to update
+/// * `app_id` - Optional GitHub App ID
+/// * `installation_id` - Optional GitHub installation ID
+/// * `private_key_path` - Optional path to the private key file
+fn set_github_config(
+    config_state: &ConfigState,
+    app_id: Option<u64>,
+    installation_id: Option<u64>,
+    private_key_path: Option<&str>,
+) {
+    let config = AppConfig {
+        github: GitHubConfig {
+            app_id,
+            installation_id,
+            private_key_path: private_key_path.map(Utf8PathBuf::from),
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
+/// Asserts that an optional GitHub field is absent.
+fn assert_github_field_absent<T>(field: Option<&T>, field_name: &str) {
+    assert!(field.is_none(), "Expected {field_name} to be absent");
+}
+
 /// State shared across configuration test scenarios.
 #[derive(Default, ScenarioState)]
 struct ConfigState {
@@ -65,10 +104,7 @@ fn config_with_invalid_agent_kind(config_state: &ConfigState) {
 
 #[then("the sandbox is not privileged")]
 fn sandbox_is_not_privileged(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
+    let config = get_config(config_state);
     assert!(
         !config.sandbox.privileged,
         "Expected sandbox to not be privileged"
@@ -77,10 +113,7 @@ fn sandbox_is_not_privileged(config_state: &ConfigState) {
 
 #[then("the sandbox is privileged")]
 fn sandbox_is_privileged(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
+    let config = get_config(config_state);
     assert!(
         config.sandbox.privileged,
         "Expected sandbox to be privileged"
@@ -89,10 +122,7 @@ fn sandbox_is_privileged(config_state: &ConfigState) {
 
 #[then("dev/fuse mounting is enabled")]
 fn dev_fuse_mounting_enabled(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
+    let config = get_config(config_state);
     assert!(
         config.sandbox.mount_dev_fuse,
         "Expected dev/fuse mounting to be enabled"
@@ -101,10 +131,7 @@ fn dev_fuse_mounting_enabled(config_state: &ConfigState) {
 
 #[then("the agent kind is Claude")]
 fn agent_kind_is_claude(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
+    let config = get_config(config_state);
     assert_eq!(
         config.agent.kind,
         AgentKind::Claude,
@@ -114,10 +141,7 @@ fn agent_kind_is_claude(config_state: &ConfigState) {
 
 #[then("the workspace base directory is /work")]
 fn workspace_base_dir_is_work(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
+    let config = get_config(config_state);
     assert_eq!(
         config.workspace.base_dir.as_str(),
         "/work",
@@ -127,38 +151,20 @@ fn workspace_base_dir_is_work(config_state: &ConfigState) {
 
 #[then("the app ID is absent")]
 fn app_id_is_absent(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
-    assert!(
-        config.github.app_id.is_none(),
-        "Expected app ID to be absent"
-    );
+    let config = get_config(config_state);
+    assert_github_field_absent(config.github.app_id.as_ref(), "app ID");
 }
 
 #[then("the installation ID is absent")]
 fn installation_id_is_absent(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
-    assert!(
-        config.github.installation_id.is_none(),
-        "Expected installation ID to be absent"
-    );
+    let config = get_config(config_state);
+    assert_github_field_absent(config.github.installation_id.as_ref(), "installation ID");
 }
 
 #[then("the private key path is absent")]
 fn private_key_path_is_absent(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
-    assert!(
-        config.github.private_key_path.is_none(),
-        "Expected private key path to be absent"
-    );
+    let config = get_config(config_state);
+    assert_github_field_absent(config.github.private_key_path.as_ref(), "private key path");
 }
 
 #[then("the configuration load fails")]
@@ -177,41 +183,27 @@ fn configuration_load_fails(config_state: &ConfigState) {
 
 #[given("a complete GitHub configuration")]
 fn complete_github_configuration(config_state: &ConfigState) {
-    let config = AppConfig {
-        github: GitHubConfig {
-            app_id: Some(12345),
-            installation_id: Some(67890),
-            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
-        },
-        ..Default::default()
-    };
-    config_state.config.set(config);
+    set_github_config(
+        config_state,
+        Some(12345),
+        Some(67890),
+        Some("/path/to/key.pem"),
+    );
 }
 
 #[given("a GitHub configuration missing the app ID")]
 fn github_config_missing_app_id(config_state: &ConfigState) {
-    let config = AppConfig {
-        github: GitHubConfig {
-            app_id: None,
-            installation_id: Some(67890),
-            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
-        },
-        ..Default::default()
-    };
-    config_state.config.set(config);
+    set_github_config(config_state, None, Some(67890), Some("/path/to/key.pem"));
 }
 
 #[given("a GitHub configuration with no fields set")]
 fn github_config_all_fields_missing(config_state: &ConfigState) {
-    config_state.config.set(AppConfig::default());
+    set_github_config(config_state, None, None, None);
 }
 
 #[then("GitHub validation succeeds")]
 fn github_validation_succeeds(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
+    let config = get_config(config_state);
     let result = config.github.validate();
     assert!(
         result.is_ok(),
@@ -221,10 +213,7 @@ fn github_validation_succeeds(config_state: &ConfigState) {
 
 #[then("GitHub validation fails")]
 fn github_validation_fails(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
+    let config = get_config(config_state);
     let result = config.github.validate();
     assert!(result.is_err(), "Expected GitHub validation to fail");
     let error = result.expect_err("validation should fail");
@@ -273,10 +262,7 @@ fn configuration_loads_successfully(config_state: &ConfigState) {
 
 #[then("GitHub is not configured")]
 fn github_is_not_configured(config_state: &ConfigState) {
-    let config = config_state
-        .config
-        .get()
-        .expect("configuration should be set");
+    let config = get_config(config_state);
     assert!(
         !config.github.is_configured(),
         "GitHub should not be configured"

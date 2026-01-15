@@ -92,9 +92,9 @@ Configuration can be provided via:
 
 The default configuration file location is `~/.config/podbot/config.toml`.
 
-**Note:** GitHub App credentials (`app_id`, `installation_id`, `private_key_path`)
-are validated only when GitHub operations are performed. Commands like `podbot ps`
-or `podbot stop` do not require GitHub configuration.
+**Note:** GitHub App credentials (`app_id`, `installation_id`,
+`private_key_path`) are validated only when GitHub operations are performed.
+Commands like `podbot ps` or `podbot stop` do not require GitHub configuration.
 
 ```toml
 # Container engine socket (Podman or Docker)
