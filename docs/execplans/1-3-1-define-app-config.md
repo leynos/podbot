@@ -99,7 +99,7 @@ from a sample config file while preserving defaults for missing fields.
 - Decision: Replace legacy project-name references with `podbot` for paths,
   directories, and CLI examples.
   Rationale: User confirmed the canonical naming and default path.
-  Date/Author: 2026-01-14 / Codex
+  Date/Author: 2026-01-14 / Codex.
 
 ## Outcomes & Retrospective
 
