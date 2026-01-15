@@ -275,15 +275,17 @@ Keep the following log files for review if needed:
 At completion, the root configuration interface should be available at
 `crate::config::AppConfig` and follow this shape:
 
-    pub struct AppConfig {
-        pub engine_socket: Option<String>,
-        pub image: Option<String>,
-        pub github: GitHubConfig,
-        pub sandbox: SandboxConfig,
-        pub agent: AgentConfig,
-        pub workspace: WorkspaceConfig,
-        pub creds: CredsConfig,
-    }
+```rust
+pub struct AppConfig {
+    pub engine_socket: Option<String>,
+    pub image: Option<String>,
+    pub github: GitHubConfig,
+    pub sandbox: SandboxConfig,
+    pub agent: AgentConfig,
+    pub workspace: WorkspaceConfig,
+    pub creds: CredsConfig,
+}
+```
 
 Nested types should live in `src/config.rs` and remain serializable with
 `serde`. Any path fields should use `camino::Utf8PathBuf`. If this task
