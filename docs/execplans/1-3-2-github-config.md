@@ -187,7 +187,7 @@ Stage E runs validation gates with captured logs.
 
 6) Update `docs/podbot-roadmap.md`.
 
-    - Mark the checkbox: `[x] Create GithubConfig for App ID, installation ID,
+    - Mark the checkbox: `[x] Create GitHubConfig for App ID, installation ID,
       and private key path.`
 
 7) Run validation with captured logs.

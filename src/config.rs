@@ -58,30 +58,28 @@ pub struct GitHubConfig {
 }
 
 impl GitHubConfig {
-    /// Validates that all required GitHub fields are present.
+    /// Validates that all required GitHub fields are present and non-zero.
     ///
     /// This method checks that `app_id`, `installation_id`, and `private_key_path`
-    /// are all set. Call this before performing GitHub operations that require
-    /// authentication.
+    /// are all set and that numeric IDs are non-zero. Call this before performing
+    /// GitHub operations that require authentication.
     ///
     /// # Note on zero values
     ///
-    /// This validation only checks for `None` values, not zero. While GitHub
-    /// does not issue `app_id` or `installation_id` values of `0`, we accept
-    /// `Some(0)` here because rejecting it would conflate presence validation
-    /// with value validation. If stricter validation is needed in future, it
-    /// should be added as a separate semantic check.
+    /// GitHub never issues `app_id` or `installation_id` values of `0`, so this
+    /// validation treats `Some(0)` as invalid to catch default/placeholder values
+    /// early.
     ///
     /// # Errors
     ///
-    /// Returns `ConfigError::MissingRequired` if any required field is `None`,
-    /// with the field names listed in the error message.
+    /// Returns `ConfigError::MissingRequired` if any required field is `None` or
+    /// if numeric IDs are zero, with the field names listed in the error message.
     pub fn validate(&self) -> crate::error::Result<()> {
         let mut missing = Vec::new();
-        if self.app_id.is_none() {
+        if self.app_id.is_none() || self.app_id == Some(0) {
             missing.push("github.app_id");
         }
-        if self.installation_id.is_none() {
+        if self.installation_id.is_none() || self.installation_id == Some(0) {
             missing.push("github.installation_id");
         }
         if self.private_key_path.is_none() {
@@ -572,5 +570,71 @@ mod tests {
             private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
         };
         assert!(!config.is_configured());
+    }
+
+    #[rstest]
+    fn github_config_validate_fails_when_app_id_is_zero() {
+        let config = GitHubConfig {
+            app_id: Some(0),
+            installation_id: Some(67890),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        let result = config.validate();
+        let error = result.expect_err("validation should fail for zero app_id");
+        match error {
+            crate::error::PodbotError::Config(crate::error::ConfigError::MissingRequired {
+                field,
+            }) => {
+                assert!(
+                    field.contains("github.app_id"),
+                    "Field should contain 'github.app_id', got: {field}"
+                );
+            }
+            other => panic!("Expected ConfigError::MissingRequired, got: {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn github_config_validate_fails_when_installation_id_is_zero() {
+        let config = GitHubConfig {
+            app_id: Some(12345),
+            installation_id: Some(0),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        let result = config.validate();
+        let error = result.expect_err("validation should fail for zero installation_id");
+        match error {
+            crate::error::PodbotError::Config(crate::error::ConfigError::MissingRequired {
+                field,
+            }) => {
+                assert!(
+                    field.contains("github.installation_id"),
+                    "Field should contain 'github.installation_id', got: {field}"
+                );
+            }
+            other => panic!("Expected ConfigError::MissingRequired, got: {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn github_config_validate_fails_when_both_ids_are_zero() {
+        let config = GitHubConfig {
+            app_id: Some(0),
+            installation_id: Some(0),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        let result = config.validate();
+        let error = result.expect_err("validation should fail for zero IDs");
+        match error {
+            crate::error::PodbotError::Config(crate::error::ConfigError::MissingRequired {
+                field,
+            }) => {
+                assert_eq!(
+                    field, "github.app_id, github.installation_id",
+                    "Field mismatch: got '{field}'"
+                );
+            }
+            other => panic!("Expected ConfigError::MissingRequired, got: {other:?}"),
+        }
     }
 }
