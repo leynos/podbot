@@ -116,6 +116,6 @@ to follow along!
 
 Developed by **[df12 Productions](https://df12.studio)**
 
-## License
+## Licence
 
-ISC License - see [LICENSE](LICENSE) for details.
+ISC Licence - see [LICENSE](LICENSE) for details.
