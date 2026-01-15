@@ -13,8 +13,9 @@ PLANS.md is not present in the repository.
 Define the root `AppConfig` structure that represents podbot's configuration in
 one place, with clear defaults and nested sections that match the design and
 user documentation. Success is observable when `cargo test` passes with new
-unit and behavioural coverage and the configuration struct can be deserialised
-from a sample config file while preserving defaults for missing fields.
+unit and behavioural coverage, and the configuration struct can be
+deserialized from a sample config file while preserving defaults for missing
+fields.
 
 ## Constraints
 
@@ -120,7 +121,7 @@ and configuration structs. Behavioural coverage resides in
 `AppConfig` should be the root configuration container for the application. It
 must aggregate nested configuration structs (GitHub, sandbox, agent, workspace,
 credentials) with defaults and optional values that make sense when fields are
-missing. The struct should be serialisable/deserialisable with `serde` and
+missing. The struct should be serializable/deserializable with `serde` and
 remain compatible with the eventual OrthoConfig layering flow described in
 `docs/ortho-config-users-guide.md`.
 
@@ -243,7 +244,7 @@ Success looks like:
 
 - `make check-fmt`, `make lint`, `make test`, and `make all` all succeed with
   no warnings.
-- Unit tests in `src/config.rs` demonstrate defaults, deserialisation, and an
+- Unit tests in `src/config.rs` demonstrate defaults, deserialization, and an
   unhappy path for invalid configuration input.
 - Behavioural tests in `tests/bdd_config.rs` pass and include at least one
   unhappy or edge scenario.
@@ -284,7 +285,7 @@ At completion, the root configuration interface should be available at
         pub creds: CredsConfig,
     }
 
-Nested types should live in `src/config.rs` and remain serialisable with
+Nested types should live in `src/config.rs` and remain serializable with
 `serde`. Any path fields should use `camino::Utf8PathBuf`. If this task
 requires `OrthoConfig` derive attributes, they should be minimal and compatible
 with the layered precedence described in `docs/ortho-config-users-guide.md`.
