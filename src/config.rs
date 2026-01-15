@@ -64,6 +64,14 @@ impl GitHubConfig {
     /// are all set. Call this before performing GitHub operations that require
     /// authentication.
     ///
+    /// # Note on zero values
+    ///
+    /// This validation only checks for `None` values, not zero. While GitHub
+    /// does not issue `app_id` or `installation_id` values of `0`, we accept
+    /// `Some(0)` here because rejecting it would conflate presence validation
+    /// with value validation. If stricter validation is needed in future, it
+    /// should be added as a separate semantic check.
+    ///
     /// # Errors
     ///
     /// Returns `ConfigError::MissingRequired` if any required field is `None`,
@@ -477,12 +485,18 @@ mod tests {
             private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
         };
         let result = config.validate();
-        assert!(result.is_err(), "Expected validation to fail");
         let error = result.expect_err("validation should fail");
-        assert!(
-            error.to_string().contains("github.app_id"),
-            "Error should mention missing field: {error}"
-        );
+        match error {
+            crate::error::PodbotError::Config(crate::error::ConfigError::MissingRequired {
+                field,
+            }) => {
+                assert!(
+                    field.contains("github.app_id"),
+                    "Field should contain 'github.app_id', got: {field}"
+                );
+            }
+            other => panic!("Expected ConfigError::MissingRequired, got: {other:?}"),
+        }
     }
 
     #[rstest]
@@ -526,10 +540,17 @@ mod tests {
         };
         let result = config.validate();
         let error = result.expect_err("validation should fail with missing fields");
-        assert!(
-            error.to_string().contains(expected_fields),
-            "Expected error to contain '{expected_fields}', got: {error}"
-        );
+        match error {
+            crate::error::PodbotError::Config(crate::error::ConfigError::MissingRequired {
+                field,
+            }) => {
+                assert_eq!(
+                    field, expected_fields,
+                    "Field mismatch: expected '{expected_fields}', got '{field}'"
+                );
+            }
+            other => panic!("Expected ConfigError::MissingRequired, got: {other:?}"),
+        }
     }
 
     #[rstest]

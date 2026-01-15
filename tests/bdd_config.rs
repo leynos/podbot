@@ -8,6 +8,7 @@
 
 use camino::Utf8PathBuf;
 use podbot::config::{AgentKind, AppConfig, GitHubConfig, SandboxConfig};
+use podbot::error::{ConfigError, PodbotError};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then};
@@ -56,8 +57,10 @@ fn assert_github_field_absent<T>(field: Option<&T>, field_name: &str) {
 struct ConfigState {
     /// The loaded application configuration.
     config: Slot<AppConfig>,
-    /// The captured configuration parsing error.
+    /// The captured configuration parsing error (for TOML parse errors).
     parse_error: Slot<String>,
+    /// The captured missing field names from validation errors.
+    missing_fields: Slot<String>,
 }
 
 /// Fixture providing a fresh configuration state.
@@ -217,38 +220,44 @@ fn github_validation_fails(config_state: &ConfigState) {
     let result = config.github.validate();
     assert!(result.is_err(), "Expected GitHub validation to fail");
     let error = result.expect_err("validation should fail");
-    config_state.parse_error.set(error.to_string());
+    // Extract the field value from the error variant rather than relying on Display
+    match error {
+        PodbotError::Config(ConfigError::MissingRequired { field }) => {
+            config_state.missing_fields.set(field);
+        }
+        other => panic!("Expected ConfigError::MissingRequired, got: {other:?}"),
+    }
 }
 
 #[then("the validation error mentions \"github.app_id\"")]
 fn validation_error_mentions_app_id(config_state: &ConfigState) {
-    let error = config_state
-        .parse_error
+    let missing = config_state
+        .missing_fields
         .get()
-        .expect("parse error should be set");
+        .expect("missing fields should be set");
     assert!(
-        error.contains("github.app_id"),
-        "Expected error to mention 'github.app_id', got: {error}"
+        missing.contains("github.app_id"),
+        "Expected missing fields to contain 'github.app_id', got: {missing}"
     );
 }
 
 #[then("the validation error mentions all missing GitHub fields")]
 fn validation_error_mentions_all_github_fields(config_state: &ConfigState) {
-    let error = config_state
-        .parse_error
+    let missing = config_state
+        .missing_fields
         .get()
-        .expect("parse error should be set");
+        .expect("missing fields should be set");
     assert!(
-        error.contains("github.app_id"),
-        "Error should mention app_id: {error}"
+        missing.contains("github.app_id"),
+        "Missing fields should contain app_id: {missing}"
     );
     assert!(
-        error.contains("github.installation_id"),
-        "Error should mention installation_id: {error}"
+        missing.contains("github.installation_id"),
+        "Missing fields should contain installation_id: {missing}"
     );
     assert!(
-        error.contains("github.private_key_path"),
-        "Error should mention private_key_path: {error}"
+        missing.contains("github.private_key_path"),
+        "Missing fields should contain private_key_path: {missing}"
     );
 }
 

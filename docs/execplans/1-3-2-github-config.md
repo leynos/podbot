@@ -1,4 +1,4 @@
-# GithubConfig validation and testing
+# GitHubConfig validation and testing
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -12,8 +12,8 @@ Complete the `GitHubConfig` implementation by adding validation methods and
 comprehensive test coverage. The struct already exists with all required fields
 (`app_id`, `installation_id`, `private_key_path`); this task adds a
 `validate()` method that checks all required fields are present, an
-`is_configured()` helper, and both unit tests (rstest) and behavioural tests
-(rstest-bdd) covering happy, unhappy, and edge cases.
+`is_configured()` helper, and both unit tests (rstest) and Behaviour-Driven
+Development (BDD) tests (rstest-bdd) covering happy, unhappy, and edge cases.
 
 Success is observable when `make test` passes with new validation coverage and
 the roadmap task is marked complete.
@@ -69,7 +69,7 @@ the roadmap task is marked complete.
   validation.
 - [x] (2026-01-15 UTC) Update `docs/users-guide.md` with validation behaviour
   note.
-- [x] (2026-01-15 UTC) Mark the GithubConfig task as done in
+- [x] (2026-01-15 UTC) Mark the GitHubConfig task as done in
   `docs/podbot-roadmap.md`.
 - [x] (2026-01-15 UTC) Run `make check-fmt`, `make lint`, `make test` and
   capture logs.
@@ -101,7 +101,7 @@ the roadmap task is marked complete.
 
 ## Outcomes & Retrospective
 
-Successfully completed the GithubConfig task:
+Successfully completed the GitHubConfig task:
 
 - Added `validate()` method that returns `ConfigError::MissingRequired` when
   any of the three required fields are missing.
@@ -121,7 +121,7 @@ already defines `ConfigError::MissingRequired` which will be used for
 validation errors.
 
 The roadmap entry for this task is in `docs/podbot-roadmap.md` under Step 1.3:
-"Create GithubConfig for App ID, installation ID, and private key path."
+"Create GitHubConfig for App ID, installation ID, and private key path."
 
 ## Plan of Work
 
@@ -213,7 +213,7 @@ Success looks like:
 - Behavioural tests in `tests/bdd_config.rs` pass with at least four new
   scenarios covering GitHub validation.
 - `docs/users-guide.md` includes a note about validation behaviour.
-- The GithubConfig task in `docs/podbot-roadmap.md` is marked as done.
+- The GitHubConfig task in `docs/podbot-roadmap.md` is marked as done.
 
 ## Idempotence and Recovery
 
