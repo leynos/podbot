@@ -94,7 +94,7 @@ elevated privileges.
 
 ## Technology stack
 
-- **Rust 1.86+** with Edition 2024
+- **Rust 1.88+** with Edition 2024
 - **Tokio** for async runtime
 - **Bollard** for Docker/Podman API access
   - Primary target: Podman with nested container support
