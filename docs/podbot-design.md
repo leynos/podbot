@@ -111,12 +111,7 @@ risks when broad network access is enabled.[^4][^5]
 
 ## Error handling boundary
 
-Podbot uses semantic error enums in `src/error.rs` for all domain failures and
-reserves `eyre::Report` for the application boundary. The CLI entry point calls
-a `run` helper that returns `podbot::error::Result<()>`, then converts the
-error into an `eyre::Report` before returning from `main`. This keeps opaque
-error reporting at the boundary while preserving precise, inspectable errors
-inside the codebase.
+See "Error handling" below for the detailed error boundary description.
 
 ## Token management
 

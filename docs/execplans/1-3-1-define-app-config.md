@@ -292,4 +292,4 @@ with the layered precedence described in `docs/ortho-config-users-guide.md`.
 ## Revision note (required when editing an ExecPlan)
 
 Updated status to COMPLETE, marked all progress steps done, and recorded the
-lint warning observation plus the final outcomes summary.
+lint warning observation plus the outcomes summary.
