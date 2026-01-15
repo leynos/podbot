@@ -110,6 +110,7 @@ the roadmap task is marked complete.
 ## Outcomes & Retrospective
 
 Successfully completed the GithubConfig task:
+
 - Added `validate()` method that returns `ConfigError::MissingRequired` when
   any of the three required fields are missing.
 - Added `is_configured()` const helper method.
@@ -240,20 +241,18 @@ Keep the following log files for review if needed:
 
 At completion, `GitHubConfig` should expose:
 
-```rust
-impl GitHubConfig {
-    /// Validates that all required GitHub fields are present.
-    ///
-    /// # Errors
-    ///
-    /// Returns `ConfigError::MissingRequired` if any required field is `None`.
-    pub fn validate(&self) -> crate::error::Result<()>;
+    impl GitHubConfig {
+        /// Validates that all required GitHub fields are present.
+        ///
+        /// # Errors
+        ///
+        /// Returns `ConfigError::MissingRequired` if any required field is `None`.
+        pub fn validate(&self) -> crate::error::Result<()>;
 
-    /// Returns whether all GitHub credentials are configured.
-    #[must_use]
-    pub const fn is_configured(&self) -> bool;
-}
-```
+        /// Returns whether all GitHub credentials are configured.
+        #[must_use]
+        pub const fn is_configured(&self) -> bool;
+    }
 
 The existing `ConfigError::MissingRequired` variant in `src/error.rs` is used
 for validation errors.
