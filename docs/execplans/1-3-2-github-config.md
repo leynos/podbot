@@ -105,7 +105,7 @@ Successfully completed the GitHubConfig task:
 
 - Added `validate()` method that returns `ConfigError::MissingRequired` when
   any of the three required fields are missing.
-- Added `is_configured()` const helper method.
+- Added `is_configured()` helper method.
 - Added 7 unit tests covering complete, partial, and empty configurations.
 - Added 4 BDD scenarios covering happy, unhappy, and edge cases.
 - All validation gates pass: `make check-fmt`, `make lint`, `make test`.
@@ -243,7 +243,7 @@ At completion, `GitHubConfig` should expose:
 
         /// Returns whether all GitHub credentials are configured.
         #[must_use]
-        pub const fn is_configured(&self) -> bool;
+        pub fn is_configured(&self) -> bool;
     }
 
 The existing `ConfigError::MissingRequired` variant in `src/error.rs` is used

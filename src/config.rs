@@ -572,20 +572,15 @@ mod tests {
     }
 
     #[rstest]
-    fn github_config_is_configured_false_when_app_id_is_zero() {
+    #[case(Some(0), Some(67890))]
+    #[case(Some(12345), Some(0))]
+    fn github_config_is_configured_false_when_id_is_zero(
+        #[case] app_id: Option<u64>,
+        #[case] installation_id: Option<u64>,
+    ) {
         let config = GitHubConfig {
-            app_id: Some(0),
-            installation_id: Some(67890),
-            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
-        };
-        assert!(!config.is_configured());
-    }
-
-    #[rstest]
-    fn github_config_is_configured_false_when_installation_id_is_zero() {
-        let config = GitHubConfig {
-            app_id: Some(12345),
-            installation_id: Some(0),
+            app_id,
+            installation_id,
             private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
         };
         assert!(!config.is_configured());
