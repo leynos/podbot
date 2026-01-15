@@ -77,7 +77,7 @@ For detailed configuration options, see the [user's guide](docs/users-guide.md).
 3. **GitHub tokens** are managed by a background daemon (no static creds!)
 4. **The agent starts** with access to the repo but isolated from your host
 5. **You interact** with the agent normally—it just runs in a safe container
-6. **Cleanup happens** automatically when you're done
+6. **Cleanup happens** automatically when you're done.
 
 The host Rust CLI maintains control of the actual Docker/Podman socket. The
 agent gets a nested container environment where it can do its work without
@@ -85,11 +85,11 @@ elevated privileges.
 
 ## Documentation
 
-- **[User's Guide](docs/users-guide.md)** - Installation, CLI reference,
+- **[User's Guide](docs/users-guide.md)** — Installation, CLI reference,
   configuration, security model
-- **[Roadmap](docs/podbot-roadmap.md)** - Detailed implementation status and
+- **[Roadmap](docs/podbot-roadmap.md)** — Detailed implementation status and
   upcoming features
-- **[Design Document](docs/podbot-design.md)** - Architecture, security model,
+- **[Design Document](docs/podbot-design.md)** — Architecture, security model,
   token management
 
 ## Technology stack
@@ -118,4 +118,4 @@ Developed by **[df12 Productions](https://df12.studio)**
 
 ## Licence
 
-ISC Licence - see [LICENSE](LICENSE) for details.
+ISC Licence — see [LICENSE](LICENSE) for details.
