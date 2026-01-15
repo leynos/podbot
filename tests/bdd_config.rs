@@ -16,6 +16,8 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then};
 struct ConfigState {
     /// The loaded application configuration.
     config: Slot<AppConfig>,
+    /// The captured configuration parsing error.
+    parse_error: Slot<String>,
 }
 
 /// Fixture providing a fresh configuration state.
@@ -47,6 +49,17 @@ fn config_with_privileged_mode(config_state: &ConfigState) {
 fn no_github_configuration(config_state: &ConfigState) {
     // Default config has no GitHub settings
     config_state.config.set(AppConfig::default());
+}
+
+#[given("a configuration file with an invalid agent kind")]
+fn config_with_invalid_agent_kind(config_state: &ConfigState) {
+    let toml = r#"
+        [agent]
+        kind = "unknown"
+    "#;
+    let error = toml::from_str::<AppConfig>(toml)
+        .expect_err("TOML parsing should fail for an invalid agent kind");
+    config_state.parse_error.set(error.to_string());
 }
 
 #[then("the sandbox is not privileged")]
@@ -147,6 +160,18 @@ fn private_key_path_is_absent(config_state: &ConfigState) {
     );
 }
 
+#[then("the configuration load fails")]
+fn configuration_load_fails(config_state: &ConfigState) {
+    let error = config_state
+        .parse_error
+        .get()
+        .expect("parse error should be set");
+    assert!(
+        error.contains("unknown variant"),
+        "Expected unknown-variant error, got: {error}"
+    );
+}
+
 // Scenario bindings
 
 #[scenario(
@@ -170,5 +195,13 @@ fn configuration_file_overrides_defaults(config_state: ConfigState) {
     name = "Missing optional configuration is acceptable"
 )]
 fn missing_optional_configuration_acceptable(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Invalid agent kind is rejected"
+)]
+fn invalid_agent_kind_is_rejected(config_state: ConfigState) {
     let _ = config_state;
 }

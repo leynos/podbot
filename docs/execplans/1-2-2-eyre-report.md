@@ -66,8 +66,12 @@ warnings.
   and edge cases.
 - [x] (2026-01-12 11:05Z) Update design documentation and roadmap entry; confirm
   no user-guide changes are required.
-- [x] (2026-01-12 11:20Z) Run `make check-fmt`, `make lint`, `make test`, `make
-  markdownlint`, and `make nixie` with logs.
+- [x] (2026-01-12 11:20Z) Run validation commands with logs:
+  - `make check-fmt`
+  - `make lint`
+  - `make test`
+  - `make markdownlint`
+  - `make nixie`
 
 ## Surprises & Discoveries
 
@@ -82,7 +86,7 @@ warnings.
   `podbot::error::Result<()>`, converting to `eyre::Report` in `main`.
   Rationale: Keeps semantic errors inside the domain and enforces the boundary
   at the entry point without changing public APIs. Date/Author: 2026-01-12 /
-  Codex
+  Codex.
 
 ## Outcomes & Retrospective
 

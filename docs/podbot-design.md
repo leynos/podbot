@@ -78,8 +78,7 @@ The CLI orchestrates container creation and agent execution through eight steps.
 7. **Start the agent in permissive mode**, attached to the terminal:
 
    - Claude Code: `claude --dangerously-skip-permissions`[^4]
-   - Codex CLI: `codex --yolo` (alias for
-     `--dangerously-bypass-approvals-and-sandbox`)[^5]
+   - Codex CLI: `codex --dangerously-bypass-approvals-and-sandbox`[^5]
 
 ## Security model
 
@@ -112,12 +111,7 @@ risks when broad network access is enabled.[^4][^5]
 
 ## Error handling boundary
 
-Podbot uses semantic error enums in `src/error.rs` for all domain failures and
-reserves `eyre::Report` for the application boundary. The CLI entry point calls
-a `run` helper that returns `podbot::error::Result<()>`, then converts the
-error into an `eyre::Report` before returning from `main`. This keeps opaque
-error reporting at the boundary while preserving precise, inspectable errors
-inside the codebase.
+See "Error handling" below for the detailed error boundary description.
 
 ## Token management
 
@@ -127,7 +121,7 @@ expire after one hour and must be refreshed without interrupting the agent.
 The token strategy works as follows:
 
 1. On container creation, the CLI establishes a runtime directory at
-   `$XDG_RUNTIME_DIR/yolo/<container_id>/`.
+   `$XDG_RUNTIME_DIR/podbot/<container_id>/`.
 
 2. The CLI writes the initial token to `ghapp_token` within this directory,
    with mode `0600` and directory mode `0700`.
@@ -188,17 +182,17 @@ annotated structs.
 
 ## Configuration
 
-The CLI reads configuration from `~/.config/yolo/config.toml` with environment
-and flag overrides.
+The CLI reads configuration from `~/.config/podbot/config.toml` with
+environment and flag overrides.
 
 ```toml
 engine_socket = "unix:///run/user/1000/podman/podman.sock"
-image = "ghcr.io/example/yolo-sandbox:latest"
+image = "ghcr.io/example/podbot-sandbox:latest"
 
 [github]
 app_id = 12345
 installation_id = 67890
-private_key_path = "/home/user/.config/yolo/github-app.pem"
+private_key_path = "/home/user/.config/podbot/github-app.pem"
 
 [workspace]
 base_dir = "/work"
@@ -213,7 +207,7 @@ mount_dev_fuse = true
 
 [agent]
 kind = "codex"
-mode = "yolo"
+mode = "podbot"
 ```
 
 The `sandbox.privileged` setting controls the trade-off between compatibility
@@ -329,11 +323,11 @@ classDiagram
 The CLI exposes a minimal surface area.
 
 ```plaintext
-yolo run --repo owner/name --agent codex|claude
-yolo token-daemon
-yolo ps
-yolo stop <container>
-yolo exec <container> <command>
+podbot run --repo owner/name --agent codex|claude
+podbot token-daemon
+podbot ps
+podbot stop <container>
+podbot exec <container> <command>
 ```
 
 The `run` subcommand orchestrates the full execution flow. The `token-daemon`

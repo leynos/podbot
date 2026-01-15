@@ -19,8 +19,10 @@ fn main() -> EyreResult<()> {
     run(&cli).map_err(Report::from)
 }
 
-// Keep semantic errors inside the run loop so the CLI boundary owns
-// conversion to `eyre::Report`.
+/// Execute the CLI command, returning domain-specific errors.
+///
+/// Keeps semantic errors inside the run loop so the CLI boundary owns
+/// conversion to `eyre::Report`.
 fn run(cli: &Cli) -> PodbotResult<()> {
     match &cli.command {
         Commands::Run(args) => run_agent(cli, args),

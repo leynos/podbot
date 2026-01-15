@@ -261,19 +261,16 @@ mod tests {
     fn app_config() -> AppConfig {
         AppConfig::default()
     }
-
     /// Fixture providing a default `SandboxConfig`.
     #[fixture]
     fn sandbox_config() -> SandboxConfig {
         SandboxConfig::default()
     }
-
     /// Fixture providing a default `WorkspaceConfig`.
     #[fixture]
     fn workspace_config() -> WorkspaceConfig {
         WorkspaceConfig::default()
     }
-
     /// Fixture providing a default `CredsConfig`.
     #[fixture]
     fn creds_config() -> CredsConfig {
@@ -284,7 +281,6 @@ mod tests {
     fn agent_kind_default_is_claude() {
         assert_eq!(AgentKind::default(), AgentKind::Claude);
     }
-
     #[rstest]
     #[case(AgentKind::Claude, "claude")]
     #[case(AgentKind::Codex, "codex")]
@@ -393,5 +389,20 @@ mod tests {
         assert!(config.sandbox.mount_dev_fuse);
         assert_eq!(config.agent.kind, AgentKind::Claude);
         assert_eq!(config.workspace.base_dir.as_str(), "/work");
+    }
+
+    #[rstest]
+    fn app_config_rejects_invalid_agent_kind() {
+        let toml = r#"
+            [agent]
+            kind = "unknown"
+        "#;
+
+        let error = toml::from_str::<AppConfig>(toml)
+            .expect_err("TOML parsing should fail for an invalid agent kind");
+        assert!(
+            error.to_string().contains("unknown variant"),
+            "Expected unknown-variant error, got: {error}"
+        );
     }
 }
