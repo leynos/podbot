@@ -85,7 +85,7 @@ the roadmap task is marked complete.
 - Observation: rstest-bdd does not support the `regex` attribute for step
   definitions with capture groups. Evidence: Compilation error when using
   `#[then(regex = r#"...(.+)..."#)]`. Impact: Changed to a literal string match
-  for the specific field name instead of a parameterised step.
+  for the specific field name instead of a parameterized step.
 
 ## Decision Log
 
@@ -131,7 +131,7 @@ method that checks all three fields are present and returns
 `is_configured()` helper that returns a boolean.
 
 Stage B adds unit tests using rstest. Create fixtures for complete and partial
-configurations. Add parameterised tests covering all combinations of missing
+configurations. Add parameterized tests covering all combinations of missing
 fields.
 
 Stage C adds BDD scenarios to `tests/features/configuration.feature` and
@@ -158,7 +158,7 @@ Stage E runs validation gates with captured logs.
     - Fixture: `github_config_complete()` with all fields set.
     - Test: `github_config_validate_succeeds_when_complete`.
     - Test: `github_config_validate_fails_when_app_id_missing`.
-    - Test: `github_config_validate_reports_all_missing_fields` (parameterised).
+    - Test: `github_config_validate_reports_all_missing_fields` (parameterized).
     - Test: `github_config_is_configured_true_when_complete`.
     - Test: `github_config_is_configured_false_when_incomplete`.
 

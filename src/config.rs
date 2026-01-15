@@ -94,14 +94,16 @@ impl GitHubConfig {
         Ok(())
     }
 
-    /// Returns whether all GitHub credentials are configured.
+    /// Returns whether all GitHub credentials are properly configured.
     ///
-    /// This is a quick check that does not validate the values themselves,
-    /// only that all three fields (`app_id`, `installation_id`, `private_key_path`)
-    /// are present.
+    /// This checks that all three fields (`app_id`, `installation_id`,
+    /// `private_key_path`) are present and that numeric IDs are non-zero.
+    /// This mirrors the checks performed by [`validate()`](Self::validate).
     #[must_use]
-    pub const fn is_configured(&self) -> bool {
-        self.app_id.is_some() && self.installation_id.is_some() && self.private_key_path.is_some()
+    pub fn is_configured(&self) -> bool {
+        self.app_id.is_some_and(|v| v != 0)
+            && self.installation_id.is_some_and(|v| v != 0)
+            && self.private_key_path.is_some()
     }
 }
 
@@ -567,6 +569,26 @@ mod tests {
         let config = GitHubConfig {
             app_id: Some(12345),
             installation_id: None,
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        assert!(!config.is_configured());
+    }
+
+    #[rstest]
+    fn github_config_is_configured_false_when_app_id_is_zero() {
+        let config = GitHubConfig {
+            app_id: Some(0),
+            installation_id: Some(67890),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        assert!(!config.is_configured());
+    }
+
+    #[rstest]
+    fn github_config_is_configured_false_when_installation_id_is_zero() {
+        let config = GitHubConfig {
+            app_id: Some(12345),
+            installation_id: Some(0),
             private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
         };
         assert!(!config.is_configured());
