@@ -47,59 +47,59 @@ from a sample config file while preserving defaults for missing fields.
 
 ## Risks
 
-    - Risk: `AppConfig` already exists with fields that differ from the design
-      document.
-      Severity: medium
-      Likelihood: medium
-      Mitigation: inspect `src/config.rs` first and adjust only what is needed
-      to align with `docs/podbot-design.md` and `docs/users-guide.md`.
+- Risk: `AppConfig` already exists with fields that differ from the design
+  document.
+  Severity: medium
+  Likelihood: medium
+  Mitigation: inspect `src/config.rs` first and adjust only what is needed to
+  align with `docs/podbot-design.md` and `docs/users-guide.md`.
 
-    - Risk: existing tests and BDD scenarios assume defaults that conflict with
-      the intended defaults.
-      Severity: medium
-      Likelihood: low
-      Mitigation: update tests and feature files in the same commit and ensure
-      defaults are described once in the design and user guide.
+- Risk: existing tests and BDD scenarios assume defaults that conflict with the
+  intended defaults.
+  Severity: medium
+  Likelihood: low
+  Mitigation: update tests and feature files in the same commit and ensure
+  defaults are described once in the design and user guide.
 
-    - Risk: `OrthoConfig` derive requirements introduce extra attributes or
-      defaults not accounted for.
-      Severity: low
-      Likelihood: medium
-      Mitigation: follow `docs/ortho-config-users-guide.md` and keep changes
-      minimal, deferring layering logic to the next roadmap tasks.
+- Risk: `OrthoConfig` derive requirements introduce extra attributes or
+  defaults not accounted for.
+  Severity: low
+  Likelihood: medium
+  Mitigation: follow `docs/ortho-config-users-guide.md` and keep changes
+  minimal, deferring layering logic to the next roadmap tasks.
 
 ## Progress
 
-    - [x] (2026-01-14 09:31Z) Inspect existing configuration structs and
-          documentation for alignment.
-    - [x] (2026-01-14 13:20Z) Implement or refine `AppConfig` and nested config
-          defaults in `src/config.rs`.
-    - [x] (2026-01-14 13:20Z) Add/update unit tests (`rstest`) and behavioural
-          tests (`rstest-bdd`) for happy, unhappy, and edge cases.
-    - [x] (2026-01-14 13:20Z) Update `docs/podbot-design.md` with any design
-          decisions and `docs/users-guide.md` with user-facing behaviour.
-    - [x] (2026-01-14 13:20Z) Mark Step 1.3 task as done in
-          `docs/podbot-roadmap.md`.
-    - [x] (2026-01-14 13:20Z) Run formatting, linting, tests, and full
-          validation (`make all`) with logs captured.
+- [x] (2026-01-14 09:31Z) Inspect existing configuration structs and
+  documentation for alignment.
+- [x] (2026-01-14 13:20Z) Implement or refine `AppConfig` and nested config
+  defaults in `src/config.rs`.
+- [x] (2026-01-14 13:20Z) Add/update unit tests (`rstest`) and behavioural
+  tests (`rstest-bdd`) for happy, unhappy, and edge cases.
+- [x] (2026-01-14 13:20Z) Update `docs/podbot-design.md` with any design
+  decisions and `docs/users-guide.md` with user-facing behaviour.
+- [x] (2026-01-14 13:20Z) Mark Step 1.3 task as done in
+  `docs/podbot-roadmap.md`.
+- [x] (2026-01-14 13:20Z) Run formatting, linting, tests, and full validation
+  (`make all`) with logs captured.
 
 ## Surprises & Discoveries
 
-    - Observation: The design documentation used the legacy project naming.
-      Evidence: `docs/podbot-design.md` "Configuration" and CLI sections.
-      Impact: Updated documentation and examples to `podbot` once confirmed.
-    - Observation: `cargo doc` emits a warning about the renamed
-      `missing_crate_level_docs` lint.
-      Evidence: `make lint` and `make all` output includes the rename warning.
-      Impact: No functional impact, but documentation builds remain noisy until
-      the lint name is updated.
+- Observation: The design documentation used the legacy project naming.
+  Evidence: `docs/podbot-design.md` "Configuration" and CLI sections.
+  Impact: Updated documentation and examples to `podbot` once confirmed.
+- Observation: `cargo doc` emits a warning about the renamed
+  `missing_crate_level_docs` lint.
+  Evidence: `make lint` and `make all` output includes the rename warning.
+  Impact: No functional impact, but documentation builds remain noisy until the
+  lint name is updated.
 
 ## Decision Log
 
-    - Decision: Replace legacy project-name references with `podbot` for paths,
-      directories, and CLI examples.
-      Rationale: User confirmed the canonical naming and default path.
-      Date/Author: 2026-01-14 / Codex
+- Decision: Replace legacy project-name references with `podbot` for paths,
+  directories, and CLI examples.
+  Rationale: User confirmed the canonical naming and default path.
+  Date/Author: 2026-01-14 / Codex
 
 ## Outcomes & Retrospective
 
