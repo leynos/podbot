@@ -50,7 +50,7 @@ defaults.
 **Tasks:**
 
 - [x] Define AppConfig as the root configuration structure.
-- [ ] Create GithubConfig for App ID, installation ID, and private key path.
+- [x] Create GithubConfig for App ID, installation ID, and private key path.
 - [ ] Establish SandboxConfig for privileged mode and /dev/fuse mount options.
 - [ ] Specify AgentConfig for agent kind and execution mode.
 - [ ] Add WorkspaceConfig for base directory.

@@ -13,9 +13,8 @@ PLANS.md is not present in the repository.
 Define the root `AppConfig` structure that represents podbot's configuration in
 one place, with clear defaults and nested sections that match the design and
 user documentation. Success is observable when `cargo test` passes with new
-unit and behavioural coverage, and the configuration struct can be
-deserialized from a sample config file while preserving defaults for missing
-fields.
+unit and behavioural coverage, and the configuration struct can be deserialized
+from a sample config file while preserving defaults for missing fields.
 
 ## Constraints
 
@@ -49,25 +48,19 @@ fields.
 ## Risks
 
 - Risk: `AppConfig` already exists with fields that differ from the design
-  document.
-  Severity: medium
-  Likelihood: medium
-  Mitigation: inspect `src/config.rs` first and adjust only what is needed to
-  align with `docs/podbot-design.md` and `docs/users-guide.md`.
+  document. Severity: medium Likelihood: medium Mitigation: inspect
+  `src/config.rs` first and adjust only what is needed to align with
+  `docs/podbot-design.md` and `docs/users-guide.md`.
 
 - Risk: existing tests and BDD scenarios assume defaults that conflict with the
-  intended defaults.
-  Severity: medium
-  Likelihood: low
-  Mitigation: update tests and feature files in the same commit and ensure
-  defaults are described once in the design and user guide.
+  intended defaults. Severity: medium Likelihood: low Mitigation: update tests
+  and feature files in the same commit and ensure defaults are described once
+  in the design and user guide.
 
 - Risk: `OrthoConfig` derive requirements introduce extra attributes or
-  defaults not accounted for.
-  Severity: low
-  Likelihood: medium
-  Mitigation: follow `docs/ortho-config-users-guide.md` and keep changes
-  minimal, deferring layering logic to the next roadmap tasks.
+  defaults not accounted for. Severity: low Likelihood: medium Mitigation:
+  follow `docs/ortho-config-users-guide.md` and keep changes minimal, deferring
+  layering logic to the next roadmap tasks.
 
 ## Progress
 
@@ -87,20 +80,18 @@ fields.
 ## Surprises & Discoveries
 
 - Observation: The design documentation used the legacy project naming.
-  Evidence: `docs/podbot-design.md` "Configuration" and CLI sections.
-  Impact: Updated documentation and examples to `podbot` once confirmed.
+  Evidence: `docs/podbot-design.md` "Configuration" and CLI sections. Impact:
+  Updated documentation and examples to `podbot` once confirmed.
 - Observation: `cargo doc` emits a warning about the renamed
-  `missing_crate_level_docs` lint.
-  Evidence: `make lint` and `make all` output includes the rename warning.
-  Impact: No functional impact, but documentation builds remain noisy until the
-  lint name is updated.
+  `missing_crate_level_docs` lint. Evidence: `make lint` and `make all` output
+  includes the rename warning. Impact: No functional impact, but documentation
+  builds remain noisy until the lint name is updated.
 
 ## Decision Log
 
 - Decision: Replace legacy project-name references with `podbot` for paths,
-  directories, and CLI examples.
-  Rationale: User confirmed the canonical naming and default path.
-  Date/Author: 2026-01-14 / Codex.
+  directories, and CLI examples. Rationale: User confirmed the canonical naming
+  and default path. Date/Author: 2026-01-14 / Codex.
 
 ## Outcomes & Retrospective
 
@@ -275,17 +266,15 @@ Keep the following log files for review if needed:
 At completion, the root configuration interface should be available at
 `crate::config::AppConfig` and follow this shape:
 
-```rust
-pub struct AppConfig {
-    pub engine_socket: Option<String>,
-    pub image: Option<String>,
-    pub github: GitHubConfig,
-    pub sandbox: SandboxConfig,
-    pub agent: AgentConfig,
-    pub workspace: WorkspaceConfig,
-    pub creds: CredsConfig,
-}
-```
+    pub struct AppConfig {
+        pub engine_socket: Option<String>,
+        pub image: Option<String>,
+        pub github: GitHubConfig,
+        pub sandbox: SandboxConfig,
+        pub agent: AgentConfig,
+        pub workspace: WorkspaceConfig,
+        pub creds: CredsConfig,
+    }
 
 Nested types should live in `src/config.rs` and remain serializable with
 `serde`. Any path fields should use `camino::Utf8PathBuf`. If this task

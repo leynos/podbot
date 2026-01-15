@@ -57,6 +57,56 @@ pub struct GitHubConfig {
     pub private_key_path: Option<Utf8PathBuf>,
 }
 
+impl GitHubConfig {
+    /// Validates that all required GitHub fields are present and non-zero.
+    ///
+    /// This method checks that `app_id`, `installation_id`, and `private_key_path`
+    /// are all set and that numeric IDs are non-zero. Call this before performing
+    /// GitHub operations that require authentication.
+    ///
+    /// # Note on zero values
+    ///
+    /// GitHub never issues `app_id` or `installation_id` values of `0`, so this
+    /// validation treats `Some(0)` as invalid to catch default/placeholder values
+    /// early.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConfigError::MissingRequired` if any required field is `None` or
+    /// if numeric IDs are zero, with the field names listed in the error message.
+    pub fn validate(&self) -> crate::error::Result<()> {
+        let mut missing = Vec::new();
+        if self.app_id.is_none() || self.app_id == Some(0) {
+            missing.push("github.app_id");
+        }
+        if self.installation_id.is_none() || self.installation_id == Some(0) {
+            missing.push("github.installation_id");
+        }
+        if self.private_key_path.is_none() {
+            missing.push("github.private_key_path");
+        }
+        if !missing.is_empty() {
+            return Err(crate::error::ConfigError::MissingRequired {
+                field: missing.join(", "),
+            }
+            .into());
+        }
+        Ok(())
+    }
+
+    /// Returns whether all GitHub credentials are properly configured.
+    ///
+    /// This checks that all three fields (`app_id`, `installation_id`,
+    /// `private_key_path`) are present and that numeric IDs are non-zero.
+    /// This mirrors the checks performed by [`validate()`](Self::validate).
+    #[must_use]
+    pub fn is_configured(&self) -> bool {
+        self.app_id.is_some_and(|v| v != 0)
+            && self.installation_id.is_some_and(|v| v != 0)
+            && self.private_key_path.is_some()
+    }
+}
+
 /// Sandbox security configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -277,6 +327,16 @@ mod tests {
         CredsConfig::default()
     }
 
+    /// Fixture providing a fully configured `GitHubConfig`.
+    #[fixture]
+    fn github_config_complete() -> GitHubConfig {
+        GitHubConfig {
+            app_id: Some(12345),
+            installation_id: Some(67890),
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        }
+    }
+
     #[rstest]
     fn agent_kind_default_is_claude() {
         assert_eq!(AgentKind::default(), AgentKind::Claude);
@@ -404,5 +464,125 @@ mod tests {
             error.to_string().contains("unknown variant"),
             "Expected unknown-variant error, got: {error}"
         );
+    }
+
+    // GitHubConfig validation tests
+
+    #[rstest]
+    fn github_config_validate_succeeds_when_complete(github_config_complete: GitHubConfig) {
+        let result = github_config_complete.validate();
+        assert!(
+            result.is_ok(),
+            "Expected validation to succeed for complete config"
+        );
+    }
+
+    #[rstest]
+    #[case(
+        None,
+        None,
+        None,
+        "github.app_id, github.installation_id, github.private_key_path"
+    )]
+    #[case(
+        Some(123),
+        None,
+        None,
+        "github.installation_id, github.private_key_path"
+    )]
+    #[case(None, Some(456), None, "github.app_id, github.private_key_path")]
+    #[case(
+        None,
+        None,
+        Some(Utf8PathBuf::from("/k.pem")),
+        "github.app_id, github.installation_id"
+    )]
+    #[case(Some(123), Some(456), None, "github.private_key_path")]
+    #[case(
+        Some(123),
+        None,
+        Some(Utf8PathBuf::from("/k.pem")),
+        "github.installation_id"
+    )]
+    #[case(None, Some(456), Some(Utf8PathBuf::from("/k.pem")), "github.app_id")]
+    // Zero values are treated as missing (GitHub never issues ID 0)
+    #[case(
+        Some(0),
+        Some(67890),
+        Some(Utf8PathBuf::from("/k.pem")),
+        "github.app_id"
+    )]
+    #[case(
+        Some(12345),
+        Some(0),
+        Some(Utf8PathBuf::from("/k.pem")),
+        "github.installation_id"
+    )]
+    #[case(
+        Some(0),
+        Some(0),
+        Some(Utf8PathBuf::from("/k.pem")),
+        "github.app_id, github.installation_id"
+    )]
+    fn github_config_validate_reports_missing_fields(
+        #[case] app_id: Option<u64>,
+        #[case] installation_id: Option<u64>,
+        #[case] private_key_path: Option<Utf8PathBuf>,
+        #[case] expected_fields: &str,
+    ) {
+        let config = GitHubConfig {
+            app_id,
+            installation_id,
+            private_key_path,
+        };
+        let result = config.validate();
+        let error = result.expect_err("validation should fail with missing fields");
+        match error {
+            crate::error::PodbotError::Config(crate::error::ConfigError::MissingRequired {
+                field,
+            }) => {
+                assert_eq!(
+                    field, expected_fields,
+                    "Field mismatch: expected '{expected_fields}', got '{field}'"
+                );
+            }
+            other => panic!("Expected ConfigError::MissingRequired, got: {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn github_config_is_configured_true_when_complete(github_config_complete: GitHubConfig) {
+        assert!(github_config_complete.is_configured());
+    }
+
+    #[rstest]
+    fn github_config_is_configured_false_when_default() {
+        let config = GitHubConfig::default();
+        assert!(!config.is_configured());
+    }
+
+    #[rstest]
+    fn github_config_is_configured_false_when_partial() {
+        let config = GitHubConfig {
+            app_id: Some(12345),
+            installation_id: None,
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        assert!(!config.is_configured());
+    }
+
+    #[rstest]
+    #[case(Some(0), Some(67890))]
+    #[case(Some(12345), Some(0))]
+    fn github_config_is_configured_false_when_id_is_zero(
+        #[case] app_id: Option<u64>,
+        #[case] installation_id: Option<u64>,
+    ) {
+        let config = GitHubConfig {
+            app_id,
+            installation_id,
+            private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
+        };
+        assert!(!config.is_configured());
     }
 }
