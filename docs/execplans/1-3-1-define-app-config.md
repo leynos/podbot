@@ -142,7 +142,7 @@ cleanly. Add or adjust module-level documentation to keep the public-facing
 example accurate.
 
 Stage C adds validation coverage. Unit tests should use `rstest` fixtures to
-cover default values, TOML deserialisation, and an unhappy path such as an
+cover default values, TOML deserialization, and an unhappy path such as an
 invalid agent kind or missing nested sections. Behavioural tests should use
 `rstest-bdd` to assert the user-facing defaults and an unhappy or edge case
 scenario, such as a malformed configuration entry leading to a reported error
@@ -180,9 +180,9 @@ Stage E runs formatting, linting, and test gates. Use Makefile targets and the
 
 3) Add or update unit tests in `src/config.rs` using `rstest`.
 
-    - Happy path: deserialise a TOML snippet into `AppConfig` and assert values.
-    - Edge path: deserialise TOML missing nested sections and assert defaults.
-    - Unhappy path: attempt to deserialise an invalid agent kind and assert the
+    - Happy path: deserialize a TOML snippet into `AppConfig` and assert values.
+    - Edge path: deserialize TOML missing nested sections and assert defaults.
+    - Unhappy path: attempt to deserialize an invalid agent kind and assert the
       error message or failure mode.
 
 4) Extend behavioural tests in `tests/bdd_config.rs` and
