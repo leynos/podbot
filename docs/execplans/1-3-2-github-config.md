@@ -128,7 +128,7 @@ The roadmap entry for this task is in `docs/podbot-roadmap.md` under Step 1.3:
 Stage A adds validation methods to `GitHubConfig`. Implement a `validate()`
 method that checks all three fields are present and returns
 `ConfigError::MissingRequired` listing any missing fields. Add an
-`is_configured()` helper that returns a boolean.
+`is_configured()` helper that returns `bool`.
 
 Stage B adds unit tests using rstest. Create fixtures for complete and partial
 configurations. Add parameterized tests covering all combinations of missing
