@@ -638,47 +638,33 @@ mod tests {
     }
 
     #[rstest]
-    fn sandbox_config_deserialises_from_toml_section() {
-        let toml = r"
-            [sandbox]
-            privileged = true
-            mount_dev_fuse = false
-        ";
-        let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-        assert!(config.sandbox.privileged, "Expected privileged to be true");
-        assert!(
-            !config.sandbox.mount_dev_fuse,
-            "Expected mount_dev_fuse to be false"
+    #[case(
+        "both_fields_explicit",
+        "[sandbox]\nprivileged = true\nmount_dev_fuse = false",
+        true,
+        false
+    )]
+    #[case(
+        "section_omitted",
+        r#"engine_socket = "unix:///tmp/test.sock""#,
+        false,
+        true
+    )]
+    #[case("missing_field_defaults", "[sandbox]\nprivileged = true", true, true)]
+    fn sandbox_config_parameterised(
+        #[case] description: &str,
+        #[case] toml_input: &str,
+        #[case] expected_privileged: bool,
+        #[case] expected_mount_dev_fuse: bool,
+    ) {
+        let config: AppConfig = toml::from_str(toml_input).expect("TOML parsing should succeed");
+        assert_eq!(
+            config.sandbox.privileged, expected_privileged,
+            "{description}: privileged mismatch"
         );
-    }
-
-    #[rstest]
-    fn sandbox_config_uses_defaults_when_section_omitted() {
-        let toml = r#"
-            engine_socket = "unix:///tmp/test.sock"
-        "#;
-        let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-        assert!(
-            !config.sandbox.privileged,
-            "Expected privileged to default to false"
-        );
-        assert!(
-            config.sandbox.mount_dev_fuse,
-            "Expected mount_dev_fuse to default to true"
-        );
-    }
-
-    #[rstest]
-    fn sandbox_config_uses_defaults_for_missing_fields() {
-        let toml = r"
-            [sandbox]
-            privileged = true
-        ";
-        let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-        assert!(config.sandbox.privileged, "Expected privileged to be true");
-        assert!(
-            config.sandbox.mount_dev_fuse,
-            "Expected mount_dev_fuse to default to true when omitted"
+        assert_eq!(
+            config.sandbox.mount_dev_fuse, expected_mount_dev_fuse,
+            "{description}: mount_dev_fuse mismatch"
         );
     }
 }
