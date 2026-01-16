@@ -24,12 +24,6 @@ fn get_config(config_state: &ConfigState) -> AppConfig {
 }
 
 /// Creates and sets an `AppConfig` with a custom `GitHubConfig`.
-///
-/// # Arguments
-/// * `config_state` - The test state to update
-/// * `app_id` - Optional GitHub App ID
-/// * `installation_id` - Optional GitHub installation ID
-/// * `private_key_path` - Optional path to the private key file
 fn set_github_config(
     config_state: &ConfigState,
     app_id: Option<u64>,
@@ -53,11 +47,6 @@ fn assert_github_field_absent<T>(field: Option<&T>, field_name: &str) {
 }
 
 /// Creates and sets an `AppConfig` with a custom `SandboxConfig`.
-///
-/// # Arguments
-/// * `config_state` - The test state to update
-/// * `privileged` - Whether to run in privileged mode
-/// * `mount_dev_fuse` - Whether to mount /dev/fuse
 fn set_sandbox_config(config_state: &ConfigState, privileged: bool, mount_dev_fuse: bool) {
     let config = AppConfig {
         sandbox: SandboxConfig {
@@ -85,8 +74,6 @@ struct ConfigState {
 fn config_state() -> ConfigState {
     ConfigState::default()
 }
-
-// Step definitions
 
 #[given("no configuration is provided")]
 fn no_configuration_provided(config_state: &ConfigState) {
@@ -321,7 +308,7 @@ fn dev_fuse_mounting_disabled(config_state: &ConfigState) {
     );
 }
 
-// Scenario bindings
+// Scenario bindings - each binds a feature scenario to its step implementations
 
 #[scenario(
     path = "tests/features/configuration.feature",

@@ -8,12 +8,12 @@ Status: COMPLETE
 
 ## Purpose / Big Picture
 
-Complete the `SandboxConfig` implementation by adding comprehensive test coverage
-and documentation. The struct already exists in `src/config.rs` with two boolean
-fields (`privileged` and `mount_dev_fuse`) and sensible defaults. Unlike
-`GitHubConfig`, `SandboxConfig` does not require a `validate()` method because
-both fields are booleans with no invalid states—any boolean combination is
-semantically valid.
+Complete the `SandboxConfig` implementation by adding comprehensive test
+coverage and documentation. The struct already exists in `src/config.rs` with
+two boolean fields (`privileged` and `mount_dev_fuse`) and sensible defaults.
+Unlike `GitHubConfig`, `SandboxConfig` does not require a `validate()` method
+because both fields are booleans with no invalid states—any boolean combination
+is semantically valid.
 
 Success is observable when `make test` passes with new test coverage, the
 user's guide is updated, and the roadmap task is marked complete.
@@ -74,7 +74,7 @@ user's guide is updated, and the roadmap task is marked complete.
 
 - Observation: The existing `src/config.rs` already had tests for SandboxConfig
   default values. Evidence: `sandbox_config_default_values` test existed at line
-  361. Impact: Extended the existing test suite rather than creating all tests
+  1. Impact: Extended the existing test suite rather than creating all tests
   from scratch.
 
 - Observation: Clippy lint `needless_raw_string_hashes` was triggered by raw
@@ -106,10 +106,10 @@ Successfully completed the SandboxConfig task:
 
 ## Context and Orientation
 
-Configuration lives in `src/config.rs`, which currently defines CLI arguments
-and configuration structs including `SandboxConfig`. Behavioural coverage
-resides in `tests/bdd_config.rs` with feature definitions in
-`tests/features/configuration.feature`.
+Configuration lives in `src/config.rs`, which currently defines command-line
+interface (CLI) arguments and configuration structs including `SandboxConfig`.
+Behavioural coverage resides in `tests/bdd_config.rs` with feature definitions
+in `tests/features/configuration.feature`.
 
 The roadmap entry for this task is in `docs/podbot-roadmap.md` under Step 1.3:
 "Establish SandboxConfig for privileged mode and /dev/fuse mount options."
@@ -153,8 +153,8 @@ Existing BDD coverage includes:
 
 ## Plan of Work
 
-Stage A adds unit tests for TOML serialization. Add parameterized tests covering
-all four boolean combinations of `privileged` and `mount_dev_fuse`.
+Stage A adds unit tests for TOML serialization. Add parameterized tests
+covering all four boolean combinations of `privileged` and `mount_dev_fuse`.
 
 Stage B adds BDD scenarios to `tests/features/configuration.feature` covering
 sandbox configuration edge cases. Add corresponding step definitions.
@@ -169,7 +169,8 @@ Stage D runs validation gates with captured logs.
 
 1) Add unit tests for TOML serialization to `src/config.rs`:
 
-    - Test: `sandbox_config_serializes_to_toml` - verify round-trip serialization
+    - Test: `sandbox_config_serializes_to_toml` - verify round-trip
+      serialization
     - Test: `sandbox_config_all_combinations` - parameterized test for all four
       boolean combinations
 
@@ -216,7 +217,8 @@ Stage D runs validation gates with captured logs.
 Success looks like:
 
 - `make check-fmt`, `make lint`, and `make test` all succeed with no warnings.
-- Unit tests in `src/config.rs` demonstrate TOML serialization for SandboxConfig.
+- Unit tests in `src/config.rs` demonstrate TOML serialization for
+  SandboxConfig.
 - Behavioural tests in `tests/bdd_config.rs` pass with new scenarios covering
   sandbox configuration.
 - `docs/users-guide.md` includes documentation about sandbox settings.
@@ -265,7 +267,7 @@ No validation method is required because all boolean combinations are valid.
 
 ## Files to Modify
 
-- `docs/execplans/1-3-3-sandbox-config.md` - Create this execplan document
+- `docs/execplans/1-3-3-sandbox-config.md` - Create this ExecPlan document
 - `src/config.rs` - Add unit tests (lines ~588+)
 - `tests/bdd_config.rs` - Add step definitions and scenario bindings
 - `tests/features/configuration.feature` - Add new BDD scenarios

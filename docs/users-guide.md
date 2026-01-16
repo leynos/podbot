@@ -153,10 +153,10 @@ All configuration options can be set via environment variables using the
 The `[sandbox]` section controls the security and compatibility trade-offs for
 the container environment.
 
-| Setting          | Default | Description                                      |
-| ---------------- | ------- | ------------------------------------------------ |
-| `privileged`     | `false` | Run container in privileged mode                 |
-| `mount_dev_fuse` | `true`  | Mount `/dev/fuse` for fuse-overlayfs support     |
+| Setting          | Default | Description                                  |
+| ---------------- | ------- | -------------------------------------------- |
+| `privileged`     | `false` | Run container in privileged mode             |
+| `mount_dev_fuse` | `true`  | Mount `/dev/fuse` for fuse-overlayfs support |
 
 **Minimal mode** (default): `privileged = false`, `mount_dev_fuse = true`
 
@@ -177,9 +177,9 @@ environment. Privileged mode:
 
 **Disabling /dev/fuse**: `mount_dev_fuse = false`
 
-The `/dev/fuse` mount is required for fuse-overlayfs, which enables inner Podman
-to function correctly. Only disable this if you are certain the agent container
-does not need nested container support.
+The `/dev/fuse` mount is required for fuse-overlayfs, which enables inner
+Podman to function correctly. Disable this only when the agent container does
+not need nested container support.
 
 ## Security model
 
