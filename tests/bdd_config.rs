@@ -52,6 +52,23 @@ fn assert_github_field_absent<T>(field: Option<&T>, field_name: &str) {
     assert!(field.is_none(), "Expected {field_name} to be absent");
 }
 
+/// Creates and sets an `AppConfig` with a custom `SandboxConfig`.
+///
+/// # Arguments
+/// * `config_state` - The test state to update
+/// * `privileged` - Whether to run in privileged mode
+/// * `mount_dev_fuse` - Whether to mount /dev/fuse
+fn set_sandbox_config(config_state: &ConfigState, privileged: bool, mount_dev_fuse: bool) {
+    let config = AppConfig {
+        sandbox: SandboxConfig {
+            privileged,
+            mount_dev_fuse,
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
 /// State shared across configuration test scenarios.
 #[derive(Default, ScenarioState)]
 struct ConfigState {
@@ -282,38 +299,17 @@ fn github_is_not_configured(config_state: &ConfigState) {
 
 #[given("a configuration file with dev/fuse mounting disabled")]
 fn config_with_dev_fuse_disabled(config_state: &ConfigState) {
-    let config = AppConfig {
-        sandbox: SandboxConfig {
-            privileged: false,
-            mount_dev_fuse: false,
-        },
-        ..Default::default()
-    };
-    config_state.config.set(config);
+    set_sandbox_config(config_state, false, false);
 }
 
 #[given("a configuration file in minimal mode")]
 fn config_in_minimal_mode(config_state: &ConfigState) {
-    let config = AppConfig {
-        sandbox: SandboxConfig {
-            privileged: false,
-            mount_dev_fuse: true,
-        },
-        ..Default::default()
-    };
-    config_state.config.set(config);
+    set_sandbox_config(config_state, false, true);
 }
 
 #[given("a configuration file with privileged mode and dev/fuse disabled")]
 fn config_with_privileged_and_no_fuse(config_state: &ConfigState) {
-    let config = AppConfig {
-        sandbox: SandboxConfig {
-            privileged: true,
-            mount_dev_fuse: false,
-        },
-        ..Default::default()
-    };
-    config_state.config.set(config);
+    set_sandbox_config(config_state, true, false);
 }
 
 #[then("dev/fuse mounting is disabled")]

@@ -34,8 +34,8 @@ user's guide is updated, and the roadmap task is marked complete.
 
 - Scope: if the change requires edits to more than 6 files or more than 300
   lines of net changes, stop and ask for confirmation.
-- Interface: if a public API outside `crate::config` must change, stop and ask
-  for confirmation.
+- Interface: if a public application programming interface (API) outside
+  `crate::config` must change, stop and ask for confirmation.
 - Dependencies: if a new crate or feature flag is required, stop and ask for
   confirmation.
 - Iterations: if tests fail after two fix attempts, stop and ask for
@@ -48,18 +48,19 @@ user's guide is updated, and the roadmap task is marked complete.
   already exceeds the limit. Future work should consider splitting the config
   module, but this task extends existing patterns.
 
-- Risk: Adding BDD scenarios may require new step definitions that conflict with
-  existing ones. Severity: low Likelihood: low Mitigation: Review existing step
-  definitions in `tests/bdd_config.rs` before adding new ones.
+- Risk: Adding behaviour-driven development (BDD) scenarios may require new step
+  definitions that conflict with existing ones. Severity: low Likelihood: low
+  Mitigation: Review existing step definitions in `tests/bdd_config.rs` before
+  adding new ones.
 
 ## Progress
 
-- [x] (2026-01-16 UTC) Create execplan at
+- [x] (2026-01-16 Coordinated Universal Time (UTC)) Create ExecPlan at
       `docs/execplans/1-3-3-sandbox-config.md`.
 - [x] (2026-01-16 UTC) Verify existing unit tests in `src/config.rs` for
       SandboxConfig.
-- [x] (2026-01-16 UTC) Add additional unit tests for TOML
-      serialisation/deserialisation.
+- [x] (2026-01-16 UTC) Add additional unit tests for Tom's Obvious, Minimal
+      Language (TOML) serialization/deserialization.
 - [x] (2026-01-16 UTC) Add BDD scenarios for sandbox configuration.
 - [x] (2026-01-16 UTC) Add step definitions to `tests/bdd_config.rs`.
 - [x] (2026-01-16 UTC) Update `docs/users-guide.md` with sandbox configuration
@@ -92,7 +93,7 @@ user's guide is updated, and the roadmap task is marked complete.
 
 Successfully completed the SandboxConfig task:
 
-- Added 7 unit tests covering TOML serialisation, round-trip, all boolean
+- Added 7 unit tests covering TOML serialization, round-trip, all boolean
   combinations, and default value handling.
 - Added 3 BDD scenarios covering dev/fuse disabled, minimal mode, and
   privileged mode with all options.
@@ -152,7 +153,7 @@ Existing BDD coverage includes:
 
 ## Plan of Work
 
-Stage A adds unit tests for TOML serialisation. Add parameterised tests covering
+Stage A adds unit tests for TOML serialization. Add parameterized tests covering
 all four boolean combinations of `privileged` and `mount_dev_fuse`.
 
 Stage B adds BDD scenarios to `tests/features/configuration.feature` covering
@@ -166,10 +167,10 @@ Stage D runs validation gates with captured logs.
 
 ## Concrete Steps
 
-1) Add unit tests for TOML serialisation to `src/config.rs`:
+1) Add unit tests for TOML serialization to `src/config.rs`:
 
-    - Test: `sandbox_config_serialises_to_toml` - verify round-trip serialisation
-    - Test: `sandbox_config_all_combinations` - parameterised test for all four
+    - Test: `sandbox_config_serializes_to_toml` - verify round-trip serialization
+    - Test: `sandbox_config_all_combinations` - parameterized test for all four
       boolean combinations
 
 2) Add BDD scenarios to `tests/features/configuration.feature`:
@@ -215,7 +216,7 @@ Stage D runs validation gates with captured logs.
 Success looks like:
 
 - `make check-fmt`, `make lint`, and `make test` all succeed with no warnings.
-- Unit tests in `src/config.rs` demonstrate TOML serialisation for SandboxConfig.
+- Unit tests in `src/config.rs` demonstrate TOML serialization for SandboxConfig.
 - Behavioural tests in `tests/bdd_config.rs` pass with new scenarios covering
   sandbox configuration.
 - `docs/users-guide.md` includes documentation about sandbox settings.

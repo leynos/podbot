@@ -586,28 +586,32 @@ mod tests {
         assert!(!config.is_configured());
     }
 
-    // SandboxConfig TOML serialisation tests
+    // SandboxConfig TOML serialization tests
 
     #[rstest]
-    fn sandbox_config_serialises_to_toml(sandbox_config: SandboxConfig) {
-        let toml_str = toml::to_string(&sandbox_config).expect("serialisation should succeed");
+    fn sandbox_config_serializes_to_toml() {
+        let config = SandboxConfig::default();
+        let toml_str = toml::to_string(&config).expect("serialization should succeed");
+        let parsed: SandboxConfig =
+            toml::from_str(&toml_str).expect("deserialization should succeed");
+        assert!(!parsed.privileged, "default privileged should be false");
         assert!(
-            toml_str.contains("privileged = false"),
-            "Expected privileged = false in TOML output"
-        );
-        assert!(
-            toml_str.contains("mount_dev_fuse = true"),
-            "Expected mount_dev_fuse = true in TOML output"
+            parsed.mount_dev_fuse,
+            "default mount_dev_fuse should be true"
         );
     }
 
     #[rstest]
-    fn sandbox_config_round_trips_through_toml(sandbox_config: SandboxConfig) {
-        let toml_str = toml::to_string(&sandbox_config).expect("serialisation should succeed");
+    fn sandbox_config_round_trips_through_toml() {
+        let config = SandboxConfig {
+            privileged: true,
+            mount_dev_fuse: false,
+        };
+        let toml_str = toml::to_string(&config).expect("serialization should succeed");
         let parsed: SandboxConfig =
-            toml::from_str(&toml_str).expect("deserialisation should succeed");
-        assert_eq!(parsed.privileged, sandbox_config.privileged);
-        assert_eq!(parsed.mount_dev_fuse, sandbox_config.mount_dev_fuse);
+            toml::from_str(&toml_str).expect("deserialization should succeed");
+        assert_eq!(parsed.privileged, config.privileged);
+        assert_eq!(parsed.mount_dev_fuse, config.mount_dev_fuse);
     }
 
     #[rstest]

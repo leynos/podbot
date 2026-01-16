@@ -168,7 +168,7 @@ This is the recommended configuration for most users. It provides:
 
 **Privileged mode**: `privileged = true`
 
-Enable privileged mode only when minimal mode does not work for your
+Enable privileged mode only when minimal mode does not work for the target
 environment. Privileged mode:
 
 - Provides maximum compatibility with nested container operations
