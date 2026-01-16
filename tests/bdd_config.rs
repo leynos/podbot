@@ -278,6 +278,53 @@ fn github_is_not_configured(config_state: &ConfigState) {
     );
 }
 
+// Sandbox configuration step definitions
+
+#[given("a configuration file with dev/fuse mounting disabled")]
+fn config_with_dev_fuse_disabled(config_state: &ConfigState) {
+    let config = AppConfig {
+        sandbox: SandboxConfig {
+            privileged: false,
+            mount_dev_fuse: false,
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
+#[given("a configuration file in minimal mode")]
+fn config_in_minimal_mode(config_state: &ConfigState) {
+    let config = AppConfig {
+        sandbox: SandboxConfig {
+            privileged: false,
+            mount_dev_fuse: true,
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
+#[given("a configuration file with privileged mode and dev/fuse disabled")]
+fn config_with_privileged_and_no_fuse(config_state: &ConfigState) {
+    let config = AppConfig {
+        sandbox: SandboxConfig {
+            privileged: true,
+            mount_dev_fuse: false,
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
+#[then("dev/fuse mounting is disabled")]
+fn dev_fuse_mounting_disabled(config_state: &ConfigState) {
+    let config = get_config(config_state);
+    assert!(
+        !config.sandbox.mount_dev_fuse,
+        "Expected dev/fuse mounting to be disabled"
+    );
+}
+
 // Scenario bindings
 
 #[scenario(
@@ -341,5 +388,29 @@ fn github_config_fails_when_all_fields_missing(config_state: ConfigState) {
     name = "GitHub configuration is not required for non-GitHub operations"
 )]
 fn github_config_not_required_for_non_github_ops(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Sandbox configuration with dev/fuse disabled"
+)]
+fn sandbox_config_with_dev_fuse_disabled(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Sandbox configuration in minimal mode"
+)]
+fn sandbox_config_in_minimal_mode(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Sandbox configuration in privileged mode with all options"
+)]
+fn sandbox_config_privileged_with_all_options(config_state: ConfigState) {
     let _ = config_state;
 }

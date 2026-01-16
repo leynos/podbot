@@ -585,4 +585,100 @@ mod tests {
         };
         assert!(!config.is_configured());
     }
+
+    // SandboxConfig TOML serialisation tests
+
+    #[rstest]
+    fn sandbox_config_serialises_to_toml(sandbox_config: SandboxConfig) {
+        let toml_str = toml::to_string(&sandbox_config).expect("serialisation should succeed");
+        assert!(
+            toml_str.contains("privileged = false"),
+            "Expected privileged = false in TOML output"
+        );
+        assert!(
+            toml_str.contains("mount_dev_fuse = true"),
+            "Expected mount_dev_fuse = true in TOML output"
+        );
+    }
+
+    #[rstest]
+    fn sandbox_config_round_trips_through_toml(sandbox_config: SandboxConfig) {
+        let toml_str = toml::to_string(&sandbox_config).expect("serialisation should succeed");
+        let parsed: SandboxConfig =
+            toml::from_str(&toml_str).expect("deserialisation should succeed");
+        assert_eq!(parsed.privileged, sandbox_config.privileged);
+        assert_eq!(parsed.mount_dev_fuse, sandbox_config.mount_dev_fuse);
+    }
+
+    #[rstest]
+    #[case(false, false, "minimal mode without fuse")]
+    #[case(false, true, "minimal mode with fuse (default)")]
+    #[case(true, false, "privileged mode without fuse")]
+    #[case(true, true, "privileged mode with fuse")]
+    fn sandbox_config_all_combinations(
+        #[case] privileged: bool,
+        #[case] mount_dev_fuse: bool,
+        #[case] description: &str,
+    ) {
+        let config = SandboxConfig {
+            privileged,
+            mount_dev_fuse,
+        };
+        let toml_str = toml::to_string(&config).expect("serialisation should succeed");
+        let parsed: SandboxConfig =
+            toml::from_str(&toml_str).expect("deserialisation should succeed");
+        assert_eq!(
+            parsed.privileged, privileged,
+            "privileged mismatch for {description}"
+        );
+        assert_eq!(
+            parsed.mount_dev_fuse, mount_dev_fuse,
+            "mount_dev_fuse mismatch for {description}"
+        );
+    }
+
+    #[rstest]
+    fn sandbox_config_deserialises_from_toml_section() {
+        let toml = r"
+            [sandbox]
+            privileged = true
+            mount_dev_fuse = false
+        ";
+        let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
+        assert!(config.sandbox.privileged, "Expected privileged to be true");
+        assert!(
+            !config.sandbox.mount_dev_fuse,
+            "Expected mount_dev_fuse to be false"
+        );
+    }
+
+    #[rstest]
+    fn sandbox_config_uses_defaults_when_section_omitted() {
+        let toml = r#"
+            engine_socket = "unix:///tmp/test.sock"
+        "#;
+        let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
+        assert!(
+            !config.sandbox.privileged,
+            "Expected privileged to default to false"
+        );
+        assert!(
+            config.sandbox.mount_dev_fuse,
+            "Expected mount_dev_fuse to default to true"
+        );
+    }
+
+    #[rstest]
+    fn sandbox_config_uses_defaults_for_missing_fields() {
+        let toml = r"
+            [sandbox]
+            privileged = true
+        ";
+        let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
+        assert!(config.sandbox.privileged, "Expected privileged to be true");
+        assert!(
+            config.sandbox.mount_dev_fuse,
+            "Expected mount_dev_fuse to default to true when omitted"
+        );
+    }
 }

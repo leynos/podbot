@@ -110,9 +110,9 @@ installation_id = 67890
 private_key_path = "/home/user/.config/podbot/github-app.pem"
 
 [sandbox]
-# Run the container in privileged mode (less secure)
+# Run the container in privileged mode (less secure, more compatible)
 privileged = false
-# Mount /dev/fuse for fuse-overlayfs support
+# Mount /dev/fuse for fuse-overlayfs support (required for inner Podman)
 mount_dev_fuse = true
 
 [agent]
@@ -147,6 +147,37 @@ All configuration options can be set via environment variables using the
 | `PODBOT_WORKSPACE_BASE_DIR`      | `workspace.base_dir`      |
 | `PODBOT_CREDS_COPY_CLAUDE`       | `creds.copy_claude`       |
 | `PODBOT_CREDS_COPY_CODEX`        | `creds.copy_codex`        |
+
+### Sandbox configuration
+
+The `[sandbox]` section controls the security and compatibility trade-offs for
+the container environment.
+
+| Setting          | Default | Description                                      |
+| ---------------- | ------- | ------------------------------------------------ |
+| `privileged`     | `false` | Run container in privileged mode                 |
+| `mount_dev_fuse` | `true`  | Mount `/dev/fuse` for fuse-overlayfs support     |
+
+**Minimal mode** (default): `privileged = false`, `mount_dev_fuse = true`
+
+This is the recommended configuration for most users. It provides:
+- Better security isolation by avoiding the privileged flag
+- Support for inner Podman via fuse-overlayfs
+- Compatibility with most Podman-in-Podman workflows
+
+**Privileged mode**: `privileged = true`
+
+Enable privileged mode only when minimal mode does not work for your
+environment. Privileged mode:
+- Provides maximum compatibility with nested container operations
+- Expands the container's attack surface significantly
+- Should be avoided unless specifically required
+
+**Disabling /dev/fuse**: `mount_dev_fuse = false`
+
+The `/dev/fuse` mount is required for fuse-overlayfs, which enables inner Podman
+to function correctly. Only disable this if you are certain the agent container
+does not need nested container support.
 
 ## Security model
 

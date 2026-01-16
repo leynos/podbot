@@ -51,7 +51,7 @@ defaults.
 
 - [x] Define AppConfig as the root configuration structure.
 - [x] Create GithubConfig for App ID, installation ID, and private key path.
-- [ ] Establish SandboxConfig for privileged mode and /dev/fuse mount options.
+- [x] Establish SandboxConfig for privileged mode and /dev/fuse mount options.
 - [ ] Specify AgentConfig for agent kind and execution mode.
 - [ ] Add WorkspaceConfig for base directory.
 - [ ] Implement OrthoConfig derive for layered precedence.
