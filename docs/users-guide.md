@@ -161,6 +161,7 @@ the container environment.
 **Minimal mode** (default): `privileged = false`, `mount_dev_fuse = true`
 
 This is the recommended configuration for most users. It provides:
+
 - Better security isolation by avoiding the privileged flag
 - Support for inner Podman via fuse-overlayfs
 - Compatibility with most Podman-in-Podman workflows
@@ -169,6 +170,7 @@ This is the recommended configuration for most users. It provides:
 
 Enable privileged mode only when minimal mode does not work for your
 environment. Privileged mode:
+
 - Provides maximum compatibility with nested container operations
 - Expands the container's attack surface significantly
 - Should be avoided unless specifically required

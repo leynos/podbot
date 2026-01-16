@@ -136,6 +136,7 @@ impl Default for SandboxConfig {
 ```
 
 Existing unit tests verify default values (line 361-364):
+
 ```rust
 #[rstest]
 fn sandbox_config_default_values(sandbox_config: SandboxConfig) {
@@ -145,6 +146,7 @@ fn sandbox_config_default_values(sandbox_config: SandboxConfig) {
 ```
 
 Existing BDD coverage includes:
+
 - Scenario: "Default configuration values" - verifies sandbox is not privileged
 - Scenario: "Configuration file overrides defaults" - verifies privileged mode
 
