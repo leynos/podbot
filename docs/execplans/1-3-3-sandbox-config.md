@@ -1,12 +1,12 @@
 # SandboxConfig validation and testing
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Risks`, `Progress`, `Surprises and discoveries`, `Decision Log`, and
+`Outcomes and retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-## Purpose / Big Picture
+## Purpose and big picture
 
 Complete the `SandboxConfig` implementation by adding comprehensive test
 coverage and documentation. The struct already exists in `src/config.rs` with
@@ -67,10 +67,10 @@ user's guide is updated, and the roadmap task is marked complete.
       details.
 - [x] (2026-01-16 UTC) Mark the SandboxConfig task as done in
       `docs/podbot-roadmap.md`.
-- [x] (2026-01-16 UTC) Run `make check-fmt`, `make lint`, `make test` and
+- [x] (2026-01-16 UTC) Run `make check-fmt`, `make lint`, `make test`, and
       capture logs.
 
-## Surprises & Discoveries
+## Surprises and discoveries
 
 - Observation: The existing `src/config.rs` already had tests for SandboxConfig
   default values. Evidence: `sandbox_config_default_values` test existed at line
@@ -89,7 +89,7 @@ user's guide is updated, and the roadmap task is marked complete.
   `mount_dev_fuse` is semantically valid. This differs from GitHubConfig where
   fields can be missing or invalid. Date/Author: 2026-01-16 / Terry.
 
-## Outcomes & Retrospective
+## Outcomes and retrospective
 
 Successfully completed the SandboxConfig task:
 
@@ -104,7 +104,7 @@ Successfully completed the SandboxConfig task:
 - Roadmap task marked complete.
 - Total: 54 unit tests, 11 BDD scenarios.
 
-## Context and Orientation
+## Context and orientation
 
 Configuration lives in `src/config.rs`, which currently defines command-line
 interface (CLI) arguments and configuration structs including `SandboxConfig`.
@@ -151,7 +151,7 @@ Existing BDD coverage includes:
 - Scenario: "Default configuration values" - verifies sandbox is not privileged
 - Scenario: "Configuration file overrides defaults" - verifies privileged mode
 
-## Plan of Work
+## Plan of work
 
 Stage A adds unit tests for TOML serialization. Add parameterized tests
 covering all four boolean combinations of `privileged` and `mount_dev_fuse`.
