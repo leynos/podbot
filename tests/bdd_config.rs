@@ -7,7 +7,9 @@
 #![expect(clippy::expect_used, reason = "expect is standard practice in tests")]
 
 use camino::Utf8PathBuf;
-use podbot::config::{AgentKind, AppConfig, GitHubConfig, SandboxConfig};
+use podbot::config::{
+    AgentKind, AgentMode, AppConfig, GitHubConfig, SandboxConfig, WorkspaceConfig,
+};
 use podbot::error::{ConfigError, PodbotError};
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -52,6 +54,17 @@ fn set_sandbox_config(config_state: &ConfigState, privileged: bool, mount_dev_fu
         sandbox: SandboxConfig {
             privileged,
             mount_dev_fuse,
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
+/// Creates and sets an `AppConfig` with a custom workspace base directory.
+fn set_workspace_base_dir(config_state: &ConfigState, base_dir: &str) {
+    let config = AppConfig {
+        workspace: WorkspaceConfig {
+            base_dir: Utf8PathBuf::from(base_dir),
         },
         ..Default::default()
     };
@@ -109,6 +122,22 @@ fn config_with_invalid_agent_kind(config_state: &ConfigState) {
     config_state.parse_error.set(error.to_string());
 }
 
+#[given("a configuration file with an invalid agent mode")]
+fn config_with_invalid_agent_mode(config_state: &ConfigState) {
+    let toml = r#"
+        [agent]
+        mode = "unknown"
+    "#;
+    let error = toml::from_str::<AppConfig>(toml)
+        .expect_err("TOML parsing should fail for an invalid agent mode");
+    config_state.parse_error.set(error.to_string());
+}
+
+#[given("a configuration file with workspace base directory set to {base_dir}")]
+fn config_with_workspace_base_dir(config_state: &ConfigState, base_dir: String) {
+    set_workspace_base_dir(config_state, &base_dir);
+}
+
 #[then("the sandbox is not privileged")]
 fn sandbox_is_not_privileged(config_state: &ConfigState) {
     let config = get_config(config_state);
@@ -146,13 +175,23 @@ fn agent_kind_is_claude(config_state: &ConfigState) {
     );
 }
 
-#[then("the workspace base directory is /work")]
-fn workspace_base_dir_is_work(config_state: &ConfigState) {
+#[then("the agent mode is podbot")]
+fn agent_mode_is_podbot(config_state: &ConfigState) {
+    let config = get_config(config_state);
+    assert_eq!(
+        config.agent.mode,
+        AgentMode::Podbot,
+        "Expected agent mode to be podbot"
+    );
+}
+
+#[then("the workspace base directory is {base_dir}")]
+fn workspace_base_dir_is(config_state: &ConfigState, base_dir: String) {
     let config = get_config(config_state);
     assert_eq!(
         config.workspace.base_dir.as_str(),
-        "/work",
-        "Expected workspace base directory to be /work"
+        base_dir.as_str(),
+        "Expected workspace base directory to be {base_dir}"
     );
 }
 
@@ -344,6 +383,14 @@ fn invalid_agent_kind_is_rejected(config_state: ConfigState) {
 
 #[scenario(
     path = "tests/features/configuration.feature",
+    name = "Invalid agent mode is rejected"
+)]
+fn invalid_agent_mode_is_rejected(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
     name = "GitHub configuration validates successfully when complete"
 )]
 fn github_config_validates_when_complete(config_state: ConfigState) {
@@ -395,5 +442,13 @@ fn sandbox_config_in_minimal_mode(config_state: ConfigState) {
     name = "Sandbox configuration in privileged mode with all options"
 )]
 fn sandbox_config_privileged_with_all_options(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Workspace configuration overrides the base directory"
+)]
+fn workspace_config_overrides_base_dir(config_state: ConfigState) {
     let _ = config_state;
 }

@@ -210,6 +210,11 @@ kind = "codex"
 mode = "podbot"
 ```
 
+The `agent.mode` setting defines the execution mode for the agent. The current
+implementation accepts only `podbot`, which indicates the default
+podbot-managed execution path. This value is reserved for future expansion when
+additional execution modes are introduced.
+
 The `sandbox.privileged` setting controls the trade-off between compatibility
 and isolation. Privileged mode enables more Podman-in-Podman configurations but
 expands the attack surface. The minimal mode mounts only `/dev/fuse` and avoids
@@ -340,12 +345,16 @@ A suggested organisation for maintainability:
 
 ```plaintext
 src/
-├── main.rs           # Configuration loading, subcommand dispatch
-├── config.rs         # AppConfig, GithubConfig, SandboxConfig, AgentConfig
-├── engine.rs         # Bollard wrapper: connect, create, upload, exec
-├── github.rs         # Octocrab App authentication, token acquisition
-├── token_daemon.rs   # Token refresh loop, atomic file writes
-└── run_flow.rs       # Orchestration of steps 1–7
+├── main.rs             # Configuration loading, subcommand dispatch
+├── config/             # Configuration module (CLI + structs + tests)
+│   ├── mod.rs          # Module docs and re-exports
+│   ├── cli.rs          # Clap argument definitions
+│   ├── types.rs        # AppConfig, GitHubConfig, SandboxConfig, AgentConfig
+│   └── tests.rs        # Unit tests for configuration types
+├── engine.rs           # Bollard wrapper: connect, create, upload, exec
+├── github.rs           # Octocrab App authentication, token acquisition
+├── token_daemon.rs     # Token refresh loop, atomic file writes
+└── run_flow.rs         # Orchestration of steps 1–7
 ```
 
 The `engine.rs` module encapsulates all Bollard interactions, providing a

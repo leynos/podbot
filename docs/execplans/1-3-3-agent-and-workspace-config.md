@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 PLANS.md is not present in the repository.
 
@@ -29,8 +29,8 @@ valid agent modes, rejects invalid ones, and `make all` passes without warnings.
 - Prefer Makefile targets and capture long output with `set -o pipefail` and
   `tee`.
 - No `unwrap` or `expect` outside test code.
-- No single code file may exceed 400 lines; if adding fields increases
-  `src/config.rs` further, split into submodules under `src/config/`.
+- No single code file may exceed 400 lines; keep configuration definitions
+  split across `src/config/` submodules.
 
 ## Tolerances (Exception Triggers)
 
@@ -48,10 +48,10 @@ valid agent modes, rejects invalid ones, and `make all` passes without warnings.
 
 ## Risks
 
-- Risk: `src/config.rs` already exceeds the 400-line limit, so adding fields
-  may require a refactor into submodules. Severity: medium. Likelihood: high.
-  Mitigation: split the configuration module into smaller files if any edits
-  are required, and update imports/tests accordingly.
+- Risk: the configuration module already exceeds the 400-line limit, so adding
+  fields may require a refactor into submodules. Severity: medium. Likelihood:
+  high. Mitigation: split the configuration module into smaller files and
+  update imports/tests accordingly.
 - Risk: `agent.mode` semantics are currently underspecified, which could lead
   to incompatible defaults. Severity: medium. Likelihood: medium. Mitigation:
   confirm the intended modes from the design and user documentation and record
@@ -62,41 +62,60 @@ valid agent modes, rejects invalid ones, and `make all` passes without warnings.
 
 ## Progress
 
-- [ ] (2026-01-17 UTC) Inspect current configuration code and docs for agent
-  mode and workspace expectations.
-- [ ] Define `AgentMode`, update `AgentConfig`, and ensure `WorkspaceConfig`
-  stays consistent with design defaults.
-- [ ] Add unit tests with `rstest` for agent mode and workspace base
-  directory, including unhappy-path cases.
-- [ ] Add `rstest-bdd` scenarios and step definitions for agent mode and
-  workspace overrides.
-- [ ] Update documentation (`docs/podbot-design.md`, `docs/users-guide.md`) and
-  mark the roadmap entry as done.
-- [ ] Run validation (`make check-fmt`, `make lint`, `make test`, `make all`,
-  plus doc tooling if docs changed) with logs captured.
+- [x] (2026-01-17 UTC) Inspect configuration code and docs for agent mode and
+  workspace expectations.
+- [x] (2026-01-17 UTC) Define `AgentMode`, update `AgentConfig`, and keep
+  `WorkspaceConfig` consistent with design defaults.
+- [x] (2026-01-17 UTC) Add unit tests with `rstest` for agent mode and
+  workspace base directory, including unhappy-path cases.
+- [x] (2026-01-17 UTC) Add `rstest-bdd` scenarios and step definitions for
+  agent mode and workspace overrides.
+- [x] (2026-01-17 UTC) Update documentation and mark the roadmap entry as
+  done.
+- [x] (2026-01-17 UTC) Run validation (`make check-fmt`, `make lint`,
+  `make test`, `make all`, plus doc tooling) with logs captured.
 
 ## Surprises & Discoveries
 
-- Observation: `AgentConfig` and `WorkspaceConfig` already exist in
-  `src/config.rs`, but `AgentConfig` lacks `mode`. Evidence: current struct
-  definitions in `src/config.rs`. Impact: focus on adding `agent.mode` rather
-  than introducing new structs.
+- Observation: Adding `AgentMode` pushed the configuration module further past
+  the 400-line limit, so the file was split into `src/config/` submodules.
+  Evidence: new `src/config/mod.rs`, `src/config/types.rs`, and
+  `src/config/cli.rs`. Impact: updated docs and imports to reference the new
+  module layout.
 
 ## Decision Log
 
-- Decision: _Pending._ Confirm the allowed values and default for
-  `agent.mode` before implementation and document the rationale in
-  `docs/podbot-design.md`.
+- Decision: `agent.mode` accepts only `podbot` for now, matching the design
+  example and documenting it as the default podbot-managed execution path.
+  Rationale: no other execution modes are defined yet; keeping a single
+  explicit value makes invalid configuration easy to detect. Date/Author:
+  2026-01-17 / Codex.
+- Decision: Split the configuration module into `src/config/` submodules to
+  enforce the 400-line limit while keeping configuration types, CLI
+  definitions, and tests scoped to the configuration module. Rationale: avoids
+  further growth of a monolithic module and keeps each file under the size
+  constraint. Date/Author: 2026-01-17 / Codex.
 
 ## Outcomes & Retrospective
 
-_To be completed after implementation._
+Completed agent and workspace configuration updates:
+
+- Added `AgentMode` with a default `podbot` value and extended `AgentConfig`
+  accordingly.
+- Split configuration into `src/config/` submodules to respect the 400-line
+  limit while preserving public APIs.
+- Added unit tests for agent mode serialisation, defaults, and invalid values.
+- Added BDD scenarios for agent mode defaults, invalid modes, and workspace
+  overrides.
+- Updated design and user documentation, plus roadmap status.
+- Validation gates passed (`make fmt`, `make markdownlint`, `make nixie`,
+  `make check-fmt`, `make lint`, `make test`, `make all`).
 
 ## Context and Orientation
 
-Configuration types and CLI parsing live in `src/config.rs`. Unit tests for
-configuration live at the bottom of `src/config.rs`. Behavioural configuration
-coverage uses `tests/bdd_config.rs` with scenarios in
+Configuration types and CLI parsing live under `src/config/`. Unit tests for
+configuration live in `src/config/tests.rs`. Behavioural configuration coverage
+uses `tests/bdd_config.rs` with scenarios in
 `tests/features/configuration.feature`. The design intent for configuration is
 in `docs/podbot-design.md`, while user-facing behaviour is documented in
 `docs/users-guide.md`. The roadmap entry for this task is under Step 1.3 in
@@ -104,12 +123,12 @@ in `docs/podbot-design.md`, while user-facing behaviour is documented in
 
 `agent.kind` currently supports `claude` and `codex` via `AgentKind`. The
 configuration example in the design document already includes
-`agent.mode = "podbot"`, which implies an additional field and a defined set
-of valid values.
+`agent.mode = "podbot"`, which implies an additional field and a defined set of
+valid values.
 
 ## Plan of Work
 
-Stage A: Inspection and clarification. Review `src/config.rs`,
+Stage A: Inspection and clarification. Review `src/config/`,
 `docs/podbot-design.md`, and `docs/users-guide.md` to confirm expectations for
 agent mode and workspace defaults. If the set of `agent.mode` values is unclear
 beyond `podbot`, stop and request clarification before implementing.
@@ -123,6 +142,7 @@ submodules (for example `src/config/agent.rs`, `src/config/workspace.rs`, and
 otherwise.
 
 Stage C: Unit tests. Use `rstest` to cover:
+
 - default `AgentConfig` values (kind and mode),
 - serialisation/deserialisation of `AgentMode`,
 - invalid `agent.mode` values returning a parse error,
@@ -130,6 +150,7 @@ Stage C: Unit tests. Use `rstest` to cover:
 
 Stage D: Behavioural tests. Add `rstest-bdd` scenarios to
 `tests/features/configuration.feature` that verify:
+
 - the default `agent.mode` when no configuration is supplied,
 - invalid `agent.mode` entries are rejected,
 - workspace base directory overrides when provided in a configuration file.
@@ -149,11 +170,11 @@ including documentation tooling if any Markdown files were modified.
 
     - Command:
 
-          rg -n "AgentConfig|AgentKind|WorkspaceConfig" src/config.rs
+          rg -n "AgentConfig|AgentKind|WorkspaceConfig" src/config
 
     - Command:
 
-          sed -n '1,260p' src/config.rs
+          sed -n '1,260p' src/config/mod.rs
 
     - Command:
 
@@ -169,15 +190,15 @@ including documentation tooling if any Markdown files were modified.
       representation and `clap::ValueEnum` support.
     - Add `mode: AgentMode` to `AgentConfig` with a default that matches the
       design example (currently `podbot`).
-    - If required to meet the 400-line limit, split `src/config.rs` into
-      submodules and update module exports plus test imports.
+    - If required to meet the 400-line limit, split configuration into
+      `src/config/` submodules and update module exports plus test imports.
 
 3) Ensure `WorkspaceConfig` is present and defaults to `/work`.
 
     - Confirm `WorkspaceConfig` uses `Utf8PathBuf` and update tests if the
       default changes.
 
-4) Add or extend unit tests in `src/config.rs` (or new config submodules) with
+4) Add or extend unit tests in `src/config/` (or new config submodules) with
    `rstest`.
 
     - Happy paths: default `AgentConfig` values and TOML deserialisation with
@@ -274,8 +295,8 @@ Keep the following log files for review if needed:
 
 ## Interfaces and Dependencies
 
-At completion, configuration should expose the following in
-`crate::config` (locations may move if `src/config.rs` is split):
+At completion, configuration should expose the following in `crate::config`
+(locations may move if additional submodules are introduced):
 
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
     #[serde(rename_all = "lowercase")]
@@ -302,3 +323,10 @@ At completion, configuration should expose the following in
 
 If additional `AgentMode` variants are required beyond `podbot`, update the
 enum and document the decision in `docs/podbot-design.md` before writing code.
+
+## Revision note
+
+Revised on 2026-01-17 to mark the plan complete, record decisions, and update
+paths after splitting the configuration module into `src/config/`. This
+revision closes all remaining work and aligns the plan with the completed
+implementation and validation logs.
