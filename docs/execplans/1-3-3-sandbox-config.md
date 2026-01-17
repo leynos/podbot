@@ -97,7 +97,7 @@ Successfully completed the SandboxConfig task:
   combinations, and default value handling.
 - Added 3 BDD scenarios covering dev/fuse disabled, minimal mode, and
   privileged mode with all options.
-- Added 4 step definitions and 3 scenario bindings to `tests/bdd_config.rs`.
+- Added 4-step definitions and 3 scenario bindings to `tests/bdd_config.rs`.
 - Updated `docs/users-guide.md` with comprehensive sandbox configuration
   documentation including security trade-offs.
 - All validation gates pass: `make check-fmt`, `make lint`, `make test`.
