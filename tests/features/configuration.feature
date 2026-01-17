@@ -42,3 +42,18 @@ Feature: Configuration loading
     Given no GitHub configuration is provided
     Then the configuration loads successfully
     And GitHub is not configured
+
+  Scenario: Sandbox configuration with dev/fuse disabled
+    Given a configuration file with dev/fuse mounting disabled
+    Then dev/fuse mounting is disabled
+    And the sandbox is not privileged
+
+  Scenario: Sandbox configuration in minimal mode
+    Given a configuration file in minimal mode
+    Then the sandbox is not privileged
+    And dev/fuse mounting is enabled
+
+  Scenario: Sandbox configuration in privileged mode with all options
+    Given a configuration file with privileged mode and dev/fuse disabled
+    Then the sandbox is privileged
+    And dev/fuse mounting is disabled

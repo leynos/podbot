@@ -24,12 +24,6 @@ fn get_config(config_state: &ConfigState) -> AppConfig {
 }
 
 /// Creates and sets an `AppConfig` with a custom `GitHubConfig`.
-///
-/// # Arguments
-/// * `config_state` - The test state to update
-/// * `app_id` - Optional GitHub App ID
-/// * `installation_id` - Optional GitHub installation ID
-/// * `private_key_path` - Optional path to the private key file
 fn set_github_config(
     config_state: &ConfigState,
     app_id: Option<u64>,
@@ -52,6 +46,18 @@ fn assert_github_field_absent<T>(field: Option<&T>, field_name: &str) {
     assert!(field.is_none(), "Expected {field_name} to be absent");
 }
 
+/// Creates and sets an `AppConfig` with a custom `SandboxConfig`.
+fn set_sandbox_config(config_state: &ConfigState, privileged: bool, mount_dev_fuse: bool) {
+    let config = AppConfig {
+        sandbox: SandboxConfig {
+            privileged,
+            mount_dev_fuse,
+        },
+        ..Default::default()
+    };
+    config_state.config.set(config);
+}
+
 /// State shared across configuration test scenarios.
 #[derive(Default, ScenarioState)]
 struct ConfigState {
@@ -68,8 +74,6 @@ struct ConfigState {
 fn config_state() -> ConfigState {
     ConfigState::default()
 }
-
-// Step definitions
 
 #[given("no configuration is provided")]
 fn no_configuration_provided(config_state: &ConfigState) {
@@ -278,7 +282,33 @@ fn github_is_not_configured(config_state: &ConfigState) {
     );
 }
 
-// Scenario bindings
+// Sandbox configuration step definitions
+
+#[given("a configuration file with dev/fuse mounting disabled")]
+fn config_with_dev_fuse_disabled(config_state: &ConfigState) {
+    set_sandbox_config(config_state, false, false);
+}
+
+#[given("a configuration file in minimal mode")]
+fn config_in_minimal_mode(config_state: &ConfigState) {
+    set_sandbox_config(config_state, false, true);
+}
+
+#[given("a configuration file with privileged mode and dev/fuse disabled")]
+fn config_with_privileged_and_no_fuse(config_state: &ConfigState) {
+    set_sandbox_config(config_state, true, false);
+}
+
+#[then("dev/fuse mounting is disabled")]
+fn dev_fuse_mounting_disabled(config_state: &ConfigState) {
+    let config = get_config(config_state);
+    assert!(
+        !config.sandbox.mount_dev_fuse,
+        "Expected dev/fuse mounting to be disabled"
+    );
+}
+
+// Scenario bindings - each binds a feature scenario to its step implementations
 
 #[scenario(
     path = "tests/features/configuration.feature",
@@ -341,5 +371,29 @@ fn github_config_fails_when_all_fields_missing(config_state: ConfigState) {
     name = "GitHub configuration is not required for non-GitHub operations"
 )]
 fn github_config_not_required_for_non_github_ops(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Sandbox configuration with dev/fuse disabled"
+)]
+fn sandbox_config_with_dev_fuse_disabled(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Sandbox configuration in minimal mode"
+)]
+fn sandbox_config_in_minimal_mode(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Sandbox configuration in privileged mode with all options"
+)]
+fn sandbox_config_privileged_with_all_options(config_state: ConfigState) {
     let _ = config_state;
 }
