@@ -187,7 +187,10 @@ fn app_config_toml_sets_engine_socket_and_image(app_config_from_full_toml: AppCo
 #[rstest]
 fn app_config_toml_sets_github_ids(app_config_from_full_toml: AppConfig) {
     assert_eq!(app_config_from_full_toml.github.app_id, Some(12345));
-    assert_eq!(app_config_from_full_toml.github.installation_id, Some(67890));
+    assert_eq!(
+        app_config_from_full_toml.github.installation_id,
+        Some(67890)
+    );
 }
 
 #[rstest]
@@ -224,9 +227,7 @@ fn app_config_partial_toml_image_defaults_to_none(app_config_from_partial_toml: 
 }
 
 #[rstest]
-fn app_config_partial_toml_github_app_id_defaults_to_none(
-    app_config_from_partial_toml: AppConfig,
-) {
+fn app_config_partial_toml_github_app_id_defaults_to_none(app_config_from_partial_toml: AppConfig) {
     assert!(app_config_from_partial_toml.github.app_id.is_none());
 }
 
@@ -244,7 +245,10 @@ fn app_config_partial_toml_agent_defaults_apply(app_config_from_partial_toml: Ap
 
 #[rstest]
 fn app_config_partial_toml_workspace_default_applies(app_config_from_partial_toml: AppConfig) {
-    assert_eq!(app_config_from_partial_toml.workspace.base_dir.as_str(), "/work");
+    assert_eq!(
+        app_config_from_partial_toml.workspace.base_dir.as_str(),
+        "/work"
+    );
 }
 
 #[rstest]
