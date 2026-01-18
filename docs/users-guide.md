@@ -118,6 +118,8 @@ mount_dev_fuse = true
 [agent]
 # Default agent type: "claude" or "codex"
 kind = "claude"
+# Execution mode for the agent (currently only "podbot")
+mode = "podbot"
 
 [workspace]
 # Base directory for cloned repositories inside the container
@@ -144,6 +146,7 @@ All configuration options can be set via environment variables using the
 | `PODBOT_SANDBOX_PRIVILEGED`      | `sandbox.privileged`      |
 | `PODBOT_SANDBOX_MOUNT_DEV_FUSE`  | `sandbox.mount_dev_fuse`  |
 | `PODBOT_AGENT_KIND`              | `agent.kind`              |
+| `PODBOT_AGENT_MODE`              | `agent.mode`              |
 | `PODBOT_WORKSPACE_BASE_DIR`      | `workspace.base_dir`      |
 | `PODBOT_CREDS_COPY_CLAUDE`       | `creds.copy_claude`       |
 | `PODBOT_CREDS_COPY_CODEX`        | `creds.copy_codex`        |
