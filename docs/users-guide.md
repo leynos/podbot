@@ -41,11 +41,12 @@ Run an AI agent in a sandboxed container.
 podbot run --repo owner/name --branch main --agent claude
 ```
 
-| Option     | Required | Default  | Description                     |
-| ---------- | -------- | -------- | ------------------------------- |
-| `--repo`   | Yes      | -        | Repository in owner/name format |
-| `--branch` | Yes      | -        | Branch to check out             |
-| `--agent`  | No       | `claude` | Agent type: `claude` or `codex` |
+| Option         | Required | Default  | Description                        |
+| -------------- | -------- | -------- | ---------------------------------- |
+| `--repo`       | Yes      | -        | Repository in owner/name format    |
+| `--branch`     | Yes      | -        | Branch to check out                |
+| `--agent`      | No       | `claude` | Agent type: `claude` or `codex`    |
+| `--agent-mode` | No       | `podbot` | Agent execution mode (podbot only) |
 
 #### `token-daemon`
 

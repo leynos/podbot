@@ -191,7 +191,8 @@ fn workspace_base_dir_is(config_state: &ConfigState, base_dir: String) {
     assert_eq!(
         config.workspace.base_dir.as_str(),
         base_dir.as_str(),
-        "Expected workspace base directory to be {base_dir}"
+        "Expected workspace base directory to be {}",
+        base_dir
     );
 }
 

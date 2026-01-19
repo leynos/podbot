@@ -1,8 +1,9 @@
 # Agent and workspace configuration
 
-This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+This Execution Plan (ExecPlan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
@@ -56,9 +57,9 @@ valid agent modes, rejects invalid ones, and `make all` passes without warnings.
   to incompatible defaults. Severity: medium. Likelihood: medium. Mitigation:
   confirm the intended modes from the design and user documentation and record
   the decision in `docs/podbot-design.md`.
-- Risk: new BDD steps may conflict with existing step definitions. Severity:
-  low. Likelihood: low. Mitigation: review `tests/bdd_config.rs` and reuse
-  helper patterns to avoid duplicate step names.
+- Risk: new behaviour-driven development (BDD) steps may conflict with
+  existing step definitions. Severity: low. Likelihood: low. Mitigation: review
+  `tests/bdd_config.rs` and reuse helper patterns to avoid duplicate step names.
 
 ## Progress
 

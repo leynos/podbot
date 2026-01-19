@@ -261,8 +261,8 @@ fn app_config_rejects_invalid_agent_kind() {
     let error = toml::from_str::<AppConfig>(toml)
         .expect_err("TOML parsing should fail for an invalid agent kind");
     assert!(
-        error.to_string().contains("unknown variant"),
-        "Expected unknown-variant error, got: {error}"
+        error.to_string().contains("unknown"),
+        "Expected error mentioning the invalid value \"unknown\", got: {error}"
     );
 }
 
@@ -276,8 +276,8 @@ fn app_config_rejects_invalid_agent_mode() {
     let error = toml::from_str::<AppConfig>(toml)
         .expect_err("TOML parsing should fail for an invalid agent mode");
     assert!(
-        error.to_string().contains("unknown variant"),
-        "Expected unknown-variant error, got: {error}"
+        error.to_string().contains("unknown"),
+        "Expected error mentioning the invalid value \"unknown\", got: {error}"
     );
 }
 

@@ -3,7 +3,7 @@
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 
-use super::AgentKind;
+use super::{AgentKind, AgentMode};
 
 /// Command-line interface for podbot.
 #[derive(Debug, Parser)]
@@ -64,6 +64,10 @@ pub struct RunArgs {
     /// Agent type to run.
     #[arg(long, value_enum, default_value_t = AgentKind::Claude)]
     pub agent: AgentKind,
+
+    /// Agent execution mode.
+    #[arg(long = "agent-mode", value_enum, default_value_t = AgentMode::Podbot)]
+    pub mode: AgentMode,
 }
 
 /// Arguments for the `token-daemon` subcommand.
