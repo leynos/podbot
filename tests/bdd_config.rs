@@ -113,3 +113,37 @@ fn sandbox_config_privileged_with_all_options(config_state: ConfigState) {
 fn workspace_config_overrides_base_dir(config_state: ConfigState) {
     let _ = config_state;
 }
+
+// Layer precedence scenarios
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "File layer overrides defaults"
+)]
+fn file_layer_overrides_defaults(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Environment layer overrides file layer"
+)]
+fn env_layer_overrides_file(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "CLI layer overrides all other layers"
+)]
+fn cli_layer_overrides_all(config_state: ConfigState) {
+    let _ = config_state;
+}
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Lower layer values are preserved when not overridden"
+)]
+fn lower_layer_values_preserved(config_state: ConfigState) {
+    let _ = config_state;
+}

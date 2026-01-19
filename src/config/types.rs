@@ -2,6 +2,7 @@
 
 use camino::Utf8PathBuf;
 use clap::ValueEnum;
+use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 
 /// The kind of AI agent to run.
@@ -167,8 +168,28 @@ impl Default for CredsConfig {
 /// Root application configuration.
 ///
 /// This structure is loaded from configuration files, environment variables,
-/// and command-line arguments with layered precedence.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+/// and command-line arguments with layered precedence. The precedence order
+/// (lowest to highest) is: defaults, configuration file, environment variables,
+/// command-line arguments.
+///
+/// Configuration files are discovered in this order:
+/// 1. Path specified via `PODBOT_CONFIG_PATH` environment variable
+/// 2. `.podbot.toml` in the current working directory
+/// 3. `.podbot.toml` in the home directory
+/// 4. `~/.config/podbot/config.toml` (XDG default)
+#[derive(Debug, Clone, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(
+    prefix = "PODBOT",
+    post_merge_hook,
+    discovery(
+        app_name = "podbot",
+        env_var = "PODBOT_CONFIG_PATH",
+        config_file_name = "config.toml",
+        dotfile_name = ".podbot.toml",
+        config_cli_long = "config",
+        config_cli_visible = true,
+    )
+)]
 pub struct AppConfig {
     /// The container engine socket path or URL.
     pub engine_socket: Option<String>,
@@ -178,21 +199,35 @@ pub struct AppConfig {
 
     /// `GitHub` App configuration.
     #[serde(default)]
+    #[ortho_config(skip_cli)]
     pub github: GitHubConfig,
 
     /// Sandbox security configuration.
     #[serde(default)]
+    #[ortho_config(skip_cli)]
     pub sandbox: SandboxConfig,
 
     /// Agent configuration.
     #[serde(default)]
+    #[ortho_config(skip_cli)]
     pub agent: AgentConfig,
 
     /// Workspace configuration.
     #[serde(default)]
+    #[ortho_config(skip_cli)]
     pub workspace: WorkspaceConfig,
 
     /// Credential copying configuration.
     #[serde(default)]
+    #[ortho_config(skip_cli)]
     pub creds: CredsConfig,
+}
+
+impl PostMergeHook for AppConfig {
+    fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
+        // Placeholder for future normalisation logic.
+        // GitHub validation is intentionally NOT performed here because
+        // not all commands require GitHub credentials (e.g., `podbot ps`).
+        Ok(())
+    }
 }

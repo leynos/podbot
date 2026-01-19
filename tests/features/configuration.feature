@@ -66,3 +66,31 @@ Feature: Configuration loading
   Scenario: Workspace configuration overrides the base directory
     Given a configuration file with workspace base directory set to /projects
     Then the workspace base directory is /projects
+
+  # Layer precedence scenarios
+
+  Scenario: File layer overrides defaults
+    Given defaults provide engine_socket as nil
+    And a file layer provides engine_socket as unix:///from/file.sock
+    When configuration is merged
+    Then the engine socket is unix:///from/file.sock
+
+  Scenario: Environment layer overrides file layer
+    Given a file layer provides engine_socket as unix:///from/file.sock
+    And an environment layer provides engine_socket as unix:///from/env.sock
+    When configuration is merged
+    Then the engine socket is unix:///from/env.sock
+
+  Scenario: CLI layer overrides all other layers
+    Given a file layer provides engine_socket as unix:///from/file.sock
+    And an environment layer provides engine_socket as unix:///from/env.sock
+    And a CLI layer provides engine_socket as unix:///from/cli.sock
+    When configuration is merged
+    Then the engine socket is unix:///from/cli.sock
+
+  Scenario: Lower layer values are preserved when not overridden
+    Given a file layer provides image as file-image:latest
+    And an environment layer provides engine_socket as unix:///from/env.sock
+    When configuration is merged
+    Then the image is file-image:latest
+    And the engine socket is unix:///from/env.sock

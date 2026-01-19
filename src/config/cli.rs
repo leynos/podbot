@@ -1,4 +1,7 @@
 //! Command-line argument definitions for podbot.
+//!
+//! This module defines the command-line interface for podbot, including global
+//! configuration flags and subcommands.
 
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
@@ -6,6 +9,12 @@ use clap::{Parser, Subcommand};
 use super::{AgentKind, AgentMode};
 
 /// Command-line interface for podbot.
+///
+/// Configuration is loaded with layered precedence:
+/// 1. Application defaults
+/// 2. Configuration file (discovered via XDG paths or `PODBOT_CONFIG_PATH`)
+/// 3. Environment variables (`PODBOT_*`)
+/// 4. Command-line arguments (these flags)
 #[derive(Debug, Parser)]
 #[command(name = "podbot")]
 #[command(
@@ -19,14 +28,20 @@ pub struct Cli {
     pub command: Commands,
 
     /// Path to configuration file.
-    #[arg(long, global = true)]
+    ///
+    /// Overrides the default discovery paths. Can also be set via `PODBOT_CONFIG_PATH`.
+    #[arg(short = 'c', long, global = true)]
     pub config: Option<Utf8PathBuf>,
 
     /// Container engine socket path or URL.
+    ///
+    /// Can also be set via `PODBOT_ENGINE_SOCKET` or in the configuration file.
     #[arg(long, global = true)]
     pub engine_socket: Option<String>,
 
-    /// Container image to use.
+    /// Container image to use for the sandbox.
+    ///
+    /// Can also be set via `PODBOT_IMAGE` or in the configuration file.
     #[arg(long, global = true)]
     pub image: Option<String>,
 }

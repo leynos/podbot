@@ -6,6 +6,7 @@
 //! (`eyre::Report`) for the application boundary.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -41,6 +42,16 @@ pub enum ConfigError {
         /// The reason the value is invalid.
         reason: String,
     },
+
+    /// The `OrthoConfig` library returned an error during configuration loading.
+    ///
+    /// This wraps errors from the layered configuration system, including:
+    /// - Configuration file parsing errors
+    /// - Environment variable parsing errors
+    /// - CLI argument parsing errors
+    /// - Missing required fields after layer merging
+    #[error("configuration loading failed: {0}")]
+    OrthoConfig(Arc<ortho_config::OrthoError>),
 }
 
 /// Errors that can occur during container operations.

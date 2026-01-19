@@ -4,13 +4,15 @@
 #![expect(clippy::expect_used, reason = "expect is standard practice in tests")]
 
 use camino::Utf8PathBuf;
+use ortho_config::MergeComposer;
+use ortho_config::serde_json::json;
 use podbot::config::{
     AgentKind, AgentMode, AppConfig, GitHubConfig, SandboxConfig, WorkspaceConfig,
 };
 use podbot::error::{ConfigError, PodbotError};
 use rstest::fixture;
 use rstest_bdd::Slot;
-use rstest_bdd_macros::{ScenarioState, given, then};
+use rstest_bdd_macros::{ScenarioState, given, then, when};
 
 // Helper functions to reduce duplication in step definitions
 
@@ -77,6 +79,12 @@ pub struct ConfigState {
     parse_error: Slot<String>,
     /// The captured missing field names from validation errors.
     missing_fields: Slot<String>,
+    /// File layer JSON value for layer precedence tests.
+    file_layer: Slot<ortho_config::serde_json::Value>,
+    /// Environment layer JSON value for layer precedence tests.
+    env_layer: Slot<ortho_config::serde_json::Value>,
+    /// CLI layer JSON value for layer precedence tests.
+    cli_layer: Slot<ortho_config::serde_json::Value>,
 }
 
 /// Fixture providing a fresh configuration state.
@@ -342,5 +350,127 @@ fn dev_fuse_mounting_disabled(config_state: &ConfigState) {
     assert!(
         !config.sandbox.mount_dev_fuse,
         "Expected dev/fuse mounting to be disabled"
+    );
+}
+
+// Layer precedence step definitions
+
+/// Merges the current file layer with a new value (combining fields).
+fn merge_file_layer(
+    config_state: &ConfigState,
+    new_value: ortho_config::serde_json::Value,
+) -> ortho_config::serde_json::Value {
+    if let Some(existing) = config_state.file_layer.get() {
+        if let (Some(existing_obj), Some(new_obj)) = (existing.as_object(), new_value.as_object()) {
+            let mut merged = existing_obj.clone();
+            for (k, v) in new_obj {
+                merged.insert(k.clone(), v.clone());
+            }
+            return ortho_config::serde_json::Value::Object(merged);
+        }
+        existing
+    } else {
+        new_value
+    }
+}
+
+/// Merges the current env layer with a new value (combining fields).
+fn merge_env_layer(
+    config_state: &ConfigState,
+    new_value: ortho_config::serde_json::Value,
+) -> ortho_config::serde_json::Value {
+    if let Some(existing) = config_state.env_layer.get() {
+        if let (Some(existing_obj), Some(new_obj)) = (existing.as_object(), new_value.as_object()) {
+            let mut merged = existing_obj.clone();
+            for (k, v) in new_obj {
+                merged.insert(k.clone(), v.clone());
+            }
+            return ortho_config::serde_json::Value::Object(merged);
+        }
+        existing
+    } else {
+        new_value
+    }
+}
+
+#[given("defaults provide engine_socket as nil")]
+fn defaults_provide_engine_socket_nil(config_state: &ConfigState) {
+    // Defaults already have engine_socket as None, nothing to do
+    let _ = config_state;
+}
+
+#[given("a file layer provides engine_socket as {socket}")]
+fn file_layer_provides_engine_socket(config_state: &ConfigState, socket: String) {
+    let merged = merge_file_layer(config_state, json!({ "engine_socket": socket }));
+    config_state.file_layer.set(merged);
+}
+
+#[given("an environment layer provides engine_socket as {socket}")]
+fn env_layer_provides_engine_socket(config_state: &ConfigState, socket: String) {
+    let merged = merge_env_layer(config_state, json!({ "engine_socket": socket }));
+    config_state.env_layer.set(merged);
+}
+
+#[given("a CLI layer provides engine_socket as {socket}")]
+fn cli_layer_provides_engine_socket(config_state: &ConfigState, socket: String) {
+    config_state
+        .cli_layer
+        .set(json!({ "engine_socket": socket }));
+}
+
+#[given("a file layer provides image as {image}")]
+fn file_layer_provides_image(config_state: &ConfigState, image: String) {
+    let merged = merge_file_layer(config_state, json!({ "image": image }));
+    config_state.file_layer.set(merged);
+}
+
+#[when("configuration is merged")]
+fn configuration_is_merged(config_state: &ConfigState) {
+    let mut composer = MergeComposer::new();
+
+    // Layer 1: Defaults
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+
+    // Layer 2: File
+    if let Some(file_layer) = config_state.file_layer.get() {
+        composer.push_file(file_layer, None);
+    }
+
+    // Layer 3: Environment
+    if let Some(env_layer) = config_state.env_layer.get() {
+        composer.push_environment(env_layer);
+    }
+
+    // Layer 4: CLI
+    if let Some(cli_layer) = config_state.cli_layer.get() {
+        composer.push_cli(cli_layer);
+    }
+
+    let config: AppConfig =
+        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+    config_state.config.set(config);
+}
+
+#[then("the engine socket is {socket}")]
+fn engine_socket_is(config_state: &ConfigState, socket: String) {
+    let config = get_config(config_state);
+    assert_eq!(
+        config.engine_socket.as_deref(),
+        Some(socket.as_str()),
+        "Expected engine socket to be {}",
+        socket
+    );
+}
+
+#[then("the image is {image}")]
+fn image_is(config_state: &ConfigState, image: String) {
+    let config = get_config(config_state);
+    assert_eq!(
+        config.image.as_deref(),
+        Some(image.as_str()),
+        "Expected image to be {}",
+        image
     );
 }

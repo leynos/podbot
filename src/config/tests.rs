@@ -2,6 +2,8 @@
 
 use super::*;
 use camino::Utf8PathBuf;
+use ortho_config::MergeComposer;
+use ortho_config::serde_json::json;
 use rstest::{fixture, rstest};
 
 /// Fixture providing a default `AppConfig`.
@@ -397,4 +399,218 @@ fn github_config_is_configured_false_when_id_is_zero(
         private_key_path: Some(Utf8PathBuf::from("/path/to/key.pem")),
     };
     assert!(!config.is_configured());
+}
+
+// ============================================================================
+// Layer Precedence Tests (MergeComposer)
+// ============================================================================
+
+/// Test that defaults layer provides baseline configuration values.
+#[rstest]
+fn layer_precedence_defaults_provide_baseline() {
+    let mut composer = MergeComposer::new();
+    // Use serialized default struct as the defaults layer
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+
+    let config: AppConfig = AppConfig::merge_from_layers(composer.layers())
+        .expect("merge should succeed with defaults only");
+
+    // Defaults should come from serde's #[serde(default)]
+    assert!(config.engine_socket.is_none());
+    assert!(config.image.is_none());
+    assert!(!config.sandbox.privileged);
+    assert!(config.sandbox.mount_dev_fuse);
+    assert_eq!(config.workspace.base_dir.as_str(), "/work");
+}
+
+/// Test that file layer overrides defaults.
+#[rstest]
+fn layer_precedence_file_overrides_defaults() {
+    let mut composer = MergeComposer::new();
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+    composer.push_file(
+        json!({
+            "engine_socket": "unix:///from/file.sock",
+            "image": "file-image:latest"
+        }),
+        None,
+    );
+
+    let config: AppConfig =
+        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+
+    assert_eq!(
+        config.engine_socket.as_deref(),
+        Some("unix:///from/file.sock")
+    );
+    assert_eq!(config.image.as_deref(), Some("file-image:latest"));
+}
+
+/// Test that environment layer overrides file layer.
+#[rstest]
+fn layer_precedence_env_overrides_file() {
+    let mut composer = MergeComposer::new();
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+    composer.push_file(
+        json!({
+            "engine_socket": "unix:///from/file.sock",
+            "image": "file-image:latest"
+        }),
+        None,
+    );
+    composer.push_environment(json!({
+        "engine_socket": "unix:///from/env.sock"
+    }));
+
+    let config: AppConfig =
+        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+
+    // Environment overrides file for engine_socket
+    assert_eq!(
+        config.engine_socket.as_deref(),
+        Some("unix:///from/env.sock")
+    );
+    // File value preserved for image (not in env layer)
+    assert_eq!(config.image.as_deref(), Some("file-image:latest"));
+}
+
+/// Test that CLI layer overrides all other layers.
+#[rstest]
+fn layer_precedence_cli_overrides_all() {
+    let mut composer = MergeComposer::new();
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+    composer.push_file(
+        json!({
+            "engine_socket": "unix:///from/file.sock",
+            "image": "file-image:latest"
+        }),
+        None,
+    );
+    composer.push_environment(json!({
+        "engine_socket": "unix:///from/env.sock"
+    }));
+    composer.push_cli(json!({
+        "engine_socket": "unix:///from/cli.sock"
+    }));
+
+    let config: AppConfig =
+        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+
+    // CLI overrides everything for engine_socket
+    assert_eq!(
+        config.engine_socket.as_deref(),
+        Some("unix:///from/cli.sock")
+    );
+    // File value preserved for image (not in env or CLI layers)
+    assert_eq!(config.image.as_deref(), Some("file-image:latest"));
+}
+
+/// Test full precedence chain: defaults < file < env < CLI.
+#[rstest]
+fn layer_precedence_full_chain() {
+    let mut composer = MergeComposer::new();
+
+    // Layer 1: Defaults (serialized default struct)
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+
+    // Layer 2: File provides base configuration
+    composer.push_file(
+        json!({
+            "engine_socket": "file-socket",
+            "image": "file-image",
+            "sandbox": { "privileged": true },
+            "github": { "app_id": 100 }
+        }),
+        None,
+    );
+
+    // Layer 3: Environment overrides some values
+    composer.push_environment(json!({
+        "image": "env-image",
+        "github": { "app_id": 200, "installation_id": 300 }
+    }));
+
+    // Layer 4: CLI overrides the highest priority values
+    composer.push_cli(json!({
+        "engine_socket": "cli-socket"
+    }));
+
+    let config: AppConfig =
+        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+
+    // CLI wins for engine_socket
+    assert_eq!(config.engine_socket.as_deref(), Some("cli-socket"));
+    // Env wins for image
+    assert_eq!(config.image.as_deref(), Some("env-image"));
+    // File wins for sandbox.privileged (not overridden by higher layers)
+    assert!(config.sandbox.privileged);
+    // Env wins for github.app_id (higher than file, no CLI override)
+    assert_eq!(config.github.app_id, Some(200));
+    // Env provides github.installation_id
+    assert_eq!(config.github.installation_id, Some(300));
+}
+
+/// Test that nested config merges correctly across layers.
+#[rstest]
+fn layer_precedence_nested_config_merges() {
+    let mut composer = MergeComposer::new();
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+    composer.push_file(
+        json!({
+            "sandbox": {
+                "privileged": true,
+                "mount_dev_fuse": false
+            }
+        }),
+        None,
+    );
+    composer.push_environment(json!({
+        "sandbox": {
+            "privileged": false
+        }
+    }));
+
+    let config: AppConfig =
+        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+
+    // Environment overrides file for privileged
+    assert!(!config.sandbox.privileged);
+    // File value preserved for mount_dev_fuse (not in env layer)
+    assert!(!config.sandbox.mount_dev_fuse);
+}
+
+/// Test that missing layers result in defaults being used.
+#[rstest]
+fn layer_precedence_empty_layers_use_defaults() {
+    let mut composer = MergeComposer::new();
+    // Use serialized default struct as the defaults layer
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+    // Add empty override layers (no effect on values)
+    composer.push_file(json!({}), None);
+    composer.push_environment(json!({}));
+    composer.push_cli(json!({}));
+
+    let config: AppConfig = AppConfig::merge_from_layers(composer.layers())
+        .expect("merge should succeed with empty layers");
+
+    // All values should be defaults
+    assert!(config.engine_socket.is_none());
+    assert!(config.image.is_none());
+    assert!(!config.sandbox.privileged);
+    assert!(config.sandbox.mount_dev_fuse);
+    assert_eq!(config.workspace.base_dir.as_str(), "/work");
 }

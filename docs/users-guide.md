@@ -91,7 +91,12 @@ Configuration can be provided via:
 
 ### Configuration file
 
-The default configuration file location is `~/.config/podbot/config.toml`.
+Configuration files are discovered in the following order (first match wins):
+
+1. Path specified via `--config` CLI argument
+2. Path specified via `PODBOT_CONFIG_PATH` environment variable
+3. `$XDG_CONFIG_HOME/podbot/config.toml` (usually `~/.config/podbot/config.toml`)
+4. `~/.podbot.toml` (dotfile in home directory)
 
 **Note:** GitHub App credentials (`app_id`, `installation_id`,
 `private_key_path`) are validated only when GitHub operations are performed.
