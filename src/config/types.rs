@@ -24,36 +24,37 @@ pub enum AgentMode {
     Podbot,
 }
 
-/// GitHub App configuration.
+/// `GitHub` App configuration.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct GitHubConfig {
-    /// The GitHub App ID.
+    /// The `GitHub` App ID.
     pub app_id: Option<u64>,
 
-    /// The GitHub App installation ID.
+    /// The `GitHub` App installation ID.
     pub installation_id: Option<u64>,
 
-    /// Path to the GitHub App private key file.
+    /// Path to the `GitHub` App private key file.
     pub private_key_path: Option<Utf8PathBuf>,
 }
 
 impl GitHubConfig {
-    /// Validates that all required GitHub fields are present and non-zero.
+    /// Validates that all required `GitHub` fields are present and non-zero.
     ///
     /// This method checks that `app_id`, `installation_id`, and `private_key_path`
     /// are all set and that numeric IDs are non-zero. Call this before performing
-    /// GitHub operations that require authentication.
+    /// `GitHub` operations that require authentication.
     ///
     /// # Note on zero values
     ///
-    /// GitHub never issues `app_id` or `installation_id` values of `0`, so this
+    /// `GitHub` never issues `app_id` or `installation_id` values of `0`, so this
     /// validation treats `Some(0)` as invalid to catch default/placeholder values
     /// early.
     ///
     /// # Errors
     ///
-    /// Returns `ConfigError::MissingRequired` if any required field is `None` or
-    /// if numeric IDs are zero, with the field names listed in the error message.
+    /// Returns `ConfigError::MissingRequired` if any required field is `None`
+    /// or if numeric IDs are zero, with the field names listed in the error
+    /// message.
     pub fn validate(&self) -> crate::error::Result<()> {
         let mut missing = Vec::new();
         if self.app_id.is_none() || self.app_id == Some(0) {
@@ -74,7 +75,7 @@ impl GitHubConfig {
         Ok(())
     }
 
-    /// Returns whether all GitHub credentials are properly configured.
+    /// Returns whether all `GitHub` credentials are properly configured.
     ///
     /// This checks that all three fields (`app_id`, `installation_id`,
     /// `private_key_path`) are present and that numeric IDs are non-zero.
@@ -175,7 +176,7 @@ pub struct AppConfig {
     /// The container image to use for the sandbox.
     pub image: Option<String>,
 
-    /// GitHub App configuration.
+    /// `GitHub` App configuration.
     #[serde(default)]
     pub github: GitHubConfig,
 

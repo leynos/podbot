@@ -105,7 +105,7 @@ Completed agent and workspace configuration updates:
   accordingly.
 - Split configuration into `src/config/` submodules to respect the 400-line
   limit while preserving public APIs.
-- Added unit tests for agent mode serialisation, defaults, and invalid values.
+- Added unit tests for agent mode serialization, defaults, and invalid values.
 - Added BDD scenarios for agent mode defaults, invalid modes, and workspace
   overrides.
 - Updated design and user documentation, plus roadmap status.
@@ -145,7 +145,7 @@ otherwise.
 Stage C: Unit tests. Use `rstest` to cover:
 
 - default `AgentConfig` values (kind and mode),
-- serialisation/deserialisation of `AgentMode`,
+- serialization/deserialization of `AgentMode`,
 - invalid `agent.mode` values returning a parse error,
 - workspace base directory defaults and explicit overrides.
 
@@ -202,7 +202,7 @@ including documentation tooling if any Markdown files were modified.
 4) Add or extend unit tests in `src/config/` (or new config submodules) with
    `rstest`.
 
-    - Happy paths: default `AgentConfig` values and TOML deserialisation with
+    - Happy paths: default `AgentConfig` values and TOML deserialization with
       `agent.mode` and `workspace.base_dir`.
     - Unhappy path: invalid `agent.mode` string emits a parse error.
 
@@ -267,7 +267,7 @@ Success looks like:
 - `make check-fmt`, `make lint`, `make test`, and `make all` all succeed with
   no warnings or lint errors.
 - Unit tests prove `AgentMode` and `WorkspaceConfig` defaults and
-  deserialisation, and an invalid `agent.mode` string fails parsing.
+  deserialization, and an invalid `agent.mode` string fails parsing.
 - Behavioural tests cover the default agent mode, invalid mode rejection, and
   workspace base directory overrides.
 - `docs/podbot-design.md` reflects the final `agent.mode` decision and
