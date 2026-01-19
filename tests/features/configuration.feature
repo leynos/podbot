@@ -8,6 +8,7 @@ Feature: Configuration loading
     Then the sandbox is not privileged
     And dev/fuse mounting is enabled
     And the agent kind is Claude
+    And the agent mode is podbot
     And the workspace base directory is /work
 
   Scenario: Configuration file overrides defaults
@@ -22,6 +23,10 @@ Feature: Configuration loading
 
   Scenario: Invalid agent kind is rejected
     Given a configuration file with an invalid agent kind
+    Then the configuration load fails
+
+  Scenario: Invalid agent mode is rejected
+    Given a configuration file with an invalid agent mode
     Then the configuration load fails
 
   Scenario: GitHub configuration validates successfully when complete
@@ -57,3 +62,7 @@ Feature: Configuration loading
     Given a configuration file with privileged mode and dev/fuse disabled
     Then the sandbox is privileged
     And dev/fuse mounting is disabled
+
+  Scenario: Workspace configuration overrides the base directory
+    Given a configuration file with workspace base directory set to /projects
+    Then the workspace base directory is /projects

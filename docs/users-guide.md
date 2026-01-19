@@ -41,11 +41,12 @@ Run an AI agent in a sandboxed container.
 podbot run --repo owner/name --branch main --agent claude
 ```
 
-| Option     | Required | Default  | Description                     |
-| ---------- | -------- | -------- | ------------------------------- |
-| `--repo`   | Yes      | -        | Repository in owner/name format |
-| `--branch` | Yes      | -        | Branch to check out             |
-| `--agent`  | No       | `claude` | Agent type: `claude` or `codex` |
+| Option         | Required | Default  | Description                        |
+| -------------- | -------- | -------- | ---------------------------------- |
+| `--repo`       | Yes      | -        | Repository in owner/name format    |
+| `--branch`     | Yes      | -        | Branch to check out                |
+| `--agent`      | No       | `claude` | Agent type: `claude` or `codex`    |
+| `--agent-mode` | No       | `podbot` | Agent execution mode (podbot only) |
 
 #### `token-daemon`
 
@@ -118,6 +119,8 @@ mount_dev_fuse = true
 [agent]
 # Default agent type: "claude" or "codex"
 kind = "claude"
+# Execution mode for the agent (currently only "podbot")
+mode = "podbot"
 
 [workspace]
 # Base directory for cloned repositories inside the container
@@ -144,6 +147,7 @@ All configuration options can be set via environment variables using the
 | `PODBOT_SANDBOX_PRIVILEGED`      | `sandbox.privileged`      |
 | `PODBOT_SANDBOX_MOUNT_DEV_FUSE`  | `sandbox.mount_dev_fuse`  |
 | `PODBOT_AGENT_KIND`              | `agent.kind`              |
+| `PODBOT_AGENT_MODE`              | `agent.mode`              |
 | `PODBOT_WORKSPACE_BASE_DIR`      | `workspace.base_dir`      |
 | `PODBOT_CREDS_COPY_CLAUDE`       | `creds.copy_claude`       |
 | `PODBOT_CREDS_COPY_CODEX`        | `creds.copy_codex`        |
