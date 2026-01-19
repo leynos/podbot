@@ -76,6 +76,20 @@ fn github_config_complete() -> GitHubConfig {
     }
 }
 
+/// Helper: Creates a `MergeComposer` with defaults layer already pushed.
+fn create_composer_with_defaults() -> MergeComposer {
+    let mut composer = MergeComposer::new();
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
+        .expect("serialization should succeed");
+    composer.push_defaults(defaults);
+    composer
+}
+
+/// Helper: Merges layers from a composer into `AppConfig`.
+fn merge_config(composer: MergeComposer) -> AppConfig {
+    AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed")
+}
+
 #[rstest]
 fn agent_kind_default_is_claude() {
     assert_eq!(AgentKind::default(), AgentKind::Claude);
@@ -254,32 +268,21 @@ fn app_config_partial_toml_workspace_default_applies(app_config_from_partial_tom
 }
 
 #[rstest]
-fn app_config_rejects_invalid_agent_kind() {
-    let toml = r#"
+#[case("kind", "unknown")]
+#[case("mode", "unknown")]
+fn app_config_rejects_invalid_agent_field(#[case] field: &str, #[case] value: &str) {
+    let toml = format!(
+        r#"
         [agent]
-        kind = "unknown"
-    "#;
-
-    let error = toml::from_str::<AppConfig>(toml)
-        .expect_err("TOML parsing should fail for an invalid agent kind");
-    assert!(
-        error.to_string().contains("unknown"),
-        "Expected error mentioning the invalid value \"unknown\", got: {error}"
+        {field} = "{value}"
+    "#
     );
-}
 
-#[rstest]
-fn app_config_rejects_invalid_agent_mode() {
-    let toml = r#"
-        [agent]
-        mode = "unknown"
-    "#;
-
-    let error = toml::from_str::<AppConfig>(toml)
-        .expect_err("TOML parsing should fail for an invalid agent mode");
+    let error = toml::from_str::<AppConfig>(&toml)
+        .expect_err("TOML parsing should fail for an invalid agent field");
     assert!(
-        error.to_string().contains("unknown"),
-        "Expected error mentioning the invalid value \"unknown\", got: {error}"
+        error.to_string().contains(value),
+        "Expected error mentioning the invalid value \"{value}\", got: {error}"
     );
 }
 
@@ -408,14 +411,8 @@ fn github_config_is_configured_false_when_id_is_zero(
 /// Test that defaults layer provides baseline configuration values.
 #[rstest]
 fn layer_precedence_defaults_provide_baseline() {
-    let mut composer = MergeComposer::new();
-    // Use serialized default struct as the defaults layer
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
-        .expect("serialization should succeed");
-    composer.push_defaults(defaults);
-
-    let config: AppConfig = AppConfig::merge_from_layers(composer.layers())
-        .expect("merge should succeed with defaults only");
+    let composer = create_composer_with_defaults();
+    let config = merge_config(composer);
 
     // Defaults should come from serde's #[serde(default)]
     assert!(config.engine_socket.is_none());
@@ -428,10 +425,7 @@ fn layer_precedence_defaults_provide_baseline() {
 /// Test that file layer overrides defaults.
 #[rstest]
 fn layer_precedence_file_overrides_defaults() {
-    let mut composer = MergeComposer::new();
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
-        .expect("serialization should succeed");
-    composer.push_defaults(defaults);
+    let mut composer = create_composer_with_defaults();
     composer.push_file(
         json!({
             "engine_socket": "unix:///from/file.sock",
@@ -440,8 +434,7 @@ fn layer_precedence_file_overrides_defaults() {
         None,
     );
 
-    let config: AppConfig =
-        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+    let config = merge_config(composer);
 
     assert_eq!(
         config.engine_socket.as_deref(),
@@ -453,10 +446,7 @@ fn layer_precedence_file_overrides_defaults() {
 /// Test that environment layer overrides file layer.
 #[rstest]
 fn layer_precedence_env_overrides_file() {
-    let mut composer = MergeComposer::new();
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
-        .expect("serialization should succeed");
-    composer.push_defaults(defaults);
+    let mut composer = create_composer_with_defaults();
     composer.push_file(
         json!({
             "engine_socket": "unix:///from/file.sock",
@@ -468,8 +458,7 @@ fn layer_precedence_env_overrides_file() {
         "engine_socket": "unix:///from/env.sock"
     }));
 
-    let config: AppConfig =
-        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+    let config = merge_config(composer);
 
     // Environment overrides file for engine_socket
     assert_eq!(
@@ -483,10 +472,7 @@ fn layer_precedence_env_overrides_file() {
 /// Test that CLI layer overrides all other layers.
 #[rstest]
 fn layer_precedence_cli_overrides_all() {
-    let mut composer = MergeComposer::new();
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
-        .expect("serialization should succeed");
-    composer.push_defaults(defaults);
+    let mut composer = create_composer_with_defaults();
     composer.push_file(
         json!({
             "engine_socket": "unix:///from/file.sock",
@@ -501,8 +487,7 @@ fn layer_precedence_cli_overrides_all() {
         "engine_socket": "unix:///from/cli.sock"
     }));
 
-    let config: AppConfig =
-        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+    let config = merge_config(composer);
 
     // CLI overrides everything for engine_socket
     assert_eq!(
@@ -516,12 +501,7 @@ fn layer_precedence_cli_overrides_all() {
 /// Test full precedence chain: defaults < file < env < CLI.
 #[rstest]
 fn layer_precedence_full_chain() {
-    let mut composer = MergeComposer::new();
-
-    // Layer 1: Defaults (serialized default struct)
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
-        .expect("serialization should succeed");
-    composer.push_defaults(defaults);
+    let mut composer = create_composer_with_defaults();
 
     // Layer 2: File provides base configuration
     composer.push_file(
@@ -545,8 +525,7 @@ fn layer_precedence_full_chain() {
         "engine_socket": "cli-socket"
     }));
 
-    let config: AppConfig =
-        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+    let config = merge_config(composer);
 
     // CLI wins for engine_socket
     assert_eq!(config.engine_socket.as_deref(), Some("cli-socket"));
@@ -563,10 +542,7 @@ fn layer_precedence_full_chain() {
 /// Test that nested config merges correctly across layers.
 #[rstest]
 fn layer_precedence_nested_config_merges() {
-    let mut composer = MergeComposer::new();
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
-        .expect("serialization should succeed");
-    composer.push_defaults(defaults);
+    let mut composer = create_composer_with_defaults();
     composer.push_file(
         json!({
             "sandbox": {
@@ -582,8 +558,7 @@ fn layer_precedence_nested_config_merges() {
         }
     }));
 
-    let config: AppConfig =
-        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+    let config = merge_config(composer);
 
     // Environment overrides file for privileged
     assert!(!config.sandbox.privileged);
@@ -594,18 +569,13 @@ fn layer_precedence_nested_config_merges() {
 /// Test that missing layers result in defaults being used.
 #[rstest]
 fn layer_precedence_empty_layers_use_defaults() {
-    let mut composer = MergeComposer::new();
-    // Use serialized default struct as the defaults layer
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
-        .expect("serialization should succeed");
-    composer.push_defaults(defaults);
+    let mut composer = create_composer_with_defaults();
     // Add empty override layers (no effect on values)
     composer.push_file(json!({}), None);
     composer.push_environment(json!({}));
     composer.push_cli(json!({}));
 
-    let config: AppConfig = AppConfig::merge_from_layers(composer.layers())
-        .expect("merge should succeed with empty layers");
+    let config = merge_config(composer);
 
     // All values should be defaults
     assert!(config.engine_socket.is_none());

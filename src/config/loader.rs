@@ -18,6 +18,21 @@ use ortho_config::{MergeComposer, toml};
 use crate::config::{AppConfig, Cli};
 use crate::error::{ConfigError, Result};
 
+/// Load a configuration file and push it to the composer.
+fn load_config_file(path: &PathBuf, composer: &mut MergeComposer) -> Result<()> {
+    let content = std::fs::read_to_string(path).map_err(|e| ConfigError::ParseError {
+        message: format!("failed to read {}: {e}", path.display()),
+    })?;
+
+    let value = toml::from_str::<serde_json::Value>(&content).map_err(|e| ConfigError::ParseError {
+        message: format!("failed to parse {}: {e}", path.display()),
+    })?;
+
+    let utf8_path = Utf8PathBuf::try_from(path.clone()).ok();
+    composer.push_file(value, utf8_path);
+    Ok(())
+}
+
 /// Load configuration with full layer precedence.
 ///
 /// This function loads configuration from all available sources:
@@ -53,29 +68,8 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
         discovery.candidates().into_iter().find(|p| p.exists())
     });
 
-    if let Some(path) = discovered_path {
-        if path.exists() {
-            match std::fs::read_to_string(&path) {
-                Ok(content) => match toml::from_str::<serde_json::Value>(&content) {
-                    Ok(value) => {
-                        let utf8_path = Utf8PathBuf::try_from(path.clone()).ok();
-                        composer.push_file(value, utf8_path);
-                    }
-                    Err(e) => {
-                        return Err(ConfigError::ParseError {
-                            message: format!("failed to parse {}: {e}", path.display()),
-                        }
-                        .into());
-                    }
-                },
-                Err(e) => {
-                    return Err(ConfigError::ParseError {
-                        message: format!("failed to read {}: {e}", path.display()),
-                    }
-                    .into());
-                }
-            }
-        }
+    if let Some(path) = discovered_path.filter(|p| p.exists()) {
+        load_config_file(&path, &mut composer)?;
     }
 
     // Layer 3: Environment variables.
