@@ -14,6 +14,7 @@ highest) is: application defaults, configuration file (`~/.config/podbot/config.
 environment variables (`PODBOT_*`), command-line arguments.
 
 Success is observable when:
+
 - Configuration loads from file, environment, and CLI with correct precedence
 - Unit tests using `MergeComposer` verify each precedence layer
 - BDD scenarios cover happy and unhappy paths
@@ -110,12 +111,14 @@ Success is observable when:
 ## Context and orientation
 
 Configuration lives in `src/config/` with:
+
 - `types.rs` - Configuration structs (AppConfig, GitHubConfig, SandboxConfig, etc.)
 - `cli.rs` - Clap-based CLI definitions (Cli, Commands, subcommand args)
 - `mod.rs` - Module exports
 - `tests.rs` - Unit tests
 
 Behavioural tests in:
+
 - `tests/bdd_config.rs` - Scenario bindings
 - `tests/bdd_config_helpers.rs` - Step definitions and state
 - `tests/features/configuration.feature` - Gherkin scenarios
@@ -137,6 +140,7 @@ Add OrthoConfig derives to all configuration structs in `types.rs`.
    - `CredsConfig` with `#[ortho_config(prefix = "CREDS")]`
 3. Add `#[ortho_config(default = expr)]` attributes for fields with defaults
 4. Add OrthoConfig derive to `AppConfig` with discovery:
+
    ```rust
    #[derive(Debug, Clone, Default, Deserialize, Serialize, OrthoConfig)]
    #[ortho_config(
@@ -154,6 +158,7 @@ Add OrthoConfig derives to all configuration structs in `types.rs`.
    )]
    pub struct AppConfig { ... }
    ```
+
 5. Implement `PostMergeHook` for `AppConfig` (empty for now, placeholder for
    future normalisation)
 
@@ -202,10 +207,12 @@ OrthoConfig(#[from] std::sync::Arc<ortho_config::OrthoError>),
 ### Stage D: CLI integration
 
 Update `src/config/cli.rs`:
+
 - Remove `--config`, `--engine-socket`, `--image` global flags from Cli struct
   (these are now handled by OrthoConfig's generated parser)
 
 Update `src/main.rs`:
+
 - Replace `Cli::parse()` with OrthoConfig loading
 - Parse CLI subcommand separately for dispatch
 - Pass loaded `AppConfig` to subcommand handlers
@@ -213,12 +220,14 @@ Update `src/main.rs`:
 ### Stage E: Testing
 
 Add unit tests to `src/config/tests.rs` using `MergeComposer`:
+
 - `test_file_overrides_defaults` - config file values beat defaults
 - `test_env_overrides_file` - env vars beat file values
 - `test_cli_overrides_env` - CLI args beat env vars
 - `test_nested_config_env_vars` - nested fields via double-underscore
 
 Add BDD scenarios to `tests/features/configuration.feature`:
+
 - "Environment variable overrides configuration file"
 - "CLI argument overrides environment variable"
 - "Configuration file is loaded from XDG path"
@@ -229,6 +238,7 @@ Add step definitions to `tests/bdd_config_helpers.rs` for env var handling.
 ### Stage F: Documentation
 
 Update `docs/users-guide.md`:
+
 - Document the `-c/--config` flag (now visible)
 - Document `PODBOT_CONFIG_PATH` env var for explicit path override
 - Document config file discovery paths
@@ -236,6 +246,7 @@ Update `docs/users-guide.md`:
 ### Stage G: Completion
 
 Mark tasks complete in `docs/podbot-roadmap.md`:
+
 - `[x] Implement OrthoConfig derive for layered precedence.`
 - `[x] Support configuration file at ~/.config/podbot/config.toml.`
 - `[x] Add validation ensuring required fields are present.`
@@ -265,6 +276,7 @@ Mark tasks complete in `docs/podbot-roadmap.md`:
 11) Mark tasks complete in `docs/podbot-roadmap.md`
 
 12) Run validation:
+
     ```bash
     set -o pipefail
     make check-fmt 2>&1 | tee /tmp/podbot-check-fmt.log
@@ -279,6 +291,7 @@ Mark tasks complete in `docs/podbot-roadmap.md`:
 ## Validation and acceptance
 
 Success looks like:
+
 - `make check-fmt`, `make lint`, and `make test` all succeed with no warnings
 - Unit tests demonstrate layer precedence with MergeComposer
 - BDD scenarios pass for environment and CLI overrides
@@ -296,6 +309,7 @@ two attempts, stop and escalate with the captured log file path.
 ## Artefacts and notes
 
 Keep the following log files for review if needed:
+
 - `/tmp/podbot-check-fmt.log`
 - `/tmp/podbot-lint.log`
 - `/tmp/podbot-test.log`
@@ -320,6 +334,7 @@ Keep the following log files for review if needed:
 ## Interfaces and dependencies
 
 At completion, the public API changes:
+
 - `load_config()` function exported from `podbot::config`
 - `load_config_from_iter()` function exported from `podbot::config`
 - `ConfigError::OrthoConfig` variant added
