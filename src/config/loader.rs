@@ -24,9 +24,10 @@ fn load_config_file(path: &PathBuf, composer: &mut MergeComposer) -> Result<()> 
         message: format!("failed to read {}: {e}", path.display()),
     })?;
 
-    let value = toml::from_str::<serde_json::Value>(&content).map_err(|e| ConfigError::ParseError {
-        message: format!("failed to parse {}: {e}", path.display()),
-    })?;
+    let value =
+        toml::from_str::<serde_json::Value>(&content).map_err(|e| ConfigError::ParseError {
+            message: format!("failed to parse {}: {e}", path.display()),
+        })?;
 
     let utf8_path = Utf8PathBuf::try_from(path.clone()).ok();
     composer.push_file(value, utf8_path);

@@ -10,8 +10,9 @@ Status: IN PROGRESS
 
 Implement `OrthoConfig` derive macros for the podbot configuration system to
 enable layered configuration precedence. The precedence order (lowest to
-highest) is: application defaults, configuration file (`~/.config/podbot/config.toml`),
-environment variables (`PODBOT_*`), command-line arguments.
+highest) is: application defaults, configuration file
+(`~/.config/podbot/config.toml`), environment variables (`PODBOT_*`),
+command-line arguments.
 
 Success is observable when:
 
@@ -29,7 +30,8 @@ Success is observable when:
 - Ensure no file exceeds 400 lines; split if needed.
 - Use en-GB-oxendict spelling in documentation and comments.
 - Tests must use `rstest` fixtures and `rstest-bdd` scenarios.
-- Use Makefile targets and capture long outputs with `tee` plus `set -o pipefail`.
+- Use Makefile targets and capture long outputs with `tee` plus
+  `set -o pipefail`.
 - No `unwrap` or `expect` calls outside test code.
 
 ## Tolerances (exception triggers)
@@ -112,7 +114,8 @@ Success is observable when:
 
 Configuration lives in `src/config/` with:
 
-- `types.rs` - Configuration structs (AppConfig, GitHubConfig, SandboxConfig, etc.)
+- `types.rs` - Configuration structs (AppConfig, GitHubConfig, SandboxConfig,
+  etc.)
 - `cli.rs` - Clap-based CLI definitions (Cli, Commands, subcommand args)
 - `mod.rs` - Module exports
 - `tests.rs` - Unit tests
@@ -316,20 +319,20 @@ Keep the following log files for review if needed:
 
 ## Files to modify
 
-| File | Action | Estimated Lines |
-|------|--------|-----------------|
-| `docs/execplans/1-3-6-ortho-config-derive.md` | Create | ~300 |
-| `src/config/types.rs` | Modify | +80 lines |
-| `src/config/loader.rs` | Create | ~50 lines |
-| `src/config/mod.rs` | Modify | +5 lines |
-| `src/config/cli.rs` | Modify | -10 lines |
-| `src/main.rs` | Modify | +15 lines |
-| `src/error.rs` | Modify | +10 lines |
-| `src/config/tests.rs` | Modify | +60 lines |
-| `tests/bdd_config_helpers.rs` | Modify | +40 lines |
-| `tests/features/configuration.feature` | Modify | +30 lines |
-| `docs/users-guide.md` | Modify | +20 lines |
-| `docs/podbot-roadmap.md` | Modify | +3 lines |
+| File                                          | Action | Estimated Lines |
+| --------------------------------------------- | ------ | --------------- |
+| `docs/execplans/1-3-6-ortho-config-derive.md` | Create | ~300            |
+| `src/config/types.rs`                         | Modify | +80 lines       |
+| `src/config/loader.rs`                        | Create | ~50 lines       |
+| `src/config/mod.rs`                           | Modify | +5 lines        |
+| `src/config/cli.rs`                           | Modify | -10 lines       |
+| `src/main.rs`                                 | Modify | +15 lines       |
+| `src/error.rs`                                | Modify | +10 lines       |
+| `src/config/tests.rs`                         | Modify | +60 lines       |
+| `tests/bdd_config_helpers.rs`                 | Modify | +40 lines       |
+| `tests/features/configuration.feature`        | Modify | +30 lines       |
+| `docs/users-guide.md`                         | Modify | +20 lines       |
+| `docs/podbot-roadmap.md`                      | Modify | +3 lines        |
 
 ## Interfaces and dependencies
 
