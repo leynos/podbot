@@ -90,6 +90,15 @@ fn merge_config(composer: MergeComposer) -> AppConfig {
     AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed")
 }
 
+/// Helper: Asserts that a config has all default values.
+fn assert_config_has_defaults(config: &AppConfig) {
+    assert!(config.engine_socket.is_none(), "engine_socket should be None");
+    assert!(config.image.is_none(), "image should be None");
+    assert!(!config.sandbox.privileged, "sandbox.privileged should be false");
+    assert!(config.sandbox.mount_dev_fuse, "sandbox.mount_dev_fuse should be true");
+    assert_eq!(config.workspace.base_dir.as_str(), "/work", "workspace.base_dir should be /work");
+}
+
 #[rstest]
 fn agent_kind_default_is_claude() {
     assert_eq!(AgentKind::default(), AgentKind::Claude);
@@ -440,12 +449,7 @@ fn layer_precedence_defaults_provide_baseline() {
     let composer = create_composer_with_defaults();
     let config = merge_config(composer);
 
-    // Defaults should come from serde's #[serde(default)]
-    assert!(config.engine_socket.is_none());
-    assert!(config.image.is_none());
-    assert!(!config.sandbox.privileged);
-    assert!(config.sandbox.mount_dev_fuse);
-    assert_eq!(config.workspace.base_dir.as_str(), "/work");
+    assert_config_has_defaults(&config);
 }
 
 /// Test that file layer overrides defaults.
@@ -603,10 +607,5 @@ fn layer_precedence_empty_layers_use_defaults() {
 
     let config = merge_config(composer);
 
-    // All values should be defaults
-    assert!(config.engine_socket.is_none());
-    assert!(config.image.is_none());
-    assert!(!config.sandbox.privileged);
-    assert!(config.sandbox.mount_dev_fuse);
-    assert_eq!(config.workspace.base_dir.as_str(), "/work");
+    assert_config_has_defaults(&config);
 }
