@@ -408,6 +408,32 @@ fn github_config_is_configured_false_when_id_is_zero(
 // Layer Precedence Tests (MergeComposer)
 // ============================================================================
 
+/// Test that serialised `AppConfig::default()` can round-trip through `MergeComposer`.
+///
+/// This mirrors the production `load_config` behaviour, which serialises
+/// `AppConfig::default()` as the defaults layer.
+#[rstest]
+fn layer_precedence_serialised_defaults_round_trip() {
+    // This is exactly what load_config does: serialise defaults, push to composer.
+    let composer = create_composer_with_defaults();
+    let config = merge_config(composer);
+    let expected = AppConfig::default();
+
+    // Verify key fields match to ensure the serialisation round-trip works.
+    assert_eq!(config.engine_socket, expected.engine_socket);
+    assert_eq!(config.image, expected.image);
+    assert_eq!(config.sandbox.privileged, expected.sandbox.privileged);
+    assert_eq!(
+        config.sandbox.mount_dev_fuse,
+        expected.sandbox.mount_dev_fuse
+    );
+    assert_eq!(config.workspace.base_dir, expected.workspace.base_dir);
+    assert_eq!(config.agent.kind, expected.agent.kind);
+    assert_eq!(config.agent.mode, expected.agent.mode);
+    assert_eq!(config.creds.copy_claude, expected.creds.copy_claude);
+    assert_eq!(config.creds.copy_codex, expected.creds.copy_codex);
+}
+
 /// Test that defaults layer provides baseline configuration values.
 #[rstest]
 fn layer_precedence_defaults_provide_baseline() {

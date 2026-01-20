@@ -355,23 +355,53 @@ fn dev_fuse_mounting_disabled(config_state: &ConfigState) {
 
 // Layer precedence step definitions
 
+/// Recursively merges two JSON values, combining nested objects field-by-field.
+///
+/// For object values, fields are merged recursively. For non-objects, the new
+/// value completely overwrites the existing one. This mirrors how `OrthoConfig`
+/// merges nested configuration structures.
+fn merge_json_values(
+    existing: &ortho_config::serde_json::Value,
+    new_value: &ortho_config::serde_json::Value,
+) -> ortho_config::serde_json::Value {
+    use ortho_config::serde_json::Value;
+
+    match (existing, new_value) {
+        (Value::Object(existing_obj), Value::Object(new_obj)) => {
+            let mut merged = existing_obj.clone();
+            for (key, new_child) in new_obj {
+                if let Some(existing_child) = merged.get(key) {
+                    // Recursively merge nested objects; for non-objects the new value wins.
+                    merged.insert(key.clone(), merge_json_values(existing_child, new_child));
+                } else {
+                    merged.insert(key.clone(), new_child.clone());
+                }
+            }
+            Value::Object(merged)
+        }
+        // For non-object values, the new value completely overwrites the existing one.
+        _ => new_value.clone(),
+    }
+}
+
+/// Merges a new value into an existing layer slot (if present).
+fn merge_layer(
+    existing: Option<ortho_config::serde_json::Value>,
+    new_value: ortho_config::serde_json::Value,
+) -> ortho_config::serde_json::Value {
+    if let Some(existing_value) = existing {
+        merge_json_values(&existing_value, &new_value)
+    } else {
+        new_value
+    }
+}
+
 /// Merges the current file layer with a new value (combining fields).
 fn merge_file_layer(
     config_state: &ConfigState,
     new_value: ortho_config::serde_json::Value,
 ) -> ortho_config::serde_json::Value {
-    if let Some(existing) = config_state.file_layer.get() {
-        if let (Some(existing_obj), Some(new_obj)) = (existing.as_object(), new_value.as_object()) {
-            let mut merged = existing_obj.clone();
-            for (k, v) in new_obj {
-                merged.insert(k.clone(), v.clone());
-            }
-            return ortho_config::serde_json::Value::Object(merged);
-        }
-        existing
-    } else {
-        new_value
-    }
+    merge_layer(config_state.file_layer.get(), new_value)
 }
 
 /// Merges the current env layer with a new value (combining fields).
@@ -379,18 +409,7 @@ fn merge_env_layer(
     config_state: &ConfigState,
     new_value: ortho_config::serde_json::Value,
 ) -> ortho_config::serde_json::Value {
-    if let Some(existing) = config_state.env_layer.get() {
-        if let (Some(existing_obj), Some(new_obj)) = (existing.as_object(), new_value.as_object()) {
-            let mut merged = existing_obj.clone();
-            for (k, v) in new_obj {
-                merged.insert(k.clone(), v.clone());
-            }
-            return ortho_config::serde_json::Value::Object(merged);
-        }
-        existing
-    } else {
-        new_value
-    }
+    merge_layer(config_state.env_layer.get(), new_value)
 }
 
 #[given("defaults provide engine_socket as nil")]

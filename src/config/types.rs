@@ -172,24 +172,17 @@ impl Default for CredsConfig {
 /// (lowest to highest) is: defaults, configuration file, environment variables,
 /// command-line arguments.
 ///
-/// Configuration files are discovered in this order:
-/// 1. Path specified via `PODBOT_CONFIG_PATH` environment variable
-/// 2. `.podbot.toml` in the current working directory
-/// 3. `.podbot.toml` in the home directory
-/// 4. `~/.config/podbot/config.toml` (XDG default)
+/// Configuration files are discovered in this order (see `loader.rs`):
+/// 1. Path specified via `--config` CLI argument (if it exists)
+/// 2. Path specified via `PODBOT_CONFIG_PATH` environment variable
+/// 3. `~/.config/podbot/config.toml` (XDG default)
+/// 4. `~/.podbot.toml` (dotfile in home directory)
+///
+/// Note: Discovery is implemented in `loader.rs` using `ConfigDiscovery` rather
+/// than via `OrthoConfig`'s `discovery(...)` attribute, because we need to
+/// integrate with the existing clap-based `Cli` struct for subcommand dispatch.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(
-    prefix = "PODBOT",
-    post_merge_hook,
-    discovery(
-        app_name = "podbot",
-        env_var = "PODBOT_CONFIG_PATH",
-        config_file_name = "config.toml",
-        dotfile_name = ".podbot.toml",
-        config_cli_long = "config",
-        config_cli_visible = true,
-    )
-)]
+#[ortho_config(prefix = "PODBOT", post_merge_hook)]
 pub struct AppConfig {
     /// The container engine socket path or URL.
     pub engine_socket: Option<String>,

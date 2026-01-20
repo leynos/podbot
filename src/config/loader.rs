@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 use camino::Utf8PathBuf;
 use ortho_config::discovery::ConfigDiscovery;
-use ortho_config::serde_json::{self, json};
+use ortho_config::serde_json;
 use ortho_config::{MergeComposer, toml};
 
 use crate::config::{AppConfig, Cli};
@@ -53,12 +53,20 @@ fn load_config_file(path: &PathBuf, composer: &mut MergeComposer) -> Result<()> 
 pub fn load_config(cli: &Cli) -> Result<AppConfig> {
     let mut composer = MergeComposer::new();
 
-    // Layer 1: Defaults (use serde's default values via empty JSON).
-    composer.push_defaults(json!({}));
+    // Layer 1: Defaults (serialised from AppConfig::default()).
+    let defaults =
+        serde_json::to_value(AppConfig::default()).map_err(|e| ConfigError::ParseError {
+            message: format!("failed to serialise defaults: {e}"),
+        })?;
+    composer.push_defaults(defaults);
 
     // Layer 2: Configuration file.
-    // Use the CLI-provided path, or discover via XDG paths.
-    let config_path: Option<PathBuf> = cli.config.as_ref().map(|p| p.as_std_path().to_owned());
+    // Use the CLI-provided path (if it exists), or discover via XDG paths.
+    let config_path: Option<PathBuf> = cli
+        .config
+        .as_ref()
+        .map(|p| p.as_std_path().to_owned())
+        .filter(|p| p.exists());
     let discovered_path = config_path.or_else(|| {
         // Discover config files using ortho_config's ConfigDiscovery builder.
         let discovery = ConfigDiscovery::builder("podbot")
@@ -69,7 +77,7 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
         discovery.candidates().into_iter().find(|p| p.exists())
     });
 
-    if let Some(path) = discovered_path.filter(|p| p.exists()) {
+    if let Some(path) = discovered_path {
         load_config_file(&path, &mut composer)?;
     }
 
