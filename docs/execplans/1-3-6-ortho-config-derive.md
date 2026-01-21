@@ -90,10 +90,11 @@ Success is observable when:
   `--config`, `--engine-socket`, and `--image` global flags move to
   OrthoConfig's generated parser. Date/Author: 2026-01-19 / Terry.
 
-- Decision: Nested configs use single-underscore prefixes (e.g., `GITHUB`)
-  resulting in double-underscore env vars (e.g., `PODBOT_GITHUB__APP_ID`).
-  Rationale: This follows OrthoConfig's standard nested field naming convention
-  and matches the documented env vars in `docs/users-guide.md`. Date/Author:
+- Decision: Environment variables use single underscores throughout (e.g.,
+  `PODBOT_GITHUB_APP_ID`, not `PODBOT_GITHUB__APP_ID`). The manual env var table
+  in `loader.rs` explicitly maps each nested field to its env var name, avoiding
+  any double-underscore convention. Rationale: Single underscores are more
+  user-friendly and match conventional environment variable naming. Date/Author:
   2026-01-19 / Terry.
 
 - Decision: Create a separate `loader.rs` module rather than adding loading

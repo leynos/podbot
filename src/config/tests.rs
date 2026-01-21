@@ -630,3 +630,42 @@ fn layer_precedence_empty_layers_use_defaults() {
 
     assert_config_has_defaults(&config);
 }
+
+/// Test that empty JSON defaults do NOT work - serialised `AppConfig::default()` is required.
+///
+/// This test verifies that using `push_defaults(json!({}))` fails to produce a valid
+/// configuration. OrthoConfig requires fully-specified defaults from the serialized
+/// `AppConfig::default()` value. Empty JSON would result in null/missing fields that
+/// cannot be deserialized into the target struct.
+///
+/// This documents why the production loader MUST use the serialized defaults approach
+/// rather than relying on serde's `#[serde(default)]` during deserialization.
+#[rstest]
+fn layer_precedence_empty_json_defaults_fails() {
+    // Empty JSON defaults should fail to produce a valid config.
+    let mut empty_composer = MergeComposer::new();
+    empty_composer.push_defaults(json!({}));
+
+    let result = AppConfig::merge_from_layers(empty_composer.layers());
+
+    // The merge should fail because empty JSON doesn't provide required defaults.
+    assert!(
+        result.is_err(),
+        "empty JSON defaults should fail; production MUST serialize AppConfig::default()"
+    );
+}
+
+/// Test that serialised `AppConfig::default()` works correctly as a defaults layer.
+///
+/// This is the correct approach used by the production `load_config` function.
+/// Contrast with `layer_precedence_empty_json_defaults_fails` which demonstrates
+/// that empty JSON does NOT work.
+#[rstest]
+fn layer_precedence_serialised_defaults_works() {
+    // Production approach: serialise AppConfig::default() as the defaults layer.
+    let composer = create_composer_with_defaults();
+    let config = merge_config(composer);
+
+    // Verify the config matches the expected defaults.
+    assert_config_has_defaults(&config);
+}

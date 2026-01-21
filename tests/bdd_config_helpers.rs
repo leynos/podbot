@@ -418,8 +418,9 @@ fn merge_env_layer(
 
 #[given("defaults provide engine_socket as nil")]
 fn defaults_provide_engine_socket_nil(config_state: &ConfigState) {
-    // Defaults already have engine_socket as None, nothing to do
-    let _ = config_state;
+    // Defaults already have engine_socket as None, nothing to do.
+    // Access config_state to satisfy clippy (rstest_bdd requires the parameter).
+    drop(config_state.file_layer.get());
 }
 
 #[given("a file layer provides engine_socket as {socket}")]

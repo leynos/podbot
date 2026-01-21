@@ -60,15 +60,13 @@ const fn cli_with_config(config_path: Option<Utf8PathBuf>) -> Cli {
 
 /// Helper: Creates a temporary config file with the given TOML content.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the temporary file cannot be created or written to.
-#[expect(clippy::expect_used, reason = "test helper may panic on setup failure")]
-fn temp_config_file(content: &str) -> NamedTempFile {
-    let mut file = NamedTempFile::new().expect("failed to create temp file");
-    file.write_all(content.as_bytes())
-        .expect("failed to write to temp file");
-    file
+/// Returns an error if the temporary file cannot be created or written to.
+fn temp_config_file(content: &str) -> std::io::Result<NamedTempFile> {
+    let mut file = NamedTempFile::new()?;
+    file.write_all(content.as_bytes())?;
+    Ok(file)
 }
 
 #[test]
@@ -101,7 +99,7 @@ fn load_config_loads_from_config_file() {
         [sandbox]
         privileged = true
     "#;
-    let config_file = temp_config_file(toml_content);
+    let config_file = temp_config_file(toml_content).expect("failed to create temp config");
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
 
@@ -127,7 +125,7 @@ fn load_config_cli_overrides_config_file() {
         engine_socket = "unix:///from/config/file.sock"
         image = "file-image:v1"
     "#;
-    let config_file = temp_config_file(toml_content);
+    let config_file = temp_config_file(toml_content).expect("failed to create temp config");
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
 
@@ -172,7 +170,7 @@ fn load_config_rejects_malformed_config_file() {
     let toml_content = r"
         this is not valid TOML {{{
     ";
-    let config_file = temp_config_file(toml_content);
+    let config_file = temp_config_file(toml_content).expect("failed to create temp config");
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
 
@@ -194,7 +192,7 @@ fn load_config_preserves_nested_config_defaults() {
     let toml_content = r#"
         engine_socket = "unix:///test.sock"
     "#;
-    let config_file = temp_config_file(toml_content);
+    let config_file = temp_config_file(toml_content).expect("failed to create temp config");
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
 
@@ -210,4 +208,86 @@ fn load_config_preserves_nested_config_defaults() {
     assert_eq!(config.workspace.base_dir.as_str(), "/work");
     assert!(config.creds.copy_claude);
     assert!(config.creds.copy_codex);
+}
+
+#[test]
+#[serial]
+fn load_config_fails_on_invalid_bool_env_var() {
+    clear_podbot_env();
+
+    // SAFETY: Tests are run serially via `#[serial]` attribute.
+    unsafe {
+        std::env::set_var("PODBOT_SANDBOX_PRIVILEGED", "maybe");
+    }
+
+    let cli = cli_with_config(None);
+    let result = load_config(&cli);
+
+    let err = result.expect_err("load_config should fail for invalid bool");
+    let err_str = err.to_string();
+    assert!(
+        err_str.contains("PODBOT_SANDBOX_PRIVILEGED"),
+        "error should mention the env var: {err_str}"
+    );
+    assert!(
+        err_str.contains("expected bool"),
+        "error should explain expected type: {err_str}"
+    );
+}
+
+#[test]
+#[serial]
+fn load_config_fails_on_invalid_u64_env_var() {
+    clear_podbot_env();
+
+    // SAFETY: Tests are run serially via `#[serial]` attribute.
+    unsafe {
+        std::env::set_var("PODBOT_GITHUB_APP_ID", "not-a-number");
+    }
+
+    let cli = cli_with_config(None);
+    let result = load_config(&cli);
+
+    let err = result.expect_err("load_config should fail for invalid integer");
+    let err_str = err.to_string();
+    assert!(
+        err_str.contains("PODBOT_GITHUB_APP_ID"),
+        "error should mention the env var: {err_str}"
+    );
+    assert!(
+        err_str.contains("expected unsigned integer"),
+        "error should explain expected type: {err_str}"
+    );
+}
+
+#[test]
+#[serial]
+fn load_config_accepts_valid_bool_env_var() {
+    clear_podbot_env();
+
+    // SAFETY: Tests are run serially via `#[serial]` attribute.
+    unsafe {
+        std::env::set_var("PODBOT_SANDBOX_PRIVILEGED", "true");
+    }
+
+    let cli = cli_with_config(None);
+    let config = load_config(&cli).expect("load_config should succeed for valid bool");
+
+    assert!(config.sandbox.privileged);
+}
+
+#[test]
+#[serial]
+fn load_config_accepts_valid_u64_env_var() {
+    clear_podbot_env();
+
+    // SAFETY: Tests are run serially via `#[serial]` attribute.
+    unsafe {
+        std::env::set_var("PODBOT_GITHUB_APP_ID", "12345");
+    }
+
+    let cli = cli_with_config(None);
+    let config = load_config(&cli).expect("load_config should succeed for valid u64");
+
+    assert_eq!(config.github.app_id, Some(12345));
 }

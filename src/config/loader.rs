@@ -11,30 +11,144 @@
 //! # Environment Variable Handling
 //!
 //! Environment variables with unparseable values (e.g., `PODBOT_SANDBOX_PRIVILEGED=maybe`
-//! instead of `true`/`false`) are silently ignored rather than causing errors.
-//! This behaviour is intentional:
-//!
-//! - **Layered defaults**: Invalid env vars fall back to file/default values
-//! - **Shell friendliness**: Avoids failures from inherited or stale env vars
-//! - **Validation deferred**: Type validation happens at deserialisation time
+//! instead of `true`/`false`) return an error immediately. This fail-fast approach
+//! ensures misconfigurations are visible to users rather than silently falling back
+//! to defaults.
 //!
 //! String fields (e.g., `PODBOT_ENGINE_SOCKET`) are always accepted. Typed fields
 //! like booleans (`PODBOT_SANDBOX_PRIVILEGED`) or integers (`PODBOT_GITHUB_APP_ID`)
-//! require valid values to take effect.
+//! must have valid values or the configuration loading will fail with a clear error.
 
 use camino::Utf8PathBuf;
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
 use ortho_config::discovery::ConfigDiscovery;
-use ortho_config::serde_json;
+use ortho_config::serde_json::{self, Map, Value};
 use ortho_config::{MergeComposer, toml};
 
 use crate::config::{AppConfig, Cli};
 use crate::error::{ConfigError, Result};
 
+// ============================================================================
+// Environment Variable Specification Table
+// ============================================================================
+
+/// The type of value expected from an environment variable.
+#[derive(Clone, Copy)]
+enum EnvVarType {
+    /// String value (always accepted).
+    String,
+    /// Boolean value (`true`/`false`). Invalid values return an error.
+    Bool,
+    /// Unsigned 64-bit integer. Invalid values return an error.
+    U64,
+}
+
+/// Specification for a single environment variable mapping.
+struct EnvVarSpec {
+    /// The environment variable name (e.g., `PODBOT_ENGINE_SOCKET`).
+    env_var: &'static str,
+    /// The JSON path segments (e.g., `["sandbox", "privileged"]`).
+    path: &'static [&'static str],
+    /// The expected value type.
+    var_type: EnvVarType,
+}
+
+/// Table of all environment variables and their JSON paths.
+///
+/// Adding or modifying environment variable mappings is a single-line change here.
+/// The order doesn't matter as the table is processed in a single pass.
+const ENV_VAR_SPECS: &[EnvVarSpec] = &[
+    // Top-level fields
+    EnvVarSpec {
+        env_var: "PODBOT_ENGINE_SOCKET",
+        path: &["engine_socket"],
+        var_type: EnvVarType::String,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_IMAGE",
+        path: &["image"],
+        var_type: EnvVarType::String,
+    },
+    // GitHub fields
+    EnvVarSpec {
+        env_var: "PODBOT_GITHUB_APP_ID",
+        path: &["github", "app_id"],
+        var_type: EnvVarType::U64,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_GITHUB_INSTALLATION_ID",
+        path: &["github", "installation_id"],
+        var_type: EnvVarType::U64,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_GITHUB_PRIVATE_KEY_PATH",
+        path: &["github", "private_key_path"],
+        var_type: EnvVarType::String,
+    },
+    // Sandbox fields
+    EnvVarSpec {
+        env_var: "PODBOT_SANDBOX_PRIVILEGED",
+        path: &["sandbox", "privileged"],
+        var_type: EnvVarType::Bool,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_SANDBOX_MOUNT_DEV_FUSE",
+        path: &["sandbox", "mount_dev_fuse"],
+        var_type: EnvVarType::Bool,
+    },
+    // Agent fields
+    EnvVarSpec {
+        env_var: "PODBOT_AGENT_KIND",
+        path: &["agent", "kind"],
+        var_type: EnvVarType::String,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_AGENT_MODE",
+        path: &["agent", "mode"],
+        var_type: EnvVarType::String,
+    },
+    // Workspace fields
+    EnvVarSpec {
+        env_var: "PODBOT_WORKSPACE_BASE_DIR",
+        path: &["workspace", "base_dir"],
+        var_type: EnvVarType::String,
+    },
+    // Creds fields
+    EnvVarSpec {
+        env_var: "PODBOT_CREDS_COPY_CLAUDE",
+        path: &["creds", "copy_claude"],
+        var_type: EnvVarType::Bool,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_CREDS_COPY_CODEX",
+        path: &["creds", "copy_codex"],
+        var_type: EnvVarType::Bool,
+    },
+];
+
 /// Load a configuration file and push it to the composer.
+///
+/// Uses `cap_std::fs_utf8` for capability-oriented filesystem access as per
+/// project conventions. The function opens the parent directory of the config
+/// file and reads from there.
 fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<()> {
-    let content = std::fs::read_to_string(path).map_err(|e| ConfigError::ParseError {
-        message: format!("failed to read {path}: {e}"),
+    // Open the parent directory using ambient authority, then read the file.
+    let current_dir = Utf8PathBuf::from(".");
+    let parent = path.parent().unwrap_or_else(|| current_dir.as_ref());
+    let file_name = path.file_name().unwrap_or(path.as_str());
+
+    let dir = Dir::open_ambient_dir(parent, ambient_authority()).map_err(|e| {
+        ConfigError::ParseError {
+            message: format!("failed to open directory {parent}: {e}"),
+        }
     })?;
+
+    let content = dir
+        .read_to_string(file_name)
+        .map_err(|e| ConfigError::ParseError {
+            message: format!("failed to read {path}: {e}"),
+        })?;
 
     let value =
         toml::from_str::<serde_json::Value>(&content).map_err(|e| ConfigError::ParseError {
@@ -59,11 +173,9 @@ fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<
 ///
 /// Returns `ConfigError` if configuration loading fails due to:
 /// - Malformed configuration files
+/// - Invalid typed environment variable values (e.g., non-boolean for
+///   `PODBOT_SANDBOX_PRIVILEGED`)
 /// - Missing required fields after merge
-///
-/// Note: Invalid typed environment variable values (e.g., non-boolean for
-/// `PODBOT_SANDBOX_PRIVILEGED`) are silently ignored rather than raising errors.
-/// See the module-level documentation for the rationale.
 pub fn load_config(cli: &Cli) -> Result<AppConfig> {
     let mut composer = MergeComposer::new();
 
@@ -76,27 +188,27 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
 
     // Layer 2: Configuration file.
     // Use the CLI-provided path (if it exists), or discover via XDG paths.
-    let config_path: Option<Utf8PathBuf> = cli.config.clone().filter(|p| p.exists());
-    let discovered_path: Option<Utf8PathBuf> = config_path.or_else(|| {
-        // Discover config files using ortho_config's ConfigDiscovery builder.
-        let discovery = ConfigDiscovery::builder("podbot")
-            .env_var("PODBOT_CONFIG_PATH")
-            .config_file_name("config.toml")
-            .dotfile_name(".podbot.toml")
-            .build();
-        discovery
-            .candidates()
-            .into_iter()
-            .filter(|p| p.exists())
-            .find_map(|p| Utf8PathBuf::try_from(p).ok())
-    });
+    let config_path: Option<Utf8PathBuf> =
+        cli.config.clone().filter(|p| p.exists()).or_else(|| {
+            // Discover config files using ortho_config's ConfigDiscovery builder.
+            let discovery = ConfigDiscovery::builder("podbot")
+                .env_var("PODBOT_CONFIG_PATH")
+                .config_file_name("config.toml")
+                .dotfile_name(".podbot.toml")
+                .build();
+            discovery
+                .candidates()
+                .into_iter()
+                .filter(|p| p.exists())
+                .find_map(|p| Utf8PathBuf::try_from(p).ok())
+        });
 
-    if let Some(ref path) = discovered_path {
+    if let Some(ref path) = config_path {
         load_config_file(path, &mut composer)?;
     }
 
     // Layer 3: Environment variables.
-    let env_values = collect_env_vars();
+    let env_values = collect_env_vars()?;
     if !env_values.is_null() {
         composer.push_environment(env_values);
     }
@@ -115,134 +227,86 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
 }
 
 /// Collect environment variables with the `PODBOT_` prefix into a JSON value.
-fn collect_env_vars() -> serde_json::Value {
-    let mut map = serde_json::Map::new();
+///
+/// This function uses a data-driven approach: all environment variable mappings
+/// are defined in [`ENV_VAR_SPECS`]. Adding or changing mappings requires only
+/// a single-line change in that table.
+///
+/// # Errors
+///
+/// Returns `ConfigError::InvalidValue` if a typed environment variable (bool, u64)
+/// has an unparseable value. This fail-fast approach ensures misconfigurations are
+/// visible to users.
+fn collect_env_vars() -> Result<Value> {
+    let mut root = Map::new();
 
-    // Top-level fields.
-    collect_top_level_env_vars(&mut map);
+    for spec in ENV_VAR_SPECS {
+        let Ok(raw_value) = std::env::var(spec.env_var) else {
+            continue;
+        };
 
-    // Nested config sections.
-    collect_github_env_vars(&mut map);
-    collect_sandbox_env_vars(&mut map);
-    collect_agent_env_vars(&mut map);
-    collect_workspace_env_vars(&mut map);
-    collect_creds_env_vars(&mut map);
+        // Parse the value according to its expected type.
+        // Invalid values return an error immediately (fail-fast).
+        let json_value = match spec.var_type {
+            EnvVarType::String => Value::String(raw_value),
+            EnvVarType::Bool => match raw_value.parse::<bool>() {
+                Ok(b) => Value::Bool(b),
+                Err(_) => {
+                    return Err(ConfigError::InvalidValue {
+                        field: spec.env_var.to_owned(),
+                        reason: format!("expected bool (true/false), got '{raw_value}'"),
+                    }
+                    .into());
+                }
+            },
+            EnvVarType::U64 => match raw_value.parse::<u64>() {
+                Ok(n) => Value::Number(n.into()),
+                Err(_) => {
+                    return Err(ConfigError::InvalidValue {
+                        field: spec.env_var.to_owned(),
+                        reason: format!("expected unsigned integer, got '{raw_value}'"),
+                    }
+                    .into());
+                }
+            },
+        };
 
-    if map.is_empty() {
-        serde_json::Value::Null
+        // Insert at the appropriate path (supports arbitrary nesting depth).
+        insert_at_path(&mut root, spec.path, json_value);
+    }
+
+    if root.is_empty() {
+        Ok(Value::Null)
     } else {
-        serde_json::Value::Object(map)
+        Ok(Value::Object(root))
     }
 }
 
-/// Collect top-level environment variables (`engine_socket`, `image`).
-fn collect_top_level_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
-    if let Ok(val) = std::env::var("PODBOT_ENGINE_SOCKET") {
-        map.insert("engine_socket".to_owned(), serde_json::Value::String(val));
-    }
-    if let Ok(val) = std::env::var("PODBOT_IMAGE") {
-        map.insert("image".to_owned(), serde_json::Value::String(val));
-    }
-}
-
-/// Collect GitHub-related environment variables.
+/// Insert a value at a nested path in a JSON map.
 ///
-/// Invalid values for typed fields (e.g., non-numeric `app_id`) are silently
-/// ignored, falling back to lower-precedence layers. See module docs for rationale.
-fn collect_github_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
-    let mut github = serde_json::Map::new();
-    if let Ok(val) = std::env::var("PODBOT_GITHUB_APP_ID") {
-        // Silently skip non-numeric values; fall back to file/default layer.
-        if let Ok(id) = val.parse::<u64>() {
-            github.insert("app_id".to_owned(), serde_json::Value::Number(id.into()));
-        }
-    }
-    if let Ok(val) = std::env::var("PODBOT_GITHUB_INSTALLATION_ID") {
-        if let Ok(id) = val.parse::<u64>() {
-            github.insert(
-                "installation_id".to_owned(),
-                serde_json::Value::Number(id.into()),
-            );
-        }
-    }
-    if let Ok(val) = std::env::var("PODBOT_GITHUB_PRIVATE_KEY_PATH") {
-        github.insert(
-            "private_key_path".to_owned(),
-            serde_json::Value::String(val),
-        );
-    }
-    if !github.is_empty() {
-        map.insert("github".to_owned(), serde_json::Value::Object(github));
-    }
-}
+/// For a path like `["sandbox", "privileged"]`, this creates the intermediate
+/// `sandbox` object if needed and inserts `privileged` within it.
+fn insert_at_path(root: &mut Map<String, Value>, path: &[&str], value: Value) {
+    let Some((&field, parents)) = path.split_last() else {
+        return;
+    };
 
-/// Collect sandbox-related environment variables.
-///
-/// Invalid boolean values (anything other than `true`/`false`) are silently
-/// ignored, falling back to lower-precedence layers. See module docs for rationale.
-fn collect_sandbox_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
-    let mut sandbox = serde_json::Map::new();
-    if let Ok(val) = std::env::var("PODBOT_SANDBOX_PRIVILEGED") {
-        // Silently skip non-boolean values; fall back to file/default layer.
-        if let Ok(b) = val.parse::<bool>() {
-            sandbox.insert("privileged".to_owned(), serde_json::Value::Bool(b));
-        }
+    // Navigate to the parent object, creating intermediate objects as needed.
+    let mut current = root;
+    for &segment in parents {
+        // Ensure the entry is an object; if it's not (shouldn't happen with our
+        // controlled path specs), skip this insertion.
+        let entry = current
+            .entry(segment.to_owned())
+            .or_insert_with(|| Value::Object(Map::new()));
+        let Some(obj) = entry.as_object_mut() else {
+            return;
+        };
+        current = obj;
     }
-    if let Ok(val) = std::env::var("PODBOT_SANDBOX_MOUNT_DEV_FUSE") {
-        // Silently skip non-boolean values; fall back to file/default layer.
-        if let Ok(b) = val.parse::<bool>() {
-            sandbox.insert("mount_dev_fuse".to_owned(), serde_json::Value::Bool(b));
-        }
-    }
-    if !sandbox.is_empty() {
-        map.insert("sandbox".to_owned(), serde_json::Value::Object(sandbox));
-    }
-}
 
-/// Collect agent-related environment variables.
-fn collect_agent_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
-    let mut agent = serde_json::Map::new();
-    if let Ok(val) = std::env::var("PODBOT_AGENT_KIND") {
-        agent.insert("kind".to_owned(), serde_json::Value::String(val));
-    }
-    if let Ok(val) = std::env::var("PODBOT_AGENT_MODE") {
-        agent.insert("mode".to_owned(), serde_json::Value::String(val));
-    }
-    if !agent.is_empty() {
-        map.insert("agent".to_owned(), serde_json::Value::Object(agent));
-    }
-}
-
-/// Collect workspace-related environment variables.
-fn collect_workspace_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
-    if let Ok(val) = std::env::var("PODBOT_WORKSPACE_BASE_DIR") {
-        let mut workspace = serde_json::Map::new();
-        workspace.insert("base_dir".to_owned(), serde_json::Value::String(val));
-        map.insert("workspace".to_owned(), serde_json::Value::Object(workspace));
-    }
-}
-
-/// Collect credentials-related environment variables.
-///
-/// Invalid boolean values are silently ignored, falling back to lower-precedence
-/// layers. See module docs for rationale.
-fn collect_creds_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
-    let mut creds = serde_json::Map::new();
-    if let Ok(val) = std::env::var("PODBOT_CREDS_COPY_CLAUDE") {
-        // Silently skip non-boolean values; fall back to file/default layer.
-        if let Ok(b) = val.parse::<bool>() {
-            creds.insert("copy_claude".to_owned(), serde_json::Value::Bool(b));
-        }
-    }
-    if let Ok(val) = std::env::var("PODBOT_CREDS_COPY_CODEX") {
-        // Silently skip non-boolean values; fall back to file/default layer.
-        if let Ok(b) = val.parse::<bool>() {
-            creds.insert("copy_codex".to_owned(), serde_json::Value::Bool(b));
-        }
-    }
-    if !creds.is_empty() {
-        map.insert("creds".to_owned(), serde_json::Value::Object(creds));
-    }
+    // Insert the final field.
+    current.insert(field.to_owned(), value);
 }
 
 /// Build a JSON value containing CLI overrides.
