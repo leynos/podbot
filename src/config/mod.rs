@@ -38,7 +38,7 @@ mod types;
 mod tests;
 
 pub use cli::{Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs};
-pub use loader::load_config;
+pub use loader::{env_var_names, load_config};
 pub use types::{
     AgentConfig, AgentKind, AgentMode, AppConfig, CredsConfig, GitHubConfig, SandboxConfig,
     WorkspaceConfig,

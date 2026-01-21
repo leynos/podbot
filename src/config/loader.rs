@@ -4,9 +4,25 @@
 //! (lowest to highest): application defaults, configuration file, environment
 //! variables, command-line arguments.
 //!
-//! The loader bridges between `ortho_config` and clap-based CLI parsing, using
-//! `MergeComposer` to handle file and environment layers while allowing the main
-//! CLI parser to handle subcommands.
+//! # Architecture Note: Why Manual Layer Composition?
+//!
+//! The `OrthoConfig` derive macro provides `load()` and `compose_layers()` methods
+//! that handle discovery, environment variables, and CLI parsing automatically.
+//! However, this loader uses `MergeComposer` manually because:
+//!
+//! 1. **Subcommand separation**: The CLI (`Cli` struct) handles subcommand dispatch
+//!    via clap's `#[command(subcommand)]`, while `AppConfig` holds configuration
+//!    values. `OrthoConfig`'s `load()` expects to own the entire CLI parsing.
+//!
+//! 2. **Environment variable validation**: `OrthoConfig`'s environment layer uses
+//!    Figment, which silently ignores unparseable values. This loader implements
+//!    fail-fast validation that returns errors for invalid typed values.
+//!
+//! 3. **Custom discovery integration**: The `Cli` struct already accepts `--config`
+//!    via clap, so discovery must honour that path before falling back to XDG paths.
+//!
+//! The trade-off is more code in this module, but better error messages and
+//! integration with the existing CLI structure.
 //!
 //! # Environment Variable Handling
 //!
@@ -126,6 +142,17 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
         var_type: EnvVarType::Bool,
     },
 ];
+
+/// Returns the list of environment variable names recognised by the config loader.
+///
+/// This is primarily useful for tests that need to clear all `PODBOT_*` environment
+/// variables to ensure isolation. Using this function instead of a hard-coded list
+/// ensures the test stays in sync with the loader's actual environment variable
+/// mappings.
+#[must_use]
+pub fn env_var_names() -> Vec<&'static str> {
+    ENV_VAR_SPECS.iter().map(|spec| spec.env_var).collect()
+}
 
 /// Load a configuration file and push it to the composer.
 ///
