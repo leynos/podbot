@@ -147,3 +147,11 @@ fn cli_layer_overrides_all(config_state: ConfigState) {
 fn lower_layer_values_preserved(config_state: ConfigState) {
     let _ = config_state;
 }
+
+#[scenario(
+    path = "tests/features/configuration.feature",
+    name = "Nested config fields merge independently across layers"
+)]
+fn nested_config_fields_merge_independently(config_state: ConfigState) {
+    let _ = config_state;
+}

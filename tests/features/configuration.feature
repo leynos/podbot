@@ -94,3 +94,11 @@ Feature: Configuration loading
     When configuration is merged
     Then the image is file-image:latest
     And the engine socket is unix:///from/env.sock
+
+  Scenario: Nested config fields merge independently across layers
+    Given a file layer provides sandbox.privileged as true
+    And a file layer provides sandbox.mount_dev_fuse as false
+    And an environment layer provides sandbox.privileged as false
+    When configuration is merged
+    Then the sandbox is not privileged
+    And dev/fuse mounting is disabled

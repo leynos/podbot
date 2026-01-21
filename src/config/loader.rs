@@ -7,6 +7,20 @@
 //! The loader bridges between `ortho_config` and clap-based CLI parsing, using
 //! `MergeComposer` to handle file and environment layers while allowing the main
 //! CLI parser to handle subcommands.
+//!
+//! # Environment Variable Handling
+//!
+//! Environment variables with unparseable values (e.g., `PODBOT_SANDBOX_PRIVILEGED=maybe`
+//! instead of `true`/`false`) are silently ignored rather than causing errors.
+//! This behaviour is intentional:
+//!
+//! - **Layered defaults**: Invalid env vars fall back to file/default values
+//! - **Shell friendliness**: Avoids failures from inherited or stale env vars
+//! - **Validation deferred**: Type validation happens at deserialisation time
+//!
+//! String fields (e.g., `PODBOT_ENGINE_SOCKET`) are always accepted. Typed fields
+//! like booleans (`PODBOT_SANDBOX_PRIVILEGED`) or integers (`PODBOT_GITHUB_APP_ID`)
+//! require valid values to take effect.
 
 use std::path::PathBuf;
 
@@ -132,9 +146,13 @@ fn collect_top_level_env_vars(map: &mut serde_json::Map<String, serde_json::Valu
 }
 
 /// Collect GitHub-related environment variables.
+///
+/// Invalid values for typed fields (e.g., non-numeric `app_id`) are silently
+/// ignored, falling back to lower-precedence layers. See module docs for rationale.
 fn collect_github_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
     let mut github = serde_json::Map::new();
     if let Ok(val) = std::env::var("PODBOT_GITHUB_APP_ID") {
+        // Silently skip non-numeric values; fall back to file/default layer.
         if let Ok(id) = val.parse::<u64>() {
             github.insert("app_id".to_owned(), serde_json::Value::Number(id.into()));
         }
@@ -159,14 +177,19 @@ fn collect_github_env_vars(map: &mut serde_json::Map<String, serde_json::Value>)
 }
 
 /// Collect sandbox-related environment variables.
+///
+/// Invalid boolean values (anything other than `true`/`false`) are silently
+/// ignored, falling back to lower-precedence layers. See module docs for rationale.
 fn collect_sandbox_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
     let mut sandbox = serde_json::Map::new();
     if let Ok(val) = std::env::var("PODBOT_SANDBOX_PRIVILEGED") {
+        // Silently skip non-boolean values; fall back to file/default layer.
         if let Ok(b) = val.parse::<bool>() {
             sandbox.insert("privileged".to_owned(), serde_json::Value::Bool(b));
         }
     }
     if let Ok(val) = std::env::var("PODBOT_SANDBOX_MOUNT_DEV_FUSE") {
+        // Silently skip non-boolean values; fall back to file/default layer.
         if let Ok(b) = val.parse::<bool>() {
             sandbox.insert("mount_dev_fuse".to_owned(), serde_json::Value::Bool(b));
         }
@@ -200,14 +223,19 @@ fn collect_workspace_env_vars(map: &mut serde_json::Map<String, serde_json::Valu
 }
 
 /// Collect credentials-related environment variables.
+///
+/// Invalid boolean values are silently ignored, falling back to lower-precedence
+/// layers. See module docs for rationale.
 fn collect_creds_env_vars(map: &mut serde_json::Map<String, serde_json::Value>) {
     let mut creds = serde_json::Map::new();
     if let Ok(val) = std::env::var("PODBOT_CREDS_COPY_CLAUDE") {
+        // Silently skip non-boolean values; fall back to file/default layer.
         if let Ok(b) = val.parse::<bool>() {
             creds.insert("copy_claude".to_owned(), serde_json::Value::Bool(b));
         }
     }
     if let Ok(val) = std::env::var("PODBOT_CREDS_COPY_CODEX") {
+        // Silently skip non-boolean values; fall back to file/default layer.
         if let Ok(b) = val.parse::<bool>() {
             creds.insert("copy_codex".to_owned(), serde_json::Value::Bool(b));
         }

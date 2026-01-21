@@ -92,11 +92,24 @@ fn merge_config(composer: MergeComposer) -> AppConfig {
 
 /// Helper: Asserts that a config has all default values.
 fn assert_config_has_defaults(config: &AppConfig) {
-    assert!(config.engine_socket.is_none(), "engine_socket should be None");
+    assert!(
+        config.engine_socket.is_none(),
+        "engine_socket should be None"
+    );
     assert!(config.image.is_none(), "image should be None");
-    assert!(!config.sandbox.privileged, "sandbox.privileged should be false");
-    assert!(config.sandbox.mount_dev_fuse, "sandbox.mount_dev_fuse should be true");
-    assert_eq!(config.workspace.base_dir.as_str(), "/work", "workspace.base_dir should be /work");
+    assert!(
+        !config.sandbox.privileged,
+        "sandbox.privileged should be false"
+    );
+    assert!(
+        config.sandbox.mount_dev_fuse,
+        "sandbox.mount_dev_fuse should be true"
+    );
+    assert_eq!(
+        config.workspace.base_dir.as_str(),
+        "/work",
+        "workspace.base_dir should be /work"
+    );
 }
 
 #[rstest]

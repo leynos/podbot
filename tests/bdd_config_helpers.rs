@@ -443,6 +443,27 @@ fn file_layer_provides_image(config_state: &ConfigState, image: String) {
     config_state.file_layer.set(merged);
 }
 
+#[given("a file layer provides sandbox.privileged as {value}")]
+fn file_layer_provides_sandbox_privileged(config_state: &ConfigState, value: bool) {
+    let merged = merge_file_layer(config_state, json!({ "sandbox": { "privileged": value } }));
+    config_state.file_layer.set(merged);
+}
+
+#[given("a file layer provides sandbox.mount_dev_fuse as {value}")]
+fn file_layer_provides_sandbox_mount_dev_fuse(config_state: &ConfigState, value: bool) {
+    let merged = merge_file_layer(
+        config_state,
+        json!({ "sandbox": { "mount_dev_fuse": value } }),
+    );
+    config_state.file_layer.set(merged);
+}
+
+#[given("an environment layer provides sandbox.privileged as {value}")]
+fn env_layer_provides_sandbox_privileged(config_state: &ConfigState, value: bool) {
+    let merged = merge_env_layer(config_state, json!({ "sandbox": { "privileged": value } }));
+    config_state.env_layer.set(merged);
+}
+
 #[when("configuration is merged")]
 fn configuration_is_merged(config_state: &ConfigState) {
     let mut composer = MergeComposer::new();
