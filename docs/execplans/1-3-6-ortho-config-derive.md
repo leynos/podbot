@@ -163,7 +163,7 @@ Add OrthoConfig derives to all configuration structs in `types.rs`.
    ```
 
 5. Implement `PostMergeHook` for `AppConfig` (empty for now, placeholder for
-   future normalisation)
+   future normalization)
 
 ### Stage B: Loader module
 

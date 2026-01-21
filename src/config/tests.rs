@@ -77,6 +77,10 @@ fn github_config_complete() -> GitHubConfig {
 }
 
 /// Helper: Creates a `MergeComposer` with defaults layer already pushed.
+///
+/// # Panics
+///
+/// Panics if serialization of defaults fails (should never happen in tests).
 fn create_composer_with_defaults() -> MergeComposer {
     let mut composer = MergeComposer::new();
     let defaults = ortho_config::serde_json::to_value(AppConfig::default())
@@ -86,6 +90,10 @@ fn create_composer_with_defaults() -> MergeComposer {
 }
 
 /// Helper: Merges layers from a composer into `AppConfig`.
+///
+/// # Panics
+///
+/// Panics if merging the layers fails (should never happen with valid test data).
 fn merge_config(composer: MergeComposer) -> AppConfig {
     AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed")
 }

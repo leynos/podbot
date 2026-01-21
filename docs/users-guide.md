@@ -95,8 +95,9 @@ Configuration files are discovered in the following order (first match wins):
 
 1. Path specified via `--config` CLI argument
 2. Path specified via `PODBOT_CONFIG_PATH` environment variable
-3. The XDG configuration directory (`$XDG_CONFIG_HOME/podbot/config.toml`,
-   typically `~/.config/podbot/config.toml`)
+3. The XDG Base Directory Specification configuration directory
+   (`$XDG_CONFIG_HOME/podbot/config.toml`, typically
+   `~/.config/podbot/config.toml`)
 4. `~/.podbot.toml` (dotfile in home directory)
 
 **Note:** GitHub App credentials (`app_id`, `installation_id`,

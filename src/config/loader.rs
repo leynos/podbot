@@ -22,8 +22,6 @@
 //! like booleans (`PODBOT_SANDBOX_PRIVILEGED`) or integers (`PODBOT_GITHUB_APP_ID`)
 //! require valid values to take effect.
 
-use std::path::PathBuf;
-
 use camino::Utf8PathBuf;
 use ortho_config::discovery::ConfigDiscovery;
 use ortho_config::serde_json;
@@ -33,18 +31,17 @@ use crate::config::{AppConfig, Cli};
 use crate::error::{ConfigError, Result};
 
 /// Load a configuration file and push it to the composer.
-fn load_config_file(path: &PathBuf, composer: &mut MergeComposer) -> Result<()> {
+fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<()> {
     let content = std::fs::read_to_string(path).map_err(|e| ConfigError::ParseError {
-        message: format!("failed to read {}: {e}", path.display()),
+        message: format!("failed to read {path}: {e}"),
     })?;
 
     let value =
         toml::from_str::<serde_json::Value>(&content).map_err(|e| ConfigError::ParseError {
-            message: format!("failed to parse {}: {e}", path.display()),
+            message: format!("failed to parse {path}: {e}"),
         })?;
 
-    let utf8_path = Utf8PathBuf::try_from(path.clone()).ok();
-    composer.push_file(value, utf8_path);
+    composer.push_file(value, Some(path.clone()));
     Ok(())
 }
 
@@ -62,8 +59,11 @@ fn load_config_file(path: &PathBuf, composer: &mut MergeComposer) -> Result<()> 
 ///
 /// Returns `ConfigError` if configuration loading fails due to:
 /// - Malformed configuration files
-/// - Invalid environment variable values
 /// - Missing required fields after merge
+///
+/// Note: Invalid typed environment variable values (e.g., non-boolean for
+/// `PODBOT_SANDBOX_PRIVILEGED`) are silently ignored rather than raising errors.
+/// See the module-level documentation for the rationale.
 pub fn load_config(cli: &Cli) -> Result<AppConfig> {
     let mut composer = MergeComposer::new();
 
@@ -76,23 +76,23 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
 
     // Layer 2: Configuration file.
     // Use the CLI-provided path (if it exists), or discover via XDG paths.
-    let config_path: Option<PathBuf> = cli
-        .config
-        .as_ref()
-        .map(|p| p.as_std_path().to_owned())
-        .filter(|p| p.exists());
-    let discovered_path = config_path.or_else(|| {
+    let config_path: Option<Utf8PathBuf> = cli.config.clone().filter(|p| p.exists());
+    let discovered_path: Option<Utf8PathBuf> = config_path.or_else(|| {
         // Discover config files using ortho_config's ConfigDiscovery builder.
         let discovery = ConfigDiscovery::builder("podbot")
             .env_var("PODBOT_CONFIG_PATH")
             .config_file_name("config.toml")
             .dotfile_name(".podbot.toml")
             .build();
-        discovery.candidates().into_iter().find(|p| p.exists())
+        discovery
+            .candidates()
+            .into_iter()
+            .filter(|p| p.exists())
+            .find_map(|p| Utf8PathBuf::try_from(p).ok())
     });
 
-    if let Some(path) = discovered_path {
-        load_config_file(&path, &mut composer)?;
+    if let Some(ref path) = discovered_path {
+        load_config_file(path, &mut composer)?;
     }
 
     // Layer 3: Environment variables.

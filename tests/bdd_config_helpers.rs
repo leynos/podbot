@@ -1,8 +1,5 @@
 //! Behavioural test helpers for podbot configuration.
 
-// Test-specific lint exceptions: expect is standard practice in tests
-#![expect(clippy::expect_used, reason = "expect is standard practice in tests")]
-
 use camino::Utf8PathBuf;
 use ortho_config::MergeComposer;
 use ortho_config::serde_json::json;
@@ -17,6 +14,7 @@ use rstest_bdd_macros::{ScenarioState, given, then, when};
 // Helper functions to reduce duplication in step definitions
 
 /// Extracts the configuration from state with consistent error handling.
+#[expect(clippy::expect_used, reason = "test helper - panics are acceptable")]
 fn get_config(config_state: &ConfigState) -> AppConfig {
     config_state
         .config
@@ -117,6 +115,7 @@ fn no_github_configuration(config_state: &ConfigState) {
 }
 
 #[given("a configuration file with an invalid agent kind")]
+#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
 fn config_with_invalid_agent_kind(config_state: &ConfigState) {
     let toml = r#"
         [agent]
@@ -128,6 +127,7 @@ fn config_with_invalid_agent_kind(config_state: &ConfigState) {
 }
 
 #[given("a configuration file with an invalid agent mode")]
+#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
 fn config_with_invalid_agent_mode(config_state: &ConfigState) {
     let toml = r#"
         [agent]
@@ -220,6 +220,7 @@ fn private_key_path_is_absent(config_state: &ConfigState) {
 }
 
 #[then("the configuration load fails")]
+#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
 fn configuration_load_fails(config_state: &ConfigState) {
     let error = config_state
         .parse_error
@@ -264,6 +265,7 @@ fn github_validation_succeeds(config_state: &ConfigState) {
 }
 
 #[then("GitHub validation fails")]
+#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
 fn github_validation_fails(config_state: &ConfigState) {
     let config = get_config(config_state);
     let result = config.github.validate();
@@ -279,6 +281,7 @@ fn github_validation_fails(config_state: &ConfigState) {
 }
 
 #[then("the validation error mentions \"github.app_id\"")]
+#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
 fn validation_error_mentions_app_id(config_state: &ConfigState) {
     let missing = config_state
         .missing_fields
@@ -291,6 +294,7 @@ fn validation_error_mentions_app_id(config_state: &ConfigState) {
 }
 
 #[then("the validation error mentions all missing GitHub fields")]
+#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
 fn validation_error_mentions_all_github_fields(config_state: &ConfigState) {
     let missing = config_state
         .missing_fields
@@ -465,6 +469,7 @@ fn env_layer_provides_sandbox_privileged(config_state: &ConfigState, value: bool
 }
 
 #[when("configuration is merged")]
+#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
 fn configuration_is_merged(config_state: &ConfigState) {
     let mut composer = MergeComposer::new();
 

@@ -4,15 +4,47 @@
 //! `podbot::config` module, testing CLI argument parsing through to final
 //! configuration values.
 
-// Test-specific lint exceptions: expect is standard practice in tests
-#![expect(clippy::expect_used, reason = "expect is standard practice in tests")]
-#![expect(clippy::unwrap_used, reason = "unwrap is acceptable in tests")]
-
 use std::io::Write;
 
 use camino::Utf8PathBuf;
 use podbot::config::{Cli, Commands, load_config};
+use serial_test::serial;
 use tempfile::NamedTempFile;
+
+/// All `PODBOT_*` environment variables that affect configuration loading.
+const PODBOT_ENV_VARS: &[&str] = &[
+    "PODBOT_CONFIG_PATH",
+    "PODBOT_ENGINE_SOCKET",
+    "PODBOT_IMAGE",
+    "PODBOT_GITHUB_APP_ID",
+    "PODBOT_GITHUB_INSTALLATION_ID",
+    "PODBOT_GITHUB_PRIVATE_KEY_PATH",
+    "PODBOT_SANDBOX_PRIVILEGED",
+    "PODBOT_SANDBOX_MOUNT_DEV_FUSE",
+    "PODBOT_AGENT_KIND",
+    "PODBOT_AGENT_MODE",
+    "PODBOT_WORKSPACE_BASE_DIR",
+    "PODBOT_CREDS_COPY_CLAUDE",
+    "PODBOT_CREDS_COPY_CODEX",
+];
+
+/// Clears all `PODBOT_*` environment variables to ensure test isolation.
+///
+/// # Safety
+///
+/// This function uses `std::env::remove_var` which is unsafe in Rust 2024.
+/// It is safe to call in the context of these tests because:
+/// - All tests that modify environment state are marked `#[serial]`
+/// - No concurrent access to these environment variables is occurring
+fn clear_podbot_env() {
+    for var in PODBOT_ENV_VARS {
+        // SAFETY: Tests are run serially via `#[serial]` attribute,
+        // preventing concurrent access to environment variables.
+        unsafe {
+            std::env::remove_var(var);
+        }
+    }
+}
 
 /// Helper: Creates a CLI struct with a config file path.
 ///
@@ -27,6 +59,11 @@ const fn cli_with_config(config_path: Option<Utf8PathBuf>) -> Cli {
 }
 
 /// Helper: Creates a temporary config file with the given TOML content.
+///
+/// # Panics
+///
+/// Panics if the temporary file cannot be created or written to.
+#[expect(clippy::expect_used, reason = "test helper may panic on setup failure")]
 fn temp_config_file(content: &str) -> NamedTempFile {
     let mut file = NamedTempFile::new().expect("failed to create temp file");
     file.write_all(content.as_bytes())
@@ -35,17 +72,14 @@ fn temp_config_file(content: &str) -> NamedTempFile {
 }
 
 #[test]
+#[serial]
 fn load_config_returns_defaults_when_no_sources_provided() {
+    clear_podbot_env();
+
     // CLI with no config file, no CLI overrides.
     let cli = cli_with_config(None);
 
-    // Note: This test assumes no PODBOT_* env vars are set and no config file
-    // exists at standard locations. In CI this should be true.
-    let result = load_config(&cli);
-
-    // Should succeed with default values.
-    assert!(result.is_ok(), "load_config should succeed: {result:?}");
-    let config = result.unwrap();
+    let config = load_config(&cli).expect("load_config should succeed with defaults");
 
     // Verify key defaults.
     assert!(config.engine_socket.is_none());
@@ -56,7 +90,10 @@ fn load_config_returns_defaults_when_no_sources_provided() {
 }
 
 #[test]
+#[serial]
 fn load_config_loads_from_config_file() {
+    clear_podbot_env();
+
     let toml_content = r#"
         engine_socket = "unix:///from/config/file.sock"
         image = "test-image:v1"
@@ -82,7 +119,10 @@ fn load_config_loads_from_config_file() {
 }
 
 #[test]
+#[serial]
 fn load_config_cli_overrides_config_file() {
+    clear_podbot_env();
+
     let toml_content = r#"
         engine_socket = "unix:///from/config/file.sock"
         image = "file-image:v1"
@@ -110,21 +150,25 @@ fn load_config_cli_overrides_config_file() {
 }
 
 #[test]
+#[serial]
 fn load_config_handles_missing_config_file_gracefully() {
+    clear_podbot_env();
+
     // Point to a non-existent config file.
     let cli = cli_with_config(Some(Utf8PathBuf::from("/nonexistent/config.toml")));
 
     // Should succeed (missing file is OK, falls back to defaults).
-    let result = load_config(&cli);
-    assert!(result.is_ok(), "load_config should succeed: {result:?}");
+    let config = load_config(&cli).expect("load_config should succeed for missing file");
 
-    let config = result.unwrap();
     // All defaults should apply.
     assert!(config.engine_socket.is_none());
 }
 
 #[test]
+#[serial]
 fn load_config_rejects_malformed_config_file() {
+    clear_podbot_env();
+
     let toml_content = r"
         this is not valid TOML {{{
     ";
@@ -142,7 +186,10 @@ fn load_config_rejects_malformed_config_file() {
 }
 
 #[test]
+#[serial]
 fn load_config_preserves_nested_config_defaults() {
+    clear_podbot_env();
+
     // Only set top-level fields, nested should get defaults.
     let toml_content = r#"
         engine_socket = "unix:///test.sock"

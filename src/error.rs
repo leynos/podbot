@@ -274,6 +274,19 @@ mod tests {
     }
 
     #[rstest]
+    fn config_error_ortho_config_displays_correctly() {
+        let ortho_error = ortho_config::OrthoError::Validation {
+            key: String::from("github.app_id"),
+            message: String::from("must be a positive integer"),
+        };
+        let error = ConfigError::OrthoConfig(Arc::new(ortho_error));
+        assert_eq!(
+            error.to_string(),
+            "configuration loading failed: Validation failed for 'github.app_id': must be a positive integer"
+        );
+    }
+
+    #[rstest]
     fn container_error_permission_denied_displays_correctly(socket_path: PathBuf) {
         let error = ContainerError::PermissionDenied { path: socket_path };
         assert_eq!(
