@@ -59,7 +59,8 @@ fn load_config_returns_defaults_when_no_sources_provided() {
 
 #[test]
 #[serial]
-fn load_config_loads_from_config_file() {
+#[expect(clippy::panic_in_result_fn, reason = "test assertions are acceptable")]
+fn load_config_loads_from_config_file() -> Result<(), Box<dyn std::error::Error>> {
     let _guard = clear_podbot_env();
 
     let toml_content = r#"
@@ -69,7 +70,7 @@ fn load_config_loads_from_config_file() {
         [sandbox]
         privileged = true
     "#;
-    let config_file = temp_config_file(toml_content).expect("failed to create temp config");
+    let config_file = temp_config_file(toml_content)?;
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
 
@@ -84,18 +85,20 @@ fn load_config_loads_from_config_file() {
     assert!(config.sandbox.privileged);
     // Defaults should still apply for unset fields.
     assert!(config.sandbox.mount_dev_fuse);
+    Ok(())
 }
 
 #[test]
 #[serial]
-fn load_config_cli_overrides_config_file() {
+#[expect(clippy::panic_in_result_fn, reason = "test assertions are acceptable")]
+fn load_config_cli_overrides_config_file() -> Result<(), Box<dyn std::error::Error>> {
     let _guard = clear_podbot_env();
 
     let toml_content = r#"
         engine_socket = "unix:///from/config/file.sock"
         image = "file-image:v1"
     "#;
-    let config_file = temp_config_file(toml_content).expect("failed to create temp config");
+    let config_file = temp_config_file(toml_content)?;
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
 
@@ -115,6 +118,7 @@ fn load_config_cli_overrides_config_file() {
     );
     // File value preserved for image.
     assert_eq!(config.image.as_deref(), Some("file-image:v1"));
+    Ok(())
 }
 
 #[test]
@@ -134,13 +138,14 @@ fn load_config_handles_missing_config_file_gracefully() {
 
 #[test]
 #[serial]
-fn load_config_rejects_malformed_config_file() {
+#[expect(clippy::panic_in_result_fn, reason = "test assertions are acceptable")]
+fn load_config_rejects_malformed_config_file() -> Result<(), Box<dyn std::error::Error>> {
     let _guard = clear_podbot_env();
 
     let toml_content = r"
         this is not valid TOML {{{
     ";
-    let config_file = temp_config_file(toml_content).expect("failed to create temp config");
+    let config_file = temp_config_file(toml_content)?;
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
 
@@ -151,18 +156,20 @@ fn load_config_rejects_malformed_config_file() {
         result.is_err(),
         "load_config should fail for malformed TOML"
     );
+    Ok(())
 }
 
 #[test]
 #[serial]
-fn load_config_preserves_nested_config_defaults() {
+#[expect(clippy::panic_in_result_fn, reason = "test assertions are acceptable")]
+fn load_config_preserves_nested_config_defaults() -> Result<(), Box<dyn std::error::Error>> {
     let _guard = clear_podbot_env();
 
     // Only set top-level fields, nested should get defaults.
     let toml_content = r#"
         engine_socket = "unix:///test.sock"
     "#;
-    let config_file = temp_config_file(toml_content).expect("failed to create temp config");
+    let config_file = temp_config_file(toml_content)?;
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
 
@@ -178,6 +185,7 @@ fn load_config_preserves_nested_config_defaults() {
     assert_eq!(config.workspace.base_dir.as_str(), "/work");
     assert!(config.creds.copy_claude);
     assert!(config.creds.copy_codex);
+    Ok(())
 }
 
 #[rstest]
