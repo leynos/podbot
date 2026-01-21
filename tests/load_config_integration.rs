@@ -8,6 +8,7 @@ use std::io::Write;
 
 use camino::Utf8PathBuf;
 use podbot::config::{Cli, Commands, load_config};
+use rstest::rstest;
 use serial_test::serial;
 use tempfile::NamedTempFile;
 
@@ -210,52 +211,33 @@ fn load_config_preserves_nested_config_defaults() {
     assert!(config.creds.copy_codex);
 }
 
-#[test]
+#[rstest]
+#[case("PODBOT_SANDBOX_PRIVILEGED", "maybe", "expected bool")]
+#[case("PODBOT_GITHUB_APP_ID", "not-a-number", "expected unsigned integer")]
 #[serial]
-fn load_config_fails_on_invalid_bool_env_var() {
+fn load_config_fails_on_invalid_typed_env_var(
+    #[case] env_var: &str,
+    #[case] invalid_value: &str,
+    #[case] expected_type: &str,
+) {
     clear_podbot_env();
 
     // SAFETY: Tests are run serially via `#[serial]` attribute.
     unsafe {
-        std::env::set_var("PODBOT_SANDBOX_PRIVILEGED", "maybe");
+        std::env::set_var(env_var, invalid_value);
     }
 
     let cli = cli_with_config(None);
     let result = load_config(&cli);
 
-    let err = result.expect_err("load_config should fail for invalid bool");
+    let err = result.expect_err("load_config should fail for invalid typed env var");
     let err_str = err.to_string();
     assert!(
-        err_str.contains("PODBOT_SANDBOX_PRIVILEGED"),
+        err_str.contains(env_var),
         "error should mention the env var: {err_str}"
     );
     assert!(
-        err_str.contains("expected bool"),
-        "error should explain expected type: {err_str}"
-    );
-}
-
-#[test]
-#[serial]
-fn load_config_fails_on_invalid_u64_env_var() {
-    clear_podbot_env();
-
-    // SAFETY: Tests are run serially via `#[serial]` attribute.
-    unsafe {
-        std::env::set_var("PODBOT_GITHUB_APP_ID", "not-a-number");
-    }
-
-    let cli = cli_with_config(None);
-    let result = load_config(&cli);
-
-    let err = result.expect_err("load_config should fail for invalid integer");
-    let err_str = err.to_string();
-    assert!(
-        err_str.contains("PODBOT_GITHUB_APP_ID"),
-        "error should mention the env var: {err_str}"
-    );
-    assert!(
-        err_str.contains("expected unsigned integer"),
+        err_str.contains(expected_type),
         "error should explain expected type: {err_str}"
     );
 }
