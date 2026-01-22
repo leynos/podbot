@@ -225,9 +225,11 @@ fn load_config_fails_on_invalid_typed_env_var(
     );
 }
 
-#[test]
+#[rstest]
+#[case("PODBOT_SANDBOX_PRIVILEGED", "true")]
+#[case("PODBOT_GITHUB_APP_ID", "12345")]
 #[serial]
-fn load_config_accepts_valid_bool_env_var() {
+fn load_config_accepts_valid_typed_env_var(#[case] env_var: &str, #[case] value: &str) {
     use crate::test_utils::EnvGuard;
     use podbot::config::env_var_names;
 
@@ -242,37 +244,26 @@ fn load_config_accepts_valid_bool_env_var() {
         }
     }
     unsafe {
-        std::env::set_var("PODBOT_SANDBOX_PRIVILEGED", "true");
+        std::env::set_var(env_var, value);
     }
 
     let cli = cli_with_config(None);
-    let config = load_config(&cli).expect("load_config should succeed for valid bool");
+    let config = load_config(&cli).expect("load_config should succeed for valid typed env var");
 
-    assert!(config.sandbox.privileged);
-}
-
-#[test]
-#[serial]
-fn load_config_accepts_valid_u64_env_var() {
-    use crate::test_utils::EnvGuard;
-    use podbot::config::env_var_names;
-
-    let _guard = EnvGuard::lock();
-
-    unsafe {
-        std::env::remove_var("PODBOT_CONFIG_PATH");
-    }
-    for var in env_var_names() {
-        unsafe {
-            std::env::remove_var(var);
+    match env_var {
+        "PODBOT_SANDBOX_PRIVILEGED" => {
+            assert!(
+                config.sandbox.privileged,
+                "sandbox.privileged should be true"
+            );
         }
+        "PODBOT_GITHUB_APP_ID" => {
+            assert_eq!(
+                config.github.app_id,
+                Some(12345),
+                "github.app_id should be Some(12345)"
+            );
+        }
+        _ => panic!("unexpected env var in test: {env_var}"),
     }
-    unsafe {
-        std::env::set_var("PODBOT_GITHUB_APP_ID", "12345");
-    }
-
-    let cli = cli_with_config(None);
-    let config = load_config(&cli).expect("load_config should succeed for valid u64");
-
-    assert_eq!(config.github.app_id, Some(12345));
 }
