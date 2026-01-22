@@ -1,7 +1,33 @@
 //! Basic type and serialisation tests for podbot configuration types.
 
 use crate::config::{AgentConfig, AgentKind, AgentMode, AppConfig};
+use rstest::fixture;
 use rstest::rstest;
+
+#[fixture]
+fn full_config_toml() -> AppConfig {
+    let toml = r#"
+        engine_socket = "unix:///run/podman/podman.sock"
+        image = "ghcr.io/example/sandbox:latest"
+
+        [github]
+        app_id = 12345
+        installation_id = 67890
+
+        [sandbox]
+        privileged = true
+        mount_dev_fuse = false
+
+        [agent]
+        kind = "codex"
+        mode = "podbot"
+
+        [workspace]
+        base_dir = "/home/user/work"
+    "#;
+
+    toml::from_str(toml).expect("TOML parsing should succeed")
+}
 
 #[rstest]
 fn agent_kind_default_is_claude() {
@@ -91,143 +117,41 @@ fn app_config_workspace_defaults_to_work_dir() {
 }
 
 #[rstest]
-fn app_config_toml_sets_engine_socket_and_image() {
-    let toml = r#"
-        engine_socket = "unix:///run/podman/podman.sock"
-        image = "ghcr.io/example/sandbox:latest"
-
-        [github]
-        app_id = 12345
-        installation_id = 67890
-
-        [sandbox]
-        privileged = true
-        mount_dev_fuse = false
-
-        [agent]
-        kind = "codex"
-        mode = "podbot"
-
-        [workspace]
-        base_dir = "/home/user/work"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
+fn app_config_toml_sets_engine_socket_and_image(full_config_toml: AppConfig) {
     assert_eq!(
-        config.engine_socket.as_deref(),
+        full_config_toml.engine_socket.as_deref(),
         Some("unix:///run/podman/podman.sock")
     );
     assert_eq!(
-        config.image.as_deref(),
+        full_config_toml.image.as_deref(),
         Some("ghcr.io/example/sandbox:latest")
     );
 }
 
 #[rstest]
-fn app_config_toml_sets_github_ids() {
-    let toml = r#"
-        engine_socket = "unix:///run/podman/podman.sock"
-        image = "ghcr.io/example/sandbox:latest"
-
-        [github]
-        app_id = 12345
-        installation_id = 67890
-
-        [sandbox]
-        privileged = true
-        mount_dev_fuse = false
-
-        [agent]
-        kind = "codex"
-        mode = "podbot"
-
-        [workspace]
-        base_dir = "/home/user/work"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert_eq!(config.github.app_id, Some(12345));
-    assert_eq!(config.github.installation_id, Some(67890));
+fn app_config_toml_sets_github_ids(full_config_toml: AppConfig) {
+    assert_eq!(full_config_toml.github.app_id, Some(12345));
+    assert_eq!(full_config_toml.github.installation_id, Some(67890));
 }
 
 #[rstest]
-fn app_config_toml_sets_sandbox_flags() {
-    let toml = r#"
-        engine_socket = "unix:///run/podman/podman.sock"
-        image = "ghcr.io/example/sandbox:latest"
-
-        [github]
-        app_id = 12345
-        installation_id = 67890
-
-        [sandbox]
-        privileged = true
-        mount_dev_fuse = false
-
-        [agent]
-        kind = "codex"
-        mode = "podbot"
-
-        [workspace]
-        base_dir = "/home/user/work"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert!(config.sandbox.privileged);
-    assert!(!config.sandbox.mount_dev_fuse);
+fn app_config_toml_sets_sandbox_flags(full_config_toml: AppConfig) {
+    assert!(full_config_toml.sandbox.privileged);
+    assert!(!full_config_toml.sandbox.mount_dev_fuse);
 }
 
 #[rstest]
-fn app_config_toml_sets_agent_config() {
-    let toml = r#"
-        engine_socket = "unix:///run/podman/podman.sock"
-        image = "ghcr.io/example/sandbox:latest"
-
-        [github]
-        app_id = 12345
-        installation_id = 67890
-
-        [sandbox]
-        privileged = true
-        mount_dev_fuse = false
-
-        [agent]
-        kind = "codex"
-        mode = "podbot"
-
-        [workspace]
-        base_dir = "/home/user/work"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert_eq!(config.agent.kind, AgentKind::Codex);
-    assert_eq!(config.agent.mode, AgentMode::Podbot);
+fn app_config_toml_sets_agent_config(full_config_toml: AppConfig) {
+    assert_eq!(full_config_toml.agent.kind, AgentKind::Codex);
+    assert_eq!(full_config_toml.agent.mode, AgentMode::Podbot);
 }
 
 #[rstest]
-fn app_config_toml_sets_workspace_base_dir() {
-    let toml = r#"
-        engine_socket = "unix:///run/podman/podman.sock"
-        image = "ghcr.io/example/sandbox:latest"
-
-        [github]
-        app_id = 12345
-        installation_id = 67890
-
-        [sandbox]
-        privileged = true
-        mount_dev_fuse = false
-
-        [agent]
-        kind = "codex"
-        mode = "podbot"
-
-        [workspace]
-        base_dir = "/home/user/work"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert_eq!(config.workspace.base_dir.as_str(), "/home/user/work");
+fn app_config_toml_sets_workspace_base_dir(full_config_toml: AppConfig) {
+    assert_eq!(
+        full_config_toml.workspace.base_dir.as_str(),
+        "/home/user/work"
+    );
 }
 
 #[rstest]
