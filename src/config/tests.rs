@@ -2,8 +2,8 @@
 
 use super::*;
 use camino::Utf8PathBuf;
-use ortho_config::serde_json::json;
 use ortho_config::MergeComposer;
+use ortho_config::serde_json::json;
 use rstest::{fixture, rstest};
 use std::sync::Arc;
 
