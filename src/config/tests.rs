@@ -90,6 +90,26 @@ fn merge_config(composer: MergeComposer) -> Result<AppConfig, Arc<ortho_config::
     AppConfig::merge_from_layers(composer.layers())
 }
 
+/// Helper: Asserts that a config's agent section has default values.
+fn assert_agent_defaults(config: &AppConfig) {
+    assert_eq!(
+        config.agent.kind,
+        AgentKind::Claude,
+        "agent.kind should be Claude"
+    );
+    assert_eq!(
+        config.agent.mode,
+        AgentMode::Podbot,
+        "agent.mode should be Podbot"
+    );
+}
+
+/// Helper: Asserts that a config's creds section has default values.
+fn assert_creds_defaults(config: &AppConfig) {
+    assert!(config.creds.copy_claude, "creds.copy_claude should be true");
+    assert!(config.creds.copy_codex, "creds.copy_codex should be true");
+}
+
 /// Helper: Asserts that a config has all default values.
 fn assert_config_has_defaults(config: &AppConfig) {
     assert!(
@@ -110,6 +130,8 @@ fn assert_config_has_defaults(config: &AppConfig) {
         "/work",
         "workspace.base_dir should be /work"
     );
+    assert_agent_defaults(config);
+    assert_creds_defaults(config);
 }
 
 #[rstest]
