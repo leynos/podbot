@@ -97,7 +97,7 @@ pub fn clear_podbot_env() -> EnvGuard<'static> {
 
 /// Sets an environment variable with exclusive access.
 ///
-/// This helper acquires the environment mutex, sets the environment variable,
+/// This helper acquires environment mutex, sets the environment variable,
 /// and returns a guard that holds the lock. The caller must ensure the
 /// guard's lifetime encompasses the duration where the environment variable
 /// should be set.
@@ -118,6 +118,11 @@ pub fn clear_podbot_env() -> EnvGuard<'static> {
 ///     // Environment variable is now set
 /// } // Guard dropped here, lock released
 /// ```
+#[allow(
+    clippy::allow_attributes,
+    dead_code,
+    reason = "Utility function kept for future use; needed here for the dead_code suppress"
+)]
 pub fn set_env_var(key: &str, value: &str) {
     let _guard = EnvGuard::lock();
     // SAFETY: Mutex guard ensures exclusive access to environment variables.

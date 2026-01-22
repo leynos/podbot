@@ -193,8 +193,22 @@ fn load_config_fails_on_invalid_typed_env_var(
     #[case] invalid_value: &str,
     #[case] expected_type: &str,
 ) {
-    let _guard = clear_podbot_env();
-    test_utils::set_env_var(env_var, invalid_value);
+    use crate::test_utils::EnvGuard;
+    use podbot::config::env_var_names;
+
+    let _guard = EnvGuard::lock();
+
+    unsafe {
+        std::env::remove_var("PODBOT_CONFIG_PATH");
+    }
+    for var in env_var_names() {
+        unsafe {
+            std::env::remove_var(var);
+        }
+    }
+    unsafe {
+        std::env::set_var(env_var, invalid_value);
+    }
 
     let cli = cli_with_config(None);
     let result = load_config(&cli);
@@ -203,7 +217,7 @@ fn load_config_fails_on_invalid_typed_env_var(
     let err_str = err.to_string();
     assert!(
         err_str.contains(env_var),
-        "error should mention the env var: {err_str}"
+        "error should mention env var: {err_str}"
     );
     assert!(
         err_str.contains(expected_type),
@@ -214,8 +228,22 @@ fn load_config_fails_on_invalid_typed_env_var(
 #[test]
 #[serial]
 fn load_config_accepts_valid_bool_env_var() {
-    let _guard = clear_podbot_env();
-    test_utils::set_env_var("PODBOT_SANDBOX_PRIVILEGED", "true");
+    use crate::test_utils::EnvGuard;
+    use podbot::config::env_var_names;
+
+    let _guard = EnvGuard::lock();
+
+    unsafe {
+        std::env::remove_var("PODBOT_CONFIG_PATH");
+    }
+    for var in env_var_names() {
+        unsafe {
+            std::env::remove_var(var);
+        }
+    }
+    unsafe {
+        std::env::set_var("PODBOT_SANDBOX_PRIVILEGED", "true");
+    }
 
     let cli = cli_with_config(None);
     let config = load_config(&cli).expect("load_config should succeed for valid bool");
@@ -226,8 +254,22 @@ fn load_config_accepts_valid_bool_env_var() {
 #[test]
 #[serial]
 fn load_config_accepts_valid_u64_env_var() {
-    let _guard = clear_podbot_env();
-    test_utils::set_env_var("PODBOT_GITHUB_APP_ID", "12345");
+    use crate::test_utils::EnvGuard;
+    use podbot::config::env_var_names;
+
+    let _guard = EnvGuard::lock();
+
+    unsafe {
+        std::env::remove_var("PODBOT_CONFIG_PATH");
+    }
+    for var in env_var_names() {
+        unsafe {
+            std::env::remove_var(var);
+        }
+    }
+    unsafe {
+        std::env::set_var("PODBOT_GITHUB_APP_ID", "12345");
+    }
 
     let cli = cli_with_config(None);
     let config = load_config(&cli).expect("load_config should succeed for valid u64");

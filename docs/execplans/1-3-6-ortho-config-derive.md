@@ -91,11 +91,11 @@ Success is observable when:
   OrthoConfig's generated parser. Date/Author: 2026-01-19 / Terry.
 
 - Decision: Environment variables use single underscores throughout (e.g.,
-  `PODBOT_GITHUB_APP_ID`, not `PODBOT_GITHUB__APP_ID`). The manual env var table
-  in `loader.rs` explicitly maps each nested field to its env var name, avoiding
-  any double-underscore convention. Rationale: Single underscores are more
-  user-friendly and match conventional environment variable naming. Date/Author:
-  2026-01-19 / Terry.
+  `PODBOT_GITHUB_APP_ID`, not `PODBOT_GITHUB__APP_ID`). The manual env var
+  table in `loader.rs` explicitly maps each nested field to its env var name,
+  avoiding any double-underscore convention. Rationale: Single underscores are
+  more user-friendly and match conventional environment variable naming.
+  Date/Author: 2026-01-19 / Terry.
 
 - Decision: Create a separate `loader.rs` module rather than adding loading
   logic to `types.rs`. Rationale: Keeps types.rs focused on struct definitions;
