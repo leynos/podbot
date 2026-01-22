@@ -2,9 +2,10 @@
 
 use super::*;
 use camino::Utf8PathBuf;
-use ortho_config::MergeComposer;
 use ortho_config::serde_json::json;
+use ortho_config::MergeComposer;
 use rstest::{fixture, rstest};
+use std::sync::Arc;
 
 /// Fixture providing a default `AppConfig`.
 #[fixture]
@@ -77,25 +78,16 @@ fn github_config_complete() -> GitHubConfig {
 }
 
 /// Helper: Creates a `MergeComposer` with defaults layer already pushed.
-///
-/// # Panics
-///
-/// Panics if serialization of defaults fails (should never happen in tests).
-fn create_composer_with_defaults() -> MergeComposer {
+fn create_composer_with_defaults() -> Result<MergeComposer, serde_json::Error> {
     let mut composer = MergeComposer::new();
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())
-        .expect("serialization should succeed");
+    let defaults = ortho_config::serde_json::to_value(AppConfig::default())?;
     composer.push_defaults(defaults);
-    composer
+    Ok(composer)
 }
 
 /// Helper: Merges layers from a composer into `AppConfig`.
-///
-/// # Panics
-///
-/// Panics if merging the layers fails (should never happen with valid test data).
-fn merge_config(composer: MergeComposer) -> AppConfig {
-    AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed")
+fn merge_config(composer: MergeComposer) -> Result<AppConfig, Arc<ortho_config::OrthoError>> {
+    AppConfig::merge_from_layers(composer.layers())
 }
 
 /// Helper: Asserts that a config has all default values.
@@ -445,8 +437,8 @@ fn github_config_is_configured_false_when_id_is_zero(
 #[rstest]
 fn layer_precedence_serialised_defaults_round_trip() {
     // This is exactly what load_config does: serialise defaults, push to composer.
-    let composer = create_composer_with_defaults();
-    let config = merge_config(composer);
+    let composer = create_composer_with_defaults().expect("composer creation should succeed");
+    let config = merge_config(composer).expect("merge should succeed");
     let expected = AppConfig::default();
 
     // Verify key fields match to ensure the serialisation round-trip works.
@@ -467,8 +459,8 @@ fn layer_precedence_serialised_defaults_round_trip() {
 /// Test that defaults layer provides baseline configuration values.
 #[rstest]
 fn layer_precedence_defaults_provide_baseline() {
-    let composer = create_composer_with_defaults();
-    let config = merge_config(composer);
+    let composer = create_composer_with_defaults().expect("composer creation should succeed");
+    let config = merge_config(composer).expect("merge should succeed");
 
     assert_config_has_defaults(&config);
 }
@@ -476,7 +468,7 @@ fn layer_precedence_defaults_provide_baseline() {
 /// Test that file layer overrides defaults.
 #[rstest]
 fn layer_precedence_file_overrides_defaults() {
-    let mut composer = create_composer_with_defaults();
+    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
     composer.push_file(
         json!({
             "engine_socket": "unix:///from/file.sock",
@@ -485,7 +477,7 @@ fn layer_precedence_file_overrides_defaults() {
         None,
     );
 
-    let config = merge_config(composer);
+    let config = merge_config(composer).expect("merge should succeed");
 
     assert_eq!(
         config.engine_socket.as_deref(),
@@ -497,7 +489,7 @@ fn layer_precedence_file_overrides_defaults() {
 /// Test that environment layer overrides file layer.
 #[rstest]
 fn layer_precedence_env_overrides_file() {
-    let mut composer = create_composer_with_defaults();
+    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
     composer.push_file(
         json!({
             "engine_socket": "unix:///from/file.sock",
@@ -509,7 +501,7 @@ fn layer_precedence_env_overrides_file() {
         "engine_socket": "unix:///from/env.sock"
     }));
 
-    let config = merge_config(composer);
+    let config = merge_config(composer).expect("merge should succeed");
 
     // Environment overrides file for engine_socket
     assert_eq!(
@@ -523,7 +515,7 @@ fn layer_precedence_env_overrides_file() {
 /// Test that CLI layer overrides all other layers.
 #[rstest]
 fn layer_precedence_cli_overrides_all() {
-    let mut composer = create_composer_with_defaults();
+    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
     composer.push_file(
         json!({
             "engine_socket": "unix:///from/file.sock",
@@ -538,7 +530,7 @@ fn layer_precedence_cli_overrides_all() {
         "engine_socket": "unix:///from/cli.sock"
     }));
 
-    let config = merge_config(composer);
+    let config = merge_config(composer).expect("merge should succeed");
 
     // CLI overrides everything for engine_socket
     assert_eq!(
@@ -552,7 +544,7 @@ fn layer_precedence_cli_overrides_all() {
 /// Test full precedence chain: defaults < file < env < CLI.
 #[rstest]
 fn layer_precedence_full_chain() {
-    let mut composer = create_composer_with_defaults();
+    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
 
     // Layer 2: File provides base configuration
     composer.push_file(
@@ -576,7 +568,7 @@ fn layer_precedence_full_chain() {
         "engine_socket": "cli-socket"
     }));
 
-    let config = merge_config(composer);
+    let config = merge_config(composer).expect("merge should succeed");
 
     // CLI wins for engine_socket
     assert_eq!(config.engine_socket.as_deref(), Some("cli-socket"));
@@ -593,7 +585,7 @@ fn layer_precedence_full_chain() {
 /// Test that nested config merges correctly across layers.
 #[rstest]
 fn layer_precedence_nested_config_merges() {
-    let mut composer = create_composer_with_defaults();
+    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
     composer.push_file(
         json!({
             "sandbox": {
@@ -609,7 +601,7 @@ fn layer_precedence_nested_config_merges() {
         }
     }));
 
-    let config = merge_config(composer);
+    let config = merge_config(composer).expect("merge should succeed");
 
     // Environment overrides file for privileged
     assert!(!config.sandbox.privileged);
@@ -620,13 +612,13 @@ fn layer_precedence_nested_config_merges() {
 /// Test that missing layers result in defaults being used.
 #[rstest]
 fn layer_precedence_empty_layers_use_defaults() {
-    let mut composer = create_composer_with_defaults();
+    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
     // Add empty override layers (no effect on values)
     composer.push_file(json!({}), None);
     composer.push_environment(json!({}));
     composer.push_cli(json!({}));
 
-    let config = merge_config(composer);
+    let config = merge_config(composer).expect("merge should succeed");
 
     assert_config_has_defaults(&config);
 }
@@ -663,8 +655,8 @@ fn layer_precedence_empty_json_defaults_fails() {
 #[rstest]
 fn layer_precedence_serialised_defaults_works() {
     // Production approach: serialise AppConfig::default() as the defaults layer.
-    let composer = create_composer_with_defaults();
-    let config = merge_config(composer);
+    let composer = create_composer_with_defaults().expect("composer creation should succeed");
+    let config = merge_config(composer).expect("merge should succeed");
 
     // Verify the config matches the expected defaults.
     assert_config_has_defaults(&config);
