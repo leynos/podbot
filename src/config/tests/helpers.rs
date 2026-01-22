@@ -108,3 +108,29 @@ pub fn assert_config_has_defaults(config: &AppConfig) {
     assert_agent_defaults(config);
     assert_creds_defaults(config);
 }
+
+/// Helper: Creates a `MergeComposer` with defaults, file, and env layers for testing layer precedence.
+///
+/// This builder pattern reduces duplication in tests that verify environment and CLI layer
+/// precedence by providing pre-configured file and environment layers.
+pub fn create_composer_with_file_and_env() -> Result<MergeComposer, serde_json::Error> {
+    use ortho_config::serde_json::json;
+
+    let mut composer = create_composer_with_defaults()?;
+
+    // Standard file layer for precedence tests
+    composer.push_file(
+        json!({
+            "engine_socket": "unix:///from/file.sock",
+            "image": "file-image:latest"
+        }),
+        None,
+    );
+
+    // Standard environment layer for precedence tests
+    composer.push_environment(json!({
+        "engine_socket": "unix:///from/env.sock"
+    }));
+
+    Ok(composer)
+}

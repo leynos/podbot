@@ -1,33 +1,8 @@
 //! Basic type and serialisation tests for podbot configuration types.
 
+use crate::config::tests::helpers::{app_config_from_full_toml, app_config_from_partial_toml};
 use crate::config::{AgentConfig, AgentKind, AgentMode, AppConfig};
-use rstest::fixture;
 use rstest::rstest;
-
-#[fixture]
-fn full_config_toml() -> AppConfig {
-    let toml = r#"
-        engine_socket = "unix:///run/podman/podman.sock"
-        image = "ghcr.io/example/sandbox:latest"
-
-        [github]
-        app_id = 12345
-        installation_id = 67890
-
-        [sandbox]
-        privileged = true
-        mount_dev_fuse = false
-
-        [agent]
-        kind = "codex"
-        mode = "podbot"
-
-        [workspace]
-        base_dir = "/home/user/work"
-    "#;
-
-    toml::from_str(toml).expect("TOML parsing should succeed")
-}
 
 #[rstest]
 fn agent_kind_default_is_claude() {
@@ -117,106 +92,82 @@ fn app_config_workspace_defaults_to_work_dir() {
 }
 
 #[rstest]
-fn app_config_toml_sets_engine_socket_and_image(full_config_toml: AppConfig) {
+fn app_config_toml_sets_engine_socket_and_image(app_config_from_full_toml: AppConfig) {
     assert_eq!(
-        full_config_toml.engine_socket.as_deref(),
+        app_config_from_full_toml.engine_socket.as_deref(),
         Some("unix:///run/podman/podman.sock")
     );
     assert_eq!(
-        full_config_toml.image.as_deref(),
+        app_config_from_full_toml.image.as_deref(),
         Some("ghcr.io/example/sandbox:latest")
     );
 }
 
 #[rstest]
-fn app_config_toml_sets_github_ids(full_config_toml: AppConfig) {
-    assert_eq!(full_config_toml.github.app_id, Some(12345));
-    assert_eq!(full_config_toml.github.installation_id, Some(67890));
-}
-
-#[rstest]
-fn app_config_toml_sets_sandbox_flags(full_config_toml: AppConfig) {
-    assert!(full_config_toml.sandbox.privileged);
-    assert!(!full_config_toml.sandbox.mount_dev_fuse);
-}
-
-#[rstest]
-fn app_config_toml_sets_agent_config(full_config_toml: AppConfig) {
-    assert_eq!(full_config_toml.agent.kind, AgentKind::Codex);
-    assert_eq!(full_config_toml.agent.mode, AgentMode::Podbot);
-}
-
-#[rstest]
-fn app_config_toml_sets_workspace_base_dir(full_config_toml: AppConfig) {
+fn app_config_toml_sets_github_ids(app_config_from_full_toml: AppConfig) {
+    assert_eq!(app_config_from_full_toml.github.app_id, Some(12345));
     assert_eq!(
-        full_config_toml.workspace.base_dir.as_str(),
+        app_config_from_full_toml.github.installation_id,
+        Some(67890)
+    );
+}
+
+#[rstest]
+fn app_config_toml_sets_sandbox_flags(app_config_from_full_toml: AppConfig) {
+    assert!(app_config_from_full_toml.sandbox.privileged);
+    assert!(!app_config_from_full_toml.sandbox.mount_dev_fuse);
+}
+
+#[rstest]
+fn app_config_toml_sets_agent_config(app_config_from_full_toml: AppConfig) {
+    assert_eq!(app_config_from_full_toml.agent.kind, AgentKind::Codex);
+    assert_eq!(app_config_from_full_toml.agent.mode, AgentMode::Podbot);
+}
+
+#[rstest]
+fn app_config_toml_sets_workspace_base_dir(app_config_from_full_toml: AppConfig) {
+    assert_eq!(
+        app_config_from_full_toml.workspace.base_dir.as_str(),
         "/home/user/work"
     );
 }
 
 #[rstest]
-fn app_config_partial_toml_sets_engine_socket() {
-    let toml = r#"
-        engine_socket = "unix:///tmp/docker.sock"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
+fn app_config_partial_toml_sets_engine_socket(app_config_from_partial_toml: AppConfig) {
     assert_eq!(
-        config.engine_socket.as_deref(),
+        app_config_from_partial_toml.engine_socket.as_deref(),
         Some("unix:///tmp/docker.sock")
     );
 }
 
 #[rstest]
-fn app_config_partial_toml_image_defaults_to_none() {
-    let toml = r#"
-        engine_socket = "unix:///tmp/docker.sock"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert!(config.image.is_none());
+fn app_config_partial_toml_image_defaults_to_none(app_config_from_partial_toml: AppConfig) {
+    assert!(app_config_from_partial_toml.image.is_none());
 }
 
 #[rstest]
-fn app_config_partial_toml_github_app_id_defaults_to_none() {
-    let toml = r#"
-        engine_socket = "unix:///tmp/docker.sock"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert!(config.github.app_id.is_none());
+fn app_config_partial_toml_github_app_id_defaults_to_none(app_config_from_partial_toml: AppConfig) {
+    assert!(app_config_from_partial_toml.github.app_id.is_none());
 }
 
 #[rstest]
-fn app_config_partial_toml_sandbox_defaults_apply() {
-    let toml = r#"
-        engine_socket = "unix:///tmp/docker.sock"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert!(!config.sandbox.privileged);
-    assert!(config.sandbox.mount_dev_fuse);
+fn app_config_partial_toml_sandbox_defaults_apply(app_config_from_partial_toml: AppConfig) {
+    assert!(!app_config_from_partial_toml.sandbox.privileged);
+    assert!(app_config_from_partial_toml.sandbox.mount_dev_fuse);
 }
 
 #[rstest]
-fn app_config_partial_toml_agent_defaults_apply() {
-    let toml = r#"
-        engine_socket = "unix:///tmp/docker.sock"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert_eq!(config.agent.kind, AgentKind::Claude);
-    assert_eq!(config.agent.mode, AgentMode::Podbot);
+fn app_config_partial_toml_agent_defaults_apply(app_config_from_partial_toml: AppConfig) {
+    assert_eq!(app_config_from_partial_toml.agent.kind, AgentKind::Claude);
+    assert_eq!(app_config_from_partial_toml.agent.mode, AgentMode::Podbot);
 }
 
 #[rstest]
-fn app_config_partial_toml_workspace_default_applies() {
-    let toml = r#"
-        engine_socket = "unix:///tmp/docker.sock"
-    "#;
-
-    let config: AppConfig = toml::from_str(toml).expect("TOML parsing should succeed");
-    assert_eq!(config.workspace.base_dir.as_str(), "/work");
+fn app_config_partial_toml_workspace_default_applies(app_config_from_partial_toml: AppConfig) {
+    assert_eq!(
+        app_config_from_partial_toml.workspace.base_dir.as_str(),
+        "/work"
+    );
 }
 
 #[rstest]
@@ -234,6 +185,6 @@ fn app_config_rejects_invalid_agent_field(#[case] field: &str, #[case] value: &s
         .expect_err("TOML parsing should fail for an invalid agent field");
     assert!(
         error.to_string().contains(value),
-        "Expected error mentioning to invalid value \"{value}\", got: {error}"
+        "Expected error mentioning the invalid value \"{value}\", got: {error}"
     );
 }

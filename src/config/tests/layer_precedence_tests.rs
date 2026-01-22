@@ -2,7 +2,8 @@
 
 use crate::config::AppConfig;
 use crate::config::tests::helpers::{
-    assert_config_has_defaults, create_composer_with_defaults, merge_config,
+    assert_config_has_defaults, create_composer_with_defaults, create_composer_with_file_and_env,
+    merge_config,
 };
 use ortho_config::MergeComposer;
 use ortho_config::serde_json::json;
@@ -67,18 +68,7 @@ fn layer_precedence_file_overrides_defaults() {
 /// Test that environment layer overrides file layer.
 #[rstest]
 fn layer_precedence_env_overrides_file() {
-    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
-    composer.push_file(
-        json!({
-            "engine_socket": "unix:///from/file.sock",
-            "image": "file-image:latest"
-        }),
-        None,
-    );
-    composer.push_environment(json!({
-        "engine_socket": "unix:///from/env.sock"
-    }));
-
+    let composer = create_composer_with_file_and_env().expect("composer creation should succeed");
     let config = merge_config(composer).expect("merge should succeed");
 
     // Environment overrides file for engine_socket
@@ -93,17 +83,8 @@ fn layer_precedence_env_overrides_file() {
 /// Test that CLI layer overrides all other layers.
 #[rstest]
 fn layer_precedence_cli_overrides_all() {
-    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
-    composer.push_file(
-        json!({
-            "engine_socket": "unix:///from/file.sock",
-            "image": "file-image:latest"
-        }),
-        None,
-    );
-    composer.push_environment(json!({
-        "engine_socket": "unix:///from/env.sock"
-    }));
+    let mut composer =
+        create_composer_with_file_and_env().expect("composer creation should succeed");
     composer.push_cli(json!({
         "engine_socket": "unix:///from/cli.sock"
     }));

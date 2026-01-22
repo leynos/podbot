@@ -193,19 +193,9 @@ fn load_config_fails_on_invalid_typed_env_var(
     #[case] invalid_value: &str,
     #[case] expected_type: &str,
 ) {
-    use crate::test_utils::EnvGuard;
-    use podbot::config::env_var_names;
+    let _guard = clear_podbot_env();
 
-    let _guard = EnvGuard::lock();
-
-    unsafe {
-        std::env::remove_var("PODBOT_CONFIG_PATH");
-    }
-    for var in env_var_names() {
-        unsafe {
-            std::env::remove_var(var);
-        }
-    }
+    // SAFETY: Mutex guard ensures exclusive access to environment variables.
     unsafe {
         std::env::set_var(env_var, invalid_value);
     }
@@ -230,19 +220,9 @@ fn load_config_fails_on_invalid_typed_env_var(
 #[case("PODBOT_GITHUB_APP_ID", "12345")]
 #[serial]
 fn load_config_accepts_valid_typed_env_var(#[case] env_var: &str, #[case] value: &str) {
-    use crate::test_utils::EnvGuard;
-    use podbot::config::env_var_names;
+    let _guard = clear_podbot_env();
 
-    let _guard = EnvGuard::lock();
-
-    unsafe {
-        std::env::remove_var("PODBOT_CONFIG_PATH");
-    }
-    for var in env_var_names() {
-        unsafe {
-            std::env::remove_var(var);
-        }
-    }
+    // SAFETY: Mutex guard ensures exclusive access to environment variables.
     unsafe {
         std::env::set_var(env_var, value);
     }

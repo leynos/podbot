@@ -94,39 +94,3 @@ pub fn clear_podbot_env() -> EnvGuard<'static> {
 
     guard
 }
-
-/// Sets an environment variable with exclusive access.
-///
-/// This helper acquires environment mutex, sets the environment variable,
-/// and returns a guard that holds the lock. The caller must ensure the
-/// guard's lifetime encompasses the duration where the environment variable
-/// should be set.
-///
-/// # Safety
-///
-/// The unsafe block is required because `std::env::set_var` is unsafe in
-/// Rust 2024 edition. Safety is ensured by the mutex guard which guarantees
-/// exclusive access to environment variables.
-///
-/// # Example
-///
-/// ```ignore
-/// #[test]
-/// #[serial]
-/// fn my_test() {
-///     test_utils::set_env_var("FOO", "bar");
-///     // Environment variable is now set
-/// } // Guard dropped here, lock released
-/// ```
-#[allow(
-    clippy::allow_attributes,
-    dead_code,
-    reason = "Utility function kept for future use; needed here for the dead_code suppress"
-)]
-pub fn set_env_var(key: &str, value: &str) {
-    let _guard = EnvGuard::lock();
-    // SAFETY: Mutex guard ensures exclusive access to environment variables.
-    unsafe {
-        std::env::set_var(key, value);
-    }
-}
