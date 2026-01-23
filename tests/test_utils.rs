@@ -6,6 +6,7 @@
 use std::sync::{Mutex, MutexGuard};
 
 use podbot::config::env_var_names;
+use rstest::fixture;
 
 /// Global mutex protecting environment variable access.
 ///
@@ -93,4 +94,52 @@ pub fn clear_podbot_env() -> EnvGuard<'static> {
     }
 
     guard
+}
+
+/// Sets an environment variable while holding the environment guard.
+///
+/// This function requires a reference to an `EnvGuard` to ensure the caller
+/// has exclusive access to environment variables. This prevents accidental
+/// use without proper synchronization.
+///
+/// # Safety
+///
+/// The unsafe block is required because `std::env::set_var` is unsafe in
+/// Rust 2024 edition. Safety is ensured by the guard reference which guarantees
+/// exclusive access to environment variables.
+///
+/// # Example
+///
+/// ```ignore
+/// let guard = clear_podbot_env();
+/// set_env_var(&guard, "PODBOT_SANDBOX_PRIVILEGED", "true");
+/// // ... test code using the env var ...
+/// ```
+pub fn set_env_var(_guard: &EnvGuard<'_>, key: &str, value: &str) {
+    // SAFETY: The guard reference ensures exclusive access to environment variables.
+    unsafe {
+        std::env::set_var(key, value);
+    }
+}
+
+/// Rstest fixture that provides a clean environment for tests.
+///
+/// This fixture clears all `PODBOT_*` environment variables and returns a guard
+/// that holds exclusive access to the environment for the duration of the test.
+///
+/// # Example
+///
+/// ```ignore
+/// use rstest::rstest;
+/// use crate::test_utils::{clean_env, set_env_var, EnvGuard};
+///
+/// #[rstest]
+/// fn my_test(clean_env: EnvGuard<'static>) {
+///     set_env_var(&clean_env, "PODBOT_IMAGE", "test:latest");
+///     // ... test code ...
+/// }
+/// ```
+#[fixture]
+pub fn clean_env() -> EnvGuard<'static> {
+    clear_podbot_env()
 }

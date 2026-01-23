@@ -65,38 +65,30 @@ fn layer_precedence_file_overrides_defaults() {
     assert_eq!(config.image.as_deref(), Some("file-image:latest"));
 }
 
-/// Test that environment layer overrides file layer.
+/// Parameterized test verifying layer precedence for env and CLI overrides.
+///
+/// This test consolidates the logic for testing that higher-precedence layers
+/// (environment, CLI) correctly override lower layers (file) for `engine_socket`,
+/// while preserving `image` from the file layer.
 #[rstest]
-fn layer_precedence_env_overrides_file() {
-    let composer = create_composer_with_file_and_env().expect("composer creation should succeed");
-    let config = merge_config(composer).expect("merge should succeed");
-
-    // Environment overrides file for engine_socket
-    assert_eq!(
-        config.engine_socket.as_deref(),
-        Some("unix:///from/env.sock")
-    );
-    // File value preserved for image (not in env layer)
-    assert_eq!(config.image.as_deref(), Some("file-image:latest"));
-}
-
-/// Test that CLI layer overrides all other layers.
-#[rstest]
-fn layer_precedence_cli_overrides_all() {
+#[case::env_overrides_file(None, "unix:///from/env.sock")]
+#[case::cli_overrides_all(Some("unix:///from/cli.sock"), "unix:///from/cli.sock")]
+fn layer_precedence_override_for_engine_socket(
+    #[case] cli_override: Option<&str>,
+    #[case] expected_socket: &str,
+) {
     let mut composer =
         create_composer_with_file_and_env().expect("composer creation should succeed");
-    composer.push_cli(json!({
-        "engine_socket": "unix:///from/cli.sock"
-    }));
+
+    if let Some(socket) = cli_override {
+        composer.push_cli(json!({ "engine_socket": socket }));
+    }
 
     let config = merge_config(composer).expect("merge should succeed");
 
-    // CLI overrides everything for engine_socket
-    assert_eq!(
-        config.engine_socket.as_deref(),
-        Some("unix:///from/cli.sock")
-    );
-    // File value preserved for image (not in env or CLI layers)
+    // Verify the expected layer wins for engine_socket
+    assert_eq!(config.engine_socket.as_deref(), Some(expected_socket));
+    // File value preserved for image (not overridden by env or CLI layers)
     assert_eq!(config.image.as_deref(), Some("file-image:latest"));
 }
 

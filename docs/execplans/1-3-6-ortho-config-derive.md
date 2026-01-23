@@ -85,7 +85,7 @@ Success is observable when:
       `tests/load_config_integration.rs` (10 tests)
 - [x] (2026-01-22 UTC) Add BDD scenarios for layer precedence in
       `tests/features/configuration.feature` (5 scenarios lines 72-104)
-- [x] (2026-01-22 UTC) Refactor tests: extract rstest fixtures, parameterise
+- [x] (2026-01-22 UTC) Refactor tests: extract rstest fixtures, parameterize
       env var tests, decompose into modules
 - [x] (2026-01-22 UTC) Run `make check-fmt`, `make lint`, `make test` - all
       passing
@@ -191,7 +191,7 @@ Success is observable when:
    `PODBOT_SANDBOX_PRIVILEGED=maybe`) return clear error messages immediately
    instead of silently falling back to defaults. Users appreciate this.
 
-3. **Test organisation**: Decomposing tests into modules and extracting rstest
+3. **Test organization**: Decomposing tests into modules and extracting rstest
    fixtures to `helpers.rs` kept files under 400 lines and reduced test
    duplication significantly.
 

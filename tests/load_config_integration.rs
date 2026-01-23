@@ -14,7 +14,7 @@ use rstest::rstest;
 use serial_test::serial;
 use tempfile::NamedTempFile;
 
-use crate::test_utils::clear_podbot_env;
+use crate::test_utils::{EnvGuard, clean_env, set_env_var};
 
 /// Helper: Creates a CLI struct with a config file path.
 ///
@@ -39,11 +39,9 @@ fn temp_config_file(content: &str) -> std::io::Result<NamedTempFile> {
     Ok(file)
 }
 
-#[test]
+#[rstest]
 #[serial]
-fn load_config_returns_defaults_when_no_sources_provided() {
-    let _guard = clear_podbot_env();
-
+fn load_config_returns_defaults_when_no_sources_provided(clean_env: EnvGuard<'static>) {
     // CLI with no config file, no CLI overrides.
     let cli = cli_with_config(None);
 
@@ -55,13 +53,13 @@ fn load_config_returns_defaults_when_no_sources_provided() {
     assert!(!config.sandbox.privileged);
     assert!(config.sandbox.mount_dev_fuse);
     assert_eq!(config.workspace.base_dir.as_str(), "/work");
+
+    drop(clean_env);
 }
 
-#[test]
+#[rstest]
 #[serial]
-fn load_config_loads_from_config_file() {
-    let _guard = clear_podbot_env();
-
+fn load_config_loads_from_config_file(clean_env: EnvGuard<'static>) {
     let toml_content = r#"
         engine_socket = "unix:///from/config/file.sock"
         image = "test-image:v1"
@@ -85,13 +83,13 @@ fn load_config_loads_from_config_file() {
     assert!(config.sandbox.privileged);
     // Defaults should still apply for unset fields.
     assert!(config.sandbox.mount_dev_fuse);
+
+    drop(clean_env);
 }
 
-#[test]
+#[rstest]
 #[serial]
-fn load_config_cli_overrides_config_file() {
-    let _guard = clear_podbot_env();
-
+fn load_config_cli_overrides_config_file(clean_env: EnvGuard<'static>) {
     let toml_content = r#"
         engine_socket = "unix:///from/config/file.sock"
         image = "file-image:v1"
@@ -117,13 +115,13 @@ fn load_config_cli_overrides_config_file() {
     );
     // File value preserved for image.
     assert_eq!(config.image.as_deref(), Some("file-image:v1"));
+
+    drop(clean_env);
 }
 
-#[test]
+#[rstest]
 #[serial]
-fn load_config_handles_missing_config_file_gracefully() {
-    let _guard = clear_podbot_env();
-
+fn load_config_handles_missing_config_file_gracefully(clean_env: EnvGuard<'static>) {
     // Point to a non-existent config file.
     let cli = cli_with_config(Some(Utf8PathBuf::from("/nonexistent/config.toml")));
 
@@ -132,13 +130,13 @@ fn load_config_handles_missing_config_file_gracefully() {
 
     // All defaults should apply.
     assert!(config.engine_socket.is_none());
+
+    drop(clean_env);
 }
 
-#[test]
+#[rstest]
 #[serial]
-fn load_config_rejects_malformed_config_file() {
-    let _guard = clear_podbot_env();
-
+fn load_config_rejects_malformed_config_file(clean_env: EnvGuard<'static>) {
     let toml_content = r"
         this is not valid TOML {{{
     ";
@@ -154,13 +152,13 @@ fn load_config_rejects_malformed_config_file() {
         result.is_err(),
         "load_config should fail for malformed TOML"
     );
+
+    drop(clean_env);
 }
 
-#[test]
+#[rstest]
 #[serial]
-fn load_config_preserves_nested_config_defaults() {
-    let _guard = clear_podbot_env();
-
+fn load_config_preserves_nested_config_defaults(clean_env: EnvGuard<'static>) {
     // Only set top-level fields, nested should get defaults.
     let toml_content = r#"
         engine_socket = "unix:///test.sock"
@@ -182,6 +180,8 @@ fn load_config_preserves_nested_config_defaults() {
     assert_eq!(config.workspace.base_dir.as_str(), "/work");
     assert!(config.creds.copy_claude);
     assert!(config.creds.copy_codex);
+
+    drop(clean_env);
 }
 
 #[rstest]
@@ -189,16 +189,12 @@ fn load_config_preserves_nested_config_defaults() {
 #[case("PODBOT_GITHUB_APP_ID", "not-a-number", "expected unsigned integer")]
 #[serial]
 fn load_config_fails_on_invalid_typed_env_var(
+    clean_env: EnvGuard<'static>,
     #[case] env_var: &str,
     #[case] invalid_value: &str,
     #[case] expected_type: &str,
 ) {
-    let _guard = clear_podbot_env();
-
-    // SAFETY: Mutex guard ensures exclusive access to environment variables.
-    unsafe {
-        std::env::set_var(env_var, invalid_value);
-    }
+    set_env_var(&clean_env, env_var, invalid_value);
 
     let cli = cli_with_config(None);
     let result = load_config(&cli);
@@ -219,13 +215,12 @@ fn load_config_fails_on_invalid_typed_env_var(
 #[case("PODBOT_SANDBOX_PRIVILEGED", "true")]
 #[case("PODBOT_GITHUB_APP_ID", "12345")]
 #[serial]
-fn load_config_accepts_valid_typed_env_var(#[case] env_var: &str, #[case] value: &str) {
-    let _guard = clear_podbot_env();
-
-    // SAFETY: Mutex guard ensures exclusive access to environment variables.
-    unsafe {
-        std::env::set_var(env_var, value);
-    }
+fn load_config_accepts_valid_typed_env_var(
+    clean_env: EnvGuard<'static>,
+    #[case] env_var: &str,
+    #[case] value: &str,
+) {
+    set_env_var(&clean_env, env_var, value);
 
     let cli = cli_with_config(None);
     let config = load_config(&cli).expect("load_config should succeed for valid typed env var");
