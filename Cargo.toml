@@ -22,7 +22,7 @@ thiserror = "2.0.17"
 eyre = "0.6.12"
 
 # Capabilities-oriented filesystem access
-cap-std = "4.0.0"
+cap-std = { version = "4.0.0", features = ["fs_utf8"] }
 camino = { version = "1.2.2", features = ["serde1"] }
 
 # Configuration management
@@ -37,6 +37,8 @@ rstest = "0.26.1"
 rstest-bdd = "0.3.2"
 rstest-bdd-macros = { version = "0.3.2", features = ["compile-time-validation"] }
 serde_json = "1.0.149"
+serial_test = "3.2.0"
+tempfile = "3.24.0"
 toml = "0.8.23"
 
 [lints.clippy]

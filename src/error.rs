@@ -6,6 +6,7 @@
 //! (`eyre::Report`) for the application boundary.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -41,6 +42,16 @@ pub enum ConfigError {
         /// The reason the value is invalid.
         reason: String,
     },
+
+    /// The `OrthoConfig` library returned an error during configuration loading.
+    ///
+    /// This wraps errors from the layered configuration system, including:
+    /// - Configuration file parsing errors
+    /// - Environment variable parsing errors
+    /// - CLI argument parsing errors
+    /// - Missing required fields after layer merging
+    #[error("configuration loading failed: {0}")]
+    OrthoConfig(Arc<ortho_config::OrthoError>),
 }
 
 /// Errors that can occur during container operations.
@@ -259,6 +270,19 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "failed to parse configuration file: unexpected token"
+        );
+    }
+
+    #[rstest]
+    fn config_error_ortho_config_displays_correctly() {
+        let ortho_error = ortho_config::OrthoError::Validation {
+            key: String::from("github.app_id"),
+            message: String::from("must be a positive integer"),
+        };
+        let error = ConfigError::OrthoConfig(Arc::new(ortho_error));
+        assert_eq!(
+            error.to_string(),
+            "configuration loading failed: Validation failed for 'github.app_id': must be a positive integer"
         );
     }
 

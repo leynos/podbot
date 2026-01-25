@@ -41,7 +41,7 @@ Establish the error handling patterns that propagate through all modules.
 **Completion criteria:** Error handling compiles, clippy raises no warnings
 about error patterns, and the expect_used lint remains strict. ✓
 
-### Step 1.3: Configuration module
+### Step 1.3: Configuration module ✓
 
 Implement the configuration system with layered precedence: CLI flags override
 environment variables, which override configuration files, which override
@@ -54,13 +54,13 @@ defaults.
 - [x] Establish SandboxConfig for privileged mode and /dev/fuse mount options.
 - [x] Specify AgentConfig for agent kind and execution mode.
 - [x] Add WorkspaceConfig for base directory.
-- [ ] Implement OrthoConfig derive for layered precedence.
-- [ ] Support configuration file at ~/.config/podbot/config.toml.
-- [ ] Add validation ensuring required fields are present.
+- [x] Implement OrthoConfig derive for layered precedence.
+- [x] Support configuration file at ~/.config/podbot/config.toml.
+- [x] Add validation ensuring required fields are present.
 
 **Completion criteria:** Configuration loads from file, environment, and CLI
 flags with correct precedence. Unit tests cover each layer and validation
-errors.
+errors. ✓
 
 ## Phase 2: Container engine integration
 
