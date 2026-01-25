@@ -11,7 +11,7 @@ Status: COMPLETE (2026-01-22 UTC)
 Implement `OrthoConfig` derive macros for the podbot configuration system to
 enable layered configuration precedence. The precedence order (lowest to
 highest) is: application defaults, configuration file
-(`~/.config/podbot/config.toml`), environment variables (`PODBOT_*`),
+(`~/.config/podbot/config.toml`), environment variables (`PODBOT_*`), and
 command-line arguments.
 
 Success is observable when:
@@ -134,7 +134,7 @@ Success is observable when:
   with real environment variables and CLI parsing. These tests use mutex guards
   to prevent env var pollution between tests.
 
-## Decision Log
+## Decision log
 
 - Decision: Keep existing Cli struct for subcommand dispatch; OrthoConfig
   handles global config loading. Rationale: Separation of concerns - Cli
@@ -172,7 +172,8 @@ Success is observable when:
 
 ### Success criteria met
 
-- ✅ Configuration loads from file, environment, and CLI with correct precedence
+- ✅ Configuration loads from file, environment, and CLI with correct
+  precedence
 - ✅ Unit tests using `MergeComposer` verify each precedence layer (8 tests in
       `layer_precedence_tests.rs`)
 - ✅ Integration tests verify full `load_config(&cli)` flow (10 tests in
@@ -455,6 +456,8 @@ Keep the following log files for review if needed:
 - `/tmp/podbot-test.log`
 
 ## Files to modify
+
+Table: Files to modify for the ortho-config-derive exec plan.
 
 | File                                          | Action | Estimated Lines |
 | --------------------------------------------- | ------ | --------------- |
