@@ -159,6 +159,25 @@ All configuration options can be set via environment variables using the
 | `PODBOT_CREDS_COPY_CLAUDE`       | `creds.copy_claude`       |
 | `PODBOT_CREDS_COPY_CODEX`        | `creds.copy_codex`        |
 
+### Container engine socket
+
+The socket endpoint for connecting to Docker or Podman is resolved in the
+following order (first match wins):
+
+1. `--engine-socket` CLI argument
+2. `engine_socket` in configuration file
+3. `PODBOT_ENGINE_SOCKET` environment variable
+4. `DOCKER_HOST` environment variable
+5. `CONTAINER_HOST` environment variable
+6. `PODMAN_HOST` environment variable
+7. Platform default (`/var/run/docker.sock` on Unix, `//./pipe/docker_engine`
+   on Windows)
+
+This allows podbot to integrate with existing Docker and Podman environments
+without additional configuration. If you have `DOCKER_HOST` or `PODMAN_HOST`
+already set for your container tooling, podbot will automatically use that
+endpoint.
+
 ### Sandbox configuration
 
 The `[sandbox]` section controls the security and compatibility trade-offs for

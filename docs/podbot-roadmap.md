@@ -73,8 +73,8 @@ Connect to the Podman or Docker socket and verify the connection.
 
 **Tasks:**
 
-- [ ] Implement socket connection via DOCKER_HOST environment variable or direct
-  path specification.
+- [x] Implement socket connection via DOCKER_HOST, CONTAINER_HOST or PODMAN_HOST
+  environment variables or direct path specification.
 - [ ] Add a health check that verifies the engine responds.
 - [ ] Handle socket permission errors with actionable error messages.
 - [ ] Support both Unix sockets and TCP connections.
