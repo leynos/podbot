@@ -188,7 +188,7 @@ mod tests {
         env
     }
 
-    /// Creates a `MockEnv` with custom mappings for environment variables.
+    /// Creates a `MockEnv` with custom mappings for environment variables (static lifetime).
     fn env_with_vars(mappings: &'static [(&'static str, &'static str)]) -> MockEnv {
         let mut env = MockEnv::new();
         env.expect_string().returning(move |key| {
@@ -196,6 +196,18 @@ mod tests {
                 .iter()
                 .find(|(k, _)| *k == key)
                 .map(|(_, v)| String::from(*v))
+        });
+        env
+    }
+
+    /// Creates a `MockEnv` with custom mappings from owned data (for parameterised tests).
+    fn env_with_owned_vars(mappings: Vec<(String, String)>) -> MockEnv {
+        let mut env = MockEnv::new();
+        env.expect_string().returning(move |key| {
+            mappings
+                .iter()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.clone())
         });
         env
     }
@@ -218,72 +230,52 @@ mod tests {
     }
 
     #[rstest]
-    fn resolver_respects_docker_host() {
-        let env = env_with_vars(&[("DOCKER_HOST", "unix:///docker.sock")]);
+    #[case::docker_host_only(
+        "respects DOCKER_HOST",
+        vec![("DOCKER_HOST", "unix:///docker.sock")],
+        Some("unix:///docker.sock")
+    )]
+    #[case::container_host_only(
+        "respects CONTAINER_HOST",
+        vec![("CONTAINER_HOST", "unix:///container.sock")],
+        Some("unix:///container.sock")
+    )]
+    #[case::podman_host_only(
+        "respects PODMAN_HOST",
+        vec![("PODMAN_HOST", "unix:///podman.sock")],
+        Some("unix:///podman.sock")
+    )]
+    #[case::docker_over_podman(
+        "prefers DOCKER_HOST over PODMAN_HOST",
+        vec![("DOCKER_HOST", "unix:///docker.sock"), ("PODMAN_HOST", "unix:///podman.sock")],
+        Some("unix:///docker.sock")
+    )]
+    #[case::docker_over_container(
+        "prefers DOCKER_HOST over CONTAINER_HOST",
+        vec![("DOCKER_HOST", "unix:///docker.sock"), ("CONTAINER_HOST", "unix:///container.sock")],
+        Some("unix:///docker.sock")
+    )]
+    #[case::container_over_podman(
+        "prefers CONTAINER_HOST over PODMAN_HOST",
+        vec![("CONTAINER_HOST", "unix:///container.sock"), ("PODMAN_HOST", "unix:///podman.sock")],
+        Some("unix:///container.sock")
+    )]
+    #[expect(
+        clippy::used_underscore_binding,
+        reason = "description parameter is for test case documentation"
+    )]
+    fn resolver_env_var_resolution(
+        #[case] _description: &str,
+        #[case] env_vars: Vec<(&str, &str)>,
+        #[case] expected: Option<&str>,
+    ) {
+        let owned_vars: Vec<(String, String)> = env_vars
+            .into_iter()
+            .map(|(k, v)| (String::from(k), String::from(v)))
+            .collect();
+        let env = env_with_owned_vars(owned_vars);
         let resolver = SocketResolver::new(&env);
-        assert_eq!(
-            resolver.resolve_from_env(),
-            Some(String::from("unix:///docker.sock"))
-        );
-    }
-
-    #[rstest]
-    fn resolver_respects_container_host() {
-        let env = env_with_vars(&[("CONTAINER_HOST", "unix:///container.sock")]);
-        let resolver = SocketResolver::new(&env);
-        assert_eq!(
-            resolver.resolve_from_env(),
-            Some(String::from("unix:///container.sock"))
-        );
-    }
-
-    #[rstest]
-    fn resolver_respects_podman_host() {
-        let env = env_with_vars(&[("PODMAN_HOST", "unix:///podman.sock")]);
-        let resolver = SocketResolver::new(&env);
-        assert_eq!(
-            resolver.resolve_from_env(),
-            Some(String::from("unix:///podman.sock"))
-        );
-    }
-
-    #[rstest]
-    fn resolver_prefers_docker_host_over_podman_host() {
-        let env = env_with_vars(&[
-            ("DOCKER_HOST", "unix:///docker.sock"),
-            ("PODMAN_HOST", "unix:///podman.sock"),
-        ]);
-        let resolver = SocketResolver::new(&env);
-        assert_eq!(
-            resolver.resolve_from_env(),
-            Some(String::from("unix:///docker.sock"))
-        );
-    }
-
-    #[rstest]
-    fn resolver_prefers_docker_host_over_container_host() {
-        let env = env_with_vars(&[
-            ("DOCKER_HOST", "unix:///docker.sock"),
-            ("CONTAINER_HOST", "unix:///container.sock"),
-        ]);
-        let resolver = SocketResolver::new(&env);
-        assert_eq!(
-            resolver.resolve_from_env(),
-            Some(String::from("unix:///docker.sock"))
-        );
-    }
-
-    #[rstest]
-    fn resolver_prefers_container_host_over_podman_host() {
-        let env = env_with_vars(&[
-            ("CONTAINER_HOST", "unix:///container.sock"),
-            ("PODMAN_HOST", "unix:///podman.sock"),
-        ]);
-        let resolver = SocketResolver::new(&env);
-        assert_eq!(
-            resolver.resolve_from_env(),
-            Some(String::from("unix:///container.sock"))
-        );
+        assert_eq!(resolver.resolve_from_env(), expected.map(String::from));
     }
 
     #[rstest]
