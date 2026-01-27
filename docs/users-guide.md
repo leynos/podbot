@@ -170,8 +170,8 @@ following order (first match wins):
 4. `DOCKER_HOST` environment variable
 5. `CONTAINER_HOST` environment variable
 6. `PODMAN_HOST` environment variable
-7. Platform default (`/var/run/docker.sock` on Unix, `//./pipe/docker_engine`
-   on Windows)
+7. Platform default (`unix:///var/run/docker.sock` on Unix,
+   `npipe:////./pipe/docker_engine` on Windows)
 
 This allows podbot to integrate with existing Docker and Podman environments
 without additional configuration. If you have `DOCKER_HOST` or `PODMAN_HOST`

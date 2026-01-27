@@ -11,6 +11,9 @@ use crate::error::{ContainerError, PodbotError};
 /// Environment variable names checked in fallback order after configuration sources.
 const FALLBACK_ENV_VARS: &[&str] = &["DOCKER_HOST", "CONTAINER_HOST", "PODMAN_HOST"];
 
+/// Connection timeout in seconds for Docker/Podman API connections.
+const CONNECTION_TIMEOUT_SECS: u64 = 120;
+
 /// Default socket path for Unix platforms.
 #[cfg(unix)]
 const DEFAULT_SOCKET: &str = "unix:///var/run/docker.sock";
@@ -93,7 +96,8 @@ impl EngineConnector {
     /// - Windows named pipes: `npipe:////./pipe/name`
     /// - HTTP: `http://host:port`
     /// - HTTPS: `https://host:port`
-    /// - Bare paths are treated as Unix sockets: `/var/run/docker.sock`
+    /// - Bare paths: On Unix, treated as Unix sockets (`/var/run/docker.sock`).
+    ///   On Windows, paths starting with `\\` or `//` are treated as named pipes.
     ///
     /// # Errors
     ///
@@ -101,13 +105,25 @@ impl EngineConnector {
     /// established.
     pub fn connect(socket: &str) -> Result<Docker, PodbotError> {
         let docker = if socket.starts_with("unix://") || socket.starts_with("npipe://") {
-            Docker::connect_with_socket(socket, 120, bollard::API_DEFAULT_VERSION)
+            Docker::connect_with_socket(
+                socket,
+                CONNECTION_TIMEOUT_SECS,
+                bollard::API_DEFAULT_VERSION,
+            )
         } else if socket.starts_with("http://") || socket.starts_with("https://") {
-            Docker::connect_with_http(socket, 120, bollard::API_DEFAULT_VERSION)
+            Docker::connect_with_http(
+                socket,
+                CONNECTION_TIMEOUT_SECS,
+                bollard::API_DEFAULT_VERSION,
+            )
         } else {
-            // Treat bare paths as Unix sockets
-            let socket_uri = format!("unix://{socket}");
-            Docker::connect_with_socket(&socket_uri, 120, bollard::API_DEFAULT_VERSION)
+            // Bare path: detect platform-appropriate scheme
+            let socket_uri = Self::normalize_bare_path(socket);
+            Docker::connect_with_socket(
+                &socket_uri,
+                CONNECTION_TIMEOUT_SECS,
+                bollard::API_DEFAULT_VERSION,
+            )
         }
         .map_err(|e| {
             PodbotError::from(ContainerError::ConnectionFailed {
@@ -116,6 +132,20 @@ impl EngineConnector {
         })?;
 
         Ok(docker)
+    }
+
+    /// Normalize a bare socket path to a URI with the appropriate scheme.
+    ///
+    /// On Windows, paths starting with `\\` or `//` (named pipe paths) are
+    /// prefixed with `npipe://`. On Unix (or for non-pipe paths), the path
+    /// is prefixed with `unix://`.
+    fn normalize_bare_path(path: &str) -> String {
+        // Windows named pipes typically start with \\ or // (e.g., \\.\pipe\docker_engine)
+        if path.starts_with("\\\\") || path.starts_with("//") {
+            format!("npipe://{path}")
+        } else {
+            format!("unix://{path}")
+        }
     }
 
     /// Connect using the resolved socket from configuration and environment.
@@ -133,11 +163,7 @@ impl EngineConnector {
         config_socket: Option<&str>,
         resolver: &SocketResolver<'_, E>,
     ) -> Result<Docker, PodbotError> {
-        let socket = config_socket
-            .map(String::from)
-            .or_else(|| resolver.resolve_from_env())
-            .unwrap_or_else(|| SocketResolver::<E>::default_socket().to_owned());
-
+        let socket = Self::resolve_socket(config_socket, resolver);
         Self::connect(&socket)
     }
 

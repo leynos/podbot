@@ -59,6 +59,12 @@ fn set_env_var(state: &EngineConnectionState, key: &str, value: &str) {
 }
 
 /// Creates a `MockEnv` from the current state.
+///
+/// **Note:** The returned `MockEnv` captures a snapshot of the environment
+/// variables at the time of creation. Any `set_env_var` calls made after
+/// `create_mock_env` will not be visible to the mock. This is intentional:
+/// in BDD scenarios, all "Given" steps (which call `set_env_var`) complete
+/// before the "When" step (which calls `create_mock_env`).
 #[expect(clippy::expect_used, reason = "test helper - panics are acceptable")]
 fn create_mock_env(state: &EngineConnectionState) -> MockEnv {
     let env_vars = get_env_vars(state);
