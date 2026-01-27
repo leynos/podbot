@@ -60,6 +60,7 @@ mockable = { version = "0.1.4", default-features = false, features = ["mock"] }
 ### Task 2: Create the `engine` module ✓
 
 **Files to create:**
+
 - `src/engine/mod.rs` — module root with public exports
 - `src/engine/connection.rs` — socket resolution and Bollard connection logic
 
@@ -198,6 +199,7 @@ changes needed.
 **File:** `src/engine/connection.rs` (in `#[cfg(test)]` module)
 
 Unit tests cover:
+
 - Resolver returns `None` when no environment variables are set
 - Resolver returns `DOCKER_HOST` value when set
 - Each fallback variable is respected individually
@@ -217,6 +219,7 @@ Unit tests cover:
 **File:** `tests/features/engine_connection.feature`
 
 Scenarios cover:
+
 - Socket resolved from `DOCKER_HOST` when config is not set
 - Config socket takes precedence over `DOCKER_HOST`
 - Fallback to `CONTAINER_HOST` when `DOCKER_HOST` is not set
