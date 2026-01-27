@@ -307,6 +307,8 @@ I/O happens when making API calls. This simplifies the API and test code.
 
 ## Files Modified
 
+Table: Files modified in this implementation
+
 | File | Action |
 |------|--------|
 | `Cargo.toml` | Added `mockable` dev-dependency |
@@ -322,6 +324,8 @@ I/O happens when making API calls. This simplifies the API and test code.
 ---
 
 ## Progress Log
+
+Table: Progress log for this implementation
 
 | Date | Status | Notes |
 |------|--------|-------|
