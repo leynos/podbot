@@ -201,19 +201,6 @@ mod tests {
         env
     }
 
-    /// Creates a `MockEnv` that returns the specified value for `DOCKER_HOST`.
-    fn env_with_docker_host(value: &'static str) -> MockEnv {
-        let mut env = MockEnv::new();
-        env.expect_string().returning(move |key| {
-            if key == "DOCKER_HOST" {
-                Some(String::from(value))
-            } else {
-                None
-            }
-        });
-        env
-    }
-
     /// Creates a `MockEnv` with custom mappings for environment variables (static lifetime).
     fn env_with_vars(mappings: &'static [(&'static str, &'static str)]) -> MockEnv {
         let mut env = MockEnv::new();
@@ -247,7 +234,7 @@ mod tests {
 
     #[rstest]
     fn resolver_returns_docker_host_when_set() {
-        let env = env_with_docker_host("unix:///custom/docker.sock");
+        let env = env_with_vars(&[("DOCKER_HOST", "unix:///custom/docker.sock")]);
         let resolver = SocketResolver::new(&env);
         assert_eq!(
             resolver.resolve_from_env(),
@@ -353,7 +340,7 @@ mod tests {
 
     #[rstest]
     fn resolve_socket_uses_env_when_config_is_none() {
-        let env = env_with_docker_host("unix:///custom/docker.sock");
+        let env = env_with_vars(&[("DOCKER_HOST", "unix:///custom/docker.sock")]);
         let resolver = SocketResolver::new(&env);
         let socket = EngineConnector::resolve_socket(None, &resolver);
         assert_eq!(socket, "unix:///custom/docker.sock");
@@ -370,7 +357,7 @@ mod tests {
 
     #[rstest]
     fn resolve_socket_config_takes_precedence_over_env() {
-        let env = env_with_docker_host("unix:///docker.sock");
+        let env = env_with_vars(&[("DOCKER_HOST", "unix:///docker.sock")]);
         let resolver = SocketResolver::new(&env);
         let socket = EngineConnector::resolve_socket(Some("unix:///config.sock"), &resolver);
         assert_eq!(socket, "unix:///config.sock");

@@ -300,7 +300,7 @@ check, container creation) will add sibling modules under `src/engine/`.
 async.
 
 **Rationale:** Bollard's `connect_with_socket` and `connect_with_http` methods
-are synchronous - they only create the client configuration. The actual async
+are synchronous — they only create the client configuration. The actual async
 I/O happens when making API calls. This simplifies the API and test code.
 
 ---

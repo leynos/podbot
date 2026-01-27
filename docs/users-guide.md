@@ -174,8 +174,8 @@ following order (first match wins):
    `npipe:////./pipe/docker_engine` on Windows)
 
 This allows podbot to integrate with existing Docker and Podman environments
-without additional configuration. If you have `DOCKER_HOST` or `PODMAN_HOST`
-already set for your container tooling, podbot will automatically use that
+without additional configuration. When `DOCKER_HOST` or `PODMAN_HOST` is
+already set for container tooling, podbot will automatically use that
 endpoint.
 
 ### Sandbox configuration
