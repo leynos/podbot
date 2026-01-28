@@ -15,7 +15,7 @@ Create a container engine module that connects to Docker or Podman via the
 Bollard library. The socket endpoint is resolved through a priority-based
 fallback chain:
 
-1. **CLI argument** (`--engine-socket`) — highest priority
+1. **Command-line interface (CLI) argument** (`--engine-socket`) — highest priority
 2. **Config file** (`engine_socket` in TOML)
 3. **`PODBOT_ENGINE_SOCKET`** environment variable
 4. **`DOCKER_HOST`** environment variable
@@ -214,7 +214,7 @@ Unit tests cover:
 
 ---
 
-### Task 7: Create BDD feature file ✓
+### Task 7: Create behaviour-driven development (BDD) feature file ✓
 
 **File:** `tests/features/engine_connection.feature`
 
@@ -301,7 +301,8 @@ async.
 
 **Rationale:** Bollard's `connect_with_socket` and `connect_with_http` methods
 are synchronous — they only create the client configuration. The actual async
-I/O happens when making API calls. This simplifies the API and test code.
+input/output (I/O) happens when making application programming interface (API)
+calls. This simplifies the API and test code.
 
 ---
 
