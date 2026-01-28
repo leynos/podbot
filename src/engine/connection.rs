@@ -94,6 +94,7 @@ impl EngineConnector {
     /// Supports the following endpoint formats:
     /// - Unix sockets: `unix:///path/to/socket`
     /// - Windows named pipes: `npipe:////./pipe/name`
+    /// - TCP: `tcp://host:port` (treated as HTTP connection)
     /// - HTTP: `http://host:port`
     /// - HTTPS: `https://host:port`
     /// - Bare paths: On Unix, treated as Unix sockets (`/var/run/docker.sock`).
@@ -107,6 +108,13 @@ impl EngineConnector {
         let docker = if socket.starts_with("unix://") || socket.starts_with("npipe://") {
             Docker::connect_with_socket(
                 socket,
+                CONNECTION_TIMEOUT_SECS,
+                bollard::API_DEFAULT_VERSION,
+            )
+        } else if socket.starts_with("tcp://") {
+            let http_socket = socket.replacen("tcp://", "http://", 1);
+            Docker::connect_with_http(
+                &http_socket,
                 CONNECTION_TIMEOUT_SECS,
                 bollard::API_DEFAULT_VERSION,
             )
@@ -365,5 +373,21 @@ mod tests {
         let resolver = SocketResolver::new(&env);
         let socket = EngineConnector::resolve_socket(Some("unix:///config.sock"), &resolver);
         assert_eq!(socket, "unix:///config.sock");
+    }
+
+    #[rstest]
+    fn connect_tcp_endpoint_creates_client() {
+        // tcp:// endpoints are rewritten to http:// and use connect_with_http.
+        // Bollard's connect_with_http is synchronous and just creates the client
+        // configuration, so this should succeed without a real Docker daemon.
+        let result = EngineConnector::connect("tcp://host:2375");
+        assert!(result.is_ok());
+    }
+
+    #[rstest]
+    fn connect_tcp_endpoint_with_ip_creates_client() {
+        // Verify tcp:// works with IP addresses as well as hostnames.
+        let result = EngineConnector::connect("tcp://192.168.1.100:2376");
+        assert!(result.is_ok());
     }
 }
