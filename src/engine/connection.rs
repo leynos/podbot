@@ -136,11 +136,15 @@ impl EngineConnector {
 
     /// Normalize a bare socket path to a URI with the appropriate scheme.
     ///
-    /// On Windows, paths starting with `\\` or `//` (named pipe paths) are
-    /// prefixed with `npipe://`. On Unix (or for non-pipe paths), the path
-    /// is prefixed with `unix://`.
+    /// Paths starting with `\\` or `//` are assumed to be Windows named pipe
+    /// paths (e.g., `\\.\pipe\docker_engine`) and are prefixed with `npipe://`.
+    /// All other paths are assumed to be Unix socket paths and are prefixed
+    /// with `unix://`.
+    ///
+    /// Note: This detection is based on path syntax, not the current platform.
+    /// Paths like `//some/path` will be treated as named pipes even on Unix.
     fn normalize_bare_path(path: &str) -> String {
-        // Windows named pipes typically start with \\ or // (e.g., \\.\pipe\docker_engine)
+        // Named pipes typically start with \\ or // (e.g., \\.\pipe\docker_engine)
         if path.starts_with("\\\\") || path.starts_with("//") {
             format!("npipe://{path}")
         } else {
