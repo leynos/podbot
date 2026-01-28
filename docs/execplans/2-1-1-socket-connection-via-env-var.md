@@ -37,7 +37,7 @@ fallbacks, and connects to the engine using Bollard.
 2. **Environment variable mocking** via the `mockable` crate for testability
 3. **Semantic error types** using `thiserror` (`ContainerError` already defined)
 4. **Files < 400 lines**; split into submodules if needed
-5. **rstest fixtures** for unit tests; **rstest-bdd** for behavioural tests
+5. **rstest fixtures** for unit tests; **rstest-bdd** for behaviour-driven development (BDD) tests
 6. **All checks must pass:** `make check-fmt`, `make lint`, `make test`
 
 ---
@@ -214,7 +214,7 @@ Unit tests cover:
 
 ---
 
-### Task 7: Create behaviour-driven development (BDD) feature file ✓
+### Task 7: Create BDD feature file ✓
 
 **File:** `tests/features/engine_connection.feature`
 
@@ -277,7 +277,7 @@ make check-fmt && make lint && make test
 
 **Rationale:** `DOCKER_HOST` is the most widely used convention. `CONTAINER_HOST`
 is a container-agnostic alternative. `PODMAN_HOST` is Podman-specific. This
-order maximises compatibility with existing tooling.
+order maximizes compatibility with existing tooling.
 
 ### Decision 2: Dependency injection for environment access
 
@@ -291,7 +291,7 @@ process environment. Tests can run in parallel without interference.
 
 **Chosen:** Create `src/engine/` module with `connection.rs` submodule.
 
-**Rationale:** Keeps the engine-related code organised. Future tasks (health
+**Rationale:** Keeps the engine-related code organized. Future tasks (health
 check, container creation) will add sibling modules under `src/engine/`.
 
 ### Decision 4: Synchronous connect method

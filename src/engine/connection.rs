@@ -82,6 +82,32 @@ impl<'a, E: mockable::Env> SocketResolver<'a, E> {
     }
 }
 
+/// Classifies socket endpoint types for connection handling.
+enum SocketType {
+    /// Unix socket or Windows named pipe with explicit scheme.
+    Socket,
+    /// HTTP, HTTPS, or TCP endpoint (TCP is rewritten to HTTP).
+    Http,
+    /// Bare path without scheme prefix.
+    BarePath,
+}
+
+impl SocketType {
+    /// Classify a socket string by its scheme prefix.
+    fn classify(socket: &str) -> Self {
+        if socket.starts_with("unix://") || socket.starts_with("npipe://") {
+            Self::Socket
+        } else if socket.starts_with("tcp://")
+            || socket.starts_with("http://")
+            || socket.starts_with("https://")
+        {
+            Self::Http
+        } else {
+            Self::BarePath
+        }
+    }
+}
+
 /// Provides methods to connect to Docker or Podman container engines.
 ///
 /// The connector supports Unix sockets, Windows named pipes, HTTP, and HTTPS
@@ -105,33 +131,33 @@ impl EngineConnector {
     /// Returns `ContainerError::ConnectionFailed` if the connection cannot be
     /// established.
     pub fn connect(socket: &str) -> Result<Docker, PodbotError> {
-        let docker = if socket.starts_with("unix://") || socket.starts_with("npipe://") {
-            Docker::connect_with_socket(
+        let docker = match SocketType::classify(socket) {
+            SocketType::Socket => Docker::connect_with_socket(
                 socket,
                 CONNECTION_TIMEOUT_SECS,
                 bollard::API_DEFAULT_VERSION,
-            )
-        } else if socket.starts_with("tcp://") {
-            let http_socket = socket.replacen("tcp://", "http://", 1);
-            Docker::connect_with_http(
-                &http_socket,
-                CONNECTION_TIMEOUT_SECS,
-                bollard::API_DEFAULT_VERSION,
-            )
-        } else if socket.starts_with("http://") || socket.starts_with("https://") {
-            Docker::connect_with_http(
-                socket,
-                CONNECTION_TIMEOUT_SECS,
-                bollard::API_DEFAULT_VERSION,
-            )
-        } else {
-            // Bare path: detect platform-appropriate scheme
-            let socket_uri = Self::normalize_bare_path(socket);
-            Docker::connect_with_socket(
-                &socket_uri,
-                CONNECTION_TIMEOUT_SECS,
-                bollard::API_DEFAULT_VERSION,
-            )
+            ),
+            SocketType::Http => {
+                // Rewrite tcp:// to http:// for Bollard compatibility
+                let http_socket = if socket.starts_with("tcp://") {
+                    socket.replacen("tcp://", "http://", 1)
+                } else {
+                    socket.to_owned()
+                };
+                Docker::connect_with_http(
+                    &http_socket,
+                    CONNECTION_TIMEOUT_SECS,
+                    bollard::API_DEFAULT_VERSION,
+                )
+            }
+            SocketType::BarePath => {
+                let socket_uri = Self::normalize_bare_path(socket);
+                Docker::connect_with_socket(
+                    &socket_uri,
+                    CONNECTION_TIMEOUT_SECS,
+                    bollard::API_DEFAULT_VERSION,
+                )
+            }
         }
         .map_err(|e| {
             PodbotError::from(ContainerError::ConnectionFailed {
