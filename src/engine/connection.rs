@@ -93,14 +93,23 @@ enum SocketType {
 }
 
 impl SocketType {
-    /// Classify a socket string by its scheme prefix.
-    fn classify(socket: &str) -> Self {
-        if socket.starts_with("unix://") || socket.starts_with("npipe://") {
-            Self::Socket
-        } else if socket.starts_with("tcp://")
+    /// Returns true if the socket string has a Unix or named pipe scheme.
+    fn is_socket_scheme(socket: &str) -> bool {
+        socket.starts_with("unix://") || socket.starts_with("npipe://")
+    }
+
+    /// Returns true if the socket string has an HTTP-compatible scheme.
+    fn is_http_scheme(socket: &str) -> bool {
+        socket.starts_with("tcp://")
             || socket.starts_with("http://")
             || socket.starts_with("https://")
-        {
+    }
+
+    /// Classify a socket string by its scheme prefix.
+    fn classify(socket: &str) -> Self {
+        if Self::is_socket_scheme(socket) {
+            Self::Socket
+        } else if Self::is_http_scheme(socket) {
             Self::Http
         } else {
             Self::BarePath

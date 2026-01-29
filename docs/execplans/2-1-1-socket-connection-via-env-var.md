@@ -37,7 +37,8 @@ fallbacks, and connects to the engine using Bollard.
 2. **Environment variable mocking** via the `mockable` crate for testability
 3. **Semantic error types** using `thiserror` (`ContainerError` already defined)
 4. **Files < 400 lines**; split into submodules if needed
-5. **rstest fixtures** for unit tests; **rstest-bdd** for behaviour-driven development (BDD) tests
+5. **rstest fixtures** for unit tests; **rstest-bdd** for behaviour-driven
+   development (BDD) tests
 6. **All checks must pass:** `make check-fmt`, `make lint`, `make test`
 
 ---
