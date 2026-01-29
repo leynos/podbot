@@ -1,4 +1,4 @@
-# ExecPlan: Socket Connection via Environment Variables
+# Execplan: Socket connection via environment variables
 
 **Task:** Implement socket connection via `DOCKER_HOST`, `CONTAINER_HOST`, or
 `PODMAN_HOST` environment variables or direct path specification.
@@ -9,7 +9,7 @@
 
 ---
 
-## Big Picture
+## Big picture
 
 Create a container engine module that connects to Docker or Podman via the
 Bollard library. The socket endpoint is resolved through a priority-based
@@ -43,7 +43,7 @@ fallbacks, and connects to the engine using Bollard.
 
 ---
 
-## Implementation Tasks
+## Implementation tasks
 
 ### Task 1: Add `mockable` dependency ✓
 
@@ -270,7 +270,7 @@ make check-fmt && make lint && make test
 
 ---
 
-## Design Decisions
+## Design decisions
 
 ### Decision 1: Fallback order for environment variables
 
@@ -307,7 +307,7 @@ calls. This simplifies the API and test code.
 
 ---
 
-## Files Modified
+## Files modified
 
 Table: Files modified in this implementation
 
@@ -325,7 +325,7 @@ Table: Files modified in this implementation
 
 ---
 
-## Progress Log
+## Progress log
 
 Table: Progress log for this implementation
 
