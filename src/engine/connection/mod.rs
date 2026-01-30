@@ -24,7 +24,7 @@ const DEFAULT_SOCKET: &str = "npipe:////./pipe/docker_engine";
 
 /// Resolves container engine socket endpoints from environment variables.
 ///
-/// The resolver checks a prioritised list of environment variables to find
+/// The resolver checks a prioritized list of environment variables to find
 /// the socket endpoint when no explicit configuration is provided.
 ///
 /// # Type Parameters
@@ -130,8 +130,10 @@ impl EngineConnector {
     /// - TCP: `tcp://host:port` (treated as HTTP connection)
     /// - HTTP: `http://host:port`
     /// - HTTPS: `https://host:port`
-    /// - Bare paths: On Unix, treated as Unix sockets (`/var/run/docker.sock`).
-    ///   On Windows, paths starting with `\\` or `//` are treated as named pipes.
+    /// - Bare paths: Paths starting with `\\` or `//` are treated as Windows
+    ///   named pipes (e.g., `//./pipe/docker_engine`). All other paths are
+    ///   treated as Unix sockets (e.g., `/var/run/docker.sock`). Detection is
+    ///   syntax-based, not platform-based.
     ///
     /// # Errors
     ///

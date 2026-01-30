@@ -36,7 +36,7 @@ fn env_with_vars(mappings: &'static [(&'static str, &'static str)]) -> MockEnv {
     env
 }
 
-/// Creates a `MockEnv` with custom mappings from owned data (for parameterised tests).
+/// Creates a `MockEnv` with custom mappings from owned data (for parameterized tests).
 fn env_with_owned_vars(mappings: Vec<(String, String)>) -> MockEnv {
     let mut env = MockEnv::new();
     env.expect_string().returning(move |key| {
