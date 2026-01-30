@@ -10,7 +10,7 @@ use rstest::{fixture, rstest};
 use super::{EngineConnector, SocketResolver};
 
 // =============================================================================
-// Fixtures
+// Fixtures and helpers
 // =============================================================================
 
 /// Fixture providing a `MockEnv` that returns `None` for all environment
@@ -19,20 +19,6 @@ use super::{EngineConnector, SocketResolver};
 fn empty_env() -> MockEnv {
     let mut env = MockEnv::new();
     env.expect_string().returning(|_| None);
-    env
-}
-
-/// Fixture providing a `MockEnv` with `DOCKER_HOST` set to a custom socket path.
-#[fixture]
-fn docker_host_env() -> MockEnv {
-    let mut env = MockEnv::new();
-    env.expect_string().returning(|key| {
-        if key == "DOCKER_HOST" {
-            Some(String::from("unix:///custom/docker.sock"))
-        } else {
-            None
-        }
-    });
     env
 }
 
@@ -61,14 +47,14 @@ fn all_empty_env_vars() -> MockEnv {
     env
 }
 
-/// Fixture providing a `MockEnv` with `DOCKER_HOST` set to a socket path,
-/// used for testing config precedence over environment.
-#[fixture]
-fn docker_host_for_precedence_env() -> MockEnv {
+/// Helper function to create a `MockEnv` with `DOCKER_HOST` set to the
+/// specified socket path.
+fn env_with_docker_host(socket: &str) -> MockEnv {
+    let socket_path = String::from(socket);
     let mut env = MockEnv::new();
-    env.expect_string().returning(|key| {
+    env.expect_string().returning(move |key| {
         if key == "DOCKER_HOST" {
-            Some(String::from("unix:///docker.sock"))
+            Some(socket_path.clone())
         } else {
             None
         }
@@ -87,8 +73,9 @@ fn resolver_returns_none_when_no_env_vars_set(empty_env: MockEnv) {
 }
 
 #[rstest]
-fn resolver_returns_docker_host_when_set(docker_host_env: MockEnv) {
-    let resolver = SocketResolver::new(&docker_host_env);
+fn resolver_returns_docker_host_when_set() {
+    let env = env_with_docker_host("unix:///custom/docker.sock");
+    let resolver = SocketResolver::new(&env);
     assert_eq!(
         resolver.resolve_from_env(),
         Some(String::from("unix:///custom/docker.sock"))
@@ -196,8 +183,9 @@ fn resolve_socket_uses_config_when_provided(empty_env: MockEnv) {
 }
 
 #[rstest]
-fn resolve_socket_uses_env_when_config_is_none(docker_host_env: MockEnv) {
-    let resolver = SocketResolver::new(&docker_host_env);
+fn resolve_socket_uses_env_when_config_is_none() {
+    let env = env_with_docker_host("unix:///custom/docker.sock");
+    let resolver = SocketResolver::new(&env);
     let socket = EngineConnector::resolve_socket(None, &resolver);
     assert_eq!(socket, "unix:///custom/docker.sock");
 }
@@ -211,8 +199,9 @@ fn resolve_socket_uses_default_when_no_source_available(empty_env: MockEnv) {
 }
 
 #[rstest]
-fn resolve_socket_config_takes_precedence_over_env(docker_host_for_precedence_env: MockEnv) {
-    let resolver = SocketResolver::new(&docker_host_for_precedence_env);
+fn resolve_socket_config_takes_precedence_over_env() {
+    let env = env_with_docker_host("unix:///docker.sock");
+    let resolver = SocketResolver::new(&env);
     let socket = EngineConnector::resolve_socket(Some("unix:///config.sock"), &resolver);
     assert_eq!(socket, "unix:///config.sock");
 }
@@ -226,8 +215,9 @@ fn resolve_socket_skips_empty_config(empty_env: MockEnv) {
 }
 
 #[rstest]
-fn resolve_socket_empty_config_falls_back_to_env(docker_host_for_precedence_env: MockEnv) {
-    let resolver = SocketResolver::new(&docker_host_for_precedence_env);
+fn resolve_socket_empty_config_falls_back_to_env() {
+    let env = env_with_docker_host("unix:///docker.sock");
+    let resolver = SocketResolver::new(&env);
     let socket = EngineConnector::resolve_socket(Some(""), &resolver);
     assert_eq!(socket, "unix:///docker.sock");
 }
