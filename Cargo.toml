@@ -32,7 +32,11 @@ serde = { version = "1.0.228", features = ["derive"] }
 # Command-line argument parsing
 clap = { version = "4.5.54", features = ["derive"] }
 
+# Environment abstraction for testability
+mockable = { version = "0.1.4", default-features = false }
+
 [dev-dependencies]
+mockable = { version = "0.1.4", default-features = false, features = ["mock"] }
 rstest = "0.26.1"
 rstest-bdd = "0.3.2"
 rstest-bdd-macros = { version = "0.3.2", features = ["compile-time-validation"] }

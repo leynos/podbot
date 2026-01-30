@@ -15,7 +15,9 @@
 //! # Modules
 //!
 //! - [`config`]: Configuration system with layered precedence (CLI > env > file > defaults)
+//! - [`engine`]: Container engine connection and management
 //! - [`error`]: Semantic error types for the application
 
 pub mod config;
+pub mod engine;
 pub mod error;

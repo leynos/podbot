@@ -1,0 +1,61 @@
+Feature: Container engine connection
+
+  The podbot CLI connects to Docker or Podman via socket endpoints resolved
+  from configuration, environment variables, or platform defaults.
+
+  Scenario: Socket resolved from DOCKER_HOST when config is not set
+    Given no engine socket is configured
+    And DOCKER_HOST is set to unix:///var/run/docker.sock
+    When the socket is resolved
+    Then the resolved socket is unix:///var/run/docker.sock
+
+  Scenario: Config socket takes precedence over DOCKER_HOST
+    Given engine socket is configured as unix:///config.sock
+    And DOCKER_HOST is set to unix:///docker.sock
+    When the socket is resolved
+    Then the resolved socket is unix:///config.sock
+
+  Scenario: Fallback to CONTAINER_HOST when DOCKER_HOST is not set
+    Given no engine socket is configured
+    And DOCKER_HOST is not set
+    And CONTAINER_HOST is set to unix:///container.sock
+    When the socket is resolved
+    Then the resolved socket is unix:///container.sock
+
+  Scenario: Fallback to PODMAN_HOST when higher-priority vars are not set
+    Given no engine socket is configured
+    And DOCKER_HOST is not set
+    And CONTAINER_HOST is not set
+    And PODMAN_HOST is set to unix:///podman.sock
+    When the socket is resolved
+    Then the resolved socket is unix:///podman.sock
+
+  Scenario: Fallback to platform default when no sources are set
+    Given no engine socket is configured
+    And DOCKER_HOST is not set
+    And CONTAINER_HOST is not set
+    And PODMAN_HOST is not set
+    When the socket is resolved
+    Then the socket resolves to the platform default
+
+  Scenario: Empty environment variable is skipped
+    Given no engine socket is configured
+    And DOCKER_HOST is empty
+    And PODMAN_HOST is set to unix:///podman.sock
+    When the socket is resolved
+    Then the resolved socket is unix:///podman.sock
+
+  Scenario: DOCKER_HOST takes priority over CONTAINER_HOST
+    Given no engine socket is configured
+    And DOCKER_HOST is set to unix:///docker.sock
+    And CONTAINER_HOST is set to unix:///container.sock
+    When the socket is resolved
+    Then the resolved socket is unix:///docker.sock
+
+  Scenario: CONTAINER_HOST takes priority over PODMAN_HOST
+    Given no engine socket is configured
+    And DOCKER_HOST is not set
+    And CONTAINER_HOST is set to unix:///container.sock
+    And PODMAN_HOST is set to unix:///podman.sock
+    When the socket is resolved
+    Then the resolved socket is unix:///container.sock
