@@ -209,6 +209,10 @@ fn connect_tcp_endpoint_creates_client() {
 #[rstest]
 fn connect_tcp_endpoint_with_ip_creates_client() {
     // Verify tcp:// works with IP addresses as well as hostnames.
+    //
+    // Note: This test relies on Bollard's `connect_with_http` being synchronous
+    // and not validating connectivity at construction time. If Bollard's behaviour
+    // changes to validate endpoints eagerly, this test may start failing.
     let result = EngineConnector::connect("tcp://192.168.1.100:2376");
     assert!(result.is_ok());
 }
