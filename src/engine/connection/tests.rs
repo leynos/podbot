@@ -246,7 +246,7 @@ fn connect_tcp_endpoint_creates_client() {
     // and not validating connectivity at construction time. If Bollard's behaviour
     // changes to validate endpoints eagerly, this test may start failing.
     let result = EngineConnector::connect("tcp://host:2375");
-    assert!(result.is_ok());
+    result.expect("connect tcp://host:2375 should create client");
 }
 
 #[rstest]
@@ -257,5 +257,5 @@ fn connect_tcp_endpoint_with_ip_creates_client() {
     // and not validating connectivity at construction time. If Bollard's behaviour
     // changes to validate endpoints eagerly, this test may start failing.
     let result = EngineConnector::connect("tcp://192.168.1.100:2376");
-    assert!(result.is_ok());
+    result.expect("connect tcp://192.168.1.100:2376 should create client");
 }
