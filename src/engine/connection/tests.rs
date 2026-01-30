@@ -94,12 +94,8 @@ fn resolver_returns_docker_host_when_set(docker_host_env: MockEnv) {
     vec![("CONTAINER_HOST", "unix:///container.sock"), ("PODMAN_HOST", "unix:///podman.sock")],
     Some("unix:///container.sock")
 )]
-#[expect(
-    clippy::used_underscore_binding,
-    reason = "description parameter is for test case documentation"
-)]
 fn resolver_env_var_resolution(
-    #[case] _description: &str,
+    #[case] description: &str,
     #[case] env_vars: Vec<(&str, &str)>,
     #[case] expected: Option<&str>,
 ) {
@@ -109,7 +105,11 @@ fn resolver_env_var_resolution(
         .collect();
     let env = env_with_owned_vars(owned_vars);
     let resolver = SocketResolver::new(&env);
-    assert_eq!(resolver.resolve_from_env(), expected.map(String::from));
+    assert_eq!(
+        resolver.resolve_from_env(),
+        expected.map(String::from),
+        "mismatch for case: {description}"
+    );
 }
 
 #[rstest]
