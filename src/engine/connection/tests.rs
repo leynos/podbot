@@ -9,6 +9,10 @@ use rstest::{fixture, rstest};
 
 use super::{EngineConnector, SocketResolver};
 
+// =============================================================================
+// Fixtures
+// =============================================================================
+
 /// Fixture providing a `MockEnv` that returns `None` for all environment
 /// variable queries.
 #[fixture]
@@ -21,32 +25,60 @@ fn empty_env() -> MockEnv {
 /// Fixture providing a `MockEnv` with `DOCKER_HOST` set to a custom socket path.
 #[fixture]
 fn docker_host_env() -> MockEnv {
-    env_with_vars(&[("DOCKER_HOST", "unix:///custom/docker.sock")])
-}
-
-/// Creates a `MockEnv` with custom mappings for environment variables (static lifetime).
-fn env_with_vars(mappings: &'static [(&'static str, &'static str)]) -> MockEnv {
     let mut env = MockEnv::new();
-    env.expect_string().returning(move |key| {
-        mappings
-            .iter()
-            .find(|(k, _)| *k == key)
-            .map(|(_, v)| String::from(*v))
+    env.expect_string().returning(|key| {
+        if key == "DOCKER_HOST" {
+            Some(String::from("unix:///custom/docker.sock"))
+        } else {
+            None
+        }
     });
     env
 }
 
-/// Creates a `MockEnv` with custom mappings from owned data (for parameterized tests).
-fn env_with_owned_vars(mappings: Vec<(String, String)>) -> MockEnv {
+/// Fixture providing a `MockEnv` with `DOCKER_HOST` set to an empty string
+/// and `PODMAN_HOST` set to a valid socket path.
+#[fixture]
+fn docker_empty_podman_fallback_env() -> MockEnv {
     let mut env = MockEnv::new();
-    env.expect_string().returning(move |key| {
-        mappings
-            .iter()
-            .find(|(k, _)| k == key)
-            .map(|(_, v)| v.clone())
+    env.expect_string().returning(|key| match key {
+        "DOCKER_HOST" => Some(String::new()),
+        "PODMAN_HOST" => Some(String::from("unix:///podman.sock")),
+        _ => None,
     });
     env
 }
+
+/// Fixture providing a `MockEnv` with all socket environment variables set to
+/// empty strings.
+#[fixture]
+fn all_empty_env_vars() -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_string().returning(|key| match key {
+        "DOCKER_HOST" | "CONTAINER_HOST" | "PODMAN_HOST" => Some(String::new()),
+        _ => None,
+    });
+    env
+}
+
+/// Fixture providing a `MockEnv` with `DOCKER_HOST` set to a socket path,
+/// used for testing config precedence over environment.
+#[fixture]
+fn docker_host_for_precedence_env() -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_string().returning(|key| {
+        if key == "DOCKER_HOST" {
+            Some(String::from("unix:///docker.sock"))
+        } else {
+            None
+        }
+    });
+    env
+}
+
+// =============================================================================
+// SocketResolver tests
+// =============================================================================
 
 #[rstest]
 fn resolver_returns_none_when_no_env_vars_set(empty_env: MockEnv) {
@@ -99,11 +131,18 @@ fn resolver_env_var_resolution(
     #[case] env_vars: Vec<(&str, &str)>,
     #[case] expected: Option<&str>,
 ) {
+    // Build the MockEnv inline from parameterized data
     let owned_vars: Vec<(String, String)> = env_vars
         .into_iter()
         .map(|(k, v)| (String::from(k), String::from(v)))
         .collect();
-    let env = env_with_owned_vars(owned_vars);
+    let mut env = MockEnv::new();
+    env.expect_string().returning(move |key| {
+        owned_vars
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    });
     let resolver = SocketResolver::new(&env);
     assert_eq!(
         resolver.resolve_from_env(),
@@ -113,9 +152,8 @@ fn resolver_env_var_resolution(
 }
 
 #[rstest]
-fn resolver_skips_empty_values() {
-    let env = env_with_vars(&[("DOCKER_HOST", ""), ("PODMAN_HOST", "unix:///podman.sock")]);
-    let resolver = SocketResolver::new(&env);
+fn resolver_skips_empty_values(docker_empty_podman_fallback_env: MockEnv) {
+    let resolver = SocketResolver::new(&docker_empty_podman_fallback_env);
     assert_eq!(
         resolver.resolve_from_env(),
         Some(String::from("unix:///podman.sock"))
@@ -123,13 +161,8 @@ fn resolver_skips_empty_values() {
 }
 
 #[rstest]
-fn resolver_skips_all_empty_values() {
-    let env = env_with_vars(&[
-        ("DOCKER_HOST", ""),
-        ("CONTAINER_HOST", ""),
-        ("PODMAN_HOST", ""),
-    ]);
-    let resolver = SocketResolver::new(&env);
+fn resolver_skips_all_empty_values(all_empty_env_vars: MockEnv) {
+    let resolver = SocketResolver::new(&all_empty_env_vars);
     assert!(resolver.resolve_from_env().is_none());
 }
 
@@ -150,6 +183,10 @@ fn default_socket_is_named_pipe() {
         "npipe:////./pipe/docker_engine"
     );
 }
+
+// =============================================================================
+// EngineConnector::resolve_socket tests
+// =============================================================================
 
 #[rstest]
 fn resolve_socket_uses_config_when_provided(empty_env: MockEnv) {
@@ -174,9 +211,8 @@ fn resolve_socket_uses_default_when_no_source_available(empty_env: MockEnv) {
 }
 
 #[rstest]
-fn resolve_socket_config_takes_precedence_over_env() {
-    let env = env_with_vars(&[("DOCKER_HOST", "unix:///docker.sock")]);
-    let resolver = SocketResolver::new(&env);
+fn resolve_socket_config_takes_precedence_over_env(docker_host_for_precedence_env: MockEnv) {
+    let resolver = SocketResolver::new(&docker_host_for_precedence_env);
     let socket = EngineConnector::resolve_socket(Some("unix:///config.sock"), &resolver);
     assert_eq!(socket, "unix:///config.sock");
 }
@@ -190,18 +226,25 @@ fn resolve_socket_skips_empty_config(empty_env: MockEnv) {
 }
 
 #[rstest]
-fn resolve_socket_empty_config_falls_back_to_env() {
-    let env = env_with_vars(&[("DOCKER_HOST", "unix:///docker.sock")]);
-    let resolver = SocketResolver::new(&env);
+fn resolve_socket_empty_config_falls_back_to_env(docker_host_for_precedence_env: MockEnv) {
+    let resolver = SocketResolver::new(&docker_host_for_precedence_env);
     let socket = EngineConnector::resolve_socket(Some(""), &resolver);
     assert_eq!(socket, "unix:///docker.sock");
 }
+
+// =============================================================================
+// EngineConnector::connect tests
+// =============================================================================
 
 #[rstest]
 fn connect_tcp_endpoint_creates_client() {
     // tcp:// endpoints are rewritten to http:// and use connect_with_http.
     // Bollard's connect_with_http is synchronous and just creates the client
     // configuration, so this should succeed without a real Docker daemon.
+    //
+    // Note: This test relies on Bollard's `connect_with_http` being synchronous
+    // and not validating connectivity at construction time. If Bollard's behaviour
+    // changes to validate endpoints eagerly, this test may start failing.
     let result = EngineConnector::connect("tcp://host:2375");
     assert!(result.is_ok());
 }
