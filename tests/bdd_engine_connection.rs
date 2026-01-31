@@ -73,3 +73,29 @@ fn docker_host_priority_over_container_host(engine_connection_state: EngineConne
 fn container_host_priority_over_podman_host(engine_connection_state: EngineConnectionState) {
     let _ = engine_connection_state;
 }
+
+// Health check scenario bindings
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "Health check succeeds when engine is responsive"
+)]
+fn health_check_succeeds(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "Health check fails when engine does not respond"
+)]
+fn health_check_fails_when_not_responding(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "Health check times out on slow engine"
+)]
+fn health_check_times_out(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}

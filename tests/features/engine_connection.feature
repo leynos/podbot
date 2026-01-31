@@ -59,3 +59,23 @@ Feature: Container engine connection
     And PODMAN_HOST is set to unix:///podman.sock
     When the socket is resolved
     Then the resolved socket is unix:///container.sock
+
+  # Health check scenarios
+  # Note: These scenarios document the expected behaviour but require a running
+  # container daemon for full integration testing. When no daemon is available,
+  # these scenarios will be skipped.
+
+  Scenario: Health check succeeds when engine is responsive
+    Given a container engine is available
+    When a health check is performed
+    Then the health check succeeds
+
+  Scenario: Health check fails when engine does not respond
+    Given the container engine is not responding
+    When a health check is attempted
+    Then a health check failure error is returned
+
+  Scenario: Health check times out on slow engine
+    Given the container engine is slow to respond
+    When a health check is attempted
+    Then a health check timeout error is returned

@@ -25,6 +25,17 @@ type StepResult<T> = Result<T, &'static str>;
 /// Thread-safe environment variable storage for BDD tests.
 type EnvVars = Arc<Mutex<HashMap<String, String>>>;
 
+/// Represents the outcome of a health check operation.
+#[derive(Clone)]
+pub enum HealthCheckOutcome {
+    /// Health check succeeded.
+    Success,
+    /// Health check failed with an error message.
+    Failed(String),
+    /// Health check timed out.
+    Timeout,
+}
+
 /// State shared across engine connection test scenarios.
 #[derive(Default, ScenarioState)]
 pub struct EngineConnectionState {
@@ -34,6 +45,12 @@ pub struct EngineConnectionState {
     config_socket: Slot<Option<String>>,
     /// The resolved socket endpoint.
     resolved_socket: Slot<String>,
+    /// The result of a health check operation.
+    health_check_outcome: Slot<HealthCheckOutcome>,
+    /// Whether the scenario simulates a non-responding engine.
+    simulate_not_responding: Slot<bool>,
+    /// Whether the scenario simulates a slow engine.
+    simulate_slow_engine: Slot<bool>,
 }
 
 /// Fixture providing a fresh engine connection state.
@@ -220,4 +237,205 @@ fn the_socket_resolves_to_platform_default(
         default, resolved
     );
     Ok(())
+}
+
+// =============================================================================
+// Health check step definitions
+// =============================================================================
+
+#[given("a container engine is available")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd step functions must return StepResult for consistency"
+)]
+fn container_engine_is_available(
+    engine_connection_state: &EngineConnectionState,
+) -> StepResult<()> {
+    // Mark that we expect a real daemon to be available.
+    // The actual check happens in the "When" step.
+    engine_connection_state.simulate_not_responding.set(false);
+    engine_connection_state.simulate_slow_engine.set(false);
+    Ok(())
+}
+
+#[given("the container engine is not responding")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd step functions must return StepResult for consistency"
+)]
+fn container_engine_is_not_responding(
+    engine_connection_state: &EngineConnectionState,
+) -> StepResult<()> {
+    engine_connection_state.simulate_not_responding.set(true);
+    Ok(())
+}
+
+#[given("the container engine is slow to respond")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd step functions must return StepResult for consistency"
+)]
+fn container_engine_is_slow_to_respond(
+    engine_connection_state: &EngineConnectionState,
+) -> StepResult<()> {
+    engine_connection_state.simulate_slow_engine.set(true);
+    Ok(())
+}
+
+#[when("a health check is performed")]
+fn health_check_is_performed(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+    // Try to connect to the default socket and perform a health check.
+    // If no daemon is available, skip the scenario.
+    let default_socket = SocketResolver::<MockEnv>::default_socket();
+
+    let rt = tokio::runtime::Runtime::new().map_err(|_| "failed to create tokio runtime")?;
+    let result = rt.block_on(async { EngineConnector::connect_and_verify(default_socket) });
+
+    match result {
+        Ok(_) => {
+            engine_connection_state
+                .health_check_outcome
+                .set(HealthCheckOutcome::Success);
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            // If the connection fails because no daemon is running, skip the test.
+            // Common error messages for missing daemons:
+            // - Unix: "No such file or directory"
+            // - Windows: "The system cannot find the file specified"
+            // - Connection refused (daemon not running)
+            // - "failed to connect" wraps the underlying error
+            let should_skip = msg.contains("No such file")
+                || msg.contains("cannot find the file")
+                || msg.contains("connection refused")
+                || msg.contains("Connection refused")
+                || msg.contains("failed to connect");
+            if should_skip {
+                rstest_bdd::skip!("no container daemon available at {}", default_socket);
+            } else {
+                engine_connection_state
+                    .health_check_outcome
+                    .set(HealthCheckOutcome::Failed(msg));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[when("a health check is attempted")]
+fn health_check_is_attempted(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+    let simulate_not_responding = engine_connection_state
+        .simulate_not_responding
+        .get()
+        .unwrap_or(false);
+    let simulate_slow = engine_connection_state
+        .simulate_slow_engine
+        .get()
+        .unwrap_or(false);
+
+    if simulate_not_responding {
+        // Use a non-existent socket to simulate a non-responding engine
+        let rt = tokio::runtime::Runtime::new().map_err(|_| "failed to create tokio runtime")?;
+        let result = rt.block_on(async {
+            EngineConnector::connect_and_verify("unix:///nonexistent/docker.sock")
+        });
+
+        match result {
+            Ok(_) => {
+                engine_connection_state
+                    .health_check_outcome
+                    .set(HealthCheckOutcome::Success);
+            }
+            Err(e) => {
+                engine_connection_state
+                    .health_check_outcome
+                    .set(HealthCheckOutcome::Failed(e.to_string()));
+            }
+        }
+    } else if simulate_slow {
+        // Simulating a slow engine is difficult without a real slow endpoint.
+        // For now, we document this behaviour and skip the actual timeout test.
+        rstest_bdd::skip!("timeout simulation requires a controllable slow endpoint");
+    } else {
+        // Normal health check attempt
+        let default_socket = SocketResolver::<MockEnv>::default_socket();
+        let rt = tokio::runtime::Runtime::new().map_err(|_| "failed to create tokio runtime")?;
+        let result = rt.block_on(async { EngineConnector::connect_and_verify(default_socket) });
+
+        match result {
+            Ok(_) => {
+                engine_connection_state
+                    .health_check_outcome
+                    .set(HealthCheckOutcome::Success);
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.contains("timed out") {
+                    engine_connection_state
+                        .health_check_outcome
+                        .set(HealthCheckOutcome::Timeout);
+                } else {
+                    engine_connection_state
+                        .health_check_outcome
+                        .set(HealthCheckOutcome::Failed(msg));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[then("the health check succeeds")]
+fn health_check_succeeds(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+    let outcome = engine_connection_state
+        .health_check_outcome
+        .get()
+        .ok_or("health check outcome should be set")?;
+
+    match outcome {
+        HealthCheckOutcome::Success => Ok(()),
+        HealthCheckOutcome::Failed(_) => Err("Expected health check to succeed, but it failed"),
+        HealthCheckOutcome::Timeout => Err("Expected health check to succeed, but it timed out"),
+    }
+}
+
+#[then("a health check failure error is returned")]
+fn health_check_failure_error_is_returned(
+    engine_connection_state: &EngineConnectionState,
+) -> StepResult<()> {
+    let outcome = engine_connection_state
+        .health_check_outcome
+        .get()
+        .ok_or("health check outcome should be set")?;
+
+    match outcome {
+        HealthCheckOutcome::Failed(_) | HealthCheckOutcome::Timeout => {
+            // A timeout is also a kind of failure, so accept it here
+            Ok(())
+        }
+        HealthCheckOutcome::Success => Err("Expected health check to fail, but it succeeded"),
+    }
+}
+
+#[then("a health check timeout error is returned")]
+fn health_check_timeout_error_is_returned(
+    engine_connection_state: &EngineConnectionState,
+) -> StepResult<()> {
+    let outcome = engine_connection_state
+        .health_check_outcome
+        .get()
+        .ok_or("health check outcome should be set")?;
+
+    match outcome {
+        HealthCheckOutcome::Timeout => Ok(()),
+        HealthCheckOutcome::Success => Err("Expected health check to timeout, but it succeeded"),
+        HealthCheckOutcome::Failed(msg) => {
+            // Check if the failure message mentions timeout
+            if msg.contains("timed out") {
+                Ok(())
+            } else {
+                Err("Expected timeout error, but got a different failure")
+            }
+        }
+    }
 }

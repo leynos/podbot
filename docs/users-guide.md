@@ -178,6 +178,25 @@ without additional configuration. When `DOCKER_HOST` or `PODMAN_HOST` is
 already set for container tooling, podbot will automatically use that
 endpoint.
 
+### Engine health check
+
+When connecting to a container engine, podbot performs a health check to verify
+the engine is responsive. This confirms the engine is operational, not just
+that the socket is reachable.
+
+**Health check behaviour:**
+
+- A ping request is sent to the engine after establishing the connection
+- The check times out after 10 seconds if the engine does not respond
+- If the health check fails, podbot reports a clear error message
+
+**Possible error messages:**
+
+| Error | Cause |
+| ----- | ----- |
+| `container engine health check failed: <message>` | The engine did not respond correctly to the ping request |
+| `container engine health check timed out after 10 seconds` | The engine took too long to respond |
+
 ### Sandbox configuration
 
 The `[sandbox]` section controls the security and compatibility trade-offs for

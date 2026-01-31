@@ -111,6 +111,20 @@ pub enum ContainerError {
         /// A description of the execution failure.
         message: String,
     },
+
+    /// Health check failed - engine did not respond correctly.
+    #[error("container engine health check failed: {message}")]
+    HealthCheckFailed {
+        /// A description of the health check failure.
+        message: String,
+    },
+
+    /// Health check timed out.
+    #[error("container engine health check timed out after {seconds} seconds")]
+    HealthCheckTimeout {
+        /// The timeout duration in seconds.
+        seconds: u64,
+    },
 }
 
 /// Errors that can occur during GitHub operations.
@@ -304,6 +318,26 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "failed to start container 'abc123': image not found"
+        );
+    }
+
+    #[rstest]
+    fn container_error_health_check_failed_displays_correctly() {
+        let error = ContainerError::HealthCheckFailed {
+            message: String::from("ping failed"),
+        };
+        assert_eq!(
+            error.to_string(),
+            "container engine health check failed: ping failed"
+        );
+    }
+
+    #[rstest]
+    fn container_error_health_check_timeout_displays_correctly() {
+        let error = ContainerError::HealthCheckTimeout { seconds: 10 };
+        assert_eq!(
+            error.to_string(),
+            "container engine health check timed out after 10 seconds"
         );
     }
 

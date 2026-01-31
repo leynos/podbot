@@ -4,7 +4,10 @@
 //! from multiple sources (environment variables, configuration, platform defaults)
 //! and establish connections using the Bollard library.
 
+use std::time::Duration;
+
 use bollard::Docker;
+use tokio::runtime::Handle;
 
 use crate::error::{ContainerError, PodbotError};
 
@@ -13,6 +16,9 @@ const FALLBACK_ENV_VARS: &[&str] = &["DOCKER_HOST", "CONTAINER_HOST", "PODMAN_HO
 
 /// Connection timeout in seconds for Docker/Podman API connections.
 const CONNECTION_TIMEOUT_SECS: u64 = 120;
+
+/// Timeout in seconds for health check operations.
+const HEALTH_CHECK_TIMEOUT_SECS: u64 = 10;
 
 /// Default socket path for Unix platforms.
 #[cfg(unix)]
@@ -233,6 +239,95 @@ impl EngineConnector {
             .map(String::from)
             .or_else(|| resolver.resolve_from_env())
             .unwrap_or_else(|| SocketResolver::<E>::default_socket().to_owned())
+    }
+
+    /// Verify the container engine is responsive.
+    ///
+    /// Sends a ping request to the engine and waits for a response.
+    /// This confirms the engine is operational, not just that the socket
+    /// is reachable.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ContainerError::HealthCheckFailed` if the engine does not
+    /// respond correctly.
+    ///
+    /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called outside of a tokio runtime context.
+    pub fn health_check(docker: &Docker) -> Result<(), PodbotError> {
+        let handle = Handle::current();
+        let timeout = Duration::from_secs(HEALTH_CHECK_TIMEOUT_SECS);
+
+        handle.block_on(async {
+            tokio::time::timeout(timeout, docker.ping())
+                .await
+                .map_err(|_| {
+                    PodbotError::from(ContainerError::HealthCheckTimeout {
+                        seconds: HEALTH_CHECK_TIMEOUT_SECS,
+                    })
+                })?
+                .map_err(|e| {
+                    PodbotError::from(ContainerError::HealthCheckFailed {
+                        message: e.to_string(),
+                    })
+                })?;
+            Ok(())
+        })
+    }
+
+    /// Connect to the container engine and verify it responds.
+    ///
+    /// Combines `connect()` with `health_check()` in a single operation.
+    /// Useful when the caller wants to ensure the engine is fully operational
+    /// before proceeding.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ContainerError::ConnectionFailed` if the connection fails.
+    ///
+    /// Returns `ContainerError::HealthCheckFailed` if the health check fails.
+    ///
+    /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called outside of a tokio runtime context.
+    pub fn connect_and_verify(socket: &str) -> Result<Docker, PodbotError> {
+        let docker = Self::connect(socket)?;
+        Self::health_check(&docker)?;
+        Ok(docker)
+    }
+
+    /// Connect using fallback resolution and verify the engine responds.
+    ///
+    /// Combines `connect_with_fallback()` with `health_check()`.
+    ///
+    /// Resolution order:
+    /// 1. `config_socket` (from CLI, config file, or `PODBOT_ENGINE_SOCKET`)
+    /// 2. `DOCKER_HOST`, `CONTAINER_HOST`, `PODMAN_HOST` (via resolver)
+    /// 3. Platform default socket
+    ///
+    /// # Errors
+    ///
+    /// Returns `ContainerError::ConnectionFailed` if the connection fails.
+    ///
+    /// Returns `ContainerError::HealthCheckFailed` if the health check fails.
+    ///
+    /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called outside of a tokio runtime context.
+    pub fn connect_with_fallback_and_verify<E: mockable::Env>(
+        config_socket: Option<&str>,
+        resolver: &SocketResolver<'_, E>,
+    ) -> Result<Docker, PodbotError> {
+        let docker = Self::connect_with_fallback(config_socket, resolver)?;
+        Self::health_check(&docker)?;
+        Ok(docker)
     }
 }
 
