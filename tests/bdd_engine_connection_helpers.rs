@@ -289,7 +289,8 @@ fn health_check_is_performed(engine_connection_state: &EngineConnectionState) ->
     let default_socket = SocketResolver::<MockEnv>::default_socket();
 
     let rt = tokio::runtime::Runtime::new().map_err(|_| "failed to create tokio runtime")?;
-    let result = rt.block_on(async { EngineConnector::connect_and_verify(default_socket) });
+    let result =
+        rt.block_on(async { EngineConnector::connect_and_verify_async(default_socket).await });
 
     match result {
         Ok(_) => {
@@ -337,7 +338,7 @@ fn health_check_is_attempted(engine_connection_state: &EngineConnectionState) ->
         // Use a non-existent socket to simulate a non-responding engine
         let rt = tokio::runtime::Runtime::new().map_err(|_| "failed to create tokio runtime")?;
         let result = rt.block_on(async {
-            EngineConnector::connect_and_verify("unix:///nonexistent/docker.sock")
+            EngineConnector::connect_and_verify_async("unix:///nonexistent/docker.sock").await
         });
 
         match result {
@@ -360,7 +361,8 @@ fn health_check_is_attempted(engine_connection_state: &EngineConnectionState) ->
         // Normal health check attempt
         let default_socket = SocketResolver::<MockEnv>::default_socket();
         let rt = tokio::runtime::Runtime::new().map_err(|_| "failed to create tokio runtime")?;
-        let result = rt.block_on(async { EngineConnector::connect_and_verify(default_socket) });
+        let result =
+            rt.block_on(async { EngineConnector::connect_and_verify_async(default_socket).await });
 
         match result {
             Ok(_) => {
