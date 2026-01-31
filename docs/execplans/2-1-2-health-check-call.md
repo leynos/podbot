@@ -63,6 +63,7 @@ Added unit tests for error display formatting.
 **File:** `src/engine/connection/mod.rs`
 
 Added constant:
+
 ```rust
 const HEALTH_CHECK_TIMEOUT_SECS: u64 = 10;
 ```
@@ -76,6 +77,7 @@ Added three methods to `EngineConnector`:
 3. `connect_with_fallback_and_verify<E>(...)` - Combined with socket resolution
 
 Implementation uses:
+
 - `tokio::runtime::Handle::current().block_on()` to call async `docker.ping()`
 - `tokio::time::timeout()` to wrap the ping call with a 10-second timeout
 - Maps Bollard errors to `ContainerError::HealthCheckFailed`
@@ -88,6 +90,7 @@ Implementation uses:
 **File:** `src/engine/connection/tests.rs`
 
 Added tests for:
+
 - `connect_and_verify` propagates connection errors correctly
 - `connect_with_fallback_and_verify` uses resolved socket
 - `connect_with_fallback_and_verify` falls back to environment variable
@@ -122,12 +125,14 @@ Scenario: Health check times out on slow engine
 ### Task 5: Add BDD step definitions ✓
 
 **Files:**
+
 - `tests/bdd_engine_connection.rs` - Added scenario bindings
 - `tests/bdd_engine_connection_helpers.rs` - Added step definitions
 
 Added `HealthCheckOutcome` enum to track health check results.
 
 Step definitions use `rstest_bdd::skip!()` when:
+
 - No container daemon is available for the success scenario
 - Timeout simulation is needed (requires controllable slow endpoint)
 
@@ -138,6 +143,7 @@ Step definitions use `rstest_bdd::skip!()` when:
 **File:** `docs/users-guide.md`
 
 Added "Engine health check" section documenting:
+
 - Health check behaviour (ping request, 10-second timeout)
 - Possible error messages users might see
 
@@ -158,6 +164,7 @@ make check-fmt && make lint && make test
 **File:** `docs/podbot-roadmap.md`
 
 Mark task as done:
+
 ```markdown
 - [x] Add a health check that verifies the engine responds.
 ```
@@ -183,6 +190,7 @@ documented in the function's panics section.
 `connect_and_verify()` methods.
 
 **Rationale:** Separating the health check from connection allows callers to:
+
 - Check health at any time after connection
 - Decide whether to perform the check (useful for performance-sensitive
   scenarios)
