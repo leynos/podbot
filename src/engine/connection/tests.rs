@@ -8,6 +8,7 @@ use mockable::MockEnv;
 use rstest::{fixture, rstest};
 
 use super::{EngineConnector, SocketResolver};
+use crate::error::{ContainerError, PodbotError};
 
 // =============================================================================
 // Fixtures and helpers
@@ -45,6 +46,12 @@ fn all_empty_env_vars() -> MockEnv {
         _ => None,
     });
     env
+}
+
+/// Fixture providing a tokio runtime for async tests.
+#[fixture]
+fn runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Runtime::new().expect("runtime creation should succeed")
 }
 
 /// Helper function to create a `MockEnv` with `DOCKER_HOST` set to the
@@ -255,36 +262,36 @@ fn connect_tcp_endpoint_with_ip_creates_client() {
 // =============================================================================
 
 #[rstest]
-fn connect_and_verify_propagates_connection_errors() {
+fn connect_and_verify_propagates_connection_errors(runtime: tokio::runtime::Runtime) {
     // Using a non-existent Unix socket to trigger a connection error.
     // The actual error occurs during the connect phase, not the health check.
-    let rt = tokio::runtime::Runtime::new().expect("runtime creation should succeed");
-    let result = rt.block_on(async {
+    let result = runtime.block_on(async {
         EngineConnector::connect_and_verify_async("unix:///nonexistent/socket.sock").await
     });
 
-    // Connection to non-existent socket should fail
+    // Connection to non-existent socket should fail with ConnectionFailed variant
+    let err = result.expect_err("connect to non-existent socket should fail");
     assert!(
-        result.is_err(),
-        "connect to non-existent socket should fail"
-    );
-    let err_msg = result.expect_err("should be an error").to_string();
-    assert!(
-        err_msg.contains("failed to connect") || err_msg.contains("connection"),
-        "error should indicate connection failure: {err_msg}"
+        matches!(
+            err,
+            PodbotError::Container(ContainerError::ConnectionFailed { .. })
+        ),
+        "expected ConnectionFailed error variant, got: {err}"
     );
 }
 
 #[rstest]
-fn connect_with_fallback_and_verify_uses_resolved_socket(empty_env: MockEnv) {
+fn connect_with_fallback_and_verify_uses_resolved_socket(
+    empty_env: MockEnv,
+    runtime: tokio::runtime::Runtime,
+) {
     // Verify that connect_with_fallback_and_verify resolves the socket correctly
     // before attempting connection. We use an explicit socket that will fail
     // to connect, but verify the resolution logic works by checking the socket
     // path appears in the error message.
     let resolver = SocketResolver::new(&empty_env);
 
-    let rt = tokio::runtime::Runtime::new().expect("runtime creation should succeed");
-    let result = rt.block_on(async {
+    let result = runtime.block_on(async {
         EngineConnector::connect_with_fallback_and_verify_async(
             Some("unix:///nonexistent/test.sock"),
             &resolver,
@@ -310,13 +317,12 @@ fn connect_with_fallback_and_verify_uses_resolved_socket(empty_env: MockEnv) {
 }
 
 #[rstest]
-fn connect_with_fallback_and_verify_falls_back_to_env() {
+fn connect_with_fallback_and_verify_falls_back_to_env(runtime: tokio::runtime::Runtime) {
     // Verify that when config is None, the resolver's environment fallback is used.
     let env = env_with_docker_host("unix:///env/docker.sock");
     let resolver = SocketResolver::new(&env);
 
-    let rt = tokio::runtime::Runtime::new().expect("runtime creation should succeed");
-    let result = rt.block_on(async {
+    let result = runtime.block_on(async {
         EngineConnector::connect_with_fallback_and_verify_async(None::<&str>, &resolver).await
     });
 

@@ -53,6 +53,35 @@ fn nonexistent_socket_path() -> String {
     }
 }
 
+/// Simulation mode for health check attempts.
+///
+/// Determines how the health check step should behave based on
+/// the preconditions set by "Given" steps.
+enum SimulationMode {
+    /// Check the default socket normally.
+    Normal,
+    /// Simulate a non-responding engine using a non-existent socket.
+    NotResponding,
+    /// Simulate a slow engine (requires skip - not implementable in tests).
+    SlowEngine,
+}
+
+impl SimulationMode {
+    /// Determine the simulation mode from the current state.
+    fn from_state(state: &EngineConnectionState) -> Self {
+        let not_responding = state.simulate_not_responding.get().unwrap_or(false);
+        let slow = state.simulate_slow_engine.get().unwrap_or(false);
+
+        if not_responding {
+            Self::NotResponding
+        } else if slow {
+            Self::SlowEngine
+        } else {
+            Self::Normal
+        }
+    }
+}
+
 /// Execute a health check and record the outcome.
 fn execute_health_check_and_record(
     state: &EngineConnectionState,
@@ -84,6 +113,10 @@ fn execute_health_check_and_record(
 // Given step definitions
 // =============================================================================
 
+/// Mark the scenario as expecting an available container engine daemon.
+///
+/// Sets up state indicating that a real container daemon should be running.
+/// The actual connectivity check happens in the "When" step.
 #[given("a container engine is available")]
 #[expect(
     clippy::unnecessary_wraps,
@@ -99,6 +132,10 @@ pub fn container_engine_is_available(
     Ok(())
 }
 
+/// Mark the scenario as simulating a non-responding container engine.
+///
+/// Sets up state indicating that connection attempts should fail because
+/// the daemon is not available (e.g., socket doesn't exist).
 #[given("the container engine is not responding")]
 #[expect(
     clippy::unnecessary_wraps,
@@ -111,6 +148,10 @@ pub fn container_engine_is_not_responding(
     Ok(())
 }
 
+/// Mark the scenario as simulating a slow container engine.
+///
+/// Sets up state indicating that the engine responds too slowly,
+/// causing health check timeouts.
 #[given("the container engine is slow to respond")]
 #[expect(
     clippy::unnecessary_wraps,
@@ -127,6 +168,11 @@ pub fn container_engine_is_slow_to_respond(
 // When step definitions
 // =============================================================================
 
+/// Perform a health check against the default container engine socket.
+///
+/// Attempts to connect to the platform default socket and verify the engine
+/// responds. If no daemon is available, the scenario is skipped rather than
+/// failing.
 #[when("a health check is performed")]
 pub fn health_check_is_performed(
     engine_connection_state: &EngineConnectionState,
@@ -143,32 +189,31 @@ pub fn health_check_is_performed(
     Ok(())
 }
 
+/// Attempt a health check based on the configured simulation mode.
+///
+/// Behavior depends on state set by "Given" steps:
+/// - Normal mode: check the default socket
+/// - Not responding mode: check a non-existent socket to simulate failure
+/// - Slow mode: skip (timeout simulation requires external setup)
 #[when("a health check is attempted")]
 pub fn health_check_is_attempted(
     engine_connection_state: &EngineConnectionState,
 ) -> StepResult<()> {
-    let simulate_not_responding = engine_connection_state
-        .simulate_not_responding
-        .get()
-        .unwrap_or(false);
-    let simulate_slow = engine_connection_state
-        .simulate_slow_engine
-        .get()
-        .unwrap_or(false);
-
-    if simulate_not_responding {
-        // Use a non-existent socket to simulate a non-responding engine.
-        // Construct a platform-appropriate non-existent socket path.
-        let socket = nonexistent_socket_path();
-        execute_health_check_and_record(engine_connection_state, &socket)?;
-    } else if simulate_slow {
-        // Simulating a slow engine is difficult without a real slow endpoint.
-        // For now, we document this behaviour and skip the actual timeout test.
-        rstest_bdd::skip!("timeout simulation requires a controllable slow endpoint");
-    } else {
-        // Normal health check attempt
-        let default_socket = SocketResolver::<MockEnv>::default_socket();
-        execute_health_check_and_record(engine_connection_state, default_socket)?;
+    match SimulationMode::from_state(engine_connection_state) {
+        SimulationMode::NotResponding => {
+            // Use a non-existent socket to simulate a non-responding engine.
+            let socket = nonexistent_socket_path();
+            execute_health_check_and_record(engine_connection_state, &socket)?;
+        }
+        SimulationMode::SlowEngine => {
+            // Simulating a slow engine is difficult without a real slow endpoint.
+            rstest_bdd::skip!("timeout simulation requires a controllable slow endpoint");
+        }
+        SimulationMode::Normal => {
+            // Normal health check attempt against the default socket.
+            let default_socket = SocketResolver::<MockEnv>::default_socket();
+            execute_health_check_and_record(engine_connection_state, default_socket)?;
+        }
     }
     Ok(())
 }
@@ -177,6 +222,10 @@ pub fn health_check_is_attempted(
 // Then step definitions
 // =============================================================================
 
+/// Assert that the health check completed successfully.
+///
+/// Verifies the recorded outcome indicates the container engine responded
+/// to the ping request within the timeout period.
 #[then("the health check succeeds")]
 pub fn health_check_succeeds(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
     let outcome = engine_connection_state
@@ -191,6 +240,10 @@ pub fn health_check_succeeds(engine_connection_state: &EngineConnectionState) ->
     }
 }
 
+/// Assert that a health check failure error was returned.
+///
+/// Accepts both explicit failures and timeouts, as both indicate the engine
+/// was not healthy.
 #[then("a health check failure error is returned")]
 pub fn health_check_failure_error_is_returned(
     engine_connection_state: &EngineConnectionState,
@@ -209,6 +262,10 @@ pub fn health_check_failure_error_is_returned(
     }
 }
 
+/// Assert that a health check timeout error was returned.
+///
+/// Specifically requires the `HealthCheckTimeout` variant, not a general
+/// connection failure.
 #[then("a health check timeout error is returned")]
 pub fn health_check_timeout_error_is_returned(
     engine_connection_state: &EngineConnectionState,

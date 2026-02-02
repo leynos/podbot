@@ -337,6 +337,10 @@ mod tests {
         ContainerError::HealthCheckTimeout { seconds: 10 },
         "container engine health check timed out after 10 seconds"
     )]
+    #[case::runtime_creation_failed(
+        ContainerError::RuntimeCreationFailed { message: String::from("cannot create reactor") },
+        "failed to create async runtime for health check: cannot create reactor"
+    )]
     fn container_error_health_check_displays_correctly(
         #[case] error: ContainerError,
         #[case] expected: &str,
