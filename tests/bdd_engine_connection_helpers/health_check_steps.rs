@@ -42,6 +42,7 @@ const fn is_health_check_timeout(err: &PodbotError) -> bool {
 ///
 /// On Unix, returns a unix:// socket path.
 /// On Windows, returns an npipe:// named pipe path.
+/// On other platforms, falls back to Unix-style path (likely to fail with a clear error).
 fn nonexistent_socket_path() -> String {
     #[cfg(unix)]
     {
@@ -50,6 +51,12 @@ fn nonexistent_socket_path() -> String {
     #[cfg(windows)]
     {
         String::from("npipe:////./pipe/nonexistent-podbot-test")
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        // Fallback for tier-3 platforms (e.g., WASI). Use Unix-style path which
+        // will produce a clear connection error rather than a compile failure.
+        String::from("unix:///nonexistent/podbot-test.sock")
     }
 }
 
