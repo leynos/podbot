@@ -6,6 +6,7 @@
 
 use mockable::MockEnv;
 use podbot::engine::{EngineConnector, SocketResolver};
+use podbot::error::{ContainerError, PodbotError};
 use rstest_bdd_macros::{given, then, when};
 
 use super::{EngineConnectionState, HealthCheckOutcome, StepResult};
@@ -29,6 +30,29 @@ fn is_daemon_unavailable(msg: &str) -> bool {
         || msg.contains("failed to connect")
 }
 
+/// Check if the error is a health check timeout by matching on the error variant.
+const fn is_health_check_timeout(err: &PodbotError) -> bool {
+    matches!(
+        err,
+        PodbotError::Container(ContainerError::HealthCheckTimeout { .. })
+    )
+}
+
+/// Returns a platform-appropriate non-existent socket path for testing.
+///
+/// On Unix, returns a unix:// socket path.
+/// On Windows, returns an npipe:// named pipe path.
+fn nonexistent_socket_path() -> String {
+    #[cfg(unix)]
+    {
+        String::from("unix:///nonexistent/podbot-test.sock")
+    }
+    #[cfg(windows)]
+    {
+        String::from("npipe:////./pipe/nonexistent-podbot-test")
+    }
+}
+
 /// Execute a health check and record the outcome.
 fn execute_health_check_and_record(
     state: &EngineConnectionState,
@@ -44,7 +68,7 @@ fn execute_health_check_and_record(
         }
         Err(e) => {
             let msg = e.to_string();
-            if msg.contains("timed out") {
+            if is_health_check_timeout(&e) {
                 state.health_check_outcome.set(HealthCheckOutcome::Timeout);
             } else {
                 state
@@ -134,9 +158,8 @@ pub fn health_check_is_attempted(
 
     if simulate_not_responding {
         // Use a non-existent socket to simulate a non-responding engine.
-        // Use platform-appropriate socket scheme.
-        let socket = SocketResolver::<MockEnv>::default_socket()
-            .replace("/var/run/docker.sock", "/nonexistent/docker.sock");
+        // Construct a platform-appropriate non-existent socket path.
+        let socket = nonexistent_socket_path();
         execute_health_check_and_record(engine_connection_state, &socket)?;
     } else if simulate_slow {
         // Simulating a slow engine is difficult without a real slow endpoint.
@@ -198,13 +221,6 @@ pub fn health_check_timeout_error_is_returned(
     match outcome {
         HealthCheckOutcome::Timeout => Ok(()),
         HealthCheckOutcome::Success => Err("Expected health check to timeout, but it succeeded"),
-        HealthCheckOutcome::Failed(msg) => {
-            // Check if the failure message mentions timeout
-            if msg.contains("timed out") {
-                Ok(())
-            } else {
-                Err("Expected timeout error, but got a different failure")
-            }
-        }
+        HealthCheckOutcome::Failed(_) => Err("Expected timeout error, but got a different failure"),
     }
 }
