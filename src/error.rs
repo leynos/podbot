@@ -125,6 +125,13 @@ pub enum ContainerError {
         /// The timeout duration in seconds.
         seconds: u64,
     },
+
+    /// Failed to create a tokio runtime for synchronous health check.
+    #[error("failed to create async runtime for health check: {message}")]
+    RuntimeCreationFailed {
+        /// A description of the runtime creation failure.
+        message: String,
+    },
 }
 
 /// Errors that can occur during GitHub operations.
@@ -322,23 +329,19 @@ mod tests {
     }
 
     #[rstest]
-    fn container_error_health_check_failed_displays_correctly() {
-        let error = ContainerError::HealthCheckFailed {
-            message: String::from("ping failed"),
-        };
-        assert_eq!(
-            error.to_string(),
-            "container engine health check failed: ping failed"
-        );
-    }
-
-    #[rstest]
-    fn container_error_health_check_timeout_displays_correctly() {
-        let error = ContainerError::HealthCheckTimeout { seconds: 10 };
-        assert_eq!(
-            error.to_string(),
-            "container engine health check timed out after 10 seconds"
-        );
+    #[case::health_check_failed(
+        ContainerError::HealthCheckFailed { message: String::from("ping failed") },
+        "container engine health check failed: ping failed"
+    )]
+    #[case::health_check_timeout(
+        ContainerError::HealthCheckTimeout { seconds: 10 },
+        "container engine health check timed out after 10 seconds"
+    )]
+    fn container_error_health_check_displays_correctly(
+        #[case] error: ContainerError,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(error.to_string(), expected);
     }
 
     #[rstest]

@@ -7,7 +7,6 @@
 use std::time::Duration;
 
 use bollard::Docker;
-use tokio::runtime::Handle;
 
 use crate::error::{ContainerError, PodbotError};
 
@@ -241,19 +240,14 @@ impl EngineConnector {
             .unwrap_or_else(|| SocketResolver::<E>::default_socket().to_owned())
     }
 
-    /// Verify the container engine is responsive (async version).
+    // =========================================================================
+    // Health check - internal helper
+    // =========================================================================
+
+    /// Perform a ping with timeout (internal helper).
     ///
-    /// Sends a ping request to the engine and waits for a response.
-    /// This confirms the engine is operational, not just that the socket
-    /// is reachable.
-    ///
-    /// # Errors
-    ///
-    /// Returns `ContainerError::HealthCheckFailed` if the engine does not
-    /// respond correctly.
-    ///
-    /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
-    pub async fn health_check_async(docker: &Docker) -> Result<(), PodbotError> {
+    /// This is the core async implementation reused by all health check APIs.
+    async fn ping_with_timeout(docker: &Docker) -> Result<(), PodbotError> {
         let timeout = Duration::from_secs(HEALTH_CHECK_TIMEOUT_SECS);
 
         tokio::time::timeout(timeout, docker.ping())
@@ -271,14 +265,15 @@ impl EngineConnector {
         Ok(())
     }
 
-    /// Verify the container engine is responsive.
+    // =========================================================================
+    // Health check - public APIs
+    // =========================================================================
+
+    /// Verify the container engine is responsive (async version).
     ///
     /// Sends a ping request to the engine and waits for a response.
     /// This confirms the engine is operational, not just that the socket
     /// is reachable.
-    ///
-    /// This is the synchronous version that blocks on the async implementation.
-    /// Use [`Self::health_check_async`] when already in an async context.
     ///
     /// # Errors
     ///
@@ -286,15 +281,62 @@ impl EngineConnector {
     /// respond correctly.
     ///
     /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
-    ///
-    /// # Panics
-    ///
-    /// Panics if called from within an async runtime context. Use
-    /// [`Self::health_check_async`] instead when in an async context.
-    pub fn health_check(docker: &Docker) -> Result<(), PodbotError> {
-        let handle = Handle::current();
-        handle.block_on(Self::health_check_async(docker))
+    pub async fn health_check_async(docker: &Docker) -> Result<(), PodbotError> {
+        Self::ping_with_timeout(docker).await
     }
+
+    /// Verify the container engine is responsive.
+    ///
+    /// Sends a ping request to the engine and waits for a response.
+    /// This confirms the engine is operational, not just that the socket
+    /// is reachable.
+    ///
+    /// This is the synchronous version that creates a dedicated tokio runtime
+    /// to execute the async health check. Use [`Self::health_check_async`]
+    /// when already in an async context to avoid the runtime creation overhead.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ContainerError::RuntimeCreationFailed` if the tokio runtime
+    /// cannot be created.
+    ///
+    /// Returns `ContainerError::HealthCheckFailed` if the engine does not
+    /// respond correctly.
+    ///
+    /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
+    pub fn health_check(docker: &Docker) -> Result<(), PodbotError> {
+        let rt = Self::create_runtime()?;
+        rt.block_on(Self::health_check_async(docker))
+    }
+
+    /// Create a tokio runtime for synchronous operations.
+    fn create_runtime() -> Result<tokio::runtime::Runtime, PodbotError> {
+        tokio::runtime::Runtime::new().map_err(|e| {
+            PodbotError::from(ContainerError::RuntimeCreationFailed {
+                message: e.to_string(),
+            })
+        })
+    }
+
+    // =========================================================================
+    // Connect and verify - internal helper
+    // =========================================================================
+
+    /// Connect then verify (internal helper).
+    ///
+    /// This is the core async combinator reused by all connect-and-verify APIs.
+    async fn connect_then_verify<F>(connect_fn: F) -> Result<Docker, PodbotError>
+    where
+        F: FnOnce() -> Result<Docker, PodbotError>,
+    {
+        let docker = connect_fn()?;
+        Self::ping_with_timeout(&docker).await?;
+        Ok(docker)
+    }
+
+    // =========================================================================
+    // Connect and verify - public APIs
+    // =========================================================================
 
     /// Connect to the container engine and verify it responds (async version).
     ///
@@ -310,9 +352,7 @@ impl EngineConnector {
     ///
     /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
     pub async fn connect_and_verify_async(socket: &str) -> Result<Docker, PodbotError> {
-        let docker = Self::connect(socket)?;
-        Self::health_check_async(&docker).await?;
-        Ok(docker)
+        Self::connect_then_verify(|| Self::connect(socket)).await
     }
 
     /// Connect to the container engine and verify it responds.
@@ -321,25 +361,22 @@ impl EngineConnector {
     /// Useful when the caller wants to ensure the engine is fully operational
     /// before proceeding.
     ///
-    /// This is the synchronous version. Use [`Self::connect_and_verify_async`]
-    /// when already in an async context.
+    /// This is the synchronous version that creates a dedicated tokio runtime.
+    /// Use [`Self::connect_and_verify_async`] when already in an async context.
     ///
     /// # Errors
+    ///
+    /// Returns `ContainerError::RuntimeCreationFailed` if the tokio runtime
+    /// cannot be created.
     ///
     /// Returns `ContainerError::ConnectionFailed` if the connection fails.
     ///
     /// Returns `ContainerError::HealthCheckFailed` if the health check fails.
     ///
     /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
-    ///
-    /// # Panics
-    ///
-    /// Panics if called from within an async runtime context. Use
-    /// [`Self::connect_and_verify_async`] instead when in an async context.
     pub fn connect_and_verify(socket: &str) -> Result<Docker, PodbotError> {
-        let docker = Self::connect(socket)?;
-        Self::health_check(&docker)?;
-        Ok(docker)
+        let rt = Self::create_runtime()?;
+        rt.block_on(Self::connect_and_verify_async(socket))
     }
 
     /// Connect using fallback resolution and verify the engine responds
@@ -363,9 +400,7 @@ impl EngineConnector {
         config_socket: Option<&str>,
         resolver: &SocketResolver<'_, E>,
     ) -> Result<Docker, PodbotError> {
-        let docker = Self::connect_with_fallback(config_socket, resolver)?;
-        Self::health_check_async(&docker).await?;
-        Ok(docker)
+        Self::connect_then_verify(|| Self::connect_with_fallback(config_socket, resolver)).await
     }
 
     /// Connect using fallback resolution and verify the engine responds.
@@ -377,30 +412,29 @@ impl EngineConnector {
     /// 2. `DOCKER_HOST`, `CONTAINER_HOST`, `PODMAN_HOST` (via resolver)
     /// 3. Platform default socket
     ///
-    /// This is the synchronous version. Use
-    /// [`Self::connect_with_fallback_and_verify_async`] when already in an
+    /// This is the synchronous version that creates a dedicated tokio runtime.
+    /// Use [`Self::connect_with_fallback_and_verify_async`] when already in an
     /// async context.
     ///
     /// # Errors
+    ///
+    /// Returns `ContainerError::RuntimeCreationFailed` if the tokio runtime
+    /// cannot be created.
     ///
     /// Returns `ContainerError::ConnectionFailed` if the connection fails.
     ///
     /// Returns `ContainerError::HealthCheckFailed` if the health check fails.
     ///
     /// Returns `ContainerError::HealthCheckTimeout` if the check times out.
-    ///
-    /// # Panics
-    ///
-    /// Panics if called from within an async runtime context. Use
-    /// [`Self::connect_with_fallback_and_verify_async`] instead when in an
-    /// async context.
     pub fn connect_with_fallback_and_verify<E: mockable::Env>(
         config_socket: Option<&str>,
         resolver: &SocketResolver<'_, E>,
     ) -> Result<Docker, PodbotError> {
-        let docker = Self::connect_with_fallback(config_socket, resolver)?;
-        Self::health_check(&docker)?;
-        Ok(docker)
+        let rt = Self::create_runtime()?;
+        rt.block_on(Self::connect_with_fallback_and_verify_async(
+            config_socket,
+            resolver,
+        ))
     }
 }
 
