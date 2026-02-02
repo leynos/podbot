@@ -1,14 +1,9 @@
 //! Behavioural test helpers for container engine connection.
+//!
+//! This module provides step definitions and state management for BDD tests
+//! covering socket resolution and health check functionality.
 
-// rstest-bdd macros generate internal code that triggers these lints for unused state parameters
-#![allow(
-    clippy::used_underscore_binding,
-    reason = "rstest-bdd requires state parameter in macro-generated code"
-)]
-#![allow(
-    non_snake_case,
-    reason = "rstest-bdd generates non-snake-case internal variables"
-)]
+mod health_check_steps;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -19,11 +14,29 @@ use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, then, when};
 
+// Re-export health check step definitions so they are visible to rstest-bdd macros.
+#[expect(
+    unused_imports,
+    reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
+)]
+pub use health_check_steps::*;
+
 /// Step result type for BDD tests, using a static string for errors.
-type StepResult<T> = Result<T, &'static str>;
+pub type StepResult<T> = Result<T, &'static str>;
 
 /// Thread-safe environment variable storage for BDD tests.
 type EnvVars = Arc<Mutex<HashMap<String, String>>>;
+
+/// Represents the outcome of a health check operation.
+#[derive(Clone)]
+pub enum HealthCheckOutcome {
+    /// Health check succeeded.
+    Success,
+    /// Health check failed with an error message.
+    Failed(String),
+    /// Health check timed out.
+    Timeout,
+}
 
 /// State shared across engine connection test scenarios.
 #[derive(Default, ScenarioState)]
@@ -34,6 +47,12 @@ pub struct EngineConnectionState {
     config_socket: Slot<Option<String>>,
     /// The resolved socket endpoint.
     resolved_socket: Slot<String>,
+    /// The result of a health check operation.
+    pub health_check_outcome: Slot<HealthCheckOutcome>,
+    /// Whether the scenario simulates a non-responding engine.
+    pub simulate_not_responding: Slot<bool>,
+    /// Whether the scenario simulates a slow engine.
+    pub simulate_slow_engine: Slot<bool>,
 }
 
 /// Fixture providing a fresh engine connection state.
@@ -74,7 +93,9 @@ fn create_mock_env(state: &EngineConnectionState) -> Result<MockEnv, &'static st
     Ok(mock)
 }
 
-// Given step definitions
+// =============================================================================
+// Socket resolution step definitions
+// =============================================================================
 
 #[given("no engine socket is configured")]
 #[expect(
@@ -174,8 +195,6 @@ fn podman_host_is_not_set(engine_connection_state: &EngineConnectionState) -> St
     Ok(())
 }
 
-// When step definitions
-
 #[when("the socket is resolved")]
 fn the_socket_is_resolved(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
     let env = create_mock_env(engine_connection_state)?;
@@ -185,8 +204,6 @@ fn the_socket_is_resolved(engine_connection_state: &EngineConnectionState) -> St
     engine_connection_state.resolved_socket.set(socket);
     Ok(())
 }
-
-// Then step definitions
 
 #[then("the resolved socket is {expected}")]
 fn the_resolved_socket_is(

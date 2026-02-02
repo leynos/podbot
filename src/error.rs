@@ -111,6 +111,27 @@ pub enum ContainerError {
         /// A description of the execution failure.
         message: String,
     },
+
+    /// Health check failed - engine did not respond correctly.
+    #[error("container engine health check failed: {message}")]
+    HealthCheckFailed {
+        /// A description of the health check failure.
+        message: String,
+    },
+
+    /// Health check timed out.
+    #[error("container engine health check timed out after {seconds} seconds")]
+    HealthCheckTimeout {
+        /// The timeout duration in seconds.
+        seconds: u64,
+    },
+
+    /// Failed to create a tokio runtime for synchronous health check.
+    #[error("failed to create async runtime for health check: {message}")]
+    RuntimeCreationFailed {
+        /// A description of the runtime creation failure.
+        message: String,
+    },
 }
 
 /// Errors that can occur during GitHub operations.
@@ -305,6 +326,26 @@ mod tests {
             error.to_string(),
             "failed to start container 'abc123': image not found"
         );
+    }
+
+    #[rstest]
+    #[case::health_check_failed(
+        ContainerError::HealthCheckFailed { message: String::from("ping failed") },
+        "container engine health check failed: ping failed"
+    )]
+    #[case::health_check_timeout(
+        ContainerError::HealthCheckTimeout { seconds: 10 },
+        "container engine health check timed out after 10 seconds"
+    )]
+    #[case::runtime_creation_failed(
+        ContainerError::RuntimeCreationFailed { message: String::from("cannot create reactor") },
+        "failed to create async runtime for health check: cannot create reactor"
+    )]
+    fn container_error_health_check_displays_correctly(
+        #[case] error: ContainerError,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(error.to_string(), expected);
     }
 
     #[rstest]

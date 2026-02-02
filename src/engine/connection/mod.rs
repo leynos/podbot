@@ -4,15 +4,96 @@
 //! from multiple sources (environment variables, configuration, platform defaults)
 //! and establish connections using the Bollard library.
 
+mod health_check;
+
+use std::fmt;
+
 use bollard::Docker;
 
 use crate::error::{ContainerError, PodbotError};
+
+// =============================================================================
+// SocketPath newtype
+// =============================================================================
+
+/// A validated container engine socket endpoint path.
+///
+/// This newtype wraps a socket endpoint string, providing type safety and
+/// reducing the number of raw string arguments in function signatures.
+/// Socket paths can be Unix sockets (`unix:///path`), Windows named pipes
+/// (`npipe:////./pipe/name`), or HTTP endpoints (`http://host:port`).
+///
+/// # Examples
+///
+/// ```ignore
+/// use podbot::engine::SocketPath;
+///
+/// let socket = SocketPath::new("unix:///var/run/docker.sock");
+/// assert_eq!(socket.as_str(), "unix:///var/run/docker.sock");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SocketPath(String);
+
+impl SocketPath {
+    /// Creates a new `SocketPath` from any string-like type.
+    #[must_use]
+    pub fn new(path: impl Into<String>) -> Self {
+        Self(path.into())
+    }
+
+    /// Returns the socket path as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consumes the `SocketPath` and returns the inner `String`.
+    #[expect(
+        dead_code,
+        reason = "public API for completeness; callers may need owned String"
+    )]
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl From<String> for SocketPath {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<&str> for SocketPath {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl AsRef<str> for SocketPath {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for SocketPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+// =============================================================================
+// Constants
+// =============================================================================
 
 /// Environment variable names checked in fallback order after configuration sources.
 const FALLBACK_ENV_VARS: &[&str] = &["DOCKER_HOST", "CONTAINER_HOST", "PODMAN_HOST"];
 
 /// Connection timeout in seconds for Docker/Podman API connections.
 const CONNECTION_TIMEOUT_SECS: u64 = 120;
+
+/// Timeout in seconds for health check operations.
+pub(super) const HEALTH_CHECK_TIMEOUT_SECS: u64 = 10;
 
 /// Default socket path for Unix platforms.
 #[cfg(unix)]
@@ -94,20 +175,21 @@ enum SocketType {
 
 impl SocketType {
     /// Returns true if the socket string has a Unix or named pipe scheme.
-    fn is_socket_scheme(socket: &str) -> bool {
-        socket.starts_with("unix://") || socket.starts_with("npipe://")
+    fn is_socket_scheme(socket: impl AsRef<str>) -> bool {
+        let s = socket.as_ref();
+        s.starts_with("unix://") || s.starts_with("npipe://")
     }
 
     /// Returns true if the socket string has an HTTP-compatible scheme.
-    fn is_http_scheme(socket: &str) -> bool {
-        socket.starts_with("tcp://")
-            || socket.starts_with("http://")
-            || socket.starts_with("https://")
+    fn is_http_scheme(socket: impl AsRef<str>) -> bool {
+        let s = socket.as_ref();
+        s.starts_with("tcp://") || s.starts_with("http://") || s.starts_with("https://")
     }
 
     /// Classify a socket string by its scheme prefix.
-    fn classify(socket: &str) -> Self {
-        match (Self::is_socket_scheme(socket), Self::is_http_scheme(socket)) {
+    fn classify(socket: impl AsRef<str>) -> Self {
+        let s = socket.as_ref();
+        match (Self::is_socket_scheme(s), Self::is_http_scheme(s)) {
             (true, _) => Self::Socket,
             (_, true) => Self::Http,
             _ => Self::BarePath,
@@ -139,19 +221,20 @@ impl EngineConnector {
     ///
     /// Returns `ContainerError::ConnectionFailed` if the connection cannot be
     /// established.
-    pub fn connect(socket: &str) -> Result<Docker, PodbotError> {
-        let docker = match SocketType::classify(socket) {
+    pub fn connect(socket: impl AsRef<str>) -> Result<Docker, PodbotError> {
+        let socket_str = socket.as_ref();
+        let docker = match SocketType::classify(socket_str) {
             SocketType::Socket => Docker::connect_with_socket(
-                socket,
+                socket_str,
                 CONNECTION_TIMEOUT_SECS,
                 bollard::API_DEFAULT_VERSION,
             ),
             SocketType::Http => {
                 // Rewrite tcp:// to http:// for Bollard compatibility
-                let http_socket = if socket.starts_with("tcp://") {
-                    socket.replacen("tcp://", "http://", 1)
+                let http_socket = if socket_str.starts_with("tcp://") {
+                    socket_str.replacen("tcp://", "http://", 1)
                 } else {
-                    socket.to_owned()
+                    socket_str.to_owned()
                 };
                 Docker::connect_with_http(
                     &http_socket,
@@ -160,7 +243,7 @@ impl EngineConnector {
                 )
             }
             SocketType::BarePath => {
-                let socket_uri = Self::normalize_bare_path(socket);
+                let socket_uri = Self::normalize_bare_path(socket_str);
                 Docker::connect_with_socket(
                     &socket_uri,
                     CONNECTION_TIMEOUT_SECS,
@@ -186,12 +269,13 @@ impl EngineConnector {
     ///
     /// Note: This detection is based on path syntax, not the current platform.
     /// Paths like `//some/path` will be treated as named pipes even on Unix.
-    fn normalize_bare_path(path: &str) -> String {
+    fn normalize_bare_path(path: impl AsRef<str>) -> String {
+        let p = path.as_ref();
         // Named pipes typically start with \\ or // (e.g., \\.\pipe\docker_engine)
-        if path.starts_with("\\\\") || path.starts_with("//") {
-            format!("npipe://{path}")
+        if p.starts_with("\\\\") || p.starts_with("//") {
+            format!("npipe://{p}")
         } else {
-            format!("unix://{path}")
+            format!("unix://{p}")
         }
     }
 
@@ -206,11 +290,12 @@ impl EngineConnector {
     ///
     /// Returns `ContainerError::ConnectionFailed` if the connection cannot be
     /// established.
-    pub fn connect_with_fallback<E: mockable::Env>(
-        config_socket: Option<&str>,
+    pub fn connect_with_fallback<S: AsRef<str> + ?Sized, E: mockable::Env>(
+        config_socket: Option<&S>,
         resolver: &SocketResolver<'_, E>,
     ) -> Result<Docker, PodbotError> {
-        let socket = Self::resolve_socket(config_socket, resolver);
+        let cfg_socket = config_socket.map(AsRef::as_ref);
+        let socket = Self::resolve_socket(cfg_socket, resolver);
         Self::connect(&socket)
     }
 
@@ -224,11 +309,12 @@ impl EngineConnector {
     /// 2. `DOCKER_HOST`, `CONTAINER_HOST`, `PODMAN_HOST` (via resolver)
     /// 3. Platform default socket
     #[must_use]
-    pub fn resolve_socket<E: mockable::Env>(
-        config_socket: Option<&str>,
+    pub fn resolve_socket<S: AsRef<str> + ?Sized, E: mockable::Env>(
+        config_socket: Option<&S>,
         resolver: &SocketResolver<'_, E>,
     ) -> String {
-        config_socket
+        let cfg_socket = config_socket.map(AsRef::as_ref);
+        cfg_socket
             .filter(|s| !s.is_empty())
             .map(String::from)
             .or_else(|| resolver.resolve_from_env())

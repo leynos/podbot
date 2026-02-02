@@ -8,6 +8,7 @@ use mockable::MockEnv;
 use rstest::{fixture, rstest};
 
 use super::{EngineConnector, SocketResolver};
+use crate::error::{ContainerError, PodbotError};
 
 // =============================================================================
 // Fixtures and helpers
@@ -45,6 +46,12 @@ fn all_empty_env_vars() -> MockEnv {
         _ => None,
     });
     env
+}
+
+/// Fixture providing a tokio runtime for async tests.
+#[fixture]
+fn runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Runtime::new().expect("runtime creation should succeed")
 }
 
 /// Helper function to create a `MockEnv` with `DOCKER_HOST` set to the
@@ -186,7 +193,7 @@ fn resolve_socket_uses_config_when_provided(empty_env: MockEnv) {
 fn resolve_socket_uses_env_when_config_is_none() {
     let env = env_with_docker_host("unix:///custom/docker.sock");
     let resolver = SocketResolver::new(&env);
-    let socket = EngineConnector::resolve_socket(None, &resolver);
+    let socket = EngineConnector::resolve_socket(None::<&str>, &resolver);
     assert_eq!(socket, "unix:///custom/docker.sock");
 }
 
@@ -194,7 +201,7 @@ fn resolve_socket_uses_env_when_config_is_none() {
 #[cfg(unix)]
 fn resolve_socket_uses_default_when_no_source_available(empty_env: MockEnv) {
     let resolver = SocketResolver::new(&empty_env);
-    let socket = EngineConnector::resolve_socket(None, &resolver);
+    let socket = EngineConnector::resolve_socket(None::<&str>, &resolver);
     assert_eq!(socket, "unix:///var/run/docker.sock");
 }
 
@@ -248,4 +255,90 @@ fn connect_tcp_endpoint_with_ip_creates_client() {
     // changes to validate endpoints eagerly, this test may start failing.
     let result = EngineConnector::connect("tcp://192.168.1.100:2376");
     result.expect("connect tcp://192.168.1.100:2376 should create client");
+}
+
+// =============================================================================
+// EngineConnector::connect_and_verify tests
+// =============================================================================
+
+#[rstest]
+fn connect_and_verify_propagates_connection_errors(runtime: tokio::runtime::Runtime) {
+    // Using a non-existent Unix socket to trigger a connection error.
+    // The actual error occurs during the connect phase, not the health check.
+    let result = runtime.block_on(async {
+        EngineConnector::connect_and_verify_async("unix:///nonexistent/socket.sock").await
+    });
+
+    // Connection to non-existent socket should fail with ConnectionFailed variant
+    let err = result.expect_err("connect to non-existent socket should fail");
+    assert!(
+        matches!(
+            err,
+            PodbotError::Container(ContainerError::ConnectionFailed { .. })
+        ),
+        "expected ConnectionFailed error variant, got: {err}"
+    );
+}
+
+#[rstest]
+fn connect_with_fallback_and_verify_uses_resolved_socket(
+    empty_env: MockEnv,
+    runtime: tokio::runtime::Runtime,
+) {
+    // Verify that connect_with_fallback_and_verify resolves the socket correctly
+    // before attempting connection. We use an explicit socket that will fail
+    // to connect, but verify the resolution logic works by checking the socket
+    // path appears in the error message.
+    let resolver = SocketResolver::new(&empty_env);
+
+    let result = runtime.block_on(async {
+        EngineConnector::connect_with_fallback_and_verify_async(
+            Some("unix:///nonexistent/test.sock"),
+            &resolver,
+        )
+        .await
+    });
+
+    // Connection should fail (no daemon at this path)
+    assert!(
+        result.is_err(),
+        "connect to non-existent socket should fail"
+    );
+
+    // Verify the error references the config-provided socket path, confirming
+    // that config takes precedence over env and default.
+    let err_msg = result
+        .expect_err("expected connection error when connecting to non-existent socket")
+        .to_string();
+    assert!(
+        err_msg.contains("nonexistent/test.sock"),
+        "error should indicate which socket was used (config-resolved path), got: {err_msg}"
+    );
+}
+
+#[rstest]
+fn connect_with_fallback_and_verify_falls_back_to_env(runtime: tokio::runtime::Runtime) {
+    // Verify that when config is None, the resolver's environment fallback is used.
+    let env = env_with_docker_host("unix:///env/docker.sock");
+    let resolver = SocketResolver::new(&env);
+
+    let result = runtime.block_on(async {
+        EngineConnector::connect_with_fallback_and_verify_async(None::<&str>, &resolver).await
+    });
+
+    // Connection will fail (no daemon), but verify the env path was used
+    assert!(
+        result.is_err(),
+        "connect to non-existent socket should fail"
+    );
+
+    // Verify the error references the environment-provided socket path,
+    // confirming that the fallback to DOCKER_HOST worked.
+    let err_msg = result
+        .expect_err("expected connection error when connecting to non-existent socket")
+        .to_string();
+    assert!(
+        err_msg.contains("env/docker.sock"),
+        "error should indicate which socket was used (env-resolved path), got: {err_msg}"
+    );
 }
