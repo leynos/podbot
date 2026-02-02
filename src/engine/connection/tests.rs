@@ -186,7 +186,7 @@ fn resolve_socket_uses_config_when_provided(empty_env: MockEnv) {
 fn resolve_socket_uses_env_when_config_is_none() {
     let env = env_with_docker_host("unix:///custom/docker.sock");
     let resolver = SocketResolver::new(&env);
-    let socket = EngineConnector::resolve_socket(None, &resolver);
+    let socket = EngineConnector::resolve_socket(None::<&str>, &resolver);
     assert_eq!(socket, "unix:///custom/docker.sock");
 }
 
@@ -194,7 +194,7 @@ fn resolve_socket_uses_env_when_config_is_none() {
 #[cfg(unix)]
 fn resolve_socket_uses_default_when_no_source_available(empty_env: MockEnv) {
     let resolver = SocketResolver::new(&empty_env);
-    let socket = EngineConnector::resolve_socket(None, &resolver);
+    let socket = EngineConnector::resolve_socket(None::<&str>, &resolver);
     assert_eq!(socket, "unix:///var/run/docker.sock");
 }
 
@@ -317,7 +317,7 @@ fn connect_with_fallback_and_verify_falls_back_to_env() {
 
     let rt = tokio::runtime::Runtime::new().expect("runtime creation should succeed");
     let result = rt.block_on(async {
-        EngineConnector::connect_with_fallback_and_verify_async(None, &resolver).await
+        EngineConnector::connect_with_fallback_and_verify_async(None::<&str>, &resolver).await
     });
 
     // Connection will fail (no daemon), but verify the env path was used
