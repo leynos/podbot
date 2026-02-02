@@ -82,6 +82,30 @@ impl SimulationMode {
     }
 }
 
+/// Assert that the health check outcome matches the expected variant.
+///
+/// Returns Ok if the predicate returns true, otherwise returns an error
+/// with the provided message.
+fn assert_health_check_outcome<F>(
+    state: &EngineConnectionState,
+    predicate: F,
+    error_message: &'static str,
+) -> StepResult<()>
+where
+    F: FnOnce(&HealthCheckOutcome) -> bool,
+{
+    let outcome = state
+        .health_check_outcome
+        .get()
+        .ok_or("health check outcome should be set")?;
+
+    if predicate(&outcome) {
+        Ok(())
+    } else {
+        Err(error_message)
+    }
+}
+
 /// Execute a health check and record the outcome.
 fn execute_health_check_and_record(
     state: &EngineConnectionState,
@@ -228,16 +252,11 @@ pub fn health_check_is_attempted(
 /// to the ping request within the timeout period.
 #[then("the health check succeeds")]
 pub fn health_check_succeeds(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
-    let outcome = engine_connection_state
-        .health_check_outcome
-        .get()
-        .ok_or("health check outcome should be set")?;
-
-    match outcome {
-        HealthCheckOutcome::Success => Ok(()),
-        HealthCheckOutcome::Failed(_) => Err("Expected health check to succeed, but it failed"),
-        HealthCheckOutcome::Timeout => Err("Expected health check to succeed, but it timed out"),
-    }
+    assert_health_check_outcome(
+        engine_connection_state,
+        |outcome| matches!(outcome, HealthCheckOutcome::Success),
+        "Expected health check to succeed, but it failed or timed out",
+    )
 }
 
 /// Assert that a health check failure error was returned.
@@ -248,18 +267,16 @@ pub fn health_check_succeeds(engine_connection_state: &EngineConnectionState) ->
 pub fn health_check_failure_error_is_returned(
     engine_connection_state: &EngineConnectionState,
 ) -> StepResult<()> {
-    let outcome = engine_connection_state
-        .health_check_outcome
-        .get()
-        .ok_or("health check outcome should be set")?;
-
-    match outcome {
-        HealthCheckOutcome::Failed(_) | HealthCheckOutcome::Timeout => {
-            // A timeout is also a kind of failure, so accept it here
-            Ok(())
-        }
-        HealthCheckOutcome::Success => Err("Expected health check to fail, but it succeeded"),
-    }
+    assert_health_check_outcome(
+        engine_connection_state,
+        |outcome| {
+            matches!(
+                outcome,
+                HealthCheckOutcome::Failed(_) | HealthCheckOutcome::Timeout
+            )
+        },
+        "Expected health check to fail, but it succeeded",
+    )
 }
 
 /// Assert that a health check timeout error was returned.
@@ -270,14 +287,9 @@ pub fn health_check_failure_error_is_returned(
 pub fn health_check_timeout_error_is_returned(
     engine_connection_state: &EngineConnectionState,
 ) -> StepResult<()> {
-    let outcome = engine_connection_state
-        .health_check_outcome
-        .get()
-        .ok_or("health check outcome should be set")?;
-
-    match outcome {
-        HealthCheckOutcome::Timeout => Ok(()),
-        HealthCheckOutcome::Success => Err("Expected health check to timeout, but it succeeded"),
-        HealthCheckOutcome::Failed(_) => Err("Expected timeout error, but got a different failure"),
-    }
+    assert_health_check_outcome(
+        engine_connection_state,
+        |outcome| matches!(outcome, HealthCheckOutcome::Timeout),
+        "Expected health check timeout error, but got a different outcome",
+    )
 }
