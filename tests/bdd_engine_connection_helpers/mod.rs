@@ -3,16 +3,6 @@
 //! This module provides step definitions and state management for BDD tests
 //! covering socket resolution and health check functionality.
 
-// rstest-bdd macros generate internal code that triggers these lints for unused state parameters
-#![allow(
-    clippy::used_underscore_binding,
-    reason = "rstest-bdd requires state parameter in macro-generated code"
-)]
-#![allow(
-    non_snake_case,
-    reason = "rstest-bdd generates non-snake-case internal variables"
-)]
-
 mod health_check_steps;
 
 use std::collections::HashMap;
