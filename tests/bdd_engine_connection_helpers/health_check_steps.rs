@@ -118,8 +118,10 @@ fn execute_health_check_and_record(
     state: &EngineConnectionState,
     socket: &str,
 ) -> StepResult<Option<String>> {
-    let rt = tokio::runtime::Runtime::new().map_err(|_| "failed to create tokio runtime")?;
-    let result = rt.block_on(async { EngineConnector::connect_and_verify_async(socket).await });
+    let rt = tokio::runtime::Runtime::new().map_err(|e| {
+        Box::leak(format!("failed to create tokio runtime: {e}").into_boxed_str()) as &'static str
+    })?;
+    let result = rt.block_on(EngineConnector::connect_and_verify_async(socket));
 
     match result {
         Ok(_) => {
