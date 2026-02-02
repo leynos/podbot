@@ -224,7 +224,7 @@ pub fn health_check_is_performed(
 
 /// Attempt a health check based on the configured simulation mode.
 ///
-/// Behavior depends on state set by "Given" steps:
+/// Behaviour depends on state set by "Given" steps:
 /// - Normal mode: check the default socket
 /// - Not responding mode: check a non-existent socket to simulate failure
 /// - Slow mode: skip (timeout simulation requires external setup)
