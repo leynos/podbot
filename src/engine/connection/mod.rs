@@ -335,6 +335,29 @@ fn extract_socket_path(socket_uri: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// Classify an I/O error kind into a semantic `ContainerError`.
+///
+/// Maps specific `ErrorKind` variants to their corresponding `ContainerError`
+/// variants when a socket path is available, falling back to `ConnectionFailed`
+/// for other error kinds or when no path can be extracted.
+fn classify_io_error_kind(
+    kind: std::io::ErrorKind,
+    socket_path: Option<PathBuf>,
+    error_msg: String,
+) -> ContainerError {
+    match kind {
+        std::io::ErrorKind::PermissionDenied => socket_path.map_or_else(
+            || ContainerError::ConnectionFailed { message: error_msg },
+            |path| ContainerError::PermissionDenied { path },
+        ),
+        std::io::ErrorKind::NotFound => socket_path.map_or_else(
+            || ContainerError::ConnectionFailed { message: error_msg },
+            |path| ContainerError::SocketNotFound { path },
+        ),
+        _ => ContainerError::ConnectionFailed { message: error_msg },
+    }
+}
+
 /// Classify a Bollard connection error into a semantic `ContainerError`.
 ///
 /// Inspects the error type and underlying cause to determine the most
@@ -344,8 +367,6 @@ fn classify_connection_error(
     bollard_error: &bollard::errors::Error,
     socket_uri: &str,
 ) -> ContainerError {
-    use std::io::ErrorKind;
-
     let socket_path = extract_socket_path(socket_uri);
     let error_msg = bollard_error.to_string();
 
@@ -358,32 +379,12 @@ fn classify_connection_error(
 
     // Check for Bollard's IOError variant directly (io::Error is stored in struct, not in source chain)
     if let bollard::errors::Error::IOError { err } = bollard_error {
-        return match err.kind() {
-            ErrorKind::PermissionDenied => socket_path.map_or_else(
-                || ContainerError::ConnectionFailed { message: error_msg },
-                |path| ContainerError::PermissionDenied { path },
-            ),
-            ErrorKind::NotFound => socket_path.map_or_else(
-                || ContainerError::ConnectionFailed { message: error_msg },
-                |path| ContainerError::SocketNotFound { path },
-            ),
-            _ => ContainerError::ConnectionFailed { message: error_msg },
-        };
+        return classify_io_error_kind(err.kind(), socket_path, error_msg);
     }
 
     // Check for wrapped io::Error in the error source chain (for nested errors)
     if let Some(io_err) = find_io_error_in_chain(bollard_error) {
-        return match io_err.kind() {
-            ErrorKind::PermissionDenied => socket_path.map_or_else(
-                || ContainerError::ConnectionFailed { message: error_msg },
-                |path| ContainerError::PermissionDenied { path },
-            ),
-            ErrorKind::NotFound => socket_path.map_or_else(
-                || ContainerError::ConnectionFailed { message: error_msg },
-                |path| ContainerError::SocketNotFound { path },
-            ),
-            _ => ContainerError::ConnectionFailed { message: error_msg },
-        };
+        return classify_io_error_kind(io_err.kind(), socket_path, error_msg);
     }
 
     ContainerError::ConnectionFailed { message: error_msg }

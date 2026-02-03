@@ -363,68 +363,70 @@ fn extract_socket_path_parses_correctly(#[case] uri: &str, #[case] expected: Opt
 }
 
 #[rstest]
-fn classify_connection_error_handles_permission_denied() {
-    use std::io::{Error as IoError, ErrorKind};
+#[case::permission_denied_unix(
+    std::io::ErrorKind::PermissionDenied,
+    "unix:///var/run/docker.sock",
+    "PermissionDenied",
+    Some("/var/run/docker.sock")
+)]
+#[case::not_found_unix(
+    std::io::ErrorKind::NotFound,
+    "unix:///nonexistent.sock",
+    "SocketNotFound",
+    Some("/nonexistent.sock")
+)]
+#[case::connection_refused(
+    std::io::ErrorKind::ConnectionRefused,
+    "unix:///var/run/docker.sock",
+    "ConnectionFailed",
+    None
+)]
+#[case::permission_denied_http(
+    std::io::ErrorKind::PermissionDenied,
+    "http://localhost:2375",
+    "ConnectionFailed",
+    None
+)]
+fn classify_connection_error_handles_errors(
+    #[case] error_kind: std::io::ErrorKind,
+    #[case] socket_uri: &str,
+    #[case] expected_variant: &str,
+    #[case] expected_path: Option<&str>,
+) {
+    use std::io::Error as IoError;
 
-    let io_err = IoError::new(ErrorKind::PermissionDenied, "permission denied");
+    let io_err = IoError::new(error_kind, "test error");
     let bollard_err = bollard::errors::Error::IOError { err: io_err };
 
-    let result = super::classify_connection_error(&bollard_err, "unix:///var/run/docker.sock");
+    let result = super::classify_connection_error(&bollard_err, socket_uri);
 
-    assert!(
-        matches!(
-            result,
-            ContainerError::PermissionDenied { ref path } if path.to_str() == Some("/var/run/docker.sock")
-        ),
-        "expected PermissionDenied with path, got: {result:?}"
-    );
-}
-
-#[rstest]
-fn classify_connection_error_handles_not_found() {
-    use std::io::{Error as IoError, ErrorKind};
-
-    let io_err = IoError::new(ErrorKind::NotFound, "no such file");
-    let bollard_err = bollard::errors::Error::IOError { err: io_err };
-
-    let result = super::classify_connection_error(&bollard_err, "unix:///nonexistent.sock");
-
-    assert!(
-        matches!(
-            result,
-            ContainerError::SocketNotFound { ref path } if path.to_str() == Some("/nonexistent.sock")
-        ),
-        "expected SocketNotFound with path, got: {result:?}"
-    );
-}
-
-#[rstest]
-fn classify_connection_error_falls_back_for_other_errors() {
-    use std::io::{Error as IoError, ErrorKind};
-
-    let io_err = IoError::new(ErrorKind::ConnectionRefused, "connection refused");
-    let bollard_err = bollard::errors::Error::IOError { err: io_err };
-
-    let result = super::classify_connection_error(&bollard_err, "unix:///var/run/docker.sock");
-
-    assert!(
-        matches!(result, ContainerError::ConnectionFailed { .. }),
-        "expected ConnectionFailed, got: {result:?}"
-    );
-}
-
-#[rstest]
-fn classify_connection_error_falls_back_for_http_endpoints() {
-    use std::io::{Error as IoError, ErrorKind};
-
-    let io_err = IoError::new(ErrorKind::PermissionDenied, "permission denied");
-    let bollard_err = bollard::errors::Error::IOError { err: io_err };
-
-    // HTTP endpoints don't have filesystem paths, so should fall back
-    let result = super::classify_connection_error(&bollard_err, "http://localhost:2375");
-
-    assert!(
-        matches!(result, ContainerError::ConnectionFailed { .. }),
-        "expected ConnectionFailed for HTTP endpoint, got: {result:?}"
-    );
+    match expected_variant {
+        "PermissionDenied" => {
+            assert!(
+                matches!(
+                    result,
+                    ContainerError::PermissionDenied { ref path }
+                        if path.to_str() == expected_path
+                ),
+                "expected PermissionDenied with path {expected_path:?}, got: {result:?}"
+            );
+        }
+        "SocketNotFound" => {
+            assert!(
+                matches!(
+                    result,
+                    ContainerError::SocketNotFound { ref path }
+                        if path.to_str() == expected_path
+                ),
+                "expected SocketNotFound with path {expected_path:?}, got: {result:?}"
+            );
+        }
+        "ConnectionFailed" => {
+            assert!(
+                matches!(result, ContainerError::ConnectionFailed { .. }),
+                "expected ConnectionFailed, got: {result:?}"
+            );
+        }
+        _ => panic!("unknown expected_variant: {expected_variant}"),
+    }
 }
