@@ -197,6 +197,46 @@ that the socket is reachable.
 | `container engine health check failed: <message>` | The engine did not respond correctly to the ping request |
 | `container engine health check timed out after 10 seconds` | The engine took too long to respond |
 
+### Connection error troubleshooting
+
+When podbot cannot connect to the container engine, it provides actionable error
+messages to help diagnose the issue.
+
+**Possible connection errors:**
+
+| Error | Cause | Resolution |
+| ----- | ----- | ---------- |
+| `permission denied accessing container socket: <path>` | User lacks permission to access the Docker/Podman socket | Add user to the docker group: `sudo usermod -aG docker $USER && newgrp docker`. For Podman, use the rootless socket at `/run/user/$UID/podman/podman.sock` |
+| `container engine socket not found: <path>` | Socket file does not exist; daemon not running | Start the daemon: Docker: `sudo systemctl start docker`. Podman: `systemctl --user start podman.socket` |
+| `failed to connect to container engine: connection refused` | Daemon not accepting connections | Restart the daemon service and check its status |
+
+**Common permission scenarios:**
+
+1. **Docker on Linux**: By default, the Docker socket (`/var/run/docker.sock`)
+   is owned by the `docker` group. Add your user to this group:
+
+   ```bash
+   sudo usermod -aG docker $USER
+   newgrp docker  # Apply group membership without logging out
+   ```
+
+2. **Rootless Podman**: Use the user-level socket instead of the system socket:
+
+   ```bash
+   # Start the user socket
+   systemctl --user start podman.socket
+
+   # Configure podbot to use it
+   export PODBOT_ENGINE_SOCKET="unix:///run/user/$(id -u)/podman/podman.sock"
+   ```
+
+3. **Podman with sudo**: If using the system Podman socket, ensure the socket
+   service is running:
+
+   ```bash
+   sudo systemctl start podman.socket
+   ```
+
 ### Sandbox configuration
 
 The `[sandbox]` section controls the security and compatibility trade-offs for

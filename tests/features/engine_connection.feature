@@ -79,3 +79,17 @@ Feature: Container engine connection
     Given the container engine is slow to respond
     When a health check is attempted
     Then a health check timeout error is returned
+
+  # Socket permission error scenarios
+
+  Scenario: Permission denied error provides actionable guidance
+    Given a socket path that requires elevated permissions
+    When a connection is attempted
+    Then a permission denied error is returned
+    And the error message includes the socket path
+
+  Scenario: Socket not found error provides actionable guidance
+    Given a socket path that does not exist
+    When a connection is attempted
+    Then a socket not found error is returned
+    And the error message includes the socket path

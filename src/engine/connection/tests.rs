@@ -269,14 +269,15 @@ fn connect_and_verify_propagates_connection_errors(runtime: tokio::runtime::Runt
         EngineConnector::connect_and_verify_async("unix:///nonexistent/socket.sock").await
     });
 
-    // Connection to non-existent socket should fail with ConnectionFailed variant
+    // Connection to non-existent socket should fail with SocketNotFound variant
+    // (error classification detects the NotFound IO error kind)
     let err = result.expect_err("connect to non-existent socket should fail");
     assert!(
         matches!(
             err,
-            PodbotError::Container(ContainerError::ConnectionFailed { .. })
+            PodbotError::Container(ContainerError::SocketNotFound { .. })
         ),
-        "expected ConnectionFailed error variant, got: {err}"
+        "expected SocketNotFound error variant, got: {err}"
     );
 }
 
@@ -340,5 +341,90 @@ fn connect_with_fallback_and_verify_falls_back_to_env(runtime: tokio::runtime::R
     assert!(
         err_msg.contains("env/docker.sock"),
         "error should indicate which socket was used (env-resolved path), got: {err_msg}"
+    );
+}
+
+// =============================================================================
+// Error classification tests
+// =============================================================================
+
+#[rstest]
+#[case::unix_socket("unix:///var/run/docker.sock", Some("/var/run/docker.sock"))]
+#[case::npipe("npipe:////./pipe/docker_engine", Some("//./pipe/docker_engine"))]
+#[case::http("http://localhost:2375", None)]
+#[case::tcp("tcp://localhost:2375", None)]
+#[case::bare_path("/var/run/docker.sock", None)]
+fn extract_socket_path_parses_correctly(#[case] uri: &str, #[case] expected: Option<&str>) {
+    let result = super::extract_socket_path(uri);
+    assert_eq!(
+        result.as_ref().map(|p| p.to_str().expect("valid UTF-8")),
+        expected
+    );
+}
+
+#[rstest]
+fn classify_connection_error_handles_permission_denied() {
+    use std::io::{Error as IoError, ErrorKind};
+
+    let io_err = IoError::new(ErrorKind::PermissionDenied, "permission denied");
+    let bollard_err = bollard::errors::Error::IOError { err: io_err };
+
+    let result = super::classify_connection_error(&bollard_err, "unix:///var/run/docker.sock");
+
+    assert!(
+        matches!(
+            result,
+            ContainerError::PermissionDenied { ref path } if path.to_str() == Some("/var/run/docker.sock")
+        ),
+        "expected PermissionDenied with path, got: {result:?}"
+    );
+}
+
+#[rstest]
+fn classify_connection_error_handles_not_found() {
+    use std::io::{Error as IoError, ErrorKind};
+
+    let io_err = IoError::new(ErrorKind::NotFound, "no such file");
+    let bollard_err = bollard::errors::Error::IOError { err: io_err };
+
+    let result = super::classify_connection_error(&bollard_err, "unix:///nonexistent.sock");
+
+    assert!(
+        matches!(
+            result,
+            ContainerError::SocketNotFound { ref path } if path.to_str() == Some("/nonexistent.sock")
+        ),
+        "expected SocketNotFound with path, got: {result:?}"
+    );
+}
+
+#[rstest]
+fn classify_connection_error_falls_back_for_other_errors() {
+    use std::io::{Error as IoError, ErrorKind};
+
+    let io_err = IoError::new(ErrorKind::ConnectionRefused, "connection refused");
+    let bollard_err = bollard::errors::Error::IOError { err: io_err };
+
+    let result = super::classify_connection_error(&bollard_err, "unix:///var/run/docker.sock");
+
+    assert!(
+        matches!(result, ContainerError::ConnectionFailed { .. }),
+        "expected ConnectionFailed, got: {result:?}"
+    );
+}
+
+#[rstest]
+fn classify_connection_error_falls_back_for_http_endpoints() {
+    use std::io::{Error as IoError, ErrorKind};
+
+    let io_err = IoError::new(ErrorKind::PermissionDenied, "permission denied");
+    let bollard_err = bollard::errors::Error::IOError { err: io_err };
+
+    // HTTP endpoints don't have filesystem paths, so should fall back
+    let result = super::classify_connection_error(&bollard_err, "http://localhost:2375");
+
+    assert!(
+        matches!(result, ContainerError::ConnectionFailed { .. }),
+        "expected ConnectionFailed for HTTP endpoint, got: {result:?}"
     );
 }

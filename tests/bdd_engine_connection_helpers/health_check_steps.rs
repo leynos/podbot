@@ -22,12 +22,14 @@ use super::{EngineConnectionState, HealthCheckOutcome, StepResult};
 /// - Windows: "The system cannot find the file specified"
 /// - Connection refused (daemon not running)
 /// - "failed to connect" wraps the underlying error
+/// - "socket not found" from semantic error classification
 fn is_daemon_unavailable(msg: &str) -> bool {
     msg.contains("No such file")
         || msg.contains("cannot find the file")
         || msg.contains("connection refused")
         || msg.contains("Connection refused")
         || msg.contains("failed to connect")
+        || msg.contains("socket not found")
 }
 
 /// Check if the error is a health check timeout by matching on the error variant.

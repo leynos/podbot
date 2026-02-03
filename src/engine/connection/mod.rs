@@ -7,6 +7,7 @@
 mod health_check;
 
 use std::fmt;
+use std::path::PathBuf;
 
 use bollard::Docker;
 
@@ -251,11 +252,7 @@ impl EngineConnector {
                 )
             }
         }
-        .map_err(|e| {
-            PodbotError::from(ContainerError::ConnectionFailed {
-                message: e.to_string(),
-            })
-        })?;
+        .map_err(|e| PodbotError::from(classify_connection_error(&e, socket_str)))?;
 
         Ok(docker)
     }
@@ -320,6 +317,91 @@ impl EngineConnector {
             .or_else(|| resolver.resolve_from_env())
             .unwrap_or_else(|| SocketResolver::<E>::default_socket().to_owned())
     }
+}
+
+// =============================================================================
+// Error classification helpers
+// =============================================================================
+
+/// Extract the filesystem path from a socket URI.
+///
+/// Strips the scheme prefix (`unix://`, `npipe://`) to get the raw path.
+/// For HTTP endpoints or bare paths, returns `None` as they either don't have
+/// filesystem paths or lack the scheme prefix needed for reliable extraction.
+fn extract_socket_path(socket_uri: &str) -> Option<PathBuf> {
+    socket_uri
+        .strip_prefix("unix://")
+        .or_else(|| socket_uri.strip_prefix("npipe://"))
+        .map(PathBuf::from)
+}
+
+/// Classify a Bollard connection error into a semantic `ContainerError`.
+///
+/// Inspects the error type and underlying cause to determine the most
+/// specific error variant. Falls back to `ConnectionFailed` for errors
+/// that don't match known patterns or for endpoints without filesystem paths.
+fn classify_connection_error(
+    bollard_error: &bollard::errors::Error,
+    socket_uri: &str,
+) -> ContainerError {
+    use std::io::ErrorKind;
+
+    let socket_path = extract_socket_path(socket_uri);
+    let error_msg = bollard_error.to_string();
+
+    // Check for Bollard's explicit SocketNotFoundError variant
+    if let bollard::errors::Error::SocketNotFoundError { .. } = bollard_error {
+        if let Some(path) = socket_path {
+            return ContainerError::SocketNotFound { path };
+        }
+    }
+
+    // Check for Bollard's IOError variant directly (io::Error is stored in struct, not in source chain)
+    if let bollard::errors::Error::IOError { err } = bollard_error {
+        return match err.kind() {
+            ErrorKind::PermissionDenied => socket_path.map_or_else(
+                || ContainerError::ConnectionFailed { message: error_msg },
+                |path| ContainerError::PermissionDenied { path },
+            ),
+            ErrorKind::NotFound => socket_path.map_or_else(
+                || ContainerError::ConnectionFailed { message: error_msg },
+                |path| ContainerError::SocketNotFound { path },
+            ),
+            _ => ContainerError::ConnectionFailed { message: error_msg },
+        };
+    }
+
+    // Check for wrapped io::Error in the error source chain (for nested errors)
+    if let Some(io_err) = find_io_error_in_chain(bollard_error) {
+        return match io_err.kind() {
+            ErrorKind::PermissionDenied => socket_path.map_or_else(
+                || ContainerError::ConnectionFailed { message: error_msg },
+                |path| ContainerError::PermissionDenied { path },
+            ),
+            ErrorKind::NotFound => socket_path.map_or_else(
+                || ContainerError::ConnectionFailed { message: error_msg },
+                |path| ContainerError::SocketNotFound { path },
+            ),
+            _ => ContainerError::ConnectionFailed { message: error_msg },
+        };
+    }
+
+    ContainerError::ConnectionFailed { message: error_msg }
+}
+
+/// Walk the error source chain looking for an `io::Error`.
+///
+/// Returns a new `io::Error` with the same `ErrorKind` if found, since we
+/// cannot return a reference to the original error.
+fn find_io_error_in_chain(error: &dyn std::error::Error) -> Option<std::io::Error> {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = error.source();
+    while let Some(err) = current {
+        if let Some(io_err) = err.downcast_ref::<std::io::Error>() {
+            return Some(std::io::Error::new(io_err.kind(), io_err.to_string()));
+        }
+        current = err.source();
+    }
+    None
 }
 
 #[cfg(test)]
