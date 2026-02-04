@@ -502,36 +502,35 @@ messages to help diagnose the issue.
 
 | Error | Cause | Resolution |
 | ----- | ----- | ---------- |
-| `permission denied accessing container socket: <path>` | User lacks permission to access the Docker/Podman socket | Add user to the docker group: `sudo usermod -aG docker $USER && newgrp docker`. For Podman, use the rootless socket at `/run/user/$UID/podman/podman.sock` |
-| `container engine socket not found: <path>` | Socket file does not exist; daemon not running | Start the daemon: Docker: `sudo systemctl start docker`. Podman: `systemctl --user start podman.socket` |
-| `failed to connect to container engine: connection refused` | Daemon not accepting connections | Restart the daemon service and check its status |
+| `permission denied...` | User lacks socket permission | Add user to docker group or use rootless Podman |
+| `socket not found...` | Socket missing; daemon not running | Start the daemon service |
+| `connection refused` | Daemon not accepting connections | Restart the daemon service |
 
 **Common permission scenarios:**
 
-1. **Docker on Linux**: By default, the Docker socket (`/var/run/docker.sock`)
-   is owned by the `docker` group. Add your user to this group:
+**Docker on Linux**: By default, the Docker socket (`/var/run/docker.sock`) is
+owned by the `docker` group. Add your user to this group:
 
-   ```bash
-   sudo usermod -aG docker $USER
-   newgrp docker  # Apply group membership without logging out
-   ```
+```bash
+sudo usermod -aG docker $USER
+newgrp docker  # Apply group membership without logging out
+```
 
-2. **Rootless Podman**: Use the user-level socket instead of the system socket:
+**Rootless Podman**: Use the user-level socket instead of the system socket:
 
-   ```bash
-   # Start the user socket
-   systemctl --user start podman.socket
+```bash
+# Start the user socket
+systemctl --user start podman.socket
 
-   # Configure podbot to use it
-   export PODBOT_ENGINE_SOCKET="unix:///run/user/$(id -u)/podman/podman.sock"
-   ```
+# Configure podbot to use it
+export PODBOT_ENGINE_SOCKET="unix:///run/user/$(id -u)/podman/podman.sock"
+```
 
-3. **Podman with sudo**: If using the system Podman socket, ensure the socket
-   service is running:
+**Podman with sudo**: If using the system Podman socket, ensure the socket
+service is running:
 
-   ```bash
-   sudo systemctl start podman.socket
-   ```
+```bash
+sudo systemctl start podman.socket
 ```
 
 ---
@@ -606,6 +605,7 @@ All tasks completed successfully:
 12. Execution plan copied to execplans directory
 
 **Quality gates passed:**
+
 - `make check-fmt` ✓
 - `make lint` ✓
 - `make test` ✓ (all 167 tests pass)
@@ -619,8 +619,8 @@ All tasks completed successfully:
 2. **thiserror concat!() limitation**: The `#[error(...)]` attribute doesn't support
    `concat!()` macro. Use multi-line string literals with `\n\` continuation instead.
 
-3. **rstest-bdd Slot<T> requires Clone**: Can't store `Result<Docker, PodbotError>`
-   in `Slot<T>` because it doesn't implement `Clone`. Created `ConnectionOutcome`
+3. **rstest-bdd Slot requires Clone**: Can't store `Result<Docker, PodbotError>`
+   in `Slot` because it doesn't implement `Clone`. Created `ConnectionOutcome`
    enum that captures just the error classification result.
 
 4. **Health check skip logic**: After adding new error message formats, existing
