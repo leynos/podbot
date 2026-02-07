@@ -7,7 +7,7 @@ connection.
 
 **Status:** Complete
 
----
+______________________________________________________________________
 
 ## Big picture
 
@@ -16,7 +16,7 @@ Podman) is operational after establishing a connection. The health check uses
 Bollard's asynchronous `ping()` method with timeout handling to confirm the
 engine responds to API requests, not just that the socket is reachable.
 
----
+______________________________________________________________________
 
 ## Constraints
 
@@ -28,7 +28,7 @@ engine responds to API requests, not just that the socket is reachable.
    development (BDD) tests
 6. **All checks must pass:** `make check-fmt`, `make lint`, `make test`
 
----
+______________________________________________________________________
 
 ## Implementation tasks
 
@@ -56,7 +56,7 @@ HealthCheckTimeout {
 
 Added unit tests for error display formatting.
 
----
+______________________________________________________________________
 
 ### Task 2: Implement health check methods ✓
 
@@ -83,7 +83,7 @@ Implementation uses:
 - Maps Bollard errors to `ContainerError::HealthCheckFailed`
 - Maps timeout to `ContainerError::HealthCheckTimeout`
 
----
+______________________________________________________________________
 
 ### Task 3: Add unit tests ✓
 
@@ -95,7 +95,7 @@ Added tests for:
 - `connect_with_fallback_and_verify` uses resolved socket
 - `connect_with_fallback_and_verify` falls back to environment variable
 
----
+______________________________________________________________________
 
 ### Task 4: Add BDD scenarios ✓
 
@@ -120,7 +120,7 @@ Scenario: Health check times out on slow engine
   Then a health check timeout error is returned
 ```
 
----
+______________________________________________________________________
 
 ### Task 5: Add BDD step definitions ✓
 
@@ -136,7 +136,7 @@ Step definitions use `rstest_bdd::skip!()` when:
 - No container daemon is available for the success scenario
 - Timeout simulation is needed (requires controllable slow endpoint)
 
----
+______________________________________________________________________
 
 ### Task 6: Update documentation ✓
 
@@ -147,7 +147,7 @@ Added "Engine health check" section documenting:
 - Health check behaviour (ping request, 10-second timeout)
 - Possible error messages users might see
 
----
+______________________________________________________________________
 
 ### Task 7: Run verification ✓
 
@@ -157,7 +157,7 @@ Execute all checks before committing:
 make check-fmt && make lint && make test
 ```
 
----
+______________________________________________________________________
 
 ### Task 8: Update roadmap ✓
 
@@ -169,7 +169,7 @@ Mark task as done:
 - [x] Add a health check that verifies the engine responds.
 ```
 
----
+______________________________________________________________________
 
 ## Design decisions
 
@@ -217,29 +217,29 @@ callers to handle these cases differently. For example, a timeout might warrant
 a retry with a longer timeout, while a failed response indicates the daemon is
 responding but unhealthy.
 
----
+______________________________________________________________________
 
 ## Files modified
 
 Table: Files modified in this implementation
 
-| File | Action |
-|------|--------|
-| `src/error.rs` | Added `HealthCheckFailed` and `HealthCheckTimeout` variants |
-| `src/engine/connection/mod.rs` | Added health check methods |
-| `src/engine/connection/tests.rs` | Added unit tests for health check flow |
-| `tests/features/engine_connection.feature` | Added health check BDD scenarios |
-| `tests/bdd_engine_connection.rs` | Added scenario bindings |
-| `tests/bdd_engine_connection_helpers.rs` | Added step definitions |
-| `docs/users-guide.md` | Documented health check behaviour |
-| `docs/podbot-roadmap.md` | Marked task as done |
+| File                                       | Action                                                      |
+| ------------------------------------------ | ----------------------------------------------------------- |
+| `src/error.rs`                             | Added `HealthCheckFailed` and `HealthCheckTimeout` variants |
+| `src/engine/connection/mod.rs`             | Added health check methods                                  |
+| `src/engine/connection/tests.rs`           | Added unit tests for health check flow                      |
+| `tests/features/engine_connection.feature` | Added health check BDD scenarios                            |
+| `tests/bdd_engine_connection.rs`           | Added scenario bindings                                     |
+| `tests/bdd_engine_connection_helpers.rs`   | Added step definitions                                      |
+| `docs/users-guide.md`                      | Documented health check behaviour                           |
+| `docs/podbot-roadmap.md`                   | Marked task as done                                         |
 
----
+______________________________________________________________________
 
 ## Progress log
 
 Table: Progress log for this implementation
 
-| Date | Status | Notes |
-|------|--------|-------|
+| Date       | Status   | Notes                              |
+| ---------- | -------- | ---------------------------------- |
 | 2026-01-31 | Complete | All tasks implemented and verified |

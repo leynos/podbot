@@ -7,7 +7,7 @@
 
 **Status:** Complete
 
----
+______________________________________________________________________
 
 ## Big picture
 
@@ -15,7 +15,8 @@ Create a container engine module that connects to Docker or Podman via the
 Bollard library. The socket endpoint is resolved through a priority-based
 fallback chain:
 
-1. **Command-line interface (CLI) argument** (`--engine-socket`) — highest priority
+1. **Command-line interface (CLI) argument** (`--engine-socket`) — highest
+   priority
 2. **Config file** (`engine_socket` in TOML)
 3. **`PODBOT_ENGINE_SOCKET`** environment variable
 4. **`DOCKER_HOST`** environment variable
@@ -25,11 +26,11 @@ fallback chain:
    `//./pipe/docker_engine` (Windows)
 
 The first three sources are already handled by the existing configuration layer
-system (`loader.rs`). This implementation adds support for the industry-standard
-`DOCKER_HOST`, `CONTAINER_HOST`, and `PODMAN_HOST` environment variables as
-fallbacks, and connects to the engine using Bollard.
+system (`loader.rs`). This implementation adds support for the
+industry-standard `DOCKER_HOST`, `CONTAINER_HOST`, and `PODMAN_HOST`
+environment variables as fallbacks, and connects to the engine using Bollard.
 
----
+______________________________________________________________________
 
 ## Constraints
 
@@ -41,7 +42,7 @@ fallbacks, and connects to the engine using Bollard.
    development (BDD) tests
 6. **All checks must pass:** `make check-fmt`, `make lint`, `make test`
 
----
+______________________________________________________________________
 
 ## Implementation tasks
 
@@ -56,7 +57,7 @@ Add `mockable` to dev-dependencies for environment variable mocking in tests:
 mockable = { version = "0.1.4", default-features = false, features = ["mock"] }
 ```
 
----
+______________________________________________________________________
 
 ### Task 2: Create the `engine` module ✓
 
@@ -73,7 +74,7 @@ Add module declaration:
 pub mod engine;
 ```
 
----
+______________________________________________________________________
 
 ### Task 3: Implement `SocketResolver` ✓
 
@@ -128,7 +129,7 @@ impl<'a, E: Env> SocketResolver<'a, E> {
 }
 ```
 
----
+______________________________________________________________________
 
 ### Task 4: Implement `EngineConnector` ✓
 
@@ -184,7 +185,7 @@ impl EngineConnector {
 }
 ```
 
----
+______________________________________________________________________
 
 ### Task 5: Update `ContainerError` if needed ✓
 
@@ -193,7 +194,7 @@ impl EngineConnector {
 The existing `ContainerError::ConnectionFailed` variant is sufficient. No
 changes needed.
 
----
+______________________________________________________________________
 
 ### Task 6: Create unit tests with `rstest` ✓
 
@@ -213,7 +214,7 @@ Unit tests cover:
 - `resolve_socket` uses default when no source is available
 - Config takes precedence over environment
 
----
+______________________________________________________________________
 
 ### Task 7: Create BDD feature file ✓
 
@@ -230,7 +231,7 @@ Scenarios cover:
 - `DOCKER_HOST` takes priority over `CONTAINER_HOST`
 - `CONTAINER_HOST` takes priority over `PODMAN_HOST`
 
----
+______________________________________________________________________
 
 ### Task 8: Create BDD test implementation ✓
 
@@ -242,7 +243,7 @@ Scenario bindings for all feature file scenarios.
 
 Step definitions using `MockEnv` for environment variable control.
 
----
+______________________________________________________________________
 
 ### Task 9: Update user's guide ✓
 
@@ -250,7 +251,7 @@ Step definitions using `MockEnv` for environment variable control.
 
 Added documentation for the container engine socket resolution order.
 
----
+______________________________________________________________________
 
 ### Task 10: Update roadmap ✓
 
@@ -258,7 +259,7 @@ Added documentation for the container engine socket resolution order.
 
 Mark the first task in Step 2.1 as done.
 
----
+______________________________________________________________________
 
 ### Task 11: Run verification ✓
 
@@ -268,7 +269,7 @@ Execute all checks before committing:
 make check-fmt && make lint && make test
 ```
 
----
+______________________________________________________________________
 
 ## Design decisions
 
@@ -276,9 +277,9 @@ make check-fmt && make lint && make test
 
 **Chosen:** `DOCKER_HOST` > `CONTAINER_HOST` > `PODMAN_HOST`
 
-**Rationale:** `DOCKER_HOST` is the most widely used convention. `CONTAINER_HOST`
-is a container-agnostic alternative. `PODMAN_HOST` is Podman-specific. This
-order maximizes compatibility with existing tooling.
+**Rationale:** `DOCKER_HOST` is the most widely used convention.
+`CONTAINER_HOST` is a container-agnostic alternative. `PODMAN_HOST` is
+Podman-specific. This order maximizes compatibility with existing tooling.
 
 ### Decision 2: Dependency injection for environment access
 
@@ -305,30 +306,30 @@ are synchronous — they only create the client configuration. The actual async
 input/output (I/O) happens when making application programming interface (API)
 calls. This simplifies the API and test code.
 
----
+______________________________________________________________________
 
 ## Files modified
 
 Table: Files modified in this implementation
 
-| File | Action |
-|------|--------|
-| `Cargo.toml` | Added `mockable` dev-dependency |
-| `src/lib.rs` | Added `pub mod engine;` |
-| `src/engine/mod.rs` | Created module root |
-| `src/engine/connection.rs` | Implemented `SocketResolver` and `EngineConnector` |
-| `tests/features/engine_connection.feature` | Created BDD feature |
-| `tests/bdd_engine_connection.rs` | Created BDD test file |
-| `tests/bdd_engine_connection_helpers.rs` | Created BDD step definitions |
-| `docs/users-guide.md` | Documented environment variable fallback |
-| `docs/podbot-roadmap.md` | Marked task as done |
+| File                                       | Action                                             |
+| ------------------------------------------ | -------------------------------------------------- |
+| `Cargo.toml`                               | Added `mockable` dev-dependency                    |
+| `src/lib.rs`                               | Added `pub mod engine;`                            |
+| `src/engine/mod.rs`                        | Created module root                                |
+| `src/engine/connection.rs`                 | Implemented `SocketResolver` and `EngineConnector` |
+| `tests/features/engine_connection.feature` | Created BDD feature                                |
+| `tests/bdd_engine_connection.rs`           | Created BDD test file                              |
+| `tests/bdd_engine_connection_helpers.rs`   | Created BDD step definitions                       |
+| `docs/users-guide.md`                      | Documented environment variable fallback           |
+| `docs/podbot-roadmap.md`                   | Marked task as done                                |
 
----
+______________________________________________________________________
 
 ## Progress log
 
 Table: Progress log for this implementation
 
-| Date | Status | Notes |
-|------|--------|-------|
+| Date       | Status   | Notes                              |
+| ---------- | -------- | ---------------------------------- |
 | 2026-01-25 | Complete | All tasks implemented and verified |

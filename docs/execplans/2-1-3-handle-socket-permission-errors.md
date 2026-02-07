@@ -5,7 +5,8 @@
 Implement actionable error handling for container engine socket permission
 errors, as specified in `docs/podbot-roadmap.md` Phase 2.1.
 
-**Roadmap task:** Handle socket permission errors with actionable error messages.
+**Roadmap task:** Handle socket permission errors with actionable error
+messages.
 
 ## Current state
 
@@ -24,7 +25,7 @@ errors, as specified in `docs/podbot-roadmap.md` Phase 2.1.
 4. **Actionable messages:** Enhanced `#[error(...)]` with remediation hints
 5. **rstest-bdd 0.4.0:** Use existing `Slot<T>` pattern (compatible with v0.4.0)
 
----
+______________________________________________________________________
 
 ## Implementation tasks
 
@@ -37,7 +38,7 @@ rstest-bdd = "0.4.0"
 rstest-bdd-macros = { version = "0.4.0", features = ["compile-time-validation"] }
 ```
 
----
+______________________________________________________________________
 
 ### Task 2: Add error classification helpers
 
@@ -113,7 +114,7 @@ fn find_io_error_in_chain(error: &dyn std::error::Error) -> Option<std::io::Erro
 }
 ```
 
----
+______________________________________________________________________
 
 ### Task 3: Update `connect()` to use classification
 
@@ -135,7 +136,7 @@ With:
 .map_err(|e| PodbotError::from(classify_connection_error(e, socket_str)))?;
 ```
 
----
+______________________________________________________________________
 
 ### Task 4: Enhance error messages
 
@@ -171,7 +172,7 @@ PermissionDenied {
 },
 ```
 
----
+______________________________________________________________________
 
 ### Task 5: Add unit tests
 
@@ -268,7 +269,7 @@ fn classify_connection_error_falls_back_for_http_endpoints() {
 }
 ```
 
----
+______________________________________________________________________
 
 ### Task 6: Add behaviour-driven development (BDD) feature scenarios
 
@@ -293,7 +294,7 @@ Add after line 82:
     And the error message includes the socket path
 ```
 
----
+______________________________________________________________________
 
 ### Task 7: Add BDD step definitions
 
@@ -423,7 +424,7 @@ fn error_includes_socket_path(
 }
 ```
 
----
+______________________________________________________________________
 
 ### Task 8: Update BDD helpers module
 
@@ -456,7 +457,7 @@ Add fields to `EngineConnectionState` struct after line 55:
     pub connection_result: Slot<Result<bollard::Docker, PodbotError>>,
 ```
 
----
+______________________________________________________________________
 
 ### Task 9: Add BDD scenario bindings
 
@@ -484,7 +485,7 @@ fn socket_not_found_error_guidance(engine_connection_state: EngineConnectionStat
 }
 ```
 
----
+______________________________________________________________________
 
 ### Task 10: Update user documentation
 
@@ -512,8 +513,8 @@ messages to help diagnose the issue.
 owned by the `docker` group. Add the current user to this group:
 
 ```bash
-sudo usermod -aG docker $USER
-newgrp docker  # Apply group membership without logging out
+sudo usermod -aG docker $USER newgrp docker  # Apply group membership without
+logging out
 ```
 
 **Rootless Podman**: Use the user-level socket instead of the system socket:
@@ -533,7 +534,7 @@ service is running:
 sudo systemctl start podman.socket
 ```
 
----
+______________________________________________________________________
 
 ### Task 11: Update roadmap
 
@@ -551,7 +552,7 @@ To:
 - [x] Handle socket permission errors with actionable error messages.
 ```
 
----
+______________________________________________________________________
 
 ## Files modified
 
@@ -572,10 +573,8 @@ To:
 ## Verification
 
 ```bash
-set -o pipefail
-make check-fmt 2>&1 | tee /tmp/fmt.log
-make lint 2>&1 | tee /tmp/lint.log
-make test 2>&1 | tee /tmp/test.log
+set -o pipefail make check-fmt 2>&1 | tee /tmp/fmt.log make lint 2>&1 | tee
+/tmp/lint.log make test 2>&1 | tee /tmp/test.log
 ```
 
 ## Testing notes
@@ -585,7 +584,7 @@ make test 2>&1 | tee /tmp/test.log
 - BDD `PermissionDenied` test uses `rstest_bdd::skip!()` when user has
   permissions or daemon not running
 
----
+______________________________________________________________________
 
 ## Final status: complete
 

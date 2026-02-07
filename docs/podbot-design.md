@@ -323,6 +323,81 @@ classDiagram
     BddTestsErrorHandling --> PodbotError : scenarios_cover
 ```
 
+For screen readers: The following class diagram focuses on engine connection
+error classification and how semantic container errors propagate to
+`PodbotError`.
+
+```mermaid
+classDiagram
+    class EngineConnector {
+        +connect(socket_str: &str) Result~Docker, PodbotError~
+    }
+
+    class ContainerError {
+        <<enum>>
+        ConnectionFailed
+        SocketNotFound
+        PermissionDenied
+    }
+
+    class ContainerError_ConnectionFailed {
+        +message: String
+    }
+
+    class ContainerError_SocketNotFound {
+        +path: PathBuf
+    }
+
+    class ContainerError_PermissionDenied {
+        +path: PathBuf
+    }
+
+    class PodbotError {
+        <<enum or struct>>
+        +from(container_error: ContainerError) PodbotError
+    }
+
+    class ErrorClassificationHelpers {
+        <<module>>
+        +extract_socket_path(socket_uri: &str) Option~PathBuf~
+        +classify_io_error_kind(kind: ErrorKind, socket_path: Option~PathBuf~, error_msg: String) ContainerError
+        +classify_connection_error(bollard_error: &Error, socket_uri: &str) ContainerError
+        +find_io_error_in_chain(error: &Error) Option~IoError~
+    }
+
+    class BollardError {
+        <<enum>>
+        SocketNotFoundError
+        IOError
+        Other
+    }
+
+    class IoError {
+        +kind() ErrorKind
+        +to_string() String
+    }
+
+    class ErrorKind {
+        <<enum>>
+        PermissionDenied
+        NotFound
+        Other
+    }
+
+    EngineConnector --> ErrorClassificationHelpers : uses
+    EngineConnector --> PodbotError : returns
+    PodbotError o-- ContainerError
+    ContainerError o-- ContainerError_ConnectionFailed
+    ContainerError o-- ContainerError_SocketNotFound
+    ContainerError o-- ContainerError_PermissionDenied
+    ErrorClassificationHelpers --> ContainerError : returns
+    ErrorClassificationHelpers --> BollardError : inspects
+    ErrorClassificationHelpers --> IoError : inspects
+    IoError --> ErrorKind : uses
+```
+
+_Figure 2: Engine connection error hierarchy and classification flow._
+
 ## CLI interface
 
 The CLI exposes a minimal surface area.

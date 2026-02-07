@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn classify_connection_error_handles_chained_io_error_via_source() {
+    fn classify_chained_io_error_via_find_io_error_in_chain() {
         let wrapped = std::io::Error::other(IoSourceWrapper {
             source: std::io::Error::new(std::io::ErrorKind::PermissionDenied, "permission denied"),
         });

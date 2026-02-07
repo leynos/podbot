@@ -203,11 +203,11 @@ error messages to help diagnose the issue.
 
 **Possible connection errors:**
 
-| Error                                                       | Cause                                                    | Resolution                                                                                                                                                                           |
-| ----------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `permission denied accessing container socket: <path>`      | User lacks permission to access the Docker/Podman socket | Add user to the docker group: `sudo usermod -aG docker $USER && newgrp docker`. For Podman, use the rootless socket at `/run/user/$UID/podman/podman.sock` (where UID means user ID) |
-| `container engine socket not found: <path>`                 | Socket file does not exist; daemon not running           | Start the daemon: Docker: `sudo systemctl start docker`. Podman: `systemctl --user start podman.socket`                                                                              |
-| `failed to connect to container engine: connection refused` | Daemon not accepting connections                         | Restart the daemon service and check its status                                                                                                                                      |
+| Error                                                       | Cause                                                    | Resolution                                                                                                                                                                                               |
+| ----------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `permission denied accessing container socket: <path>`      | User lacks permission to access the Docker/Podman socket | Add user to the docker group: `sudo usermod -aG docker $USER && newgrp docker`. For Podman, use the rootless socket at `/run/user/$UID/podman/podman.sock` (where user ID (UID) identifies your account) |
+| `container engine socket not found: <path>`                 | Socket file does not exist; daemon not running           | Start the daemon: Docker: `sudo systemctl start docker`. Podman: `systemctl --user start podman.socket`                                                                                                  |
+| `failed to connect to container engine: connection refused` | Daemon not accepting connections                         | Restart the daemon service and check its status                                                                                                                                                          |
 
 **Common permission scenarios:**
 
