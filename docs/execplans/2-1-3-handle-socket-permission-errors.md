@@ -1,4 +1,4 @@
-# Execution Plan: Handle Socket Permission Errors (Phase 2.1.3)
+# Execution plan: handle socket permission errors (phase 2.1.3)
 
 ## Overview
 
@@ -7,7 +7,7 @@ errors, as specified in `docs/podbot-roadmap.md` Phase 2.1.
 
 **Roadmap task:** Handle socket permission errors with actionable error messages.
 
-## Current State
+## Current state
 
 - `src/engine/connection/mod.rs` (lines 254-258): All Bollard errors wrapped as
   `ContainerError::ConnectionFailed`
@@ -15,7 +15,7 @@ errors, as specified in `docs/podbot-roadmap.md` Phase 2.1.
   variants exist but are unused
 - rstest-bdd version: 0.3.2 (upgrade to 0.4.0 requested)
 
-## Design Decisions
+## Design decisions
 
 1. **Error detection:** Inspect Bollard's `IOError` variant and underlying
    `std::io::ErrorKind` (more reliable than string matching)
@@ -26,7 +26,7 @@ errors, as specified in `docs/podbot-roadmap.md` Phase 2.1.
 
 ---
 
-## Implementation Tasks
+## Implementation tasks
 
 ### Task 1: Upgrade rstest-bdd to 0.4.0
 
@@ -509,7 +509,7 @@ messages to help diagnose the issue.
 **Common permission scenarios:**
 
 **Docker on Linux**: By default, the Docker socket (`/var/run/docker.sock`) is
-owned by the `docker` group. Add your user to this group:
+owned by the `docker` group. Add the current user to this group:
 
 ```bash
 sudo usermod -aG docker $USER
@@ -553,7 +553,7 @@ To:
 
 ---
 
-## Files Modified
+## Files modified
 
 | File | Action |
 | ---- | ------ |
@@ -578,7 +578,7 @@ make lint 2>&1 | tee /tmp/lint.log
 make test 2>&1 | tee /tmp/test.log
 ```
 
-## Testing Notes
+## Testing notes
 
 - Unit tests verify error classification with mock Bollard errors
 - BDD `SocketNotFound` test should always pass (nonexistent path)
@@ -587,7 +587,7 @@ make test 2>&1 | tee /tmp/test.log
 
 ---
 
-## Final Status: COMPLETE
+## Final status: complete
 
 All tasks completed successfully:
 
@@ -610,7 +610,7 @@ All tasks completed successfully:
 - `make lint` ✓
 - `make test` ✓ (all 167 tests pass)
 
-## Lessons Learned
+## Lessons learned
 
 1. **Bollard IOError struct syntax**: Bollard v0.20.0 uses `IOError { err }` struct
    syntax rather than tuple `IOError(io_err)`. Must match directly on this variant

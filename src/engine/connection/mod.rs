@@ -221,8 +221,10 @@ impl EngineConnector {
     ///
     /// # Errors
     ///
-    /// Returns `ContainerError::ConnectionFailed` if the connection cannot be
-    /// established.
+    /// Returns a `ContainerError` variant:
+    /// - `ContainerError::SocketNotFound` if the socket file does not exist.
+    /// - `ContainerError::PermissionDenied` if the user lacks socket access.
+    /// - `ContainerError::ConnectionFailed` for all other connection failures.
     pub fn connect(socket: impl AsRef<str>) -> Result<Docker, PodbotError> {
         let socket_str = socket.as_ref();
         let (docker_result, socket_for_error) = match SocketType::classify(socket_str) {
@@ -296,7 +298,9 @@ impl EngineConnector {
     ///
     /// # Errors
     ///
-    /// Returns `ContainerError::ConnectionFailed` if the connection cannot be
+    /// Returns a `ContainerError` variant (`ContainerError::SocketNotFound`,
+    /// `ContainerError::PermissionDenied`, or
+    /// `ContainerError::ConnectionFailed`) if the connection cannot be
     /// established.
     pub fn connect_with_fallback<S: AsRef<str> + ?Sized, E: mockable::Env>(
         config_socket: Option<&S>,

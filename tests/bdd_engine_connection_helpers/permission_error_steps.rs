@@ -15,37 +15,40 @@ use super::{ConnectionOutcome, EngineConnectionState, StepResult};
 // Given step definitions
 // =============================================================================
 
-/// Returns a platform-appropriate socket path that commonly requires elevated
-/// permissions.
-fn restricted_socket_path() -> String {
+/// Returns a platform-appropriate socket path.
+fn platform_socket_path(unix_path: &str, windows_path: &str) -> String {
     #[cfg(unix)]
     {
-        String::from("unix:///var/run/docker.sock")
+        let _ = windows_path;
+        String::from(unix_path)
     }
     #[cfg(windows)]
     {
-        String::from("npipe:////./pipe/docker_engine")
+        let _ = unix_path;
+        String::from(windows_path)
     }
     #[cfg(not(any(unix, windows)))]
     {
-        String::from("unix:///var/run/docker.sock")
+        let _ = windows_path;
+        String::from(unix_path)
     }
+}
+
+/// Returns a platform-appropriate socket path that commonly requires elevated
+/// permissions.
+fn restricted_socket_path() -> String {
+    platform_socket_path(
+        "unix:///var/run/docker.sock",
+        "npipe:////./pipe/docker_engine",
+    )
 }
 
 /// Returns a platform-appropriate socket path that should not exist.
 fn missing_socket_path() -> String {
-    #[cfg(unix)]
-    {
-        String::from("unix:///nonexistent/podbot-test-socket.sock")
-    }
-    #[cfg(windows)]
-    {
-        String::from("npipe:////./pipe/nonexistent-podbot-test-socket")
-    }
-    #[cfg(not(any(unix, windows)))]
-    {
-        String::from("unix:///nonexistent/podbot-test-socket.sock")
-    }
+    platform_socket_path(
+        "unix:///nonexistent/podbot-test-socket.sock",
+        "npipe:////./pipe/nonexistent-podbot-test-socket",
+    )
 }
 
 /// Extracts a path component from a socket URI for comparison in assertions.
@@ -117,20 +120,18 @@ fn connection_is_attempted(engine_connection_state: &EngineConnectionState) -> S
 
     let outcome = match result {
         Ok(_) => ConnectionOutcome::Success,
-        Err(PodbotError::Container(ContainerError::PermissionDenied { path })) => {
-            let message = ContainerError::PermissionDenied { path: path.clone() }.to_string();
-            ConnectionOutcome::PermissionDenied {
-                path: path.display().to_string(),
-                message,
-            }
-        }
-        Err(PodbotError::Container(ContainerError::SocketNotFound { path })) => {
-            let message = ContainerError::SocketNotFound { path: path.clone() }.to_string();
-            ConnectionOutcome::SocketNotFound {
-                path: path.display().to_string(),
-                message,
-            }
-        }
+        Err(PodbotError::Container(
+            ref container_err @ ContainerError::PermissionDenied { ref path },
+        )) => ConnectionOutcome::PermissionDenied {
+            path: path.display().to_string(),
+            message: container_err.to_string(),
+        },
+        Err(PodbotError::Container(
+            ref container_err @ ContainerError::SocketNotFound { ref path },
+        )) => ConnectionOutcome::SocketNotFound {
+            path: path.display().to_string(),
+            message: container_err.to_string(),
+        },
         Err(e) => ConnectionOutcome::OtherError(e.to_string()),
     };
 

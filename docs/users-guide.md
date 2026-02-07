@@ -211,7 +211,7 @@ error messages to help diagnose the issue.
 
 **Common permission scenarios:**
 
-1. **Docker on Linux**: By default, the Docker socket (`/var/run/docker.sock`)
+- **Docker on Linux**: By default, the Docker socket (`/var/run/docker.sock`)
    is owned by the `docker` group. Add the current user to this group:
 
    ```bash
@@ -219,7 +219,7 @@ error messages to help diagnose the issue.
    newgrp docker  # Apply group membership without logging out
    ```
 
-2. **Rootless Podman**: Use the user-level socket instead of the system socket:
+- **Rootless Podman**: Use the user-level socket instead of the system socket:
 
    ```bash
    # Start the user socket
@@ -229,7 +229,7 @@ error messages to help diagnose the issue.
    export PODBOT_ENGINE_SOCKET="unix:///run/user/$(id -u)/podman/podman.sock"
    ```
 
-3. **Podman with sudo**: If using the system Podman socket, ensure the socket
+- **Podman with sudo**: If using the system Podman socket, ensure the socket
    service is running:
 
    ```bash
