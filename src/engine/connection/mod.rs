@@ -2,16 +2,17 @@
 //!
 //! This module provides functionality to resolve container engine socket endpoints
 //! from multiple sources (environment variables, configuration, platform defaults)
-//! and establish connections using the Bollard library.
+//! and establish connections using the `Bollard` library.
 
+mod error_classification;
 mod health_check;
 
 use std::fmt;
-use std::path::PathBuf;
 
 use bollard::Docker;
+use error_classification::classify_connection_error;
 
-use crate::error::{ContainerError, PodbotError};
+use crate::error::PodbotError;
 
 // =============================================================================
 // SocketPath newtype
@@ -224,11 +225,14 @@ impl EngineConnector {
     /// established.
     pub fn connect(socket: impl AsRef<str>) -> Result<Docker, PodbotError> {
         let socket_str = socket.as_ref();
-        let docker = match SocketType::classify(socket_str) {
-            SocketType::Socket => Docker::connect_with_socket(
-                socket_str,
-                CONNECTION_TIMEOUT_SECS,
-                bollard::API_DEFAULT_VERSION,
+        let (docker_result, socket_for_error) = match SocketType::classify(socket_str) {
+            SocketType::Socket => (
+                Docker::connect_with_socket(
+                    socket_str,
+                    CONNECTION_TIMEOUT_SECS,
+                    bollard::API_DEFAULT_VERSION,
+                ),
+                socket_str.to_owned(),
             ),
             SocketType::Http => {
                 // Rewrite tcp:// to http:// for Bollard compatibility
@@ -237,22 +241,29 @@ impl EngineConnector {
                 } else {
                     socket_str.to_owned()
                 };
-                Docker::connect_with_http(
-                    &http_socket,
-                    CONNECTION_TIMEOUT_SECS,
-                    bollard::API_DEFAULT_VERSION,
+                (
+                    Docker::connect_with_http(
+                        &http_socket,
+                        CONNECTION_TIMEOUT_SECS,
+                        bollard::API_DEFAULT_VERSION,
+                    ),
+                    http_socket,
                 )
             }
             SocketType::BarePath => {
                 let socket_uri = Self::normalize_bare_path(socket_str);
-                Docker::connect_with_socket(
-                    &socket_uri,
-                    CONNECTION_TIMEOUT_SECS,
-                    bollard::API_DEFAULT_VERSION,
+                (
+                    Docker::connect_with_socket(
+                        &socket_uri,
+                        CONNECTION_TIMEOUT_SECS,
+                        bollard::API_DEFAULT_VERSION,
+                    ),
+                    socket_uri,
                 )
             }
-        }
-        .map_err(|e| PodbotError::from(classify_connection_error(&e, socket_str)))?;
+        };
+        let docker = docker_result
+            .map_err(|e| PodbotError::from(classify_connection_error(&e, &socket_for_error)))?;
 
         Ok(docker)
     }
@@ -317,92 +328,6 @@ impl EngineConnector {
             .or_else(|| resolver.resolve_from_env())
             .unwrap_or_else(|| SocketResolver::<E>::default_socket().to_owned())
     }
-}
-
-// =============================================================================
-// Error classification helpers
-// =============================================================================
-
-/// Extract the filesystem path from a socket URI.
-///
-/// Strips the scheme prefix (`unix://`, `npipe://`) to get the raw path.
-/// For HTTP endpoints or bare paths, returns `None` as they either don't have
-/// filesystem paths or lack the scheme prefix needed for reliable extraction.
-fn extract_socket_path(socket_uri: &str) -> Option<PathBuf> {
-    socket_uri
-        .strip_prefix("unix://")
-        .or_else(|| socket_uri.strip_prefix("npipe://"))
-        .map(PathBuf::from)
-}
-
-/// Classify an I/O error kind into a semantic `ContainerError`.
-///
-/// Maps specific `ErrorKind` variants to their corresponding `ContainerError`
-/// variants when a socket path is available, falling back to `ConnectionFailed`
-/// for other error kinds or when no path can be extracted.
-fn classify_io_error_kind(
-    kind: std::io::ErrorKind,
-    socket_path: Option<PathBuf>,
-    error_msg: String,
-) -> ContainerError {
-    match kind {
-        std::io::ErrorKind::PermissionDenied => socket_path.map_or_else(
-            || ContainerError::ConnectionFailed { message: error_msg },
-            |path| ContainerError::PermissionDenied { path },
-        ),
-        std::io::ErrorKind::NotFound => socket_path.map_or_else(
-            || ContainerError::ConnectionFailed { message: error_msg },
-            |path| ContainerError::SocketNotFound { path },
-        ),
-        _ => ContainerError::ConnectionFailed { message: error_msg },
-    }
-}
-
-/// Classify a Bollard connection error into a semantic `ContainerError`.
-///
-/// Inspects the error type and underlying cause to determine the most
-/// specific error variant. Falls back to `ConnectionFailed` for errors
-/// that don't match known patterns or for endpoints without filesystem paths.
-fn classify_connection_error(
-    bollard_error: &bollard::errors::Error,
-    socket_uri: &str,
-) -> ContainerError {
-    let socket_path = extract_socket_path(socket_uri);
-    let error_msg = bollard_error.to_string();
-
-    // Check for Bollard's explicit SocketNotFoundError variant
-    if let bollard::errors::Error::SocketNotFoundError { .. } = bollard_error {
-        if let Some(path) = socket_path {
-            return ContainerError::SocketNotFound { path };
-        }
-    }
-
-    // Check for Bollard's IOError variant directly (io::Error is stored in struct, not in source chain)
-    if let bollard::errors::Error::IOError { err } = bollard_error {
-        return classify_io_error_kind(err.kind(), socket_path, error_msg);
-    }
-
-    // Check for wrapped io::Error in the error source chain (for nested errors)
-    if let Some(io_err) = find_io_error_in_chain(bollard_error) {
-        return classify_io_error_kind(io_err.kind(), socket_path, error_msg);
-    }
-
-    ContainerError::ConnectionFailed { message: error_msg }
-}
-
-/// Walk the error source chain looking for an `io::Error`.
-///
-/// Returns a new `io::Error` with the same `ErrorKind` if found, since we
-/// cannot return a reference to the original error.
-fn find_io_error_in_chain(error: &dyn std::error::Error) -> Option<std::io::Error> {
-    let mut current: Option<&(dyn std::error::Error + 'static)> = error.source();
-    while let Some(err) = current {
-        if let Some(io_err) = err.downcast_ref::<std::io::Error>() {
-            return Some(std::io::Error::new(io_err.kind(), io_err.to_string()));
-        }
-        current = err.source();
-    }
-    None
 }
 
 #[cfg(test)]

@@ -49,10 +49,10 @@ pub enum HealthCheckOutcome {
 pub enum ConnectionOutcome {
     /// Connection succeeded.
     Success,
-    /// Permission denied error with the socket path.
-    PermissionDenied(String),
-    /// Socket not found error with the socket path.
-    SocketNotFound(String),
+    /// Permission denied error with the socket path and rendered message.
+    PermissionDenied { path: String, message: String },
+    /// Socket not found error with the socket path and rendered message.
+    SocketNotFound { path: String, message: String },
     /// Other connection failure with the error message.
     OtherError(String),
 }

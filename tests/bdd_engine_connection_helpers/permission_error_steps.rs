@@ -3,6 +3,8 @@
 //! This module contains step definitions for testing socket permission
 //! and not-found error handling scenarios.
 
+use std::path::Path;
+
 use podbot::engine::EngineConnector;
 use podbot::error::{ContainerError, PodbotError};
 use rstest_bdd_macros::{given, then, when};
@@ -13,9 +15,60 @@ use super::{ConnectionOutcome, EngineConnectionState, StepResult};
 // Given step definitions
 // =============================================================================
 
+/// Returns a platform-appropriate socket path that commonly requires elevated
+/// permissions.
+fn restricted_socket_path() -> String {
+    #[cfg(unix)]
+    {
+        String::from("unix:///var/run/docker.sock")
+    }
+    #[cfg(windows)]
+    {
+        String::from("npipe:////./pipe/docker_engine")
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        String::from("unix:///var/run/docker.sock")
+    }
+}
+
+/// Returns a platform-appropriate socket path that should not exist.
+fn missing_socket_path() -> String {
+    #[cfg(unix)]
+    {
+        String::from("unix:///nonexistent/podbot-test-socket.sock")
+    }
+    #[cfg(windows)]
+    {
+        String::from("npipe:////./pipe/nonexistent-podbot-test-socket")
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        String::from("unix:///nonexistent/podbot-test-socket.sock")
+    }
+}
+
+/// Extracts a path component from a socket URI for comparison in assertions.
+fn socket_path_component(socket_uri: &str) -> &Path {
+    let path = socket_uri
+        .strip_prefix("unix://")
+        .or_else(|| socket_uri.strip_prefix("npipe://"))
+        .unwrap_or(socket_uri);
+    Path::new(path)
+}
+
+/// Returns true if an error message includes a hint and at least one command.
+fn has_remediation_guidance(message: &str) -> bool {
+    message.contains("Hint:")
+        && (message.contains("sudo usermod -aG docker")
+            || message.contains("sudo systemctl start docker")
+            || message.contains("systemctl --user start podman.socket")
+            || message.contains("/run/user/$UID/podman/podman.sock"))
+}
+
 /// Set up a socket path that typically requires elevated permissions.
 ///
-/// Uses the system Docker socket which normally requires docker group
+/// Uses the system `Docker` socket which normally requires docker group
 /// membership or root access.
 #[given("a socket path that requires elevated permissions")]
 #[expect(
@@ -27,7 +80,7 @@ fn socket_requires_elevated_permissions(
 ) -> StepResult<()> {
     engine_connection_state
         .test_socket_path
-        .set(String::from("unix:///var/run/docker.sock"));
+        .set(restricted_socket_path());
     Ok(())
 }
 
@@ -42,7 +95,7 @@ fn socket_requires_elevated_permissions(
 fn socket_does_not_exist(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
     engine_connection_state
         .test_socket_path
-        .set(String::from("unix:///nonexistent/podbot-test-socket.sock"));
+        .set(missing_socket_path());
     Ok(())
 }
 
@@ -65,10 +118,18 @@ fn connection_is_attempted(engine_connection_state: &EngineConnectionState) -> S
     let outcome = match result {
         Ok(_) => ConnectionOutcome::Success,
         Err(PodbotError::Container(ContainerError::PermissionDenied { path })) => {
-            ConnectionOutcome::PermissionDenied(path.display().to_string())
+            let message = ContainerError::PermissionDenied { path: path.clone() }.to_string();
+            ConnectionOutcome::PermissionDenied {
+                path: path.display().to_string(),
+                message,
+            }
         }
         Err(PodbotError::Container(ContainerError::SocketNotFound { path })) => {
-            ConnectionOutcome::SocketNotFound(path.display().to_string())
+            let message = ContainerError::SocketNotFound { path: path.clone() }.to_string();
+            ConnectionOutcome::SocketNotFound {
+                path: path.display().to_string(),
+                message,
+            }
         }
         Err(e) => ConnectionOutcome::OtherError(e.to_string()),
     };
@@ -94,11 +155,11 @@ fn permission_denied_error_returned(
         .ok_or("connection outcome should be set")?;
 
     match outcome {
-        ConnectionOutcome::PermissionDenied(_) => Ok(()),
+        ConnectionOutcome::PermissionDenied { .. } => Ok(()),
         ConnectionOutcome::Success => {
             rstest_bdd::skip!("user has permission to access the socket");
         }
-        ConnectionOutcome::SocketNotFound(_) => {
+        ConnectionOutcome::SocketNotFound { .. } => {
             rstest_bdd::skip!("socket not found; daemon may not be running");
         }
         ConnectionOutcome::OtherError(msg) => Err(Box::leak(
@@ -118,12 +179,12 @@ fn socket_not_found_error_returned(
         .ok_or("connection outcome should be set")?;
 
     match outcome {
-        ConnectionOutcome::SocketNotFound(_) => Ok(()),
+        ConnectionOutcome::SocketNotFound { .. } => Ok(()),
         ConnectionOutcome::OtherError(msg) => Err(Box::leak(
             format!("expected SocketNotFound, got: {msg}").into_boxed_str(),
         )),
         ConnectionOutcome::Success => Err("expected error but connection succeeded"),
-        ConnectionOutcome::PermissionDenied(path) => Err(Box::leak(
+        ConnectionOutcome::PermissionDenied { path, .. } => Err(Box::leak(
             format!("expected SocketNotFound, got PermissionDenied for: {path}").into_boxed_str(),
         )),
     }
@@ -137,8 +198,9 @@ fn error_includes_socket_path(engine_connection_state: &EngineConnectionState) -
         .get()
         .ok_or("connection outcome should be set")?;
 
-    let error_path = match &outcome {
-        ConnectionOutcome::PermissionDenied(path) | ConnectionOutcome::SocketNotFound(path) => path,
+    let (error_path, message) = match &outcome {
+        ConnectionOutcome::PermissionDenied { path, message }
+        | ConnectionOutcome::SocketNotFound { path, message } => (path, message),
         ConnectionOutcome::OtherError(msg) => {
             return Err(Box::leak(
                 format!("expected PermissionDenied or SocketNotFound, got: {msg}").into_boxed_str(),
@@ -152,14 +214,18 @@ fn error_includes_socket_path(engine_connection_state: &EngineConnectionState) -
         .get()
         .ok_or("test socket path should be set")?;
 
-    // Extract path from unix:// URI
-    let expected_path = socket.strip_prefix("unix://").unwrap_or(&socket);
+    let expected_path = socket_path_component(&socket).display().to_string();
 
-    if error_path.contains(expected_path) {
-        Ok(())
-    } else {
+    if !error_path.contains(&expected_path) {
         Err(Box::leak(
             format!("error path '{error_path}' should contain '{expected_path}'").into_boxed_str(),
         ))
+    } else if !has_remediation_guidance(message) {
+        Err(Box::leak(
+            format!("error message should include actionable guidance, got: {message}")
+                .into_boxed_str(),
+        ))
+    } else {
+        Ok(())
     }
 }

@@ -270,7 +270,7 @@ fn classify_connection_error_falls_back_for_http_endpoints() {
 
 ---
 
-### Task 6: Add BDD feature scenarios
+### Task 6: Add behaviour-driven development (BDD) feature scenarios
 
 **File:** `tests/features/engine_connection.feature`
 

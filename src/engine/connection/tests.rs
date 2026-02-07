@@ -282,6 +282,26 @@ fn connect_and_verify_propagates_connection_errors(runtime: tokio::runtime::Runt
 }
 
 #[rstest]
+#[cfg(unix)]
+fn connect_and_verify_classifies_bare_path_socket_not_found(runtime: tokio::runtime::Runtime) {
+    // Bare paths are normalized to unix:// URIs before connecting, and
+    // classification should use that normalized URI to extract the path.
+    let result = runtime.block_on(async {
+        EngineConnector::connect_and_verify_async("/nonexistent/socket.sock").await
+    });
+
+    let err = result.expect_err("connect to non-existent bare socket path should fail");
+    assert!(
+        matches!(
+            err,
+            PodbotError::Container(ContainerError::SocketNotFound { ref path })
+                if path.to_str() == Some("/nonexistent/socket.sock")
+        ),
+        "expected SocketNotFound with extracted path, got: {err}"
+    );
+}
+
+#[rstest]
 fn connect_with_fallback_and_verify_uses_resolved_socket(
     empty_env: MockEnv,
     runtime: tokio::runtime::Runtime,
@@ -355,7 +375,7 @@ fn connect_with_fallback_and_verify_falls_back_to_env(runtime: tokio::runtime::R
 #[case::tcp("tcp://localhost:2375", None)]
 #[case::bare_path("/var/run/docker.sock", None)]
 fn extract_socket_path_parses_correctly(#[case] uri: &str, #[case] expected: Option<&str>) {
-    let result = super::extract_socket_path(uri);
+    let result = super::error_classification::extract_socket_path(uri);
     assert_eq!(
         result.as_ref().map(|p| p.to_str().expect("valid UTF-8")),
         expected
@@ -398,7 +418,7 @@ fn classify_connection_error_handles_errors(
     let io_err = IoError::new(error_kind, "test error");
     let bollard_err = bollard::errors::Error::IOError { err: io_err };
 
-    let result = super::classify_connection_error(&bollard_err, socket_uri);
+    let result = super::error_classification::classify_connection_error(&bollard_err, socket_uri);
 
     match expected_variant {
         "PermissionDenied" => {
@@ -429,4 +449,38 @@ fn classify_connection_error_handles_errors(
         }
         _ => panic!("unknown expected_variant: {expected_variant}"),
     }
+}
+
+#[rstest]
+fn classify_connection_error_handles_socket_not_found_variant() {
+    let bollard_err = bollard::errors::Error::SocketNotFoundError(String::from("missing socket"));
+
+    let result = super::error_classification::classify_connection_error(
+        &bollard_err,
+        "unix:///var/run/docker.sock",
+    );
+
+    assert!(
+        matches!(
+            result,
+            ContainerError::SocketNotFound { ref path }
+                if path.to_str() == Some("/var/run/docker.sock")
+        ),
+        "expected SocketNotFound with unix socket path, got: {result:?}"
+    );
+}
+
+#[rstest]
+fn classify_connection_error_non_io_errors_fall_back_to_connection_failed() {
+    let bollard_err = bollard::errors::Error::UnsupportedURISchemeError {
+        uri: String::from("foo://example"),
+    };
+
+    let result =
+        super::error_classification::classify_connection_error(&bollard_err, "foo://example");
+
+    assert!(
+        matches!(result, ContainerError::ConnectionFailed { .. }),
+        "expected ConnectionFailed fallback for non-io bollard error, got: {result:?}"
+    );
 }
