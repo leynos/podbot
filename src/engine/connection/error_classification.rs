@@ -10,13 +10,21 @@ use crate::error::ContainerError;
 /// Extract the filesystem path from a socket URI.
 ///
 /// Strips the scheme prefix (`unix://`, `npipe://`) to get the raw path.
-/// For HTTP endpoints or bare paths, returns `None` as they either do not have
-/// filesystem paths or lack the scheme prefix needed for reliable extraction.
+/// Scheme-less absolute paths are treated as socket paths. HTTP and TCP
+/// endpoints return `None`.
 pub(super) fn extract_socket_path(socket_uri: &str) -> Option<&Path> {
     socket_uri
         .strip_prefix("unix://")
-        .or_else(|| socket_uri.strip_prefix("npipe://"))
         .map(Path::new)
+        .or_else(|| {
+            socket_uri
+                .strip_prefix("npipe://")
+                .map(Path::new)
+                .or_else(|| {
+                    let path = Path::new(socket_uri);
+                    path.is_absolute().then_some(path)
+                })
+        })
 }
 
 /// Classify an I/O error kind into a semantic `ContainerError`.
@@ -219,7 +227,7 @@ mod tests {
     #[case::npipe("npipe:////./pipe/docker_engine", Some("//./pipe/docker_engine"))]
     #[case::http("http://localhost:2375", None)]
     #[case::tcp("tcp://localhost:2375", None)]
-    #[case::bare_path("/var/run/docker.sock", None)]
+    #[case::bare_path("/var/run/docker.sock", Some("/var/run/docker.sock"))]
     fn extract_socket_path_parses_correctly(#[case] uri: &str, #[case] expected: Option<&str>) {
         let result = extract_socket_path(uri);
         assert_eq!(

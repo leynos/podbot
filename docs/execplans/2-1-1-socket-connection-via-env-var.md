@@ -17,7 +17,7 @@ fallback chain:
 
 1. **Command-line interface (CLI) argument** (`--engine-socket`) — highest
    priority
-2. **Config file** (`engine_socket` in TOML)
+2. **Config file** (`engine_socket` in Tom's Obvious, Minimal Language (TOML))
 3. **`PODBOT_ENGINE_SOCKET`** environment variable
 4. **`DOCKER_HOST`** environment variable
 5. **`CONTAINER_HOST`** environment variable
@@ -249,7 +249,8 @@ ______________________________________________________________________
 
 **File:** `docs/users-guide.md`
 
-Added documentation for the container engine socket resolution order.
+Added documentation for the socket endpoint resolution order for the container
+engine.
 
 ______________________________________________________________________
 

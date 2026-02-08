@@ -359,10 +359,10 @@ classDiagram
 
     class ErrorClassificationHelpers {
         <<module>>
-        +extract_socket_path(socket_uri: &str) Option~PathBuf~
-        +classify_io_error_kind(kind: ErrorKind, socket_path: Option~PathBuf~, error_msg: String) ContainerError
+        +extract_socket_path(socket_uri: &str) Option~&Path~
+        +classify_io_error_kind(kind: ErrorKind, socket_path: Option~&Path~, error_msg: &str) ContainerError
         +classify_connection_error(bollard_error: &Error, socket_uri: &str) ContainerError
-        +find_io_error_in_chain(error: &Error) Option~IoError~
+        +io_error_kind_in_chain(error: &Error) Option~ErrorKind~
     }
 
     class BollardError {
