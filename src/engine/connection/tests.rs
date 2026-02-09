@@ -56,7 +56,7 @@ fn runtime() -> tokio::runtime::Runtime {
 
 /// Helper function to create a `MockEnv` with `DOCKER_HOST` set to the
 /// specified socket path.
-fn env_with_docker_host(socket: &str) -> MockEnv {
+pub(super) fn env_with_docker_host(socket: &str) -> MockEnv {
     let socket_path = String::from(socket);
     let mut env = MockEnv::new();
     env.expect_string().returning(move |key| {
@@ -229,33 +229,8 @@ fn resolve_socket_empty_config_falls_back_to_env() {
     assert_eq!(socket, "unix:///docker.sock");
 }
 
-// =============================================================================
-// EngineConnector::connect tests
-// =============================================================================
-
-#[rstest]
-fn connect_tcp_endpoint_creates_client() {
-    // tcp:// endpoints are rewritten to http:// and use connect_with_http.
-    // Bollard's connect_with_http is synchronous and just creates the client
-    // configuration, so this should succeed without a real Docker daemon.
-    //
-    // Note: This test relies on Bollard's `connect_with_http` being synchronous
-    // and not validating connectivity at construction time. If Bollard's behaviour
-    // changes to validate endpoints eagerly, this test may start failing.
-    let result = EngineConnector::connect("tcp://host:2375");
-    result.expect("connect tcp://host:2375 should create client");
-}
-
-#[rstest]
-fn connect_tcp_endpoint_with_ip_creates_client() {
-    // Verify tcp:// works with IP addresses as well as hostnames.
-    //
-    // Note: This test relies on Bollard's `connect_with_http` being synchronous
-    // and not validating connectivity at construction time. If Bollard's behaviour
-    // changes to validate endpoints eagerly, this test may start failing.
-    let result = EngineConnector::connect("tcp://192.168.1.100:2376");
-    result.expect("connect tcp://192.168.1.100:2376 should create client");
-}
+#[path = "tests_tcp.rs"]
+mod tcp;
 
 // =============================================================================
 // EngineConnector::connect_and_verify tests

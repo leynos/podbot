@@ -60,6 +60,30 @@ Feature: Container engine connection
     When the socket is resolved
     Then the resolved socket is unix:///container.sock
 
+  # TCP endpoint scenarios
+
+  Scenario: TCP endpoint resolved from DOCKER_HOST
+    Given no engine socket is configured
+    And DOCKER_HOST is set to tcp://remotehost:2375
+    When the socket is resolved
+    Then the resolved socket is tcp://remotehost:2375
+
+  Scenario: Config socket as TCP endpoint takes precedence
+    Given engine socket is configured as tcp://docker.example.com:2375
+    And DOCKER_HOST is set to unix:///docker.sock
+    When the socket is resolved
+    Then the resolved socket is tcp://docker.example.com:2375
+
+  Scenario: TCP endpoint connection succeeds without daemon
+    Given a TCP endpoint is configured
+    When a TCP connection is attempted
+    Then the connection client is created successfully
+
+  Scenario: TCP connection errors are classified as connection failures
+    Given a TCP endpoint that will fail health check
+    When a TCP connection with health check is attempted
+    Then a connection failure error is returned
+
   # Health check scenarios
   # Note: These scenarios document the expected behaviour but require a running
   # container daemon for full integration testing. When no daemon is available,

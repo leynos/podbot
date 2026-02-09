@@ -180,6 +180,64 @@ flags override environment variables, which override configuration files, which
 override defaults.[^6] The derive macro generates the layering logic from
 annotated structs.
 
+## Engine connection protocol support
+
+The `EngineConnector` supports multiple endpoint protocols for connecting to
+container engines. This section documents the rationale for the protocol
+handling design.
+
+### Supported protocols
+
+| Protocol    | Scheme prefix | Bollard method       | Use case                                           |
+| ----------- | ------------- | -------------------- | -------------------------------------------------- |
+| Unix socket | `unix://`     | `connect_with_socket` | Local Docker/Podman daemon (default on Linux/macOS) |
+| Named pipe  | `npipe://`    | `connect_with_socket` | Local Docker on Windows                            |
+| TCP         | `tcp://`      | `connect_with_http`  | Remote daemon over network                         |
+| HTTP        | `http://`     | `connect_with_http`  | Remote daemon (explicit HTTP)                      |
+| HTTPS       | `https://`    | `connect_with_http`  | Remote daemon with TLS                             |
+| Bare path   | (none)        | `connect_with_socket` | Convenience shorthand for socket paths             |
+
+_Table 2: Supported connection protocols and their Bollard dispatch._
+
+### TCP-to-HTTP rewriting
+
+Bollard does not natively accept `tcp://` schemes. The `EngineConnector`
+rewrites `tcp://` to `http://` before calling `connect_with_http`. This
+matches the behaviour of the Docker command-line interface (CLI), which treats
+`tcp://` as an alias for `http://`. The rewriting is a simple string
+replacement (`tcp://` to `http://`) applied once during connection
+establishment.
+
+### Lazy versus eager connection
+
+Unix socket and named pipe connections via `connect_with_socket` perform eager
+validation: if the socket file does not exist or is not accessible, the
+connection fails immediately with a descriptive error (`SocketNotFound` or
+`PermissionDenied`).
+
+TCP/HTTP connections via `connect_with_http` are lazy: Bollard creates the
+client configuration synchronously without attempting to reach the remote host.
+Failures surface only during the first API call, typically the health check
+ping. This means:
+
+- `connect()` always succeeds for TCP/HTTP endpoints.
+- Errors are detected during `connect_and_verify()` (health check phase).
+- TCP errors produce `ConnectionFailed` or `HealthCheckFailed`, never
+  `SocketNotFound` or `PermissionDenied`, because there is no filesystem path
+  to attribute the error to.
+
+### Bare path normalization
+
+Paths without a scheme prefix are classified by syntax:
+
+- Paths starting with `\\` or `//` are treated as Windows named pipe paths and
+  prefixed with `npipe://`.
+- All other paths are treated as Unix socket paths and prefixed with `unix://`.
+
+This detection is syntax-based, not platform-based. A path like `//some/path`
+is treated as a named pipe even on Unix. This is a deliberate design choice to
+support cross-platform testing and configuration portability.
+
 ## Configuration
 
 The CLI reads configuration from `~/.config/podbot/config.toml` with

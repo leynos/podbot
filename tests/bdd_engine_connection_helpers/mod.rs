@@ -5,6 +5,7 @@
 
 mod health_check_steps;
 mod permission_error_steps;
+mod tcp_connection_steps;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -26,6 +27,11 @@ pub use health_check_steps::*;
     reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
 )]
 pub use permission_error_steps::*;
+#[expect(
+    unused_imports,
+    reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
+)]
+pub use tcp_connection_steps::*;
 
 /// Step result type for BDD tests, using a static string for errors.
 pub type StepResult<T> = Result<T, &'static str>;
