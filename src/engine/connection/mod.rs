@@ -2,15 +2,17 @@
 //!
 //! This module provides functionality to resolve container engine socket endpoints
 //! from multiple sources (environment variables, configuration, platform defaults)
-//! and establish connections using the Bollard library.
+//! and establish connections using the `Bollard` library.
 
+mod error_classification;
 mod health_check;
 
 use std::fmt;
 
 use bollard::Docker;
+use error_classification::classify_connection_error;
 
-use crate::error::{ContainerError, PodbotError};
+use crate::error::PodbotError;
 
 // =============================================================================
 // SocketPath newtype
@@ -219,15 +221,20 @@ impl EngineConnector {
     ///
     /// # Errors
     ///
-    /// Returns `ContainerError::ConnectionFailed` if the connection cannot be
-    /// established.
+    /// Returns a `ContainerError` variant:
+    /// - `ContainerError::SocketNotFound` if the socket file does not exist.
+    /// - `ContainerError::PermissionDenied` if the user lacks socket access.
+    /// - `ContainerError::ConnectionFailed` for all other connection failures.
     pub fn connect(socket: impl AsRef<str>) -> Result<Docker, PodbotError> {
         let socket_str = socket.as_ref();
-        let docker = match SocketType::classify(socket_str) {
-            SocketType::Socket => Docker::connect_with_socket(
-                socket_str,
-                CONNECTION_TIMEOUT_SECS,
-                bollard::API_DEFAULT_VERSION,
+        let (docker_result, socket_for_error) = match SocketType::classify(socket_str) {
+            SocketType::Socket => (
+                Docker::connect_with_socket(
+                    socket_str,
+                    CONNECTION_TIMEOUT_SECS,
+                    bollard::API_DEFAULT_VERSION,
+                ),
+                socket_str.to_owned(),
             ),
             SocketType::Http => {
                 // Rewrite tcp:// to http:// for Bollard compatibility
@@ -236,26 +243,29 @@ impl EngineConnector {
                 } else {
                     socket_str.to_owned()
                 };
-                Docker::connect_with_http(
-                    &http_socket,
-                    CONNECTION_TIMEOUT_SECS,
-                    bollard::API_DEFAULT_VERSION,
+                (
+                    Docker::connect_with_http(
+                        &http_socket,
+                        CONNECTION_TIMEOUT_SECS,
+                        bollard::API_DEFAULT_VERSION,
+                    ),
+                    http_socket,
                 )
             }
             SocketType::BarePath => {
                 let socket_uri = Self::normalize_bare_path(socket_str);
-                Docker::connect_with_socket(
-                    &socket_uri,
-                    CONNECTION_TIMEOUT_SECS,
-                    bollard::API_DEFAULT_VERSION,
+                (
+                    Docker::connect_with_socket(
+                        &socket_uri,
+                        CONNECTION_TIMEOUT_SECS,
+                        bollard::API_DEFAULT_VERSION,
+                    ),
+                    socket_uri,
                 )
             }
-        }
-        .map_err(|e| {
-            PodbotError::from(ContainerError::ConnectionFailed {
-                message: e.to_string(),
-            })
-        })?;
+        };
+        let docker = docker_result
+            .map_err(|e| PodbotError::from(classify_connection_error(&e, &socket_for_error)))?;
 
         Ok(docker)
     }
@@ -288,7 +298,9 @@ impl EngineConnector {
     ///
     /// # Errors
     ///
-    /// Returns `ContainerError::ConnectionFailed` if the connection cannot be
+    /// Returns a `ContainerError` variant (`ContainerError::SocketNotFound`,
+    /// `ContainerError::PermissionDenied`, or
+    /// `ContainerError::ConnectionFailed`) if the connection cannot be
     /// established.
     pub fn connect_with_fallback<S: AsRef<str> + ?Sized, E: mockable::Env>(
         config_socket: Option<&S>,

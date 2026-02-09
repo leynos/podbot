@@ -130,6 +130,9 @@ argument, the wrapper panics with
 `pattern '<pattern>' missing capture for argument '<name>'`, making the
 mismatch explicit.
 
+For cucumber-rs migration compatibility notes, see
+[Migration and async patterns](cucumber-rs-migration-and-async-patterns.md).
+
 The procedural macro implementation expands the annotated function into two
 parts: the original function and a wrapper function that registers the step in
 a global registry. The wrapper captures the step keyword, pattern string and
@@ -138,8 +141,8 @@ lookup.
 
 ### Fixtures and implicit injection
 
-`rstest‑bdd` builds on `rstest`’s fixture system rather than using a monolithic
-“world” object. Fixtures are defined using `#[rstest::fixture]` in the usual
+`rstest‑bdd` builds on `rstest`'s fixture system rather than using a monolithic
+"world" object. Fixtures are defined using `#[rstest::fixture]` in the usual
 way. When a step function parameter does not correspond to a placeholder in the
 step pattern, the macros treat it as a fixture and inject the value
 automatically. The optional `#[from(name)]` attribute remains available when a
@@ -157,7 +160,7 @@ the generated test inserts its arguments (the `rstest` fixtures) into the
 
 Each scenario owns its fixtures, so value fixtures are stored with exclusive
 access. Step parameters declared as `&mut FixtureType` receive mutable
-references, making “world” structs ergonomic without sprinkling `Cell` or
+references, making "world" structs ergonomic without sprinkling `Cell` or
 `RefCell` wrappers through the fields. Immutable references continue to work
 exactly as before; mutability is an opt‑in convenience.
 
@@ -282,7 +285,7 @@ fn last_input(world: &ReportWorld) {
 
 `#[when]` steps may return a value. The scenario runner scans the available
 fixtures for ones whose `TypeId` matches the returned value. When exactly one
-fixture uses that type, the override is recorded under that fixture’s name and
+fixture uses that type, the override is recorded under that fixture's name and
 subsequent steps receive the most recent value (last write wins). Ambiguous or
 missing matches leave fixtures untouched, keeping scenarios predictable while
 still allowing a functional style without mutable fixtures.
@@ -486,7 +489,7 @@ fn cli_behaviour(cli_state: CliState) {
 
 Slots are independent, so scenarios can freely mix eager `set` calls with lazy
 `get_or_insert_with` initializers. Because slots live inside a regular fixture,
-the state benefits from `rstest`’s usual lifecycle: a fresh struct is produced
+the state benefits from `rstest`'s usual lifecycle: a fresh struct is produced
 for each scenario invocation, yet it remains trivial to clear and reuse the
 contents when chaining multiple behaviours inside a single test body.
 
@@ -565,7 +568,7 @@ During macro expansion, the feature file is read and parsed. The macro
 generates a new test function annotated with `#[rstest::rstest]` that performs
 the following steps:
 
-1. Build a `StepContext` and insert the test’s fixture arguments into it.
+1. Build a `StepContext` and insert the test's fixture arguments into it.
 
 2. For each step in the scenario (according to the `Given‑When‑Then` sequence),
    look up a matching step function by `(keyword, pattern)` in the registry. A
@@ -744,9 +747,9 @@ enables test code to `.await` async operations while preserving the
 
 ### Using `#[scenario]` with async
 
-Declare the test function as `async fn` and add `#[tokio::test]` before the
-`#[scenario]` attribute. The macro detects the async signature and generates an
-async step executor:
+Declare the test function as `async fn` and add
+`#[tokio::test(flavor = "current_thread")]` before the `#[scenario]` attribute.
+The macro detects the async signature and generates an async step executor:
 
 ```rust,no_run
 use rstest_bdd_macros::{given, scenario, then, when};
@@ -778,12 +781,12 @@ fn check_value(counter: &Counter, n: i32) {
 }
 
 #[scenario(path = "tests/features/counter.feature", name = "Increment counter")]
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn increment_counter(counter: Counter) {}
 ```
 
-The macro generates `#[rstest::rstest]` without duplicating `#[tokio::test]`
-when the user already supplies it.
+The macro generates `#[rstest::rstest]` without duplicating
+`#[tokio::test(flavor = "current_thread")]` when the user already supplies it.
 
 ### Using `scenarios!` with async
 
@@ -806,14 +809,81 @@ When `runtime = "tokio-current-thread"` is specified:
 - Each test is annotated with `#[tokio::test(flavor = "current_thread")]`.
 - Steps execute sequentially within the single-threaded Tokio runtime.
 
+### Recommended async pattern for steps
+
+Step functions are synchronous, even when a scenario runs in an async runtime.
+Use one of the following patterns to keep async work safe and predictable. This
+section summarizes the canonical guidance in
+[Migration and async patterns](cucumber-rs-migration-and-async-patterns.md).
+
+- **Prefer async fixtures:** If a step needs async data, move the async call
+  into a fixture and inject the resolved value into the step. The scenario
+  runtime awaits the fixture once, then passes the result to the synchronous
+  step.
+
+```rust,no_run
+use rstest::fixture;
+use rstest_bdd_macros::{given, scenarios, when};
+
+struct StreamEnd;
+
+impl StreamEnd {
+    async fn connect() -> Self {
+        StreamEnd
+    }
+
+    fn trigger(&self) {}
+}
+
+#[fixture]
+async fn stream_end() -> StreamEnd {
+    StreamEnd::connect().await
+}
+
+#[when("the stream ends")]
+fn end_stream(stream_end: &StreamEnd) {
+    stream_end.trigger();
+}
+
+scenarios!(
+    "tests/features/streams.feature",
+    runtime = "tokio-current-thread",
+    fixtures = [stream_end]
+);
+```
+
+- **Use a per-step runtime only in synchronous scenarios:** If a step must call
+  async code and the scenario is not running under Tokio, build a runtime in
+  the step and block on the async work. Avoid this inside an async scenario
+  because nested runtimes can fail. For async scenarios, prefer fixtures or the
+  async test body instead. See [ADR-005](adr-005-async-step-functions.md) for
+  the current strategy.
+
+```rust,no_run
+use rstest_bdd_macros::when;
+
+#[when("the stream ends")]
+fn end_stream() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build step runtime");
+    runtime.block_on(async {
+        // async work here
+    });
+}
+```
+
 ### Current limitations
 
 - **Sync step definitions only:** The async executor currently calls the sync
-  `run` handler directly rather than `run_async`. This avoids HRTB lifetime
-  issues but means steps cannot `.await` internally. True async step
-  definitions (with `async fn` bodies) are planned for a future release.
+  `run` handler directly rather than `run_async`. This avoids higher-ranked
+  trait bound (HRTB) lifetime issues but means steps cannot `.await`
+  internally. See [ADR-005](adr-005-async-step-functions.md) for the current
+  pattern, and [ADR-001](adr-001-async-fixtures-and-test.md) for the design
+  rationale.
 - **Current-thread mode only:** Multi-threaded Tokio mode would require `Send`
-  futures, which conflicts with the `RefCell`-based fixture storage. See
+  futures, which conflicts with the `RefCell`-backed fixture storage. See
   [ADR-001](adr-001-async-fixtures-and-test.md) for the full design rationale.
 - **No `async_std` runtime:** Only Tokio is supported at present.
 
@@ -821,14 +891,14 @@ When `runtime = "tokio-current-thread"` is specified:
 
 Once feature files and step definitions are in place, scenarios run via the
 usual `cargo test` command. Test functions created by the `#[scenario]` macro
-behave like other `rstest` tests; they honour `#[tokio::test]` or
-`#[async_std::test]` attributes if applied to the original function. Each
-scenario runs its steps sequentially in the order defined in the feature file.
-By default, missing steps emit a compile‑time warning and are checked again at
-runtime, so steps can live in other crates. Enabling the
-`compile-time-validation` feature on `rstest-bdd-macros` registers steps and
-performs compile‑time validation, emitting warnings for any that are missing.
-The `strict-compile-time-validation` feature builds on this and turns those
+behave like other `rstest` tests; they honour `#[tokio::test]` attributes if
+applied to the original function. Each scenario runs its steps sequentially in
+the order defined in the feature file. By default, missing steps emit a
+compile‑time warning and are checked again at runtime, so steps can live in
+other crates. Enabling the `compile-time-validation` feature on
+`rstest-bdd-macros` registers steps and performs compile‑time validation,
+emitting warnings for any that are missing. The
+`strict-compile-time-validation` feature builds on this and turns those
 warnings into `compile_error!`s when all step definitions are local. This
 prevents behaviour specifications from silently drifting from the code while
 still permitting cross‑crate step sharing.
@@ -837,14 +907,14 @@ To enable validation, pin a feature in the project's `dev-dependencies`:
 
 ```toml
 [dev-dependencies]
-rstest-bdd-macros = { version = "0.3.2", features = ["compile-time-validation"] }
+rstest-bdd-macros = { version = "0.4.0", features = ["compile-time-validation"] }
 ```
 
 For strict checking use:
 
 ```toml
 [dev-dependencies]
-rstest-bdd-macros = { version = "0.3.2", features = ["strict-compile-time-validation"] }
+rstest-bdd-macros = { version = "0.4.0", features = ["strict-compile-time-validation"] }
 ```
 
 Steps are only validated when one of these features is enabled.
@@ -1177,7 +1247,7 @@ document and README remain unimplemented in the current codebase:
 - **Restricted placeholder types.** Only placeholders that parse via
   `FromStr` are supported, and they must be well-formed and non-overlapping.
 
-Consult the project’s roadmap or repository for updates. The addition of new
+Consult the project's roadmap or repository for updates. The addition of new
 features may result in patterns or examples changing. Meanwhile, adopting
 `rstest‑bdd` in its current form will be most effective when teams keep feature
 files simple. Step definitions should remain explicit.
@@ -1237,7 +1307,7 @@ Localization tooling can be added to `Cargo.toml` as follows:
 
 ```toml
 [dependencies]
-rstest-bdd = "0.3.2"
+rstest-bdd = "0.4.0"
 i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
 unic-langid = "0.9"
 ```
@@ -1262,7 +1332,7 @@ The selection function preserves the caller-supplied order, so applications can
 pass a list of preferred locales. The helper resolves to the best available
 translation and continues to fall back to English when a requested locale is
 not shipped with the crate. Procedural macro diagnostics remain in English so
-compile-time output stays deterministic regardless of the host machine’s
+compile-time output stays deterministic regardless of the host machine's
 language settings.
 
 [`Localizations`]: https://docs.rs/rstest-bdd/latest/rstest_bdd/localization/
@@ -1427,8 +1497,7 @@ The language server provides the following capabilities:
   and enumerate packages.
 - **Feature indexing (on save)**: Parses saved `.feature` files using the
   `gherkin` parser and records steps, doc strings, data tables, and Examples
-  header columns with byte offsets. Parse failures are logged; diagnostics are
-  added in later phases.
+  header columns with byte offsets. Parse failures are logged.
 - **Rust step indexing (on save)**: Parses saved `.rs` files with `syn` and
   records `#[given]`, `#[when]`, and `#[then]` functions, including the step
   keyword, pattern string (including inferred patterns when the attribute has
@@ -1494,8 +1563,59 @@ presents a list of locations to choose from.
 - The step text is matched against the compiled regex patterns from the step
   registry, ensuring consistency with the runtime.
 
-Future releases will add diagnostics as outlined in the
-[Language Server Design Document](rstest-bdd-language-server-design.md).
+### Diagnostics (on save)
+
+The language server publishes diagnostics when files are saved, helping
+developers identify consistency issues between feature files and Rust step
+definitions:
+
+- **Unimplemented feature steps** (`unimplemented-step`): When a step in a
+  `.feature` file has no matching Rust implementation, a warning diagnostic is
+  published at the step location. The message indicates the step keyword and
+  text that needs an implementation.
+
+- **Unused step definitions** (`unused-step-definition`): When a Rust step
+  definition (annotated with `#[given]`, `#[when]`, or `#[then]`) is not
+  matched by any feature step, a warning diagnostic is published at the
+  function definition. This helps identify dead code or typos in step patterns.
+
+- **Placeholder count mismatch** (`placeholder-count-mismatch`): When a step
+  pattern contains a different number of placeholder occurrences than the
+  function has step arguments, a warning diagnostic is published on the Rust
+  step definition. Each placeholder occurrence is counted separately (e.g.,
+  `{x} and {x}` counts as two placeholders), matching the macro's capture
+  semantics. A step argument is a function parameter whose normalized name
+  matches a placeholder name in the pattern; `datatable`, `docstring`, and
+  fixture parameters are excluded from the count.
+
+- **Data table expected** (`table-expected`): When a Rust step expects a data
+  table (has a `datatable` parameter) but the matching feature step does not
+  provide one, a warning diagnostic is published on the feature step.
+
+- **Data table not expected** (`table-not-expected`): When a feature step
+  provides a data table but the matching Rust implementation does not expect
+  one, a warning diagnostic is published on the data table in the feature file.
+
+- **Doc string expected** (`docstring-expected`): When a Rust step expects a doc
+  string (has a `docstring: String` parameter) but the matching feature step
+  does not provide one, a warning diagnostic is published on the feature step.
+
+- **Doc string not expected** (`docstring-not-expected`): When a feature step
+  provides a doc string but the matching Rust implementation does not expect
+  one, a warning diagnostic is published on the doc string in the feature file.
+
+Diagnostics are updated incrementally:
+
+- Saving a `.feature` file recomputes diagnostics for that file, including
+  unimplemented steps and table/docstring expectation mismatches.
+- Saving a `.rs` file recomputes diagnostics for all feature files (since new
+  or removed step definitions may affect which steps are implemented) and
+  checks for unused definitions and placeholder count mismatches in the saved
+  file.
+
+Diagnostics appear in the editor's Problems panel and as inline warnings,
+similar to compiler diagnostics. They use the source `rstest-bdd` and the codes
+listed above for filtering.
 
 ## Summary
 

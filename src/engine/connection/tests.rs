@@ -269,14 +269,35 @@ fn connect_and_verify_propagates_connection_errors(runtime: tokio::runtime::Runt
         EngineConnector::connect_and_verify_async("unix:///nonexistent/socket.sock").await
     });
 
-    // Connection to non-existent socket should fail with ConnectionFailed variant
+    // Connection to non-existent socket should fail with SocketNotFound variant
+    // (error classification detects the NotFound IO error kind)
     let err = result.expect_err("connect to non-existent socket should fail");
     assert!(
         matches!(
             err,
-            PodbotError::Container(ContainerError::ConnectionFailed { .. })
+            PodbotError::Container(ContainerError::SocketNotFound { .. })
         ),
-        "expected ConnectionFailed error variant, got: {err}"
+        "expected SocketNotFound error variant, got: {err}"
+    );
+}
+
+#[rstest]
+#[cfg(unix)]
+fn connect_and_verify_classifies_bare_path_socket_not_found(runtime: tokio::runtime::Runtime) {
+    // Bare paths are normalized to unix:// URIs before connecting, and
+    // classification should use that normalized URI to extract the path.
+    let result = runtime.block_on(async {
+        EngineConnector::connect_and_verify_async("/nonexistent/socket.sock").await
+    });
+
+    let err = result.expect_err("connect to non-existent bare socket path should fail");
+    assert!(
+        matches!(
+            err,
+            PodbotError::Container(ContainerError::SocketNotFound { ref path })
+                if path.to_str() == Some("/nonexistent/socket.sock")
+        ),
+        "expected SocketNotFound with extracted path, got: {err}"
     );
 }
 

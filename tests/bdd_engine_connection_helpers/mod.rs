@@ -4,6 +4,7 @@
 //! covering socket resolution and health check functionality.
 
 mod health_check_steps;
+mod permission_error_steps;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -14,12 +15,17 @@ use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, then, when};
 
-// Re-export health check step definitions so they are visible to rstest-bdd macros.
+// Re-export step definitions so they are visible to rstest-bdd macros.
 #[expect(
     unused_imports,
     reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
 )]
 pub use health_check_steps::*;
+#[expect(
+    unused_imports,
+    reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
+)]
+pub use permission_error_steps::*;
 
 /// Step result type for BDD tests, using a static string for errors.
 pub type StepResult<T> = Result<T, &'static str>;
@@ -38,6 +44,19 @@ pub enum HealthCheckOutcome {
     Timeout,
 }
 
+/// Represents the outcome of a connection attempt (for error testing).
+#[derive(Clone)]
+pub enum ConnectionOutcome {
+    /// Connection succeeded.
+    Success,
+    /// Permission denied error with the socket path and rendered message.
+    PermissionDenied { path: String, message: String },
+    /// Socket not found error with the socket path and rendered message.
+    SocketNotFound { path: String, message: String },
+    /// Other connection failure with the error message.
+    OtherError(String),
+}
+
 /// State shared across engine connection test scenarios.
 #[derive(Default, ScenarioState)]
 pub struct EngineConnectionState {
@@ -53,6 +72,10 @@ pub struct EngineConnectionState {
     pub simulate_not_responding: Slot<bool>,
     /// Whether the scenario simulates a slow engine.
     pub simulate_slow_engine: Slot<bool>,
+    /// The socket path to test against (for error testing).
+    pub test_socket_path: Slot<String>,
+    /// The outcome of a connection attempt (for error testing).
+    pub connection_outcome: Slot<ConnectionOutcome>,
 }
 
 /// Fixture providing a fresh engine connection state.

@@ -76,7 +76,7 @@ Connect to the Podman or Docker socket and verify the connection.
 - [x] Implement socket connection via DOCKER_HOST, CONTAINER_HOST or PODMAN_HOST
   environment variables or direct path specification.
 - [x] Add a health check that verifies the engine responds.
-- [ ] Handle socket permission errors with actionable error messages.
+- [x] Handle socket permission errors with actionable error messages.
 - [ ] Support both Unix sockets and TCP connections.
 
 **Completion criteria:** Connection succeeds against a running Podman or Docker

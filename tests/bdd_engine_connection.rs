@@ -99,3 +99,21 @@ fn health_check_fails_when_not_responding(engine_connection_state: EngineConnect
 fn health_check_times_out(engine_connection_state: EngineConnectionState) {
     let _ = engine_connection_state;
 }
+
+// Permission error scenario bindings
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "Permission denied error provides actionable guidance"
+)]
+fn permission_denied_error_guidance(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "Socket not found error provides actionable guidance"
+)]
+fn socket_not_found_error_guidance(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}

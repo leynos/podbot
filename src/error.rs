@@ -65,14 +65,24 @@ pub enum ContainerError {
     },
 
     /// The container engine socket was not found.
-    #[error("container engine socket not found: {path}")]
+    #[error(
+        "container engine socket not found: {path}\n\
+Hint: Verify the socket path exists and the container daemon is running.\n\
+For Docker: sudo systemctl start docker\n\
+For Podman: systemctl --user start podman.socket"
+    )]
     SocketNotFound {
         /// The path where the socket was expected.
         path: PathBuf,
     },
 
     /// Permission denied when accessing the container engine socket.
-    #[error("permission denied accessing container socket: {path}")]
+    #[error(
+        "permission denied accessing container socket: {path}\n\
+Hint: Add your user to the docker group or use rootless Podman.\n\
+For Docker: sudo usermod -aG docker $USER && newgrp docker\n\
+For Podman: Use socket at /run/user/$UID/podman/podman.sock"
+    )]
     PermissionDenied {
         /// The path to the socket.
         path: PathBuf,
@@ -310,9 +320,16 @@ mod tests {
     #[rstest]
     fn container_error_permission_denied_displays_correctly(socket_path: PathBuf) {
         let error = ContainerError::PermissionDenied { path: socket_path };
-        assert_eq!(
-            error.to_string(),
-            "permission denied accessing container socket: /run/podman/podman.sock"
+        let msg = error.to_string();
+        assert!(
+            msg.starts_with(
+                "permission denied accessing container socket: /run/podman/podman.sock"
+            ),
+            "error message should start with socket path, got: {msg}"
+        );
+        assert!(
+            msg.contains("Hint:"),
+            "error message should contain remediation hint, got: {msg}"
         );
     }
 
