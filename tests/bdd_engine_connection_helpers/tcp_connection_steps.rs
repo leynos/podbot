@@ -96,6 +96,10 @@ pub fn tcp_connection_with_health_check(
         .get()
         .ok_or("test socket path should be set")?;
 
+    // Box::leak intentionally leaks the error string to satisfy rstest-bdd's
+    // `&'static str` error requirement.  This only triggers on the error path
+    // (runtime creation failure), so the leak is bounded and acceptable in
+    // tests.
     let rt = tokio::runtime::Runtime::new().map_err(|e| {
         Box::leak(format!("failed to create tokio runtime: {e}").into_boxed_str()) as &'static str
     })?;

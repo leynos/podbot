@@ -34,23 +34,11 @@ fn empty_env() -> MockEnv {
 // =============================================================================
 
 #[rstest]
-fn connect_tcp_endpoint_creates_client() {
-    // tcp:// endpoints are rewritten to http:// and use connect_with_http.
-    let result = EngineConnector::connect("tcp://host:2375");
-    result.expect("connect tcp://host:2375 should create client");
-}
-
-#[rstest]
-fn connect_tcp_endpoint_with_ip_creates_client() {
-    // Verify tcp:// works with IP addresses as well as hostnames.
-    let result = EngineConnector::connect("tcp://192.168.1.100:2376");
-    result.expect("connect tcp://192.168.1.100:2376 should create client");
-}
-
-#[rstest]
+#[case::tcp_with_hostname("tcp://host:2375")]
+#[case::tcp_with_ip("tcp://192.168.1.100:2376")]
 #[case::http_endpoint("http://remotehost:2375")]
 #[case::https_endpoint("https://remotehost:2376")]
-#[case::tcp_with_hostname("tcp://docker.example.com:2375")]
+#[case::tcp_with_fqdn("tcp://docker.example.com:2375")]
 #[case::tcp_with_ipv4("tcp://10.0.0.1:2375")]
 fn connect_http_compatible_endpoints_creates_client(#[case] endpoint: &str) {
     // HTTP-compatible endpoints (http://, https://, tcp://) use

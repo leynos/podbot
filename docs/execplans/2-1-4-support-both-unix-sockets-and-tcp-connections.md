@@ -64,7 +64,8 @@ green. The roadmap entry is marked complete and Step 2.1 is fully done.
 - [x] (2026-02-09) Upgrade rstest-bdd to 0.5.0
 - [x] (2026-02-09) Create TCP unit tests in `tests_tcp.rs` submodule
 - [x] (2026-02-09) Add TCP error classification test cases
-- [x] (2026-02-09) Add 4 BDD scenarios for TCP endpoints
+- [x] (2026-02-09) Add 4 behaviour-driven development (BDD) scenarios
+  for TCP endpoints
 - [x] (2026-02-09) Create TCP BDD step definitions module
 - [x] (2026-02-09) Add BDD scenario bindings
 - [x] (2026-02-09) Update user documentation with TCP examples

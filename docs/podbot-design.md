@@ -211,7 +211,7 @@ establishment.
 ### Lazy versus eager connection
 
 Unix socket and named pipe connections via `connect_with_socket` perform eager
-validation: if the socket file does not exist or is not accessible, the
+validation: if the socket file does not exist or is inaccessible, the
 connection fails immediately with a descriptive error (`SocketNotFound` or
 `PermissionDenied`).
 
@@ -223,7 +223,7 @@ ping. This means:
 - `connect()` always succeeds for TCP/HTTP endpoints.
 - Errors are detected during `connect_and_verify()` (health check phase).
 - TCP errors produce `ConnectionFailed` or `HealthCheckFailed`, never
-  `SocketNotFound` or `PermissionDenied`, because there is no filesystem path
+  `SocketNotFound` or `PermissionDenied` because there is no filesystem path
   to attribute the error to.
 
 ### Bare path normalization
