@@ -371,9 +371,13 @@ changes are additive. The quality gate commands can be re-run at any time.
 No new public interfaces introduced. No new dependencies beyond the rstest-bdd
 version upgrade. Existing public API unchanged:
 
-- `podbot::engine::EngineConnector::connect(socket: impl AsRef<str>) -> Result<Docker, PodbotError>`
-- `podbot::engine::EngineConnector::connect_with_fallback(config_socket, resolver) -> Result<Docker, PodbotError>`
-- `podbot::engine::EngineConnector::connect_and_verify_async(socket) -> Result<Docker, PodbotError>`
+- `EngineConnector::connect(socket: impl AsRef<str>)
+  -> Result<Docker, PodbotError>`
+- `EngineConnector::connect_with_fallback(
+  config_socket, resolver)
+  -> Result<Docker, PodbotError>`
+- `EngineConnector::connect_and_verify_async(socket)
+  -> Result<Docker, PodbotError>`
 - `podbot::engine::SocketResolver::resolve_from_env() -> Option<String>`
 
 ______________________________________________________________________
