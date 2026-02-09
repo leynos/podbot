@@ -38,7 +38,7 @@ mockable = { version = "0.1.4", default-features = false }
 [dev-dependencies]
 mockable = { version = "0.1.4", default-features = false, features = ["mock"] }
 rstest = "0.26.1"
-rstest-bdd = "0.4.0"
+rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.4.0", features = ["compile-time-validation"] }
 serde_json = "1.0.149"
 serial_test = "3.2.0"

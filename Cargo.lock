@@ -2381,9 +2381,9 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e741d97bce6ea0a7d0f074716041e0d0eebe6ab9edcd243e7d12f9fd2b5e8b6"
+checksum = "138d8e4f97e16906ebeb0bfb12d2c94f0b05913a96fc522111bec62ca8328522"
 dependencies = [
  "ctor",
  "derive_more",
@@ -2394,8 +2394,8 @@ dependencies = [
  "inventory",
  "log",
  "regex",
- "rstest-bdd-patterns",
- "rstest-bdd-policy",
+ "rstest-bdd-patterns 0.5.0",
+ "rstest-bdd-policy 0.5.0",
  "rust-embed",
  "serde",
  "serde_json",
@@ -2420,8 +2420,8 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "rstest-bdd-patterns",
- "rstest-bdd-policy",
+ "rstest-bdd-patterns 0.4.0",
+ "rstest-bdd-policy 0.4.0",
  "syn 2.0.114",
  "thiserror 1.0.69",
  "walkdir",
@@ -2439,10 +2439,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "rstest-bdd-patterns"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39abaa69316cdbbad0512dc0f37b704b09e4cdb5018d80f197cbdb77a2269d06"
+dependencies = [
+ "gherkin",
+ "regex",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "rstest-bdd-policy"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d256efeb01f08e281cef9cd1e54dab33d8778e871090f5fa49b7a9a70f0caf81"
+
+[[package]]
+name = "rstest-bdd-policy"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88f2ca584f7d9d359a09f616900be015302c959d58c2c2da6c075573352dfa0d"
 
 [[package]]
 name = "rstest_macros"
