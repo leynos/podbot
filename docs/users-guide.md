@@ -106,7 +106,10 @@ Commands like `podbot ps` or `podbot stop` do not require GitHub configuration.
 
 ```toml
 # Container engine socket (Podman or Docker)
+# Unix socket (default for local daemons):
 engine_socket = "unix:///run/user/1000/podman/podman.sock"
+# TCP endpoint (for remote daemons):
+# engine_socket = "tcp://docker.example.com:2375"
 
 # Container image for the sandbox
 image = "ghcr.io/example/podbot-sandbox:latest"
@@ -176,6 +179,54 @@ following order (first match wins):
 This allows podbot to integrate with existing Docker and Podman environments
 without additional configuration. When `DOCKER_HOST` or `PODMAN_HOST` is
 already set for container tooling, podbot will automatically use that endpoint.
+
+### TCP endpoint support
+
+In addition to Unix sockets and Windows named pipes, podbot supports TCP
+connections to remote container engines. This is useful when the Docker or
+Podman daemon is running on a different host or is configured to listen on a
+TCP port.
+
+**Supported TCP endpoint formats:**
+
+| Format              | Example                              | Notes                              |
+| ------------------- | ------------------------------------ | ---------------------------------- |
+| `tcp://host:port`   | `tcp://192.168.1.100:2375`           | Rewritten internally to `http://`  |
+| `http://host:port`  | `http://docker.example.com:2375`     | Used directly                      |
+| `https://host:port` | `https://docker.example.com:2376`    | TLS-encrypted connection           |
+
+**Configuration examples:**
+
+Via CLI argument:
+
+```bash
+podbot run --engine-socket tcp://remotehost:2375 --repo owner/name --branch main
+```
+
+Via environment variable:
+
+```bash
+export DOCKER_HOST=tcp://192.168.1.100:2375
+podbot run --repo owner/name --branch main
+```
+
+Via configuration file:
+
+```toml
+engine_socket = "tcp://docker.example.com:2375"
+```
+
+**TCP-specific troubleshooting:**
+
+| Error                                                       | Cause                                                 | Resolution                                                                                                                    |
+| ----------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `failed to connect to container engine: <message>`          | TCP endpoint unreachable or daemon not listening       | Verify the remote host is reachable and the daemon is configured to listen on the specified port                               |
+| `container engine health check failed: <message>`           | Connection established but daemon did not respond      | Verify the daemon is healthy: `curl http://remotehost:2375/v1.40/_ping`                                                       |
+| `container engine health check timed out after 10 seconds`  | Network latency or daemon overloaded                  | Check network connectivity and daemon load                                                                                    |
+
+**Security note:** TCP connections without TLS (`tcp://` and `http://`)
+transmit data unencrypted. Use `https://` with TLS certificates for production
+environments. Consult the Docker or Podman documentation for configuring TLS.
 
 ### Engine health check
 

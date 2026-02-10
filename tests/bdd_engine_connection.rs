@@ -74,6 +74,40 @@ fn container_host_priority_over_podman_host(engine_connection_state: EngineConne
     let _ = engine_connection_state;
 }
 
+// TCP endpoint scenario bindings
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "TCP endpoint resolved from DOCKER_HOST"
+)]
+fn tcp_endpoint_from_docker_host(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "Config socket as TCP endpoint takes precedence"
+)]
+fn config_tcp_takes_precedence(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "TCP endpoint connection succeeds without daemon"
+)]
+fn tcp_connection_succeeds(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}
+
+#[scenario(
+    path = "tests/features/engine_connection.feature",
+    name = "TCP connection errors are classified as connection failures"
+)]
+fn tcp_connection_errors_classified(engine_connection_state: EngineConnectionState) {
+    let _ = engine_connection_state;
+}
+
 // Health check scenario bindings
 
 #[scenario(

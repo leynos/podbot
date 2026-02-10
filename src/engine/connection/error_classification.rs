@@ -228,6 +228,7 @@ mod tests {
     #[case::http("http://localhost:2375", None)]
     #[case::tcp("tcp://localhost:2375", None)]
     #[case::bare_path("/var/run/docker.sock", Some("/var/run/docker.sock"))]
+    #[case::https("https://docker.example.com:2376", None)]
     fn extract_socket_path_parses_correctly(#[case] uri: &str, #[case] expected: Option<&str>) {
         let result = extract_socket_path(uri);
         assert_eq!(
@@ -291,6 +292,8 @@ mod tests {
         "unix:///var/run/docker.sock"
     )]
     #[case::permission_denied_http(std::io::ErrorKind::PermissionDenied, "http://localhost:2375")]
+    #[case::not_found_tcp(std::io::ErrorKind::NotFound, "tcp://remotehost:2375")]
+    #[case::permission_denied_tcp(std::io::ErrorKind::PermissionDenied, "tcp://remotehost:2375")]
     fn classify_connection_error_falls_back_for_unmapped_or_non_socket_context(
         #[case] io_error_kind: std::io::ErrorKind,
         #[case] socket_uri: &str,

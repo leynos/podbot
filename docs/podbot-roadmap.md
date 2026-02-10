@@ -67,7 +67,7 @@ errors. ✓
 Implement the Bollard wrapper that manages container lifecycle, credential
 injection, and interactive execution.
 
-### Step 2.1: Engine connection
+### Step 2.1: Engine connection ✓
 
 Connect to the Podman or Docker socket and verify the connection.
 
@@ -77,10 +77,10 @@ Connect to the Podman or Docker socket and verify the connection.
   environment variables or direct path specification.
 - [x] Add a health check that verifies the engine responds.
 - [x] Handle socket permission errors with actionable error messages.
-- [ ] Support both Unix sockets and TCP connections.
+- [x] Support both Unix sockets and TCP connections.
 
 **Completion criteria:** Connection succeeds against a running Podman or Docker
-daemon. Permission errors produce clear diagnostic messages.
+daemon. Permission errors produce clear diagnostic messages. ✓
 
 ### Step 2.2: Container creation
 
