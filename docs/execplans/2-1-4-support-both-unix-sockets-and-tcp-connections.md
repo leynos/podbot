@@ -166,6 +166,23 @@ connectivity. Failures surface only during the first API call (typically the
 health check ping). This is fundamentally different from Unix sockets, where
 `Docker::connect_with_socket()` for a nonexistent path fails immediately.
 
+### Image versioning strategy
+
+Sandbox images consumed by `EngineConnector` should use immutable digests
+(e.g. `podbot-sandbox@sha256:abc123…`) in production to guarantee
+reproducibility. Mutable tags (e.g. `podbot-sandbox:latest`) are acceptable
+in development and testing environments.
+
+The expected update cadence is: weekly base-image security patches, ad-hoc
+updates for critical vulnerabilities, and quarterly feature releases. To
+roll back, reference an earlier digest or tagged release; CI/CD pipelines
+should retain at least three prior digests so that rollback is immediate.
+
+Image version metadata is recorded as OCI container labels (accessible via
+`docker inspect` or `podman inspect`) and summarized in the project
+`README.md`. This ensures `EngineConnector` consumers can verify the
+running image version programmatically.
+
 ## Plan of work
 
 ### Task 1: Upgrade rstest-bdd to 0.5.0
