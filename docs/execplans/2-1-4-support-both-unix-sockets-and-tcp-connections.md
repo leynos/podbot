@@ -289,10 +289,12 @@ All commands run from `/home/user/project`.
 12. Update `docs/podbot-roadmap.md` to mark complete.
 13. Run quality gates:
 
-        set -o pipefail
-        make check-fmt 2>&1 | tee /tmp/fmt.log && echo "FMT OK"
-        make lint 2>&1 | tee /tmp/lint.log && echo "LINT OK"
-        make test 2>&1 | tee /tmp/test.log && echo "TEST OK"
+```bash
+set -o pipefail
+make check-fmt 2>&1 | tee /tmp/fmt.log && echo "FMT OK"
+make lint 2>&1 | tee /tmp/lint.log && echo "LINT OK"
+make test 2>&1 | tee /tmp/test.log && echo "TEST OK"
+```
 
 ## Validation and acceptance
 
@@ -333,10 +335,12 @@ Quality criteria:
 
 Quality method:
 
-    set -o pipefail
-    make check-fmt 2>&1 | tee /tmp/fmt.log && echo "FMT OK"
-    make lint 2>&1 | tee /tmp/lint.log && echo "LINT OK"
-    make test 2>&1 | tee /tmp/test.log && echo "TEST OK"
+```bash
+set -o pipefail
+make check-fmt 2>&1 | tee /tmp/fmt.log && echo "FMT OK"
+make lint 2>&1 | tee /tmp/lint.log && echo "LINT OK"
+make test 2>&1 | tee /tmp/test.log && echo "TEST OK"
+```
 
 ## Idempotence and recovery
 
@@ -353,6 +357,8 @@ changes are additive. The quality gate commands can be re-run at any time.
 | `tests/bdd_engine_connection_helpers/tcp_connection_steps.rs` | TCP BDD step definitions |
 | `docs/execplans/2-1-4-support-both-unix-sockets-and-tcp-connections.md` | This execution plan |
 
+_Table 1: Files created by this task._
+
 **Files modified:**
 
 | File | Change |
@@ -366,6 +372,8 @@ changes are additive. The quality gate commands can be re-run at any time.
 | `docs/users-guide.md` | Add TCP endpoint support section |
 | `docs/podbot-design.md` | Add engine connection protocol support section |
 | `docs/podbot-roadmap.md` | Mark task and step complete |
+
+_Table 2: Files modified by this task._
 
 ## Interfaces and dependencies
 

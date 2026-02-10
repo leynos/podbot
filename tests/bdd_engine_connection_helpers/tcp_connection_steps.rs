@@ -17,7 +17,7 @@ use super::{ConnectionOutcome, EngineConnectionState, StepResult};
 
 /// Configure a TCP endpoint for connection testing.
 ///
-/// TCP connections via Bollard's `connect_with_http` are lazy and do
+/// TCP connections via `Bollard`'s `connect_with_http` are lazy and do
 /// not validate connectivity at construction time.
 #[given("a TCP endpoint is configured")]
 #[expect(
@@ -133,7 +133,7 @@ pub fn tcp_connection_with_health_check(
 /// Assert that the TCP connection client was created successfully.
 ///
 /// This verifies the lazy connection behaviour: TCP endpoints create
-/// the Bollard client without attempting to reach the remote host.
+/// the `Bollard` client without attempting to reach the remote host.
 #[then("the connection client is created successfully")]
 pub fn connection_client_created(
     engine_connection_state: &EngineConnectionState,
