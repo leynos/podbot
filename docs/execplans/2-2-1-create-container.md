@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 No `PLANS.md` file exists in this repository as of 2026-02-10, so this ExecPlan
 is the governing implementation document for this task.
@@ -84,14 +84,15 @@ This plan also covers required documentation updates:
       engine code structure.
 - [x] (2026-02-10 UTC) Drafted this ExecPlan at
       `docs/execplans/2-2-1-create-container.md`.
-- [ ] Implement container-creation security modelling and Bollard request
-      construction.
-- [ ] Add unit tests (rstest) for happy, unhappy, and edge paths.
-- [ ] Add behavioural tests (rstest-bdd v0.5.0) covering externally observable
-      create-container behaviour.
-- [ ] Update design and user documentation.
-- [ ] Mark relevant roadmap entry as done.
-- [ ] Run quality gates and capture logs.
+- [x] (2026-02-11 UTC) Implemented container-creation security modelling and
+      Bollard request construction.
+- [x] (2026-02-11 UTC) Added `rstest` unit tests for happy, unhappy, and edge
+      paths.
+- [x] (2026-02-11 UTC) Added `rstest-bdd` v0.5.0 scenarios for create-container
+      behaviour.
+- [x] (2026-02-11 UTC) Updated design and user documentation.
+- [x] (2026-02-11 UTC) Marked the relevant roadmap entry as done.
+- [x] (2026-02-11 UTC) Ran quality gates and captured logs.
 
 ## Surprises and discoveries
 
@@ -120,9 +121,29 @@ This plan also covers required documentation updates:
   with `docs/reliable-testing-in-rust-via-dependency- injection.md` and avoids
   brittle daemon-dependent tests for core logic. Date/Author: 2026-02-10 / Codex
 
+- Decision: introduce a public `ContainerCreator` abstraction and explicit
+  `CreateContainerRequest`/`ContainerSecurityOptions` types in `src/engine`.
+  Rationale: this supports deterministic unit and behavioural tests without a
+  running daemon while preserving a stable seam for Step 2.3 and Step 2.4.
+  Date/Author: 2026-02-11 / Codex
+
 ## Outcomes and retrospective
 
-Pending implementation.
+Implemented Step 2.2.1 container creation with configurable security options.
+
+- Added `EngineConnector::create_container_async` and synchronous
+  `EngineConnector::create_container`.
+- Added public engine types: `ContainerCreator`, `CreateContainerRequest`,
+  `ContainerSecurityOptions`, and `SelinuxLabelMode`.
+- Implemented privileged and minimal security mapping, optional `/dev/fuse`
+  handling, and SELinux label controls.
+- Added semantic missing-image validation via `ConfigError::MissingRequired`.
+- Added unit and behavioural coverage for happy, unhappy, and edge paths.
+- Updated `docs/podbot-design.md`, `docs/users-guide.md`, and
+  `docs/podbot-roadmap.md`.
+
+This milestone stops at container creation; start/execution lifecycle work
+remains in subsequent roadmap steps.
 
 ## Context and orientation
 
@@ -337,3 +358,6 @@ Dependencies remain unchanged unless a tolerance trigger is explicitly invoked.
 
 Initial draft created on 2026-02-10 to plan Step 2.2.1 container creation work,
 including implementation, testing, documentation, and roadmap-completion tasks.
+
+Revised on 2026-02-11 to record delivered implementation, decisions, and
+quality-gated completion evidence.

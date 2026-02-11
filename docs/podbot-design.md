@@ -188,25 +188,24 @@ handling design.
 
 ### Supported protocols
 
-| Protocol    | Scheme prefix | Bollard method       | Use case                                           |
-| ----------- | ------------- | -------------------- | -------------------------------------------------- |
+| Protocol    | Scheme prefix | Bollard method        | Use case                                            |
+| ----------- | ------------- | --------------------- | --------------------------------------------------- |
 | Unix socket | `unix://`     | `connect_with_socket` | Local Docker/Podman daemon (default on Linux/macOS) |
-| Named pipe  | `npipe://`    | `connect_with_socket` | Local Docker on Windows                            |
-| TCP         | `tcp://`      | `connect_with_http`  | Remote daemon over network                         |
-| HTTP        | `http://`     | `connect_with_http`  | Remote daemon (explicit HTTP)                      |
-| HTTPS       | `https://`    | `connect_with_http`  | Remote daemon with TLS                             |
-| Bare path   | (none)        | `connect_with_socket` | Convenience shorthand for socket paths             |
+| Named pipe  | `npipe://`    | `connect_with_socket` | Local Docker on Windows                             |
+| TCP         | `tcp://`      | `connect_with_http`   | Remote daemon over network                          |
+| HTTP        | `http://`     | `connect_with_http`   | Remote daemon (explicit HTTP)                       |
+| HTTPS       | `https://`    | `connect_with_http`   | Remote daemon with TLS                              |
+| Bare path   | (none)        | `connect_with_socket` | Convenience shorthand for socket paths              |
 
 _Table 2: Supported connection protocols and their Bollard dispatch._
 
 ### TCP-to-HTTP rewriting
 
 Bollard does not natively accept `tcp://` schemes. The `EngineConnector`
-rewrites `tcp://` to `http://` before calling `connect_with_http`. This
-matches the behaviour of the Docker command-line interface (CLI), which treats
-`tcp://` as an alias for `http://`. The rewriting is a simple string
-replacement (`tcp://` to `http://`) applied once during connection
-establishment.
+rewrites `tcp://` to `http://` before calling `connect_with_http`. This matches
+the behaviour of the Docker command-line interface (CLI), which treats `tcp://`
+as an alias for `http://`. The rewriting is a simple string replacement
+(`tcp://` to `http://`) applied once during connection establishment.
 
 ### Lazy versus eager connection
 
@@ -223,8 +222,8 @@ ping. This means:
 - `connect()` always succeeds for TCP/HTTP endpoints.
 - Errors are detected during `connect_and_verify()` (health check phase).
 - TCP errors produce `ConnectionFailed` or `HealthCheckFailed`, never
-  `SocketNotFound` or `PermissionDenied` because there is no filesystem path
-  to attribute the error to.
+  `SocketNotFound` or `PermissionDenied` because there is no filesystem path to
+  attribute the error to.
 
 ### Bare path normalization
 
@@ -277,6 +276,28 @@ The `sandbox.privileged` setting controls the trade-off between compatibility
 and isolation. Privileged mode enables more Podman-in-Podman configurations but
 expands the attack surface. The minimal mode mounts only `/dev/fuse` and avoids
 the privileged flag.
+
+## Container creation security mapping
+
+`EngineConnector::create_container` translates high-level sandbox settings into
+`Bollard` host configuration at container-create time.
+
+- **Privileged profile** (`sandbox.privileged = true`)
+  - Sets `HostConfig.Privileged = true`.
+  - Leaves capability additions, device mappings, and SELinux security options
+    unset so the engine default profile is used.
+- **Minimal profile** (`sandbox.privileged = false`)
+  - Sets `HostConfig.Privileged = false`.
+  - Applies `SecurityOpt = ["label=disable"]` so rootless nested Podman
+    workflows do not fail under strict SELinux labelling.
+  - When `sandbox.mount_dev_fuse = true`, mounts `/dev/fuse` with `rwm`
+    permissions and adds `SYS_ADMIN` capability to support `fuse-overlayfs`.
+  - When `sandbox.mount_dev_fuse = false`, `/dev/fuse` and capability additions
+    are omitted.
+
+Container creation validates that an image is configured. If `image` is missing
+or empty, the operation fails with a semantic `ConfigError::MissingRequired`
+for `image`.
 
 ## Error handling
 

@@ -189,11 +189,11 @@ TCP port.
 
 **Supported TCP endpoint formats:**
 
-| Format              | Example                              | Notes                              |
-| ------------------- | ------------------------------------ | ---------------------------------- |
-| `tcp://host:port`   | `tcp://192.168.1.100:2375`           | Rewritten internally to `http://`  |
-| `http://host:port`  | `http://docker.example.com:2375`     | Used directly                      |
-| `https://host:port` | `https://docker.example.com:2376`    | TLS-encrypted connection           |
+| Format              | Example                           | Notes                             |
+| ------------------- | --------------------------------- | --------------------------------- |
+| `tcp://host:port`   | `tcp://192.168.1.100:2375`        | Rewritten internally to `http://` |
+| `http://host:port`  | `http://docker.example.com:2375`  | Used directly                     |
+| `https://host:port` | `https://docker.example.com:2376` | TLS-encrypted connection          |
 
 **Configuration examples:**
 
@@ -218,11 +218,11 @@ engine_socket = "tcp://docker.example.com:2375"
 
 **TCP-specific troubleshooting:**
 
-| Error                                                       | Cause                                                 | Resolution                                                                                                                    |
-| ----------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `failed to connect to container engine: <message>`          | TCP endpoint unreachable or daemon not listening       | Verify the remote host is reachable and the daemon is configured to listen on the specified port                               |
-| `container engine health check failed: <message>`           | Connection established but daemon did not respond      | Verify the daemon is healthy: `curl http://remotehost:2375/v1.40/_ping`                                                       |
-| `container engine health check timed out after 10 seconds`  | Network latency or daemon overloaded                  | Check network connectivity and daemon load                                                                                    |
+| Error                                                      | Cause                                             | Resolution                                                                                       |
+| ---------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `failed to connect to container engine: <message>`         | TCP endpoint unreachable or daemon not listening  | Verify the remote host is reachable and the daemon is configured to listen on the specified port |
+| `container engine health check failed: <message>`          | Connection established but daemon did not respond | Verify the daemon is healthy: `curl http://remotehost:2375/v1.40/_ping`                          |
+| `container engine health check timed out after 10 seconds` | Network latency or daemon overloaded              | Check network connectivity and daemon load                                                       |
 
 **Security note:** TCP connections without TLS (`tcp://` and `http://`)
 transmit data unencrypted. Use `https://` with TLS certificates for production
@@ -319,6 +319,27 @@ environment. Privileged mode:
 The `/dev/fuse` mount is required for fuse-overlayfs, which enables inner
 Podman to function correctly. Disable this only when the agent container does
 not need nested container support.
+
+### Container creation behaviour
+
+When podbot creates a sandbox container, it applies the following host security
+settings:
+
+- `privileged = true`: sets `HostConfig.Privileged = true` and uses engine
+  defaults for capabilities, devices, and SELinux options.
+- `privileged = false`: sets `HostConfig.Privileged = false`, applies
+  `SecurityOpt = ["label=disable"]`, and uses a minimal profile.
+- `privileged = false` and `mount_dev_fuse = true`: additionally maps
+  `/dev/fuse` and adds `SYS_ADMIN` capability so `fuse-overlayfs` can run.
+- `privileged = false` and `mount_dev_fuse = false`: skips `/dev/fuse` mapping
+  and capability additions.
+
+Container creation requires `image` to be configured. If it is missing, podbot
+returns:
+
+```text
+missing required configuration: image
+```
 
 ## Security model
 

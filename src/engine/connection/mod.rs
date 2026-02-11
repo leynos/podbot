@@ -4,6 +4,7 @@
 //! from multiple sources (environment variables, configuration, platform defaults)
 //! and establish connections using the `Bollard` library.
 
+mod create_container;
 mod error_classification;
 mod health_check;
 
@@ -13,6 +14,11 @@ use bollard::Docker;
 use error_classification::classify_connection_error;
 
 use crate::error::PodbotError;
+
+pub use create_container::{
+    ContainerCreator, ContainerSecurityOptions, CreateContainerFuture, CreateContainerRequest,
+    SelinuxLabelMode,
+};
 
 // =============================================================================
 // SocketPath newtype
