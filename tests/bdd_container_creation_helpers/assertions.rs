@@ -1,6 +1,6 @@
 //! Then-step assertions for container-creation behavioural scenarios.
 
-use bollard::models::HostConfig;
+use bollard::models::{DeviceMapping, HostConfig};
 use rstest_bdd_macros::then;
 
 use super::state::{ContainerCreationState, CreateOutcome, FailureKind, StepResult};
@@ -72,34 +72,64 @@ fn minimal_host_configuration_with_fuse_used(
     container_creation_state: &ContainerCreationState,
 ) -> StepResult<()> {
     let host_config = captured_host_config(container_creation_state)?;
+    validate_privileged_false(&host_config)?;
+    validate_sys_admin_capability(&host_config)?;
+    validate_selinux_label_disable(&host_config)?;
+    validate_fuse_device_mapping(&host_config)?;
 
-    if host_config.privileged != Some(false) {
-        return Err(String::from(
-            "expected minimal host configuration with privileged=false",
-        ));
-    }
-    if host_config.cap_add != Some(vec![String::from("SYS_ADMIN")]) {
-        return Err(String::from(
-            "expected SYS_ADMIN capability in minimal mode with /dev/fuse",
-        ));
-    }
-    if host_config.security_opt != Some(vec![String::from("label=disable")]) {
-        return Err(String::from(
-            "expected SELinux label=disable in minimal mode",
-        ));
-    }
-
-    let devices = host_config
+    let device = host_config
         .devices
-        .ok_or_else(|| String::from("minimal mode with fuse should map /dev/fuse"))?;
-    if devices.len() != 1 {
-        return Err(String::from(
-            "expected exactly one /dev/fuse device mapping",
-        ));
-    }
-    let device = devices
-        .first()
+        .as_ref()
+        .and_then(|devices| devices.first())
         .ok_or_else(|| String::from("`/dev/fuse` mapping should include one device entry"))?;
+    validate_device_paths(device)?;
+    validate_device_permissions(device)
+}
+
+fn validate_privileged_false(host_config: &HostConfig) -> StepResult<()> {
+    if host_config.privileged == Some(false) {
+        return Ok(());
+    }
+
+    Err(String::from(
+        "expected minimal host configuration with privileged=false",
+    ))
+}
+
+fn validate_sys_admin_capability(host_config: &HostConfig) -> StepResult<()> {
+    if host_config.cap_add == Some(vec![String::from("SYS_ADMIN")]) {
+        return Ok(());
+    }
+
+    Err(String::from(
+        "expected SYS_ADMIN capability in minimal mode with /dev/fuse",
+    ))
+}
+
+fn validate_selinux_label_disable(host_config: &HostConfig) -> StepResult<()> {
+    if host_config.security_opt == Some(vec![String::from("label=disable")]) {
+        return Ok(());
+    }
+
+    Err(String::from(
+        "expected SELinux label=disable in minimal mode",
+    ))
+}
+
+fn validate_fuse_device_mapping(host_config: &HostConfig) -> StepResult<()> {
+    let Some(devices) = host_config.devices.as_ref() else {
+        return Err(String::from("minimal mode with fuse should map /dev/fuse"));
+    };
+    if devices.len() == 1 {
+        return Ok(());
+    }
+
+    Err(String::from(
+        "expected exactly one /dev/fuse device mapping",
+    ))
+}
+
+fn validate_device_paths(device: &DeviceMapping) -> StepResult<()> {
     if device.path_on_host.as_deref() != Some("/dev/fuse") {
         return Err(String::from("expected device path_on_host to be /dev/fuse"));
     }
@@ -108,13 +138,18 @@ fn minimal_host_configuration_with_fuse_used(
             "expected device path_in_container to be /dev/fuse",
         ));
     }
-    if device.cgroup_permissions.as_deref() != Some("rwm") {
-        return Err(String::from(
-            "expected /dev/fuse cgroup permissions to be rwm",
-        ));
-    }
 
     Ok(())
+}
+
+fn validate_device_permissions(device: &DeviceMapping) -> StepResult<()> {
+    if device.cgroup_permissions.as_deref() == Some("rwm") {
+        return Ok(());
+    }
+
+    Err(String::from(
+        "expected /dev/fuse cgroup permissions to be rwm",
+    ))
 }
 
 #[then("minimal host configuration without /dev/fuse is used")]
