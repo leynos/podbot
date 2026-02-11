@@ -82,7 +82,6 @@ fn container_engine_create_call_fails(container_creation_state: &ContainerCreati
 fn container_creation_is_requested(
     container_creation_state: &ContainerCreationState,
 ) -> StepResult<()> {
-    let mut creator = MockCreator::new();
     let call_count = Arc::new(Mutex::new(0_usize));
     let captured_options = Arc::new(Mutex::new(None::<CreateContainerOptions>));
     let captured_host_config = Arc::new(Mutex::new(None::<HostConfig>));
@@ -90,10 +89,47 @@ fn container_creation_is_requested(
         .should_fail_create
         .get()
         .unwrap_or(false);
+    let creator = setup_mock_creator(
+        should_fail,
+        &call_count,
+        &captured_options,
+        &captured_host_config,
+    );
 
-    let call_count_for_closure = Arc::clone(&call_count);
-    let captured_options_for_closure = Arc::clone(&captured_options);
-    let captured_host_config_for_closure = Arc::clone(&captured_host_config);
+    let request = match build_request_from_state(container_creation_state) {
+        Ok(request) => request,
+        Err(error) => {
+            capture_mock_state(
+                container_creation_state,
+                &call_count,
+                &captured_options,
+                &captured_host_config,
+            )?;
+            record_failure(container_creation_state, &error);
+            return Ok(());
+        }
+    };
+
+    execute_and_capture_result(
+        container_creation_state,
+        &creator,
+        &request,
+        &call_count,
+        &captured_options,
+        &captured_host_config,
+    )
+}
+
+fn setup_mock_creator(
+    should_fail: bool,
+    call_count: &Arc<Mutex<usize>>,
+    captured_options: &Arc<Mutex<Option<CreateContainerOptions>>>,
+    captured_host_config: &Arc<Mutex<Option<HostConfig>>>,
+) -> MockCreator {
+    let mut creator = MockCreator::new();
+    let call_count_for_closure = Arc::clone(call_count);
+    let captured_options_for_closure = Arc::clone(captured_options);
+    let captured_host_config_for_closure = Arc::clone(captured_host_config);
     creator
         .expect_create_container()
         .returning(move |options, config| {
@@ -119,35 +155,43 @@ fn container_creation_is_requested(
             })
         });
 
+    creator
+}
+
+fn build_request_from_state(
+    container_creation_state: &ContainerCreationState,
+) -> Result<CreateContainerRequest, PodbotError> {
     let image = container_creation_state
         .image
         .get()
         .unwrap_or(None)
         .unwrap_or_default();
     let security = container_creation_state.security.get().unwrap_or_default();
-    let request = match CreateContainerRequest::new(image, security) {
-        Ok(request) => request.with_name(Some(String::from("podbot-sandbox-test"))),
-        Err(error) => {
-            capture_mock_state(
-                container_creation_state,
-                &call_count,
-                &captured_options,
-                &captured_host_config,
-            )?;
-            record_failure(container_creation_state, &error);
-            return Ok(());
-        }
-    };
+    CreateContainerRequest::new(image, security)
+        .map(|request| request.with_name(Some(String::from("podbot-sandbox-test"))))
+}
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "required by explicit refactor request for helper signature"
+)]
+fn execute_and_capture_result(
+    container_creation_state: &ContainerCreationState,
+    creator: &MockCreator,
+    request: &CreateContainerRequest,
+    call_count: &Arc<Mutex<usize>>,
+    captured_options: &Arc<Mutex<Option<CreateContainerOptions>>>,
+    captured_host_config: &Arc<Mutex<Option<HostConfig>>>,
+) -> StepResult<()> {
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|_| String::from("failed to create tokio runtime for scenario"))?;
-    let result = runtime.block_on(EngineConnector::create_container_async(&creator, &request));
+    let result = runtime.block_on(EngineConnector::create_container_async(creator, request));
 
     capture_mock_state(
         container_creation_state,
-        &call_count,
-        &captured_options,
-        &captured_host_config,
+        call_count,
+        captured_options,
+        captured_host_config,
     )?;
 
     match result {
