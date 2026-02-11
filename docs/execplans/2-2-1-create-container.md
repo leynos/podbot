@@ -114,18 +114,19 @@ This plan also covers required documentation updates:
   while designing interfaces that do not block Step 2.2 follow-on tasks.
   Rationale: the request targets `2-2-1-create-container.md`, but the interface
   should remain suitable for privileged/minimal/SELinux/image requirements in
-  the same phase. Date/Author: 2026-02-10 / Codex
+  the same phase. Date/Author: 2026-02-10 / Codex.
 
 - Decision: require deterministic test coverage through dependency injection for
   create-container request building and error mapping. Rationale: this aligns
   with `docs/reliable-testing-in-rust-via-dependency-injection.md` and avoids
-  brittle daemon-dependent tests for core logic. Date/Author: 2026-02-10 / Codex
+  brittle daemon-dependent tests for core logic. Date/Author: 2026-02-10 /
+  Codex.
 
 - Decision: introduce a public `ContainerCreator` abstraction and explicit
   `CreateContainerRequest`/`ContainerSecurityOptions` types in `src/engine`.
   Rationale: this supports deterministic unit and behavioural tests without a
   running daemon while preserving a stable seam for Step 2.3 and Step 2.4.
-  Date/Author: 2026-02-11 / Codex
+  Date/Author: 2026-02-11 / Codex.
 
 ## Outcomes and retrospective
 
@@ -173,7 +174,7 @@ Key requirement translation for Step 2.2.1:
   options.
 - Support privileged and minimal security profiles.
 - Support `/dev/fuse` mounting control.
-- Apply SELinux-compatible security options in a deterministic way.
+- Apply SELinux-compatible security options deterministically.
 - Use configured image input.
 
 ## Plan of work
