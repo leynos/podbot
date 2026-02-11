@@ -296,8 +296,8 @@ the privileged flag.
     are omitted.
 
 Container creation validates that an image is configured. If `image` is missing
-or empty, the operation fails with a semantic `ConfigError::MissingRequired`
-for `image`.
+or whitespace-only, the operation fails with a semantic
+`ConfigError::MissingRequired` for `image`.
 
 ## Error handling
 

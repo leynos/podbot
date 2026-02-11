@@ -39,6 +39,16 @@ fn create_container_fails_when_image_missing(container_creation_state: Container
 
 #[scenario(
     path = "tests/features/container_creation.feature",
+    name = "Create container fails when image is whitespace only"
+)]
+fn create_container_fails_when_image_whitespace_only(
+    container_creation_state: ContainerCreationState,
+) {
+    let _ = container_creation_state;
+}
+
+#[scenario(
+    path = "tests/features/container_creation.feature",
     name = "Create container surfaces engine create failures"
 )]
 fn create_container_surfaces_engine_failures(container_creation_state: ContainerCreationState) {

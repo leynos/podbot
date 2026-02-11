@@ -41,7 +41,7 @@ This plan also covers required documentation updates:
 - Preserve current public configuration semantics unless a roadmap requirement
   explicitly requires a change.
 - Use en-GB-oxendict spelling in documentation updates.
-- Prefer Makefile targets for verification (`make check-fmt`, `make lint`,
+- Prefer Makefile targets for verification (`make check-fmt`, `make lint`, and
   `make test`).
 
 ## Tolerances (exception triggers)
@@ -118,7 +118,7 @@ This plan also covers required documentation updates:
 
 - Decision: require deterministic test coverage through dependency injection for
   create-container request building and error mapping. Rationale: this aligns
-  with `docs/reliable-testing-in-rust-via-dependency- injection.md` and avoids
+  with `docs/reliable-testing-in-rust-via-dependency-injection.md` and avoids
   brittle daemon-dependent tests for core logic. Date/Author: 2026-02-10 / Codex
 
 - Decision: introduce a public `ContainerCreator` abstraction and explicit
@@ -147,7 +147,7 @@ remains in subsequent roadmap steps.
 
 ## Context and orientation
 
-Current engine code is organised under `src/engine/connection/` and supports:
+Current engine code is organized under `src/engine/connection/` and supports:
 
 - socket resolution from config, environment, and defaults;
 - connection establishment via Bollard;
@@ -279,7 +279,7 @@ message that explains what changed and why.
 
 Validation gate:
 
-- `make check-fmt`, `make lint`, `make test` all exit zero;
+- `make check-fmt`, `make lint`, and `make test` all exit zero;
 - commit includes only intended files.
 
 ## Concrete steps
@@ -331,9 +331,9 @@ Implementation is complete when all conditions below are true:
 - If a tolerance trigger is hit, stop implementation, update `Decision log`,
   and wait for direction before expanding scope.
 
-## Artifacts and notes
+## Artefacts and notes
 
-Expected verification artifacts:
+Expected verification artefacts:
 
 - `/tmp/check-fmt-podbot-<branch>.out`
 - `/tmp/lint-podbot-<branch>.out`

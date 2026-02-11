@@ -29,6 +29,14 @@ Feature: Container creation
     And sandbox security is minimal mode with /dev/fuse mounted
     When container creation is requested
     Then container creation fails with missing image error
+    And container engine is not invoked
+
+  Scenario: Create container fails when image is whitespace only
+    Given sandbox image is configured as whitespace only
+    And sandbox security is minimal mode with /dev/fuse mounted
+    When container creation is requested
+    Then container creation fails with missing image error
+    And container engine is not invoked
 
   Scenario: Create container surfaces engine create failures
     Given a configured sandbox image ghcr.io/example/podbot-sandbox:latest

@@ -334,8 +334,8 @@ settings:
 - `privileged = false` and `mount_dev_fuse = false`: skips `/dev/fuse` mapping
   and capability additions.
 
-Container creation requires `image` to be configured. If it is missing, podbot
-returns:
+Container creation requires `image` to be configured. If it is missing or
+whitespace-only, podbot returns:
 
 ```text
 missing required configuration: image
