@@ -54,3 +54,19 @@ fn create_container_fails_when_image_whitespace_only(
 fn create_container_surfaces_engine_failures(container_creation_state: ContainerCreationState) {
     let _ = container_creation_state;
 }
+
+#[scenario(
+    path = "tests/features/container_creation.feature",
+    name = "Privileged mode ignores /dev/fuse setting"
+)]
+fn privileged_mode_ignores_fuse_setting(container_creation_state: ContainerCreationState) {
+    let _ = container_creation_state;
+}
+
+#[scenario(
+    path = "tests/features/container_creation.feature",
+    name = "Privileged mode ignores SELinux override"
+)]
+fn privileged_mode_ignores_selinux_override(container_creation_state: ContainerCreationState) {
+    let _ = container_creation_state;
+}

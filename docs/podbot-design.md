@@ -286,6 +286,9 @@ the privileged flag.
   - Sets `HostConfig.Privileged = true`.
   - Leaves capability additions, device mappings, and SELinux security options
     unset so the engine default profile is used.
+  - The `sandbox.mount_dev_fuse` and SELinux label mode settings are
+    intentionally ignored in privileged mode because the engine grants full
+    device access and governs security labelling directly.
 - **Minimal profile** (`sandbox.privileged = false`)
   - Sets `HostConfig.Privileged = false`.
   - Applies `SecurityOpt = ["label=disable"]` so rootless nested Podman

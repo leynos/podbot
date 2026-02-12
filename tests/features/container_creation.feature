@@ -44,3 +44,17 @@ Feature: Container creation
     And the container engine create call fails
     When container creation is requested
     Then container creation fails with create failed error
+
+  Scenario: Privileged mode ignores /dev/fuse setting
+    Given a configured sandbox image ghcr.io/example/podbot-sandbox:latest
+    And sandbox security is privileged mode without /dev/fuse
+    When container creation is requested
+    Then container creation succeeds
+    And privileged host configuration is used
+
+  Scenario: Privileged mode ignores SELinux override
+    Given a configured sandbox image ghcr.io/example/podbot-sandbox:latest
+    And sandbox security is privileged mode with SELinux label disable
+    When container creation is requested
+    Then container creation succeeds
+    And privileged host configuration is used

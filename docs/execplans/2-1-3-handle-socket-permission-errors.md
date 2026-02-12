@@ -573,10 +573,8 @@ ______________________________________________________________________
 ## Verification
 
 ```bash
-set -o pipefail
-make check-fmt 2>&1 | tee /tmp/fmt.log
-make lint 2>&1 | tee /tmp/lint.log
-make test 2>&1 | tee /tmp/test.log
+set -o pipefail make check-fmt 2>&1 | tee /tmp/fmt.log make lint 2>&1 | tee
+/tmp/lint.log make test 2>&1 | tee /tmp/test.log
 ```
 
 ## Testing notes
