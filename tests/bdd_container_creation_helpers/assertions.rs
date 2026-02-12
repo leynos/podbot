@@ -36,24 +36,10 @@ fn privileged_host_configuration_used(
 ) -> StepResult<()> {
     let host_config = captured_host_config(container_creation_state)?;
 
-    if host_config.privileged != Some(true) {
-        return Err(String::from("expected privileged host configuration"));
-    }
-    if host_config.cap_add.is_some() {
-        return Err(String::from(
-            "expected privileged host configuration without cap_add",
-        ));
-    }
-    if host_config.devices.is_some() {
-        return Err(String::from(
-            "expected privileged host configuration without device maps",
-        ));
-    }
-    if host_config.security_opt.is_some() {
-        return Err(String::from(
-            "expected privileged host configuration without security_opt",
-        ));
-    }
+    validate_privileged_true(&host_config)?;
+    validate_no_cap_add(&host_config)?;
+    validate_no_devices(&host_config)?;
+    validate_no_security_opt(&host_config)?;
 
     let options = container_creation_state
         .captured_options
@@ -67,6 +53,44 @@ fn privileged_host_configuration_used(
     Ok(())
 }
 
+fn validate_privileged_true(host_config: &HostConfig) -> StepResult<()> {
+    if host_config.privileged == Some(true) {
+        return Ok(());
+    }
+
+    Err(String::from("expected privileged host configuration"))
+}
+
+fn validate_no_cap_add(host_config: &HostConfig) -> StepResult<()> {
+    if host_config.cap_add.is_none() {
+        return Ok(());
+    }
+
+    Err(String::from(
+        "expected privileged host configuration without cap_add",
+    ))
+}
+
+fn validate_no_devices(host_config: &HostConfig) -> StepResult<()> {
+    if host_config.devices.is_none() {
+        return Ok(());
+    }
+
+    Err(String::from(
+        "expected privileged host configuration without device maps",
+    ))
+}
+
+fn validate_no_security_opt(host_config: &HostConfig) -> StepResult<()> {
+    if host_config.security_opt.is_none() {
+        return Ok(());
+    }
+
+    Err(String::from(
+        "expected privileged host configuration without security_opt",
+    ))
+}
+
 #[then("minimal host configuration with /dev/fuse is used")]
 fn minimal_host_configuration_with_fuse_used(
     container_creation_state: &ContainerCreationState,
@@ -75,13 +99,8 @@ fn minimal_host_configuration_with_fuse_used(
     validate_privileged_false(&host_config)?;
     validate_sys_admin_capability(&host_config)?;
     validate_selinux_label_disable(&host_config)?;
-    validate_fuse_device_mapping(&host_config)?;
 
-    let device = host_config
-        .devices
-        .as_ref()
-        .and_then(|devices| devices.first())
-        .ok_or_else(|| String::from("`/dev/fuse` mapping should include one device entry"))?;
+    let device = validate_fuse_device_mapping(&host_config)?;
     validate_device_paths(device)?;
     validate_device_permissions(device)
 }
@@ -116,17 +135,19 @@ fn validate_selinux_label_disable(host_config: &HostConfig) -> StepResult<()> {
     ))
 }
 
-fn validate_fuse_device_mapping(host_config: &HostConfig) -> StepResult<()> {
+fn validate_fuse_device_mapping(host_config: &HostConfig) -> StepResult<&DeviceMapping> {
     let Some(devices) = host_config.devices.as_ref() else {
         return Err(String::from("minimal mode with fuse should map /dev/fuse"));
     };
-    if devices.len() == 1 {
-        return Ok(());
+    if devices.len() != 1 {
+        return Err(String::from(
+            "expected exactly one /dev/fuse device mapping",
+        ));
     }
 
-    Err(String::from(
-        "expected exactly one /dev/fuse device mapping",
-    ))
+    devices
+        .first()
+        .ok_or_else(|| String::from("`/dev/fuse` mapping should include one device entry"))
 }
 
 fn validate_device_paths(device: &DeviceMapping) -> StepResult<()> {

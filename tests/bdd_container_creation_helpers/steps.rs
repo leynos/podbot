@@ -27,6 +27,22 @@ mock! {
     }
 }
 
+struct MockCaptureState {
+    call_count: Arc<Mutex<usize>>,
+    captured_options: Arc<Mutex<Option<CreateContainerOptions>>>,
+    captured_host_config: Arc<Mutex<Option<HostConfig>>>,
+}
+
+impl MockCaptureState {
+    fn new() -> Self {
+        Self {
+            call_count: Arc::new(Mutex::new(0_usize)),
+            captured_options: Arc::new(Mutex::new(None::<CreateContainerOptions>)),
+            captured_host_config: Arc::new(Mutex::new(None::<HostConfig>)),
+        }
+    }
+}
+
 #[given("a configured sandbox image {image}")]
 fn configured_sandbox_image(container_creation_state: &ContainerCreationState, image: String) {
     container_creation_state.image.set(Some(image));
@@ -59,7 +75,11 @@ fn sandbox_security_privileged_mode(container_creation_state: &ContainerCreation
 fn sandbox_security_minimal_with_fuse(container_creation_state: &ContainerCreationState) {
     container_creation_state
         .security
-        .set(ContainerSecurityOptions::default());
+        .set(ContainerSecurityOptions {
+            privileged: false,
+            mount_dev_fuse: true,
+            selinux_label_mode: SelinuxLabelMode::DisableForContainer,
+        });
 }
 
 #[given("sandbox security is minimal mode without /dev/fuse mounted")]
@@ -82,54 +102,30 @@ fn container_engine_create_call_fails(container_creation_state: &ContainerCreati
 fn container_creation_is_requested(
     container_creation_state: &ContainerCreationState,
 ) -> StepResult<()> {
-    let call_count = Arc::new(Mutex::new(0_usize));
-    let captured_options = Arc::new(Mutex::new(None::<CreateContainerOptions>));
-    let captured_host_config = Arc::new(Mutex::new(None::<HostConfig>));
+    let capture_state = MockCaptureState::new();
     let should_fail = container_creation_state
         .should_fail_create
         .get()
         .unwrap_or(false);
-    let creator = setup_mock_creator(
-        should_fail,
-        &call_count,
-        &captured_options,
-        &captured_host_config,
-    );
+    let creator = setup_mock_creator(should_fail, &capture_state);
 
     let request = match build_request_from_state(container_creation_state) {
         Ok(request) => request,
         Err(error) => {
-            capture_mock_state(
-                container_creation_state,
-                &call_count,
-                &captured_options,
-                &captured_host_config,
-            )?;
+            capture_mock_state(container_creation_state, &capture_state)?;
             record_failure(container_creation_state, &error);
             return Ok(());
         }
     };
 
-    execute_and_capture_result(
-        container_creation_state,
-        &creator,
-        &request,
-        &call_count,
-        &captured_options,
-        &captured_host_config,
-    )
+    execute_and_capture_result(container_creation_state, &creator, &request, &capture_state)
 }
 
-fn setup_mock_creator(
-    should_fail: bool,
-    call_count: &Arc<Mutex<usize>>,
-    captured_options: &Arc<Mutex<Option<CreateContainerOptions>>>,
-    captured_host_config: &Arc<Mutex<Option<HostConfig>>>,
-) -> MockCreator {
+fn setup_mock_creator(should_fail: bool, capture_state: &MockCaptureState) -> MockCreator {
     let mut creator = MockCreator::new();
-    let call_count_for_closure = Arc::clone(call_count);
-    let captured_options_for_closure = Arc::clone(captured_options);
-    let captured_host_config_for_closure = Arc::clone(captured_host_config);
+    let call_count_for_closure = Arc::clone(&capture_state.call_count);
+    let captured_options_for_closure = Arc::clone(&capture_state.captured_options);
+    let captured_host_config_for_closure = Arc::clone(&capture_state.captured_host_config);
     creator
         .expect_create_container()
         .returning(move |options, config| {
@@ -164,35 +160,24 @@ fn build_request_from_state(
     let image = container_creation_state
         .image
         .get()
-        .unwrap_or(None)
+        .flatten()
         .unwrap_or_default();
     let security = container_creation_state.security.get().unwrap_or_default();
     CreateContainerRequest::new(image, security)
         .map(|request| request.with_name(Some(String::from("podbot-sandbox-test"))))
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "required by explicit refactor request for helper signature"
-)]
 fn execute_and_capture_result(
     container_creation_state: &ContainerCreationState,
     creator: &MockCreator,
     request: &CreateContainerRequest,
-    call_count: &Arc<Mutex<usize>>,
-    captured_options: &Arc<Mutex<Option<CreateContainerOptions>>>,
-    captured_host_config: &Arc<Mutex<Option<HostConfig>>>,
+    capture_state: &MockCaptureState,
 ) -> StepResult<()> {
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|_| String::from("failed to create tokio runtime for scenario"))?;
     let result = runtime.block_on(EngineConnector::create_container_async(creator, request));
 
-    capture_mock_state(
-        container_creation_state,
-        call_count,
-        captured_options,
-        captured_host_config,
-    )?;
+    capture_mock_state(container_creation_state, capture_state)?;
 
     match result {
         Ok(container_id) => {
@@ -208,18 +193,19 @@ fn execute_and_capture_result(
 
 fn capture_mock_state(
     container_creation_state: &ContainerCreationState,
-    call_count: &Arc<Mutex<usize>>,
-    captured_options: &Arc<Mutex<Option<CreateContainerOptions>>>,
-    captured_host_config: &Arc<Mutex<Option<HostConfig>>>,
+    capture_state: &MockCaptureState,
 ) -> StepResult<()> {
-    let call_count_value = *call_count
+    let call_count_value = *capture_state
+        .call_count
         .lock()
         .map_err(|_| String::from("engine call count mutex is poisoned"))?;
-    let options_value = captured_options
+    let options_value = capture_state
+        .captured_options
         .lock()
         .map_err(|_| String::from("captured options mutex is poisoned"))?
         .clone();
-    let host_config_value = captured_host_config
+    let host_config_value = capture_state
+        .captured_host_config
         .lock()
         .map_err(|_| String::from("captured host config mutex is poisoned"))?
         .clone();
