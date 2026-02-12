@@ -96,13 +96,8 @@ pub fn tcp_connection_with_health_check(
         .get()
         .ok_or("test socket path should be set")?;
 
-    // Box::leak intentionally leaks the error string to satisfy rstest-bdd's
-    // `&'static str` error requirement.  This only triggers on the error path
-    // (runtime creation failure), so the leak is bounded and acceptable in
-    // tests.
-    let rt = tokio::runtime::Runtime::new().map_err(|e| {
-        Box::leak(format!("failed to create tokio runtime: {e}").into_boxed_str()) as &'static str
-    })?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("failed to create tokio runtime: {e}"))?;
     let result = rt.block_on(EngineConnector::connect_and_verify_async(&socket));
 
     let outcome = match result {
@@ -145,10 +140,10 @@ pub fn connection_client_created(
 
     match outcome {
         ConnectionOutcome::Success => Ok(()),
-        ConnectionOutcome::OtherError(msg) => Err(Box::leak(
-            format!("expected successful connection, got error: {msg}").into_boxed_str(),
-        )),
-        _ => Err("expected successful connection"),
+        ConnectionOutcome::OtherError(msg) => {
+            Err(format!("expected successful connection, got error: {msg}"))
+        }
+        _ => Err(String::from("expected successful connection")),
     }
 }
 
@@ -174,15 +169,11 @@ pub fn connection_failure_error_returned(
                 "TCP endpoint unexpectedly responded; daemon may be running at configured address"
             );
         }
-        ConnectionOutcome::SocketNotFound { path, .. } => Err(Box::leak(
-            format!("TCP should not produce SocketNotFound, but got SocketNotFound for: {path}")
-                .into_boxed_str(),
+        ConnectionOutcome::SocketNotFound { path, .. } => Err(format!(
+            "TCP should not produce SocketNotFound, but got SocketNotFound for: {path}"
         )),
-        ConnectionOutcome::PermissionDenied { path, .. } => Err(Box::leak(
-            format!(
-                "TCP should not produce PermissionDenied, but got PermissionDenied for: {path}"
-            )
-            .into_boxed_str(),
+        ConnectionOutcome::PermissionDenied { path, .. } => Err(format!(
+            "TCP should not produce PermissionDenied, but got PermissionDenied for: {path}"
         )),
     }
 }

@@ -14,4 +14,7 @@
 
 mod connection;
 
-pub use connection::{EngineConnector, SocketResolver};
+pub use connection::{
+    ContainerCreator, ContainerSecurityOptions, CreateContainerFuture, CreateContainerRequest,
+    EngineConnector, SelinuxLabelMode, SocketResolver,
+};
