@@ -33,8 +33,8 @@ pub use permission_error_steps::*;
 )]
 pub use tcp_connection_steps::*;
 
-/// Step result type for BDD tests, using a static string for errors.
-pub type StepResult<T> = Result<T, &'static str>;
+/// Step result type for BDD tests.
+pub type StepResult<T> = Result<T, String>;
 
 /// Thread-safe environment variable storage for BDD tests.
 type EnvVars = Arc<Mutex<HashMap<String, String>>>;
@@ -93,12 +93,15 @@ pub fn engine_connection_state() -> EngineConnectionState {
 }
 
 /// Helper to get the env vars map.
-fn get_env_vars(state: &EngineConnectionState) -> Result<EnvVars, &'static str> {
-    state.env_vars.get().ok_or("env_vars should be initialised")
+fn get_env_vars(state: &EngineConnectionState) -> StepResult<EnvVars> {
+    state
+        .env_vars
+        .get()
+        .ok_or_else(|| String::from("env_vars should be initialised"))
 }
 
 /// Helper to set an environment variable.
-fn set_env_var(state: &EngineConnectionState, key: &str, value: &str) -> Result<(), &'static str> {
+fn set_env_var(state: &EngineConnectionState, key: &str, value: &str) -> StepResult<()> {
     let env_vars = get_env_vars(state)?;
     let mut vars = env_vars.lock().map_err(|_| "mutex poisoned")?;
     vars.insert(String::from(key), String::from(value));
@@ -112,7 +115,7 @@ fn set_env_var(state: &EngineConnectionState, key: &str, value: &str) -> Result<
 /// `create_mock_env` will not be visible to the mock. This is intentional:
 /// in BDD scenarios, all "Given" steps (which call `set_env_var`) complete
 /// before the "When" step (which calls `create_mock_env`).
-fn create_mock_env(state: &EngineConnectionState) -> Result<MockEnv, &'static str> {
+fn create_mock_env(state: &EngineConnectionState) -> StepResult<MockEnv> {
     let env_vars = get_env_vars(state)?;
     let vars = env_vars.lock().map_err(|_| "mutex poisoned")?.clone();
 
@@ -226,11 +229,13 @@ fn podman_host_is_not_set(engine_connection_state: &EngineConnectionState) -> St
 
 #[when("the socket is resolved")]
 fn the_socket_is_resolved(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
-    let env = create_mock_env(engine_connection_state)?;
-    let resolver = SocketResolver::new(&env);
-    let config_socket = engine_connection_state.config_socket.get().flatten();
-    let socket = EngineConnector::resolve_socket(config_socket.as_deref(), &resolver);
-    engine_connection_state.resolved_socket.set(socket);
+    let mock_env = create_mock_env(engine_connection_state)?;
+    let resolver = SocketResolver::new(&mock_env);
+
+    let configured = engine_connection_state.config_socket.get().flatten();
+    let resolved = EngineConnector::resolve_socket(configured.as_ref(), &resolver);
+
+    engine_connection_state.resolved_socket.set(resolved);
     Ok(())
 }
 
@@ -243,12 +248,12 @@ fn the_resolved_socket_is(
         .resolved_socket
         .get()
         .ok_or("resolved socket should be set")?;
-    assert_eq!(
-        resolved, expected,
-        "Expected resolved socket to be '{}', but got '{}'",
-        expected, resolved
-    );
-    Ok(())
+
+    if resolved == expected {
+        Ok(())
+    } else {
+        Err(format!("expected '{expected}', got '{resolved}'"))
+    }
 }
 
 #[then("the socket resolves to the platform default")]
@@ -259,11 +264,43 @@ fn the_socket_resolves_to_platform_default(
         .resolved_socket
         .get()
         .ok_or("resolved socket should be set")?;
-    let default = SocketResolver::<MockEnv>::default_socket();
-    assert_eq!(
-        resolved, default,
-        "Expected resolved socket to be platform default '{}', but got '{}'",
-        default, resolved
-    );
-    Ok(())
+
+    let default_socket = SocketResolver::<MockEnv>::default_socket();
+    if resolved == default_socket {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected default socket '{default_socket}', got '{resolved}'"
+        ))
+    }
+}
+
+#[when("connection is established")]
+fn connection_is_established(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+    let resolved = engine_connection_state
+        .resolved_socket
+        .get()
+        .ok_or("resolved socket should be set")?;
+
+    let connection_result = EngineConnector::connect(resolved);
+    if connection_result.is_ok() {
+        Ok(())
+    } else {
+        // For BDD we track health check outcomes separately; connection setup may be
+        // lazy for TCP endpoints and should not fail these scenarios.
+        Ok(())
+    }
+}
+
+#[then("connection succeeds")]
+fn connection_succeeds(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+    let resolved = engine_connection_state
+        .resolved_socket
+        .get()
+        .ok_or("resolved socket should be set")?;
+
+    match EngineConnector::connect(resolved) {
+        Ok(_) => Ok(()),
+        Err(error) => Err(format!("expected connection success, got error: {error}")),
+    }
 }

@@ -111,7 +111,7 @@ where
     if predicate(&outcome) {
         Ok(())
     } else {
-        Err(error_message)
+        Err(String::from(error_message))
     }
 }
 
@@ -120,9 +120,8 @@ fn execute_health_check_and_record(
     state: &EngineConnectionState,
     socket: &str,
 ) -> StepResult<Option<String>> {
-    let rt = tokio::runtime::Runtime::new().map_err(|e| {
-        Box::leak(format!("failed to create tokio runtime: {e}").into_boxed_str()) as &'static str
-    })?;
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("failed to create tokio runtime: {e}"))?;
     let result = rt.block_on(EngineConnector::connect_and_verify_async(socket));
 
     match result {

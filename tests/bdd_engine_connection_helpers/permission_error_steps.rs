@@ -163,9 +163,7 @@ fn permission_denied_error_returned(
         ConnectionOutcome::SocketNotFound { .. } => {
             rstest_bdd::skip!("socket not found; daemon may not be running");
         }
-        ConnectionOutcome::OtherError(msg) => Err(Box::leak(
-            format!("expected PermissionDenied, got: {msg}").into_boxed_str(),
-        )),
+        ConnectionOutcome::OtherError(msg) => Err(format!("expected PermissionDenied, got: {msg}")),
     }
 }
 
@@ -181,12 +179,10 @@ fn socket_not_found_error_returned(
 
     match outcome {
         ConnectionOutcome::SocketNotFound { .. } => Ok(()),
-        ConnectionOutcome::OtherError(msg) => Err(Box::leak(
-            format!("expected SocketNotFound, got: {msg}").into_boxed_str(),
-        )),
-        ConnectionOutcome::Success => Err("expected error but connection succeeded"),
-        ConnectionOutcome::PermissionDenied { path, .. } => Err(Box::leak(
-            format!("expected SocketNotFound, got PermissionDenied for: {path}").into_boxed_str(),
+        ConnectionOutcome::OtherError(msg) => Err(format!("expected SocketNotFound, got: {msg}")),
+        ConnectionOutcome::Success => Err(String::from("expected error but connection succeeded")),
+        ConnectionOutcome::PermissionDenied { path, .. } => Err(format!(
+            "expected SocketNotFound, got PermissionDenied for: {path}"
         )),
     }
 }
@@ -203,11 +199,13 @@ fn error_includes_socket_path(engine_connection_state: &EngineConnectionState) -
         ConnectionOutcome::PermissionDenied { path, message }
         | ConnectionOutcome::SocketNotFound { path, message } => (path, message),
         ConnectionOutcome::OtherError(msg) => {
-            return Err(Box::leak(
-                format!("expected PermissionDenied or SocketNotFound, got: {msg}").into_boxed_str(),
+            return Err(format!(
+                "expected PermissionDenied or SocketNotFound, got: {msg}"
             ));
         }
-        ConnectionOutcome::Success => return Err("expected error but connection succeeded"),
+        ConnectionOutcome::Success => {
+            return Err(String::from("expected error but connection succeeded"));
+        }
     };
 
     let socket = engine_connection_state
@@ -218,13 +216,12 @@ fn error_includes_socket_path(engine_connection_state: &EngineConnectionState) -
     let expected_path = socket_path_component(&socket).display().to_string();
 
     if !error_path.contains(&expected_path) {
-        Err(Box::leak(
-            format!("error path '{error_path}' should contain '{expected_path}'").into_boxed_str(),
+        Err(format!(
+            "error path '{error_path}' should contain '{expected_path}'"
         ))
     } else if !has_remediation_guidance(message) {
-        Err(Box::leak(
-            format!("error message should include actionable guidance, got: {message}")
-                .into_boxed_str(),
+        Err(format!(
+            "error message should include actionable guidance, got: {message}"
         ))
     } else {
         Ok(())
