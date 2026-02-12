@@ -61,61 +61,72 @@ fn no_sandbox_image_configured(container_creation_state: &ContainerCreationState
     container_creation_state.image.set(None);
 }
 
-#[given("sandbox security is privileged mode")]
-fn sandbox_security_privileged_mode(container_creation_state: &ContainerCreationState) {
+/// Helper function to set sandbox security options, reducing duplication in BDD steps.
+fn set_sandbox_security(
+    container_creation_state: &ContainerCreationState,
+    privileged: bool,
+    mount_dev_fuse: bool,
+    selinux_label_mode: SelinuxLabelMode,
+) {
     container_creation_state
         .security
         .set(ContainerSecurityOptions {
-            privileged: true,
-            mount_dev_fuse: true,
-            selinux_label_mode: SelinuxLabelMode::KeepDefault,
+            privileged,
+            mount_dev_fuse,
+            selinux_label_mode,
         });
+}
+
+#[given("sandbox security is privileged mode")]
+fn sandbox_security_privileged_mode(container_creation_state: &ContainerCreationState) {
+    set_sandbox_security(
+        container_creation_state,
+        true,
+        true,
+        SelinuxLabelMode::KeepDefault,
+    );
 }
 
 #[given("sandbox security is minimal mode with /dev/fuse mounted")]
 fn sandbox_security_minimal_with_fuse(container_creation_state: &ContainerCreationState) {
-    container_creation_state
-        .security
-        .set(ContainerSecurityOptions {
-            privileged: false,
-            mount_dev_fuse: true,
-            selinux_label_mode: SelinuxLabelMode::DisableForContainer,
-        });
+    set_sandbox_security(
+        container_creation_state,
+        false,
+        true,
+        SelinuxLabelMode::DisableForContainer,
+    );
 }
 
 #[given("sandbox security is minimal mode without /dev/fuse mounted")]
 fn sandbox_security_minimal_without_fuse(container_creation_state: &ContainerCreationState) {
-    container_creation_state
-        .security
-        .set(ContainerSecurityOptions {
-            privileged: false,
-            mount_dev_fuse: false,
-            selinux_label_mode: SelinuxLabelMode::DisableForContainer,
-        });
+    set_sandbox_security(
+        container_creation_state,
+        false,
+        false,
+        SelinuxLabelMode::DisableForContainer,
+    );
 }
 
 #[given("sandbox security is privileged mode without /dev/fuse")]
 fn sandbox_security_privileged_without_fuse(container_creation_state: &ContainerCreationState) {
-    container_creation_state
-        .security
-        .set(ContainerSecurityOptions {
-            privileged: true,
-            mount_dev_fuse: false,
-            selinux_label_mode: SelinuxLabelMode::KeepDefault,
-        });
+    set_sandbox_security(
+        container_creation_state,
+        true,
+        false,
+        SelinuxLabelMode::KeepDefault,
+    );
 }
 
 #[given("sandbox security is privileged mode with SELinux label disable")]
 fn sandbox_security_privileged_with_selinux_disable(
     container_creation_state: &ContainerCreationState,
 ) {
-    container_creation_state
-        .security
-        .set(ContainerSecurityOptions {
-            privileged: true,
-            mount_dev_fuse: true,
-            selinux_label_mode: SelinuxLabelMode::DisableForContainer,
-        });
+    set_sandbox_security(
+        container_creation_state,
+        true,
+        true,
+        SelinuxLabelMode::DisableForContainer,
+    );
 }
 
 #[given("the container engine create call fails")]
