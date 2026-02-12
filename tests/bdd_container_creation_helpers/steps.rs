@@ -27,6 +27,7 @@ mock! {
     }
 }
 
+/// Encapsulates shared state for capturing mock creator invocations.
 struct MockCaptureState {
     call_count: Arc<Mutex<usize>>,
     captured_options: Arc<Mutex<Option<CreateContainerOptions>>>,
@@ -37,8 +38,8 @@ impl MockCaptureState {
     fn new() -> Self {
         Self {
             call_count: Arc::new(Mutex::new(0_usize)),
-            captured_options: Arc::new(Mutex::new(None::<CreateContainerOptions>)),
-            captured_host_config: Arc::new(Mutex::new(None::<HostConfig>)),
+            captured_options: Arc::new(Mutex::new(None)),
+            captured_host_config: Arc::new(Mutex::new(None)),
         }
     }
 }
