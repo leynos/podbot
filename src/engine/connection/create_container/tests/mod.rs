@@ -1,5 +1,7 @@
 //! Unit tests for container-creation request mapping and error handling.
 
+mod privileged_mode;
+
 use std::sync::{Arc, Mutex};
 
 use bollard::models::ContainerCreateResponse;
@@ -337,67 +339,4 @@ fn create_container_sync_uses_provided_runtime(
         format!("expected container-id, got {container_id}"),
     )?;
     ensure(call_count(&captured) == 1, "expected one engine call")
-}
-
-#[rstest]
-fn from_sandbox_config_non_privileged_sets_selinux_disable() {
-    let cfg = SandboxConfig {
-        privileged: false,
-        mount_dev_fuse: true,
-    };
-    let sec = ContainerSecurityOptions::from_sandbox_config(&cfg);
-    assert_eq!(
-        sec.selinux_label_mode,
-        SelinuxLabelMode::DisableForContainer
-    );
-}
-
-fn privileged_create(
-    rt: &tokio::runtime::Runtime,
-    fuse: bool,
-    selinux: SelinuxLabelMode,
-) -> std::io::Result<(Option<CreateContainerOptions>, ContainerCreateBody)> {
-    let sec = ContainerSecurityOptions {
-        privileged: true,
-        mount_dev_fuse: fuse,
-        selinux_label_mode: selinux,
-    };
-    let (creator, cap) = success_creator("cid");
-    let req = CreateContainerRequest::new("ghcr.io/example/sandbox:latest", sec)
-        .map_err(|e| io_error(format!("{e}")))?;
-    let _ = rt
-        .block_on(EngineConnector::create_container_async(&creator, &req))
-        .map_err(|e| io_error(format!("{e}")))?;
-    let body = take_body(&cap).ok_or_else(|| io_error("body"))?;
-    let hc = body.host_config.as_ref().ok_or_else(|| io_error("hc"))?;
-    ensure(hc.privileged == Some(true), "privileged")?;
-    ensure(hc.cap_add.is_none(), "cap_add")?;
-    ensure(hc.devices.is_none(), "devices")?;
-    ensure(hc.security_opt.is_none(), "security_opt")?;
-    Ok((take_options(&cap), body))
-}
-
-#[rstest]
-fn create_container_privileged_mode_ignores_fuse_disabled(
-    runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    privileged_create(&runtime?, false, SelinuxLabelMode::KeepDefault).map(|_| ())
-}
-
-#[rstest]
-fn create_container_privileged_mode_ignores_selinux_override(
-    runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    privileged_create(&runtime?, true, SelinuxLabelMode::DisableForContainer).map(|_| ())
-}
-
-#[rstest]
-fn create_container_privileged_mode_without_optional_fields(
-    runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let (opts, body) = privileged_create(&runtime?, true, SelinuxLabelMode::KeepDefault)?;
-    ensure(opts.is_none(), "create options")?;
-    ensure(body.image.is_some(), "image")?;
-    ensure(body.cmd.is_none(), "cmd")?;
-    ensure(body.env.is_none(), "env")
 }

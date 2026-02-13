@@ -17,8 +17,9 @@ compatibility." The goal is to ensure that when `sandbox.privileged = true`,
 the container creation path produces a fully correct privileged-mode
 `HostConfig`, that the configuration flows end-to-end from `SandboxConfig`
 through `ContainerSecurityOptions` to the Bollard create payload, and that this
-behaviour is explicitly validated with dedicated unit tests and BDD scenarios
-focused on the privileged-mode contract.
+behaviour is explicitly validated with dedicated unit tests and
+behaviour-driven development (BDD) scenarios focused on the privileged-mode
+contract.
 
 After this change, a user who sets `sandbox.privileged = true` in their
 configuration can be confident that:
@@ -27,7 +28,7 @@ configuration can be confident that:
 - no additional capabilities, device mappings, or SELinux overrides are applied
   (the engine host profile governs these);
 - the `mount_dev_fuse` and `selinux_label_mode` settings are intentionally
-  ignored in privileged mode, because the engine provides full device and
+  ignored in privileged mode because the engine provides full device and
   security access;
 - this behaviour is observable via `make test`.
 
@@ -65,7 +66,7 @@ that should be ignored.
 - Dependencies: if a new dependency is required, stop and confirm before adding
   it.
 - Iterations: if `make lint` or `make test` still fails after two fix passes,
-  stop and document the blocker with log evidence.
+  stop, and document the blocker with log evidence.
 - Ambiguity: if the privileged-mode semantics require reinterpretation of
   existing design-document wording, stop and present options.
 
@@ -210,8 +211,8 @@ configurations:
    `from_sandbox_config` with `privileged: false` produces
    `SelinuxLabelMode::DisableForContainer` (confirming the inverse case).
 
-4. **Privileged mode with no name, cmd, or env**: verify the create body
-   has correct image and host config with `None` for optional fields.
+4. **Privileged mode with no name, cmd, or env**: verify the created body
+   has the correct image and host config with `None` for optional fields.
 
 Validation gate: `make test` passes with the new tests.
 
@@ -267,7 +268,9 @@ All commands run from repository root: `/data/leynos/Projects/podbot`.
 
 1. Confirm green baseline:
 
-       make check-fmt && make lint && make test
+   ```bash
+   make check-fmt && make lint && make test
+   ```
 
 2. Add edge-case unit tests in
    `src/engine/connection/create_container/tests.rs`.
@@ -283,14 +286,20 @@ All commands run from repository root: `/data/leynos/Projects/podbot`.
 
 6. Run verification with log capture:
 
-       set -o pipefail
-       make check-fmt 2>&1 | tee /tmp/check-fmt-podbot-2-2-2.out
+   ```bash
+   set -o pipefail
+   make check-fmt 2>&1 | tee /tmp/check-fmt-podbot-2-2-2.out
+   ```
 
-       set -o pipefail
-       make lint 2>&1 | tee /tmp/lint-podbot-2-2-2.out
+   ```bash
+   set -o pipefail
+   make lint 2>&1 | tee /tmp/lint-podbot-2-2-2.out
+   ```
 
-       set -o pipefail
-       make test 2>&1 | tee /tmp/test-podbot-2-2-2.out
+   ```bash
+   set -o pipefail
+   make test 2>&1 | tee /tmp/test-podbot-2-2-2.out
+   ```
 
 7. Review diffs and commit.
 
