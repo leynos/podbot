@@ -129,6 +129,18 @@ fn sandbox_security_privileged_with_selinux_disable(
     );
 }
 
+#[given("sandbox security is minimal mode with /dev/fuse and SELinux defaults")]
+fn sandbox_security_minimal_with_fuse_and_selinux_defaults(
+    container_creation_state: &ContainerCreationState,
+) {
+    set_sandbox_security(
+        container_creation_state,
+        false,
+        true,
+        SelinuxLabelMode::KeepDefault,
+    );
+}
+
 #[given("the container engine create call fails")]
 fn container_engine_create_call_fails(container_creation_state: &ContainerCreationState) {
     container_creation_state.should_fail_create.set(true);
