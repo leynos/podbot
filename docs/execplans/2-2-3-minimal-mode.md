@@ -19,7 +19,7 @@ default), the container creation path produces a correctly configured minimal
 
 - sets `HostConfig.Privileged = false`;
 - applies `SecurityOpt = ["label=disable"]` so rootless nested Podman workflows
-  succeed under strict SELinux labelling;
+  succeed under strict Security-Enhanced Linux (SELinux) labelling;
 - when `sandbox.mount_dev_fuse = true` (the default), maps `/dev/fuse` with
   `rwm` permissions and adds the `SYS_ADMIN` capability to support
   `fuse-overlayfs`;
@@ -44,9 +44,10 @@ Examination of the existing code reveals that the minimal-mode code path in
 `build_host_config` (`src/engine/connection/create_container/mod.rs`) already
 implements the required behaviour. Similarly, existing unit tests
 (`create_container_minimal_mode_mounts_fuse`,
-`create_container_minimal_without_fuse_avoids_mount`) and BDD scenarios
-("Create container in minimal mode with /dev/fuse", "Create container in
-minimal mode without /dev/fuse") already cover the primary happy paths.
+`create_container_minimal_without_fuse_avoids_mount`) and behaviour-driven
+development (BDD) scenarios ("Create container in minimal mode with /dev/fuse",
+"Create container in minimal mode without /dev/fuse") already cover the primary
+happy paths.
 
 The remaining work for this task is therefore to:
 

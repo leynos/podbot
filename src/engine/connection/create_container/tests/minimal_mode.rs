@@ -5,13 +5,16 @@ use rstest::rstest;
 use super::*;
 
 #[rstest]
-fn from_sandbox_config_minimal_mode_sets_selinux_disable() {
+#[case::with_fuse(true)]
+#[case::without_fuse(false)]
+fn from_sandbox_config_minimal_mode_sets_selinux_disable(#[case] fuse: bool) {
     let cfg = SandboxConfig {
         privileged: false,
-        mount_dev_fuse: true,
+        mount_dev_fuse: fuse,
     };
     let sec = ContainerSecurityOptions::from_sandbox_config(&cfg);
     assert!(!sec.privileged);
+    assert_eq!(sec.mount_dev_fuse, fuse);
     assert_eq!(
         sec.selinux_label_mode,
         SelinuxLabelMode::DisableForContainer
@@ -82,7 +85,11 @@ fn create_container_minimal_mode_without_fuse_omits_capabilities(
         .as_ref()
         .ok_or_else(|| io_error("host config should be set"))?;
     ensure(host_config.cap_add.is_none(), "did not expect cap_add")?;
-    ensure(host_config.devices.is_none(), "did not expect devices")
+    ensure(host_config.devices.is_none(), "did not expect devices")?;
+    ensure(
+        host_config.security_opt == Some(vec![String::from("label=disable")]),
+        "expected label=disable security option in minimal mode without fuse",
+    )
 }
 
 #[rstest]
