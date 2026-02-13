@@ -91,7 +91,7 @@ execution.
 
 - [x] Implement create_container with configurable security options.
 - [x] Support privileged mode for maximum compatibility.
-- [ ] Support minimal mode with only /dev/fuse mounted.
+- [x] Support minimal mode with only /dev/fuse mounted.
 - [ ] Configure appropriate capabilities and security options for SELinux
   environments.
 - [ ] Set the container image from configuration.

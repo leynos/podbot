@@ -58,3 +58,17 @@ Feature: Container creation
     When container creation is requested
     Then container creation succeeds
     And privileged host configuration is used
+
+  Scenario: Minimal mode with SELinux kept at default
+    Given a configured sandbox image ghcr.io/example/podbot-sandbox:latest
+    And sandbox security is minimal mode with /dev/fuse and SELinux defaults
+    When container creation is requested
+    Then container creation succeeds
+    And minimal host configuration with /dev/fuse but without SELinux disable is used
+
+  Scenario: Minimal mode without /dev/fuse omits capabilities
+    Given a configured sandbox image ghcr.io/example/podbot-sandbox:latest
+    And sandbox security is minimal mode without /dev/fuse mounted
+    When container creation is requested
+    Then container creation succeeds
+    And minimal host configuration without capabilities is used

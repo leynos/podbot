@@ -1,5 +1,6 @@
 //! Unit tests for container-creation request mapping and error handling.
 
+mod minimal_mode;
 mod privileged_mode;
 
 use std::sync::{Arc, Mutex};

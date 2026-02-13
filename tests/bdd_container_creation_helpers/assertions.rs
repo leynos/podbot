@@ -274,3 +274,29 @@ fn assert_engine_not_called(container_creation_state: &ContainerCreationState) -
         "engine should not be called when request validation fails, got {engine_call_count} calls"
     ))
 }
+
+#[then("minimal host configuration with /dev/fuse but without SELinux disable is used")]
+fn minimal_host_configuration_with_fuse_but_without_selinux_disable(
+    container_creation_state: &ContainerCreationState,
+) -> StepResult<()> {
+    let host_config = captured_host_config(container_creation_state)?;
+    validate_privileged_false(&host_config)?;
+    validate_sys_admin_capability(&host_config)?;
+
+    let device = validate_fuse_device_mapping(&host_config)?;
+    validate_device_paths(device)?;
+    validate_device_permissions(device)?;
+
+    validate_no_security_opt(&host_config)
+}
+
+#[then("minimal host configuration without capabilities is used")]
+fn minimal_host_configuration_without_capabilities(
+    container_creation_state: &ContainerCreationState,
+) -> StepResult<()> {
+    let host_config = captured_host_config(container_creation_state)?;
+    validate_privileged_false(&host_config)?;
+    validate_no_cap_add(&host_config)?;
+    validate_no_devices(&host_config)?;
+    validate_selinux_label_disable(&host_config)
+}
