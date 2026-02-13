@@ -1,5 +1,7 @@
 //! Unit tests for container-creation request mapping and error handling.
 
+mod privileged_mode;
+
 use std::sync::{Arc, Mutex};
 
 use bollard::models::ContainerCreateResponse;

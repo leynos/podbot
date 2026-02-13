@@ -313,6 +313,8 @@ environment. Privileged mode:
 - Provides maximum compatibility with nested container operations
 - Expands the container's attack surface significantly
 - Should be avoided unless specifically required
+- Ignores `mount_dev_fuse` because the engine grants full device access in
+  privileged mode
 
 **Disabling /dev/fuse**: `mount_dev_fuse = false`
 

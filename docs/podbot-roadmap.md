@@ -90,7 +90,7 @@ execution.
 **Tasks:**
 
 - [x] Implement create_container with configurable security options.
-- [ ] Support privileged mode for maximum compatibility.
+- [x] Support privileged mode for maximum compatibility.
 - [ ] Support minimal mode with only /dev/fuse mounted.
 - [ ] Configure appropriate capabilities and security options for SELinux
   environments.

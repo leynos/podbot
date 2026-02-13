@@ -16,9 +16,8 @@ After this change, the `EngineConnector` has comprehensive test coverage for
 TCP endpoint handling alongside the existing Unix socket support. A reader of
 the user's guide can see that podbot supports `tcp://`, `http://`, and
 `https://` endpoints in addition to `unix://` sockets and `npipe://` named
-pipes. The test suite exercises TCP paths through socket classification,
-scheme rewriting, socket resolution, fallback behaviour, and error
-classification.
+pipes. The test suite exercises TCP paths through socket classification, scheme
+rewriting, socket resolution, fallback behaviour, and error classification.
 
 Running `make check-fmt && make lint && make test` passes with all 190 tests
 green. The roadmap entry is marked complete and Step 2.1 is fully done.
@@ -52,8 +51,8 @@ green. The roadmap entry is marked complete and Step 2.1 is fully done.
 ## Risks
 
 - Risk: rstest-bdd 0.5.0 may have breaking changes from 0.4.0.
-  Severity: medium. Likelihood: low. Mitigation: upgrade first as Task 1;
-  the upgrade compiled cleanly with no code changes required.
+  Severity: medium. Likelihood: low. Mitigation: upgrade first as Task 1; the
+  upgrade compiled cleanly with no code changes required.
 
 - Risk: Bollard's `connect_with_http` may change behaviour in future versions.
   Severity: low. Likelihood: low. Mitigation: tests document this assumption
@@ -78,60 +77,54 @@ green. The roadmap entry is marked complete and Step 2.1 is fully done.
 - Observation: The `tests.rs` file uses a `#[cfg(test)] mod tests;` pattern
   from `mod.rs`, which means submodules declared inside `tests.rs` look for
   files at `src/engine/connection/tests/tests_tcp.rs` rather than
-  `src/engine/connection/tests_tcp.rs`.
-  Evidence: Compilation error `file not found for module tests_tcp`.
-  Impact: Used `#[path = "tests_tcp.rs"] mod tcp;` attribute to redirect the
-  module path to the sibling file.
+  `src/engine/connection/tests_tcp.rs`. Evidence: Compilation error
+  `file not found for module tests_tcp`. Impact: Used
+  `#[path = "tests_tcp.rs"] mod tcp;` attribute to redirect the module path to
+  the sibling file.
 
 - Observation: The `expect_used` clippy lint is set to `deny` globally,
   including test code outside `#[cfg(test)]` modules (such as integration test
-  files).
-  Evidence: Clippy rejected `result.expect_err("already matched Err")` in the
-  TCP BDD step definitions.
-  Impact: Refactored to use `ref container_err @` binding patterns to access
-  inner error fields without calling `expect_err`, matching the pattern
-  established in `permission_error_steps.rs`.
+  files). Evidence: Clippy rejected `result.expect_err("already matched Err")`
+  in the TCP BDD step definitions. Impact: Refactored to use
+  `ref container_err @` binding patterns to access inner error fields without
+  calling `expect_err`, matching the pattern established in
+  `permission_error_steps.rs`.
 
 ## Decision log
 
 - Decision: Split TCP tests into a submodule (`tests_tcp.rs`) rather than
-  keeping them inline in `tests.rs`.
-  Rationale: `tests.rs` was 366 lines; adding 70+ lines of TCP tests would
-  exceed the 400-line limit. The `#[path]` attribute keeps the submodule file
-  as a sibling rather than requiring a directory restructure.
-  Date: 2026-02-09
+  keeping them inline in `tests.rs`. Rationale: `tests.rs` was 366 lines;
+  adding 70+ lines of TCP tests would exceed the 400-line limit. The `#[path]`
+  attribute keeps the submodule file as a sibling rather than requiring a
+  directory restructure. Date: 2026-02-09
 
 - Decision: TCP BDD step definitions go in a new
   `tcp_connection_steps.rs` module rather than being added to the existing
-  permission error steps.
-  Rationale: TCP connection testing has distinct concerns (lazy connection
-  semantics, health check failure classification) that warrant a separate
-  module for clarity and maintainability.
-  Date: 2026-02-09
+  permission error steps. Rationale: TCP connection testing has distinct
+  concerns (lazy connection semantics, health check failure classification)
+  that warrant a separate module for clarity and maintainability. Date:
+  2026-02-09
 
 - Decision: Use RFC 5737 documentation-reserved IP address (`192.0.2.1`)
-  for the TCP endpoint that should fail health check.
-  Rationale: This IP range (192.0.2.0/24) is reserved by IANA for
-  documentation and will never route to a real service, making the test
-  deterministic without risk of accidental connection.
-  Date: 2026-02-09
+  for the TCP endpoint that should fail health check. Rationale: This IP range
+  (192.0.2.0/24) is reserved by IANA for documentation and will never route to
+  a real service, making the test deterministic without risk of accidental
+  connection. Date: 2026-02-09
 
 - Decision: No changes to core connection logic.
-  Rationale: The `EngineConnector::connect()` method already correctly
-  handles Unix sockets, named pipes, TCP (via http rewriting), HTTP, and
-  HTTPS endpoints. The `SocketType` enum classifies all schemes. Error
-  classification correctly returns `ConnectionFailed` for TCP endpoints.
-  The remaining work was testing, documentation, and dependency upgrade.
-  Date: 2026-02-09
+  Rationale: The `EngineConnector::connect()` method already correctly handles
+  Unix sockets, named pipes, TCP (via http rewriting), HTTP, and HTTPS
+  endpoints. The `SocketType` enum classifies all schemes. Error classification
+  correctly returns `ConnectionFailed` for TCP endpoints. The remaining work
+  was testing, documentation, and dependency upgrade. Date: 2026-02-09
 
 ## Outcomes and retrospective
 
-All objectives achieved. The task required no changes to production code
-beyond the rstest-bdd version upgrade in `Cargo.toml`. The work was entirely
-additive: new test files, new BDD scenarios, and documentation updates. This
-confirms that the original `EngineConnector::connect()` implementation was
-already complete for TCP support; what was missing was validation and
-documentation.
+All objectives achieved. The task required no changes to production code beyond
+the rstest-bdd version upgrade in `Cargo.toml`. The work was entirely additive:
+new test files, new BDD scenarios, and documentation updates. This confirms
+that the original `EngineConnector::connect()` implementation was already
+complete for TCP support; what was missing was validation and documentation.
 
 The rstest-bdd 0.5.0 upgrade was seamless with no breaking changes. The
 `#[path]` attribute workaround for the test submodule is slightly unusual but
@@ -168,20 +161,20 @@ health check ping). This is fundamentally different from Unix sockets, where
 
 ### Image versioning strategy
 
-Sandbox images consumed by `EngineConnector` should use immutable digests
-(e.g. `podbot-sandbox@sha256:abc123…`) in production to guarantee
-reproducibility. Mutable tags (e.g. `podbot-sandbox:latest`) are acceptable
-in development and testing environments.
+Sandbox images consumed by `EngineConnector` should use immutable digests (e.g.
+`podbot-sandbox@sha256:abc123…`) in production to guarantee reproducibility.
+Mutable tags (e.g. `podbot-sandbox:latest`) are acceptable in development and
+testing environments.
 
 The expected update cadence is: weekly base-image security patches, ad-hoc
-updates for critical vulnerabilities, and quarterly feature releases. To
-roll back, reference an earlier digest or tagged release; CI/CD pipelines
-should retain at least three prior digests so that rollback is immediate.
+updates for critical vulnerabilities, and quarterly feature releases. To roll
+back, reference an earlier digest or tagged release; CI/CD pipelines should
+retain at least three prior digests so that rollback is immediate.
 
 Image version metadata is recorded as OCI container labels (accessible via
 `docker inspect` or `podman inspect`) and summarized in the project
-`README.md`. This ensures `EngineConnector` consumers can verify the
-running image version programmatically.
+`README.md`. This ensures `EngineConnector` consumers can verify the running
+image version programmatically.
 
 ## Plan of work
 
@@ -193,8 +186,8 @@ Change rstest-bdd and rstest-bdd-macros versions from `"0.4.0"` to `"0.5.0"`.
 
 ### Task 2: Create TCP unit tests
 
-**Files:** `src/engine/connection/tests.rs`, `src/engine/connection/tests_tcp.rs`
-(new)
+**Files:** `src/engine/connection/tests.rs`,
+`src/engine/connection/tests_tcp.rs` (new)
 
 Move the two existing TCP tests (`connect_tcp_endpoint_creates_client` and
 `connect_tcp_endpoint_with_ip_creates_client`) from `tests.rs` to a new
@@ -368,27 +361,27 @@ changes are additive. The quality gate commands can be re-run at any time.
 
 **Files created:**
 
-| File | Purpose |
-| ---- | ------- |
-| `src/engine/connection/tests_tcp.rs` | TCP unit tests (12 tests) |
-| `tests/bdd_engine_connection_helpers/tcp_connection_steps.rs` | TCP BDD step definitions |
-| `docs/execplans/2-1-4-support-both-unix-sockets-and-tcp-connections.md` | This execution plan |
+| File                                                                    | Purpose                   |
+| ----------------------------------------------------------------------- | ------------------------- |
+| `src/engine/connection/tests_tcp.rs`                                    | TCP unit tests (12 tests) |
+| `tests/bdd_engine_connection_helpers/tcp_connection_steps.rs`           | TCP BDD step definitions  |
+| `docs/execplans/2-1-4-support-both-unix-sockets-and-tcp-connections.md` | This execution plan       |
 
 _Table 1: Files created by this task._
 
 **Files modified:**
 
-| File | Change |
-| ---- | ------ |
-| `Cargo.toml` | Upgrade rstest-bdd 0.4.0 → 0.5.0 |
-| `src/engine/connection/tests.rs` | Move TCP tests out, add `mod tcp`, make helper `pub(super)` |
-| `src/engine/connection/error_classification.rs` | Add 3 TCP test cases |
-| `tests/features/engine_connection.feature` | Add 4 TCP scenarios |
-| `tests/bdd_engine_connection_helpers/mod.rs` | Add tcp_connection_steps module |
-| `tests/bdd_engine_connection.rs` | Add 4 scenario bindings |
-| `docs/users-guide.md` | Add TCP endpoint support section |
-| `docs/podbot-design.md` | Add engine connection protocol support section |
-| `docs/podbot-roadmap.md` | Mark task and step complete |
+| File                                            | Change                                                      |
+| ----------------------------------------------- | ----------------------------------------------------------- |
+| `Cargo.toml`                                    | Upgrade rstest-bdd 0.4.0 → 0.5.0                            |
+| `src/engine/connection/tests.rs`                | Move TCP tests out, add `mod tcp`, make helper `pub(super)` |
+| `src/engine/connection/error_classification.rs` | Add 3 TCP test cases                                        |
+| `tests/features/engine_connection.feature`      | Add 4 TCP scenarios                                         |
+| `tests/bdd_engine_connection_helpers/mod.rs`    | Add tcp_connection_steps module                             |
+| `tests/bdd_engine_connection.rs`                | Add 4 scenario bindings                                     |
+| `docs/users-guide.md`                           | Add TCP endpoint support section                            |
+| `docs/podbot-design.md`                         | Add engine connection protocol support section              |
+| `docs/podbot-roadmap.md`                        | Mark task and step complete                                 |
 
 _Table 2: Files modified by this task._
 
@@ -400,8 +393,7 @@ version upgrade. Existing public API unchanged:
 - `EngineConnector::connect(socket: impl AsRef<str>)
   -> Result<Docker, PodbotError>`
 - `EngineConnector::connect_with_fallback(
-  config_socket, resolver)
-  -> Result<Docker, PodbotError>`
+  config_socket, resolver) -> Result<Docker, PodbotError>`
 - `EngineConnector::connect_and_verify_async(socket)
   -> Result<Docker, PodbotError>`
 - `podbot::engine::SocketResolver::resolve_from_env() -> Option<String>`
