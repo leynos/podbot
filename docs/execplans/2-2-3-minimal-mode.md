@@ -270,8 +270,7 @@ Wire up the new scenarios in `bdd_container_creation.rs`.
 
 ## Concrete steps
 
-All commands should be run from the repository root
-`/data/leynos/Projects/podbot`.
+All commands should be run from the repository root.
 
 1. Create the file
    `src/engine/connection/create_container/tests/minimal_mode.rs` with the
