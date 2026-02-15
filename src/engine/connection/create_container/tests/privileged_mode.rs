@@ -5,10 +5,11 @@ use rstest::rstest;
 use super::*;
 
 #[rstest]
-fn from_sandbox_config_non_privileged_sets_selinux_disable() {
+fn from_sandbox_config_non_privileged_preserves_default_selinux_mode() {
     let cfg = SandboxConfig {
         privileged: false,
         mount_dev_fuse: true,
+        selinux_label_mode: SelinuxLabelMode::DisableForContainer,
     };
     let sec = ContainerSecurityOptions::from_sandbox_config(&cfg);
     assert_eq!(

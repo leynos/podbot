@@ -113,6 +113,11 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
         path: &["sandbox", "mount_dev_fuse"],
         var_type: EnvVarType::Bool,
     },
+    EnvVarSpec {
+        env_var: "PODBOT_SANDBOX_SELINUX_LABEL_MODE",
+        path: &["sandbox", "selinux_label_mode"],
+        var_type: EnvVarType::String,
+    },
     // Agent fields
     EnvVarSpec {
         env_var: "PODBOT_AGENT_KIND",

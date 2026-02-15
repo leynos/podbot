@@ -5,6 +5,23 @@ use clap::ValueEnum;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 
+/// How `SELinux` labels should be applied to the container.
+///
+/// This controls whether the container engine's default `SELinux` labelling
+/// is preserved or explicitly disabled. Disabling labels is required for
+/// rootless nested Podman workflows that fail under strict `SELinux`
+/// labelling.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelinuxLabelMode {
+    /// Keep engine defaults for `SELinux` labels.
+    KeepDefault,
+
+    /// Disable labels for the container process.
+    #[default]
+    DisableForContainer,
+}
+
 /// The kind of AI agent to run.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -98,6 +115,9 @@ pub struct SandboxConfig {
 
     /// Mount /dev/fuse in the container for fuse-overlayfs support.
     pub mount_dev_fuse: bool,
+
+    /// `SELinux` label handling mode for the container.
+    pub selinux_label_mode: SelinuxLabelMode,
 }
 
 impl Default for SandboxConfig {
@@ -105,6 +125,7 @@ impl Default for SandboxConfig {
         Self {
             privileged: false,
             mount_dev_fuse: true,
+            selinux_label_mode: SelinuxLabelMode::DisableForContainer,
         }
     }
 }

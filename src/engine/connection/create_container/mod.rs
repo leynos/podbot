@@ -13,6 +13,7 @@ use bollard::query_parameters::{CreateContainerOptions, CreateContainerOptionsBu
 
 use super::EngineConnector;
 use crate::config::SandboxConfig;
+pub use crate::config::SelinuxLabelMode;
 use crate::error::{ConfigError, ContainerError, PodbotError};
 
 const DEV_FUSE_PATH: &str = "/dev/fuse";
@@ -48,17 +49,6 @@ impl ContainerCreator for Docker {
     }
 }
 
-/// How `SELinux` labels should be applied to the container.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum SelinuxLabelMode {
-    /// Keep engine defaults for `SELinux` labels.
-    KeepDefault,
-
-    /// Disable labels for the container process.
-    #[default]
-    DisableForContainer,
-}
-
 /// Container security options applied at create time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContainerSecurityOptions {
@@ -76,16 +66,10 @@ impl ContainerSecurityOptions {
     /// Build security options from `[sandbox]` configuration.
     #[must_use]
     pub const fn from_sandbox_config(sandbox: &SandboxConfig) -> Self {
-        let selinux_label_mode = if sandbox.privileged {
-            SelinuxLabelMode::KeepDefault
-        } else {
-            SelinuxLabelMode::DisableForContainer
-        };
-
         Self {
             privileged: sandbox.privileged,
             mount_dev_fuse: sandbox.mount_dev_fuse,
-            selinux_label_mode,
+            selinux_label_mode: sandbox.selinux_label_mode,
         }
     }
 }

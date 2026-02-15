@@ -72,3 +72,10 @@ Feature: Container creation
     When container creation is requested
     Then container creation succeeds
     And minimal host configuration without capabilities is used
+
+  Scenario: Sandbox config SELinux label mode passes through to container
+    Given a configured sandbox image ghcr.io/example/podbot-sandbox:latest
+    And sandbox config has selinux_label_mode set to keep_default
+    When container creation is requested
+    Then container creation succeeds
+    And minimal host configuration with /dev/fuse but without SELinux disable is used
