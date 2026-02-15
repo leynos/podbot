@@ -125,6 +125,8 @@ private_key_path = "/home/user/.config/podbot/github-app.pem"
 privileged = false
 # Mount /dev/fuse for fuse-overlayfs support (required for inner Podman)
 mount_dev_fuse = true
+# SELinux label handling: "disable_for_container" or "keep_default"
+selinux_label_mode = "disable_for_container"
 
 [agent]
 # Default agent type: "claude" or "codex"
@@ -147,20 +149,21 @@ copy_codex = true
 All configuration options can be set via environment variables using the
 `PODBOT_` prefix:
 
-| Variable                         | Configuration key         |
-| -------------------------------- | ------------------------- |
-| `PODBOT_ENGINE_SOCKET`           | `engine_socket`           |
-| `PODBOT_IMAGE`                   | `image`                   |
-| `PODBOT_GITHUB_APP_ID`           | `github.app_id`           |
-| `PODBOT_GITHUB_INSTALLATION_ID`  | `github.installation_id`  |
-| `PODBOT_GITHUB_PRIVATE_KEY_PATH` | `github.private_key_path` |
-| `PODBOT_SANDBOX_PRIVILEGED`      | `sandbox.privileged`      |
-| `PODBOT_SANDBOX_MOUNT_DEV_FUSE`  | `sandbox.mount_dev_fuse`  |
-| `PODBOT_AGENT_KIND`              | `agent.kind`              |
-| `PODBOT_AGENT_MODE`              | `agent.mode`              |
-| `PODBOT_WORKSPACE_BASE_DIR`      | `workspace.base_dir`      |
-| `PODBOT_CREDS_COPY_CLAUDE`       | `creds.copy_claude`       |
-| `PODBOT_CREDS_COPY_CODEX`        | `creds.copy_codex`        |
+| Variable                            | Configuration key            |
+| ----------------------------------- | ---------------------------- |
+| `PODBOT_ENGINE_SOCKET`              | `engine_socket`              |
+| `PODBOT_IMAGE`                      | `image`                      |
+| `PODBOT_GITHUB_APP_ID`              | `github.app_id`              |
+| `PODBOT_GITHUB_INSTALLATION_ID`     | `github.installation_id`     |
+| `PODBOT_GITHUB_PRIVATE_KEY_PATH`    | `github.private_key_path`    |
+| `PODBOT_SANDBOX_PRIVILEGED`         | `sandbox.privileged`         |
+| `PODBOT_SANDBOX_MOUNT_DEV_FUSE`     | `sandbox.mount_dev_fuse`     |
+| `PODBOT_SANDBOX_SELINUX_LABEL_MODE` | `sandbox.selinux_label_mode` |
+| `PODBOT_AGENT_KIND`                 | `agent.kind`                 |
+| `PODBOT_AGENT_MODE`                 | `agent.mode`                 |
+| `PODBOT_WORKSPACE_BASE_DIR`         | `workspace.base_dir`         |
+| `PODBOT_CREDS_COPY_CLAUDE`          | `creds.copy_claude`          |
+| `PODBOT_CREDS_COPY_CODEX`           | `creds.copy_codex`           |
 
 ### Container engine socket
 
@@ -292,10 +295,11 @@ error messages to help diagnose the issue.
 The `[sandbox]` section controls the security and compatibility trade-offs for
 the container environment.
 
-| Setting          | Default | Description                                  |
-| ---------------- | ------- | -------------------------------------------- |
-| `privileged`     | `false` | Run container in privileged mode             |
-| `mount_dev_fuse` | `true`  | Mount `/dev/fuse` for fuse-overlayfs support |
+| Setting              | Default                   | Description                                  |
+| -------------------- | ------------------------- | -------------------------------------------- |
+| `privileged`         | `false`                   | Run container in privileged mode             |
+| `mount_dev_fuse`     | `true`                    | Mount `/dev/fuse` for fuse-overlayfs support |
+| `selinux_label_mode` | `"disable_for_container"` | SELinux label handling mode                  |
 
 **Minimal mode** (default): `privileged = false`, `mount_dev_fuse = true`
 
@@ -322,19 +326,38 @@ The `/dev/fuse` mount is required for fuse-overlayfs, which enables inner
 Podman to function correctly. Disable this only when the agent container does
 not need nested container support.
 
+**SELinux label mode**: `selinux_label_mode`
+
+Controls how SELinux labels are applied to the container process:
+
+- `"disable_for_container"` (default): Applies
+  `SecurityOpt = ["label=disable"]` so rootless nested Podman workflows do not
+  fail under strict SELinux labelling. This is the recommended setting for most
+  environments.
+- `"keep_default"`: Leaves SELinux labelling at engine defaults. Use this
+  when the host SELinux policy is already configured to permit nested container
+  operations, or when SELinux enforcement is disabled system-wide.
+
+In privileged mode, this setting is ignored because the engine governs security
+labelling directly.
+
 ### Container creation behaviour
 
 When podbot creates a sandbox container, it applies the following host security
 settings:
 
 - `privileged = true`: sets `HostConfig.Privileged = true` and uses engine
-  defaults for capabilities, devices, and SELinux options.
-- `privileged = false`: sets `HostConfig.Privileged = false`, applies
-  `SecurityOpt = ["label=disable"]`, and uses a minimal profile.
-- `privileged = false` and `mount_dev_fuse = true`: additionally maps
+  defaults for capabilities, devices, and SELinux options. The `mount_dev_fuse`
+  and `selinux_label_mode` settings are ignored.
+- `privileged = false` with the default `selinux_label_mode`: sets
+  `HostConfig.Privileged = false` and applies `SecurityOpt = ["label=disable"]`.
+- `privileged = false` and `selinux_label_mode = "keep_default"`: sets
+  `HostConfig.Privileged = false` without adding `SecurityOpt`, leaving SELinux
+  labelling at engine defaults.
+- `mount_dev_fuse = true` (in non-privileged mode): additionally maps
   `/dev/fuse` and adds `SYS_ADMIN` capability so `fuse-overlayfs` can run.
-- `privileged = false` and `mount_dev_fuse = false`: skips `/dev/fuse` mapping
-  and capability additions.
+- `mount_dev_fuse = false` (in non-privileged mode): skips `/dev/fuse`
+  mapping and capability additions.
 
 Container creation requires `image` to be configured. If it is missing or
 whitespace-only, podbot returns:

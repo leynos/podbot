@@ -117,17 +117,20 @@ fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
 }
 
 #[rstest]
-fn from_sandbox_config_preserves_flags() {
+#[case::keep_default(SelinuxLabelMode::KeepDefault)]
+#[case::disable_for_container(SelinuxLabelMode::DisableForContainer)]
+fn from_sandbox_config_passes_through_all_fields(#[case] selinux: SelinuxLabelMode) {
     let sandbox = SandboxConfig {
         privileged: true,
         mount_dev_fuse: false,
+        selinux_label_mode: selinux,
     };
 
     let security = ContainerSecurityOptions::from_sandbox_config(&sandbox);
 
     assert!(security.privileged);
     assert!(!security.mount_dev_fuse);
-    assert_eq!(security.selinux_label_mode, SelinuxLabelMode::KeepDefault);
+    assert_eq!(security.selinux_label_mode, selinux);
 }
 
 #[rstest]

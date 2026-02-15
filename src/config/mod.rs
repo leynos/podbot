@@ -24,6 +24,7 @@
 //! [sandbox]
 //! privileged = false
 //! mount_dev_fuse = true
+//! selinux_label_mode = "disable_for_container"
 //!
 //! [agent]
 //! kind = "claude"
@@ -41,5 +42,5 @@ pub use cli::{Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs};
 pub use loader::{env_var_names, load_config};
 pub use types::{
     AgentConfig, AgentKind, AgentMode, AppConfig, CredsConfig, GitHubConfig, SandboxConfig,
-    WorkspaceConfig,
+    SelinuxLabelMode, WorkspaceConfig,
 };

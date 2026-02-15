@@ -9,7 +9,7 @@ mod test_utils;
 use std::io::Write;
 
 use camino::Utf8PathBuf;
-use podbot::config::{Cli, Commands, load_config};
+use podbot::config::{Cli, Commands, SelinuxLabelMode, load_config};
 use rstest::rstest;
 use serial_test::serial;
 use tempfile::NamedTempFile;
@@ -214,6 +214,7 @@ fn load_config_fails_on_invalid_typed_env_var(
 #[rstest]
 #[case("PODBOT_SANDBOX_PRIVILEGED", "true")]
 #[case("PODBOT_GITHUB_APP_ID", "12345")]
+#[case("PODBOT_SANDBOX_SELINUX_LABEL_MODE", "keep_default")]
 #[serial]
 fn load_config_accepts_valid_typed_env_var(
     clean_env: EnvGuard<'static>,
@@ -239,6 +240,27 @@ fn load_config_accepts_valid_typed_env_var(
                 "github.app_id should be Some(12345)"
             );
         }
+        "PODBOT_SANDBOX_SELINUX_LABEL_MODE" => {
+            assert_eq!(
+                config.sandbox.selinux_label_mode,
+                SelinuxLabelMode::KeepDefault,
+                "sandbox.selinux_label_mode should be KeepDefault"
+            );
+        }
         _ => panic!("unexpected env var in test: {env_var}"),
     }
+}
+
+#[rstest]
+#[serial]
+fn load_config_rejects_invalid_selinux_label_mode_env_var(clean_env: EnvGuard<'static>) {
+    set_env_var(&clean_env, "PODBOT_SANDBOX_SELINUX_LABEL_MODE", "banana");
+
+    let cli = cli_with_config(None);
+    let result = load_config(&cli);
+
+    assert!(
+        result.is_err(),
+        "load_config should fail for invalid selinux_label_mode"
+    );
 }

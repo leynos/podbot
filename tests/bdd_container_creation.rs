@@ -86,3 +86,11 @@ fn minimal_mode_with_selinux_kept_at_default(container_creation_state: Container
 fn minimal_mode_without_fuse_omits_capabilities(container_creation_state: ContainerCreationState) {
     let _ = container_creation_state;
 }
+
+#[scenario(
+    path = "tests/features/container_creation.feature",
+    name = "Sandbox config SELinux label mode passes through to container"
+)]
+fn sandbox_config_selinux_passes_through(container_creation_state: ContainerCreationState) {
+    let _ = container_creation_state;
+}

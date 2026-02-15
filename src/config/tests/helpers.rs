@@ -1,6 +1,6 @@
 //! Shared fixtures and helper functions for config tests.
 
-use crate::config::{AgentKind, AgentMode, AppConfig, GitHubConfig};
+use crate::config::{AgentKind, AgentMode, AppConfig, GitHubConfig, SelinuxLabelMode};
 use camino::Utf8PathBuf;
 use ortho_config::MergeComposer;
 use rstest::fixture;
@@ -20,6 +20,7 @@ pub fn app_config_from_full_toml() -> AppConfig {
         [sandbox]
         privileged = true
         mount_dev_fuse = false
+        selinux_label_mode = "keep_default"
 
         [agent]
         kind = "codex"
@@ -99,6 +100,11 @@ pub fn assert_config_has_defaults(config: &AppConfig) {
     assert!(
         config.sandbox.mount_dev_fuse,
         "sandbox.mount_dev_fuse should be true"
+    );
+    assert_eq!(
+        config.sandbox.selinux_label_mode,
+        SelinuxLabelMode::DisableForContainer,
+        "sandbox.selinux_label_mode should be DisableForContainer"
     );
     assert_eq!(
         config.workspace.base_dir.as_str(),

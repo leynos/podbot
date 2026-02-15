@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use bollard::models::{ContainerCreateBody, ContainerCreateResponse, HostConfig};
 use bollard::query_parameters::CreateContainerOptions;
 use mockall::mock;
+use podbot::config::SandboxConfig;
 use podbot::engine::{
     ContainerCreator, ContainerSecurityOptions, CreateContainerFuture, CreateContainerRequest,
     EngineConnector, SelinuxLabelMode,
@@ -139,6 +140,17 @@ fn sandbox_security_minimal_with_fuse_and_selinux_defaults(
         true,
         SelinuxLabelMode::KeepDefault,
     );
+}
+
+#[given("sandbox config has selinux_label_mode set to keep_default")]
+fn sandbox_config_selinux_keep_default(container_creation_state: &ContainerCreationState) {
+    let sandbox = SandboxConfig {
+        privileged: false,
+        mount_dev_fuse: true,
+        selinux_label_mode: SelinuxLabelMode::KeepDefault,
+    };
+    let security = ContainerSecurityOptions::from_sandbox_config(&sandbox);
+    container_creation_state.security.set(security);
 }
 
 #[given("the container engine create call fails")]
