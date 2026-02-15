@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// This controls whether the container engine's default `SELinux` labelling
 /// is preserved or explicitly disabled. Disabling labels is required for
-/// rootless nested Podman workflows that fail under strict `SELinux`
+/// rootless nested `Podman` workflows that fail under strict `SELinux`
 /// labelling.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

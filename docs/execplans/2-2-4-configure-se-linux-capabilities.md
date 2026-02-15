@@ -1,4 +1,4 @@
-# Step 2.2.4: Configure SELinux capabilities and security options
+# Step 2.2.4: Configure Security-Enhanced Linux (SELinux) capabilities and security options
 
 This ExecPlan (execution plan) is a living document. The sections
 `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises and discoveries`,
@@ -25,7 +25,8 @@ no way to override this without changing the privileged flag.
 
 After this change:
 
-- A new `sandbox.selinux_label_mode` field in the TOML configuration (and
+- A new `sandbox.selinux_label_mode` field in the TOML (Tom's Obvious, Minimal
+  Language) configuration (and
   `PODBOT_SANDBOX_SELINUX_LABEL_MODE` environment variable) lets operators
   choose between `"keep_default"` and `"disable_for_container"`.
 - Existing configuration files that omit the field default to
@@ -33,7 +34,8 @@ After this change:
 - The `from_sandbox_config` constructor passes the field through directly
   instead of deriving it from `sandbox.privileged`.
 - This behaviour is observable via `make test` (all tests pass, including new
-  serde round-trip, pass-through, env var, and BDD tests).
+  serde round-trip, pass-through, env var, and behaviour-driven development
+  (BDD) tests).
 
 ## Constraints
 
@@ -59,19 +61,19 @@ After this change:
 
 ## Risks
 
-    - Risk: users-guide.md line count exceeds 400 lines.
-      Severity: low
-      Likelihood: medium
-      Mitigation: AGENTS.md says "code file" for the 400-line limit.
-      Documentation files are not code files. The guide reaches 424 lines,
-      which is acceptable.
+- Risk: users-guide.md line count exceeds 400 lines.
+  Severity: low
+  Likelihood: medium
+  Mitigation: AGENTS.md says "code file" for the 400-line limit.
+  Documentation files are not code files. The guide reaches 424 lines,
+  which is acceptable.
 
-    - Risk: serde rename strategy mismatch with existing enums.
-      Severity: low
-      Likelihood: low
-      Mitigation: SelinuxLabelMode uses snake_case (multi-word variants),
-      while AgentKind/AgentMode use lowercase (single-word variants). Both
-      are correct for their respective variant naming patterns.
+- Risk: serde rename strategy mismatch with existing enums.
+  Severity: low
+  Likelihood: low
+  Mitigation: SelinuxLabelMode uses snake_case (multi-word variants),
+  while AgentKind/AgentMode use lowercase (single-word variants). Both
+  are correct for their respective variant naming patterns.
 
 ## Progress
 
@@ -106,44 +108,44 @@ After this change:
 
 ## Surprises and discoveries
 
-    - Observation: The `doc_markdown` Clippy lint requires `SELinux` to be
-      backtick-quoted in doc comments. The original engine definition used
-      backticks but the new config definition initially omitted them.
-      Evidence: Clippy error during `make lint`.
-      Impact: Five doc comment lines needed backtick-quoting. Fixed in the
-      same commit.
+- Observation: The `doc_markdown` Clippy lint requires `SELinux` to be
+  backtick-quoted in doc comments. The original engine definition used
+  backticks but the new config definition initially omitted them.
+  Evidence: Clippy error during `make lint`.
+  Impact: Five doc comment lines needed backtick-quoting. Fixed in the
+  same commit.
 
-    - Observation: `make fmt` reformats all markdown files, producing
-      collateral diffs in table alignment across files that were not manually
-      changed.
-      Evidence: Known from previous tasks (recorded in MEMORY.md).
-      Impact: Documentation commit includes formatting changes from `make fmt`.
+- Observation: `make fmt` reformats all markdown files, producing
+  collateral diffs in table alignment across files that were not manually
+  changed.
+  Evidence: Known from previous tasks (recorded in MEMORY.md).
+  Impact: Documentation commit includes formatting changes from `make fmt`.
 
 ## Decision log
 
-    - Decision: Use `#[serde(rename_all = "snake_case")]` for SelinuxLabelMode.
-      Rationale: Multi-word variants (KeepDefault, DisableForContainer)
-      serialise naturally as "keep_default" and "disable_for_container" with
-      snake_case. Single-word enums like AgentKind use "lowercase" instead.
-      Date/Author: 2026-02-15 / agent
+- Decision: Use `#[serde(rename_all = "snake_case")]` for SelinuxLabelMode.
+  Rationale: Multi-word variants (KeepDefault, DisableForContainer)
+  serialise naturally as "keep_default" and "disable_for_container" with
+  snake_case. Single-word enums like AgentKind use "lowercase" instead.
+  Date/Author: 2026-02-15 / agent
 
-    - Decision: Env var typed as String, not a new EnvVarType variant.
-      Rationale: Matches the existing pattern for PODBOT_AGENT_KIND and
-      PODBOT_AGENT_MODE. Invalid values are caught during merge_from_layers
-      by serde, not at collect_env_vars.
-      Date/Author: 2026-02-15 / agent
+- Decision: Env var typed as String, not a new EnvVarType variant.
+  Rationale: Matches the existing pattern for PODBOT_AGENT_KIND and
+  PODBOT_AGENT_MODE. Invalid values are caught during merge_from_layers
+  by serde, not at collect_env_vars.
+  Date/Author: 2026-02-15 / agent
 
-    - Decision: Keep `impl SelinuxLabelMode` block in engine module.
-      Rationale: The `requires_label_disable` method is engine-specific
-      logic that translates a config value into a build_host_config decision.
-      Moving it to config/types.rs would leak engine concerns into config.
-      Date/Author: 2026-02-15 / agent
+- Decision: Keep `impl SelinuxLabelMode` block in engine module.
+  Rationale: The `requires_label_disable` method is engine-specific
+  logic that translates a config value into a build_host_config decision.
+  Moving it to config/types.rs would leak engine concerns into config.
+  Date/Author: 2026-02-15 / agent
 
-    - Decision: Re-export via `pub use crate::config::SelinuxLabelMode` in
-      create_container/mod.rs.
-      Rationale: Preserves the existing `podbot::engine::SelinuxLabelMode`
-      path used by BDD tests and the connection/mod.rs re-export chain.
-      Date/Author: 2026-02-15 / agent
+- Decision: Re-export via `pub use crate::config::SelinuxLabelMode` in
+  create_container/mod.rs.
+  Rationale: Preserves the existing `podbot::engine::SelinuxLabelMode`
+  path used by BDD tests and the connection/mod.rs re-export chain.
+  Date/Author: 2026-02-15 / agent
 
 ## Outcomes and retrospective
 
@@ -154,7 +156,8 @@ and BDD config-to-engine translation.
 Key outcomes:
 
 - `SelinuxLabelMode` is now a first-class config option with serde support,
-  `ValueEnum` for future CLI use, and environment variable override.
+  `ValueEnum` for future command-line interface (CLI) use, and environment
+  variable override.
 - Backward compatibility is fully preserved: existing configs without the field
   default to `DisableForContainer`.
 - The re-export chain `config -> engine -> public API` works correctly.
@@ -171,7 +174,8 @@ avoids breaking the existing import paths.
 The podbot project is a Rust application that creates sandboxed containers for
 AI coding agents. Container creation is handled by the engine module
 (`src/engine/connection/create_container/`), which translates high-level
-`SandboxConfig` settings into Bollard API payloads.
+`SandboxConfig` settings into Bollard application programming interface (API)
+payloads.
 
 Key files:
 
