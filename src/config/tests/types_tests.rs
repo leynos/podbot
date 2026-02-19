@@ -2,6 +2,7 @@
 
 use crate::config::tests::helpers::{app_config_from_full_toml, app_config_from_partial_toml};
 use crate::config::{AgentConfig, AgentKind, AgentMode, AppConfig, SelinuxLabelMode};
+use clap::ValueEnum;
 use rstest::rstest;
 
 #[rstest]
@@ -199,6 +200,19 @@ fn selinux_label_mode_deserialises_from_snake_case(
     let mode: SelinuxLabelMode =
         serde_json::from_str(input).expect("deserialisation should succeed");
     assert_eq!(mode, expected);
+}
+
+#[rstest]
+#[case(SelinuxLabelMode::KeepDefault)]
+#[case(SelinuxLabelMode::DisableForContainer)]
+fn selinux_label_mode_clap_names_match_serde_snake_case(#[case] mode: SelinuxLabelMode) {
+    let clap_value = mode
+        .to_possible_value()
+        .expect("all SelinuxLabelMode variants should expose a clap value name");
+    let clap_name = clap_value.get_name();
+
+    let serialised = serde_json::to_string(&mode).expect("serialisation should succeed");
+    assert_eq!(serialised, format!("\"{clap_name}\""));
 }
 
 #[rstest]
