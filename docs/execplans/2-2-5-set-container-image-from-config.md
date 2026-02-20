@@ -5,10 +5,10 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
-No `PLANS.md` file exists in this repository as of 2026-02-20, so this
-ExecPlan is the governing implementation document for this task.
+No `PLANS.md` file exists in this repository as of 2026-02-20, so this ExecPlan
+is the governing implementation document for this task.
 
 ## Purpose and big picture
 
@@ -32,7 +32,7 @@ After implementation:
   cover happy, unhappy, and edge paths;
 - `docs/podbot-design.md` records the image-selection decision;
 - `docs/users-guide.md` documents any observable behaviour change;
-- `docs/podbot-roadmap.md` task 2.2.5 is marked done only after all gates pass.
+- `docs/podbot-roadmap.md` task 2.2.5 is marked done after all gates pass.
 
 ## Constraints
 
@@ -65,23 +65,18 @@ After implementation:
 
 - Risk: the current production flow (`run_agent`) is still orchestration-stub
   code, so there may be no end-to-end runtime call path yet for
-  `EngineConnector::create_container_async`.
-  Severity: medium.
-  Likelihood: high.
-  Mitigation: implement and validate a deterministic config-to-request seam now,
-  and keep runtime orchestration out of scope unless required for 2.2.5.
+  `EngineConnector::create_container_async`. Severity: medium. Likelihood:
+  high. Mitigation: implement and validate a deterministic config-to-request
+  seam now, and keep runtime orchestration out of scope unless required for
+  2.2.5.
 
 - Risk: behavioural tests currently treat image as scenario state rather than a
-  full `AppConfig` input.
-  Severity: medium.
-  Likelihood: medium.
-  Mitigation: add or refactor steps so at least one scenario proves image comes
-  from configuration-derived state, not hard-coded request setup.
+  full `AppConfig` input. Severity: medium. Likelihood: medium. Mitigation: add
+  or refactor steps so at least one scenario proves image comes from
+  configuration-derived state, not hard-coded request setup.
 
 - Risk: docs already mention image configuration, so accidental wording drift
-  could create contradictory statements.
-  Severity: low.
-  Likelihood: medium.
+  could create contradictory statements. Severity: low. Likelihood: medium.
   Mitigation: update only the precise sections that describe container-create
   image resolution and validation timing.
 
@@ -108,7 +103,6 @@ Current test surfaces:
 
 Roadmap dependency context:
 
-- 2.2.5 is the only unchecked task in Step 2.2.
 - Step 2.3 (credential injection) depends on successful container creation.
 
 ## Agent team execution model
@@ -140,8 +134,8 @@ Coordination rule:
 
 ### Stage A: Add explicit config-to-request image mapping seam
 
-Introduce an additive constructor/helper that builds a
-`CreateContainerRequest` directly from resolved configuration. The helper must:
+Introduce an additive constructor/helper that builds a `CreateContainerRequest`
+directly from resolved configuration. The helper must:
 
 - source image from `AppConfig.image`;
 - source security options from `AppConfig.sandbox` via
@@ -247,11 +241,22 @@ Acceptance is met only when all points below are true:
       Step 2.2 implementation/test code paths.
 - [x] (2026-02-20 UTC) Drafted ExecPlan at
       `docs/execplans/2-2-5-set-container-image-from-config.md`.
-- [ ] (pending) Implement Stage A config-to-request mapping seam.
-- [ ] (pending) Implement Stage B rstest unit/integration coverage.
-- [ ] (pending) Implement Stage C rstest-bdd behavioural coverage.
-- [ ] (pending) Implement Stage D docs updates.
-- [ ] (pending) Implement Stage E roadmap update and full gate run.
+- [x] (2026-02-20 UTC) Implemented Stage A by adding
+      `CreateContainerRequest::from_app_config(&AppConfig)` in
+      `src/engine/connection/create_container/mod.rs` and associated unit
+      coverage.
+- [x] (2026-02-20 UTC) Implemented Stage B with config-image resolution
+      integration coverage in `tests/load_config_image_resolution.rs`.
+- [x] (2026-02-20 UTC) Implemented Stage C lane work: added BDD scenario and
+      assertions proving `ContainerCreateBody.image` is forwarded from
+      configuration-derived state, and retained missing/blank image no-engine
+      failure coverage.
+- [x] (2026-02-20 UTC) Implemented Stage D lane work: updated
+      `docs/podbot-design.md` and `docs/users-guide.md` with
+      config-resolution/validation timing clarifications.
+- [x] (2026-02-20 UTC) Completed Stage E by marking roadmap task 2.2.5 done and
+      running full gates:
+      `make check-fmt`, `make lint`, `make test`.
 
 ## Surprises and discoveries
 
@@ -263,24 +268,59 @@ Acceptance is met only when all points below are true:
   this task should focus on deterministic config-to-request mapping and tests,
   without overreaching into unrelated lifecycle steps.
 
+- Observation: existing BDD coverage classified missing-image failures and
+  engine call counts, but did not capture/assert `ContainerCreateBody.image`.
+  Impact: added focused capture state and assertion step to make
+  configuration-derived image forwarding explicit.
+
+- Observation: adding the new image-resolution tests pushed
+  `tests/load_config_integration.rs` beyond the 400-line code-file limit.
+  Impact: moved image-specific coverage into
+  `tests/load_config_image_resolution.rs`.
+
 ## Decision log
 
 - Decision: keep this document as a planning artefact first (draft phase) and
-  require explicit approval before implementation.
-  Rationale: aligns with execplans approval-gate discipline and prevents
-  unapproved scope drift.
+  require explicit approval before implementation. Rationale: aligns with
+  execplans approval-gate discipline and prevents unapproved scope drift.
   Date/Author: 2026-02-20 / Codex.
 
 - Decision: plan for an agent-team split (core, tests, behaviour/docs) during
-  execution.
-  Rationale: enables parallel delivery while preserving clean ownership and
-  reviewability.
+  execution. Rationale: enables parallel delivery while preserving clean
+  ownership and reviewability. Date/Author: 2026-02-20 / Codex.
+
+- Decision: capture image payload directly from the mocked create request body
+  in BDD helpers. Rationale: proves the final image sent to the engine equals
+  the resolved configuration-derived value, not merely scenario setup state.
+  Date/Author: 2026-02-20 / Codex.
+
+- Decision: split image-resolution tests into a dedicated integration test file
+  rather than suppressing lints or file-size guidance. Rationale: keeps each
+  code file under the 400-line limit and retains focused test ownership.
   Date/Author: 2026-02-20 / Codex.
 
 ## Outcomes and retrospective
 
-Not started yet. Update this section after implementation to capture:
+Implemented Step 2.2.5 end-to-end with agent-team delivery and final
+integration.
 
-- final changed files and why;
-- gate evidence summary;
-- any deviations from the initial plan and lessons learned.
+- Added `CreateContainerRequest::from_app_config(&AppConfig)` and reused
+  existing `CreateContainerRequest::new(...)` validation semantics.
+- Added/updated unit coverage in
+  `src/engine/connection/create_container/tests/mod.rs` for config-driven
+  request construction.
+- Added image-resolution integration coverage in
+  `tests/load_config_image_resolution.rs` covering file/env/CLI precedence plus
+  missing/blank unhappy paths.
+- Updated BDD coverage in
+  `tests/features/container_creation.feature`,
+  `tests/bdd_container_creation.rs`,
+  `tests/bdd_container_creation_helpers/state.rs`,
+  `tests/bdd_container_creation_helpers/steps.rs`, and
+  `tests/bdd_container_creation_helpers/assertions.rs` to assert image payload
+  forwarding from resolved configuration and no-engine-call validation failures.
+- Updated documentation in `docs/podbot-design.md` and `docs/users-guide.md` to
+  clarify configuration-layer image resolution and pre-engine-call validation.
+- Marked roadmap task 2.2.5 complete in `docs/podbot-roadmap.md`.
+- Verification completed with passing gates: `make check-fmt`, `make lint`,
+  and `make test`.

@@ -225,6 +225,26 @@ fn container_engine_is_not_invoked(
     assert_engine_not_called(container_creation_state)
 }
 
+#[then("container image {image} is forwarded from resolved configuration")]
+fn container_image_is_forwarded_from_resolved_configuration(
+    container_creation_state: &ContainerCreationState,
+    image: String,
+) -> StepResult<()> {
+    let captured_image = container_creation_state
+        .captured_image
+        .get()
+        .flatten()
+        .ok_or_else(|| String::from("captured image should be available"))?;
+
+    if captured_image == image {
+        return Ok(());
+    }
+
+    Err(format!(
+        "expected container image {image}, got {captured_image}"
+    ))
+}
+
 fn captured_host_config(
     container_creation_state: &ContainerCreationState,
 ) -> StepResult<HostConfig> {

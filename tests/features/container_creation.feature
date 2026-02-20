@@ -24,15 +24,22 @@ Feature: Container creation
     Then container creation succeeds
     And minimal host configuration without /dev/fuse is used
 
-  Scenario: Create container fails when image is missing
-    Given no sandbox image is configured
+  Scenario: Create container uses image resolved from configuration
+    Given resolved configuration provides sandbox image ghcr.io/example/podbot-sandbox:v2
+    And sandbox security is minimal mode with /dev/fuse mounted
+    When container creation is requested
+    Then container creation succeeds
+    And container image ghcr.io/example/podbot-sandbox:v2 is forwarded from resolved configuration
+
+  Scenario: Create container fails when resolved image is missing
+    Given resolved configuration has no sandbox image
     And sandbox security is minimal mode with /dev/fuse mounted
     When container creation is requested
     Then container creation fails with missing image error
     And container engine is not invoked
 
-  Scenario: Create container fails when image is whitespace only
-    Given sandbox image is configured as whitespace only
+  Scenario: Create container fails when resolved image is whitespace only
+    Given resolved configuration sandbox image is whitespace only
     And sandbox security is minimal mode with /dev/fuse mounted
     When container creation is requested
     Then container creation fails with missing image error
