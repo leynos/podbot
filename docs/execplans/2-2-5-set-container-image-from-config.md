@@ -95,7 +95,7 @@ Current relevant implementation points:
 Current test surfaces:
 
 - Unit tests under `src/engine/connection/create_container/tests/`.
-- BDD container creation scenarios in
+- behaviour-driven development (BDD) container creation scenarios in
   `tests/features/container_creation.feature` and
   `tests/bdd_container_creation_helpers/`.
 - Configuration precedence tests in `tests/load_config_integration.rs` and
