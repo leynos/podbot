@@ -51,6 +51,7 @@ fn set_sandbox_config(config_state: &ConfigState, privileged: bool, mount_dev_fu
         sandbox: SandboxConfig {
             privileged,
             mount_dev_fuse,
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -102,6 +103,7 @@ fn config_with_privileged_mode(config_state: &ConfigState) {
         sandbox: SandboxConfig {
             privileged: true,
             mount_dev_fuse: true,
+            ..Default::default()
         },
         ..Default::default()
     };

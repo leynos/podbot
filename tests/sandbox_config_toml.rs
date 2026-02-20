@@ -24,11 +24,13 @@ fn sandbox_config_round_trips_through_toml() {
     let config = SandboxConfig {
         privileged: true,
         mount_dev_fuse: false,
+        ..Default::default()
     };
     let toml_str = toml::to_string(&config).expect("serialization should succeed");
     let parsed: SandboxConfig = toml::from_str(&toml_str).expect("deserialization should succeed");
     assert_eq!(parsed.privileged, config.privileged);
     assert_eq!(parsed.mount_dev_fuse, config.mount_dev_fuse);
+    assert_eq!(parsed.selinux_label_mode, config.selinux_label_mode);
 }
 
 #[rstest]
@@ -44,6 +46,7 @@ fn sandbox_config_all_combinations(
     let config = SandboxConfig {
         privileged,
         mount_dev_fuse,
+        ..Default::default()
     };
     let toml_str = toml::to_string(&config).expect("serialization should succeed");
     let parsed: SandboxConfig = toml::from_str(&toml_str).expect("deserialization should succeed");

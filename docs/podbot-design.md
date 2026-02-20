@@ -291,8 +291,11 @@ the privileged flag.
     device access and governs security labelling directly.
 - **Minimal profile** (`sandbox.privileged = false`)
   - Sets `HostConfig.Privileged = false`.
-  - Applies `SecurityOpt = ["label=disable"]` so rootless nested Podman
-    workflows do not fail under strict SELinux labelling.
+  - When `sandbox.selinux_label_mode = "disable_for_container"` (the default),
+    applies `SecurityOpt = ["label=disable"]` so rootless nested Podman
+    workflows do not fail under strict SELinux labelling. When set to
+    `"keep_default"`, the `SecurityOpt` field is left unset and the engine's
+    default SELinux policy applies.
   - When `sandbox.mount_dev_fuse = true`, mounts `/dev/fuse` with `rwm`
     permissions and adds `SYS_ADMIN` capability to support `fuse-overlayfs`.
   - When `sandbox.mount_dev_fuse = false`, `/dev/fuse` and capability additions

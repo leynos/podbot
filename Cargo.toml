@@ -28,6 +28,7 @@ camino = { version = "1.2.2", features = ["serde1"] }
 # Configuration management
 ortho_config = "0.7.0"
 serde = { version = "1.0.228", features = ["derive"] }
+smart-default = "0.7.1"
 
 # Command-line argument parsing
 clap = { version = "4.5.54", features = ["derive"] }

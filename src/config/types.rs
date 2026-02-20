@@ -4,6 +4,25 @@ use camino::Utf8PathBuf;
 use clap::ValueEnum;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
+use smart_default::SmartDefault;
+
+/// How `SELinux` labels should be applied to the container.
+///
+/// This controls whether the container engine's default `SELinux` labelling
+/// is preserved or explicitly disabled. Disabling labels is required for
+/// rootless nested `Podman` workflows that fail under strict `SELinux`
+/// labelling.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[value(rename_all = "snake_case")]
+pub enum SelinuxLabelMode {
+    /// Keep engine defaults for `SELinux` labels.
+    KeepDefault,
+
+    /// Disable labels for the container process.
+    #[default]
+    DisableForContainer,
+}
 
 /// The kind of AI agent to run.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
@@ -90,23 +109,18 @@ impl GitHubConfig {
 }
 
 /// Sandbox security configuration.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, SmartDefault, Deserialize, Serialize)]
 #[serde(default)]
 pub struct SandboxConfig {
     /// Run the container in privileged mode (less secure but more compatible).
     pub privileged: bool,
 
     /// Mount /dev/fuse in the container for fuse-overlayfs support.
+    #[default = true]
     pub mount_dev_fuse: bool,
-}
 
-impl Default for SandboxConfig {
-    fn default() -> Self {
-        Self {
-            privileged: false,
-            mount_dev_fuse: true,
-        }
-    }
+    /// `SELinux` label handling mode for the container.
+    pub selinux_label_mode: SelinuxLabelMode,
 }
 
 /// Agent execution configuration.

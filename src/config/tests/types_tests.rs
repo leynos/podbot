@@ -1,7 +1,8 @@
 //! Basic type and serialisation tests for podbot configuration types.
 
 use crate::config::tests::helpers::{app_config_from_full_toml, app_config_from_partial_toml};
-use crate::config::{AgentConfig, AgentKind, AgentMode, AppConfig};
+use crate::config::{AgentConfig, AgentKind, AgentMode, AppConfig, SelinuxLabelMode};
+use clap::ValueEnum;
 use rstest::rstest;
 
 #[rstest]
@@ -171,6 +172,75 @@ fn app_config_partial_toml_workspace_default_applies(app_config_from_partial_tom
 }
 
 #[rstest]
+fn selinux_label_mode_default_is_disable_for_container() {
+    assert_eq!(
+        SelinuxLabelMode::default(),
+        SelinuxLabelMode::DisableForContainer
+    );
+}
+
+#[rstest]
+#[case(SelinuxLabelMode::KeepDefault, "keep_default")]
+#[case(SelinuxLabelMode::DisableForContainer, "disable_for_container")]
+fn selinux_label_mode_serialises_to_snake_case(
+    #[case] mode: SelinuxLabelMode,
+    #[case] expected: &str,
+) {
+    let serialised = serde_json::to_string(&mode).expect("serialisation should succeed");
+    assert_eq!(serialised, format!("\"{expected}\""));
+}
+
+#[rstest]
+#[case("\"keep_default\"", SelinuxLabelMode::KeepDefault)]
+#[case("\"disable_for_container\"", SelinuxLabelMode::DisableForContainer)]
+fn selinux_label_mode_deserialises_from_snake_case(
+    #[case] input: &str,
+    #[case] expected: SelinuxLabelMode,
+) {
+    let mode: SelinuxLabelMode =
+        serde_json::from_str(input).expect("deserialisation should succeed");
+    assert_eq!(mode, expected);
+}
+
+#[rstest]
+#[case(SelinuxLabelMode::KeepDefault)]
+#[case(SelinuxLabelMode::DisableForContainer)]
+fn selinux_label_mode_clap_names_match_serde_snake_case(#[case] mode: SelinuxLabelMode) {
+    let clap_value = mode
+        .to_possible_value()
+        .expect("all SelinuxLabelMode variants should expose a clap value name");
+    let clap_name = clap_value.get_name();
+
+    let serialised = serde_json::to_string(&mode).expect("serialisation should succeed");
+    assert_eq!(serialised, format!("\"{clap_name}\""));
+}
+
+#[rstest]
+fn app_config_sandbox_selinux_label_mode_defaults_to_disable() {
+    let config = AppConfig::default();
+    assert_eq!(
+        config.sandbox.selinux_label_mode,
+        SelinuxLabelMode::DisableForContainer
+    );
+}
+
+#[rstest]
+fn app_config_toml_sets_selinux_label_mode(app_config_from_full_toml: AppConfig) {
+    assert_eq!(
+        app_config_from_full_toml.sandbox.selinux_label_mode,
+        SelinuxLabelMode::KeepDefault
+    );
+}
+
+#[rstest]
+fn app_config_partial_toml_selinux_label_mode_defaults(app_config_from_partial_toml: AppConfig) {
+    assert_eq!(
+        app_config_from_partial_toml.sandbox.selinux_label_mode,
+        SelinuxLabelMode::DisableForContainer
+    );
+}
+
+#[rstest]
 #[case("kind", "unknown")]
 #[case("mode", "unknown")]
 fn app_config_rejects_invalid_agent_field(#[case] field: &str, #[case] value: &str) {
@@ -186,5 +256,20 @@ fn app_config_rejects_invalid_agent_field(#[case] field: &str, #[case] value: &s
     assert!(
         error.to_string().contains(value),
         "Expected error mentioning the invalid value \"{value}\", got: {error}"
+    );
+}
+
+#[rstest]
+fn app_config_rejects_invalid_selinux_label_mode() {
+    let toml = r#"
+        [sandbox]
+        selinux_label_mode = "banana"
+    "#;
+
+    let error = toml::from_str::<AppConfig>(toml)
+        .expect_err("TOML parsing should fail for an invalid selinux_label_mode");
+    assert!(
+        error.to_string().contains("banana"),
+        "Expected error mentioning the invalid value, got: {error}"
     );
 }

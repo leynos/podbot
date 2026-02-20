@@ -7,10 +7,11 @@ use super::*;
 #[rstest]
 #[case::with_fuse(true)]
 #[case::without_fuse(false)]
-fn from_sandbox_config_minimal_mode_sets_selinux_disable(#[case] fuse: bool) {
+fn from_sandbox_config_minimal_mode_passes_through_selinux_mode(#[case] fuse: bool) {
     let cfg = SandboxConfig {
         privileged: false,
         mount_dev_fuse: fuse,
+        selinux_label_mode: SelinuxLabelMode::DisableForContainer,
     };
     let sec = ContainerSecurityOptions::from_sandbox_config(&cfg);
     assert!(!sec.privileged);
@@ -19,6 +20,19 @@ fn from_sandbox_config_minimal_mode_sets_selinux_disable(#[case] fuse: bool) {
         sec.selinux_label_mode,
         SelinuxLabelMode::DisableForContainer
     );
+}
+
+#[rstest]
+fn from_sandbox_config_minimal_mode_with_keep_default() {
+    let cfg = SandboxConfig {
+        privileged: false,
+        mount_dev_fuse: true,
+        selinux_label_mode: SelinuxLabelMode::KeepDefault,
+    };
+    let sec = ContainerSecurityOptions::from_sandbox_config(&cfg);
+    assert!(!sec.privileged);
+    assert!(sec.mount_dev_fuse);
+    assert_eq!(sec.selinux_label_mode, SelinuxLabelMode::KeepDefault);
 }
 
 /// Run a minimal-mode container creation with the given fuse and `SELinux`
