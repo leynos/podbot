@@ -219,7 +219,7 @@ fn setup_mock_creator(should_fail: bool, capture_state: &MockCaptureState) -> Mo
                 *locked = options;
             }
             if let Ok(mut locked) = captured_image_for_closure.lock() {
-                (*locked).clone_from(&config.image);
+                locked.clone_from(&config.image);
             }
             if let Ok(mut locked) = captured_host_config_for_closure.lock() {
                 *locked = config.host_config;

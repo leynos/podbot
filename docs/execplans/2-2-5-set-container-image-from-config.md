@@ -206,11 +206,13 @@ in `docs/podbot-roadmap.md`.
 
 Run required gates with log capture via `tee`:
 
-    PROJECT="$(get-project)"
-    BRANCH_SAFE="$(git branch --show | tr '/' '-')"
-    make check-fmt 2>&1 | tee "/tmp/check-fmt-${PROJECT}-${BRANCH_SAFE}.out"
-    make lint 2>&1 | tee "/tmp/lint-${PROJECT}-${BRANCH_SAFE}.out"
-    make test 2>&1 | tee "/tmp/test-${PROJECT}-${BRANCH_SAFE}.out"
+```shell
+PROJECT="$(get-project)"
+BRANCH_SAFE="$(git branch --show | tr '/' '-')"
+make check-fmt 2>&1 | tee "/tmp/check-fmt-${PROJECT}-${BRANCH_SAFE}.out"
+make lint 2>&1 | tee "/tmp/lint-${PROJECT}-${BRANCH_SAFE}.out"
+make test 2>&1 | tee "/tmp/test-${PROJECT}-${BRANCH_SAFE}.out"
+```
 
 If any gate fails, fix and rerun until all pass.
 
