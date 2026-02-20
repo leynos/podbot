@@ -366,6 +366,11 @@ whitespace-only, podbot returns:
 missing required configuration: image
 ```
 
+Podbot resolves this image from layered configuration precedence (`--image`,
+then `PODBOT_IMAGE`, then file/default values). Validation occurs before the
+engine create call, so no container-create request is sent when the resolved
+image is empty.
+
 ## Security model
 
 Podbot's security model is based on capability-based containment:

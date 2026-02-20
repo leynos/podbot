@@ -31,17 +31,29 @@ fn create_container_in_minimal_mode_without_fuse(container_creation_state: Conta
 
 #[scenario(
     path = "tests/features/container_creation.feature",
-    name = "Create container fails when image is missing"
+    name = "Create container uses image resolved from configuration"
 )]
-fn create_container_fails_when_image_missing(container_creation_state: ContainerCreationState) {
+fn create_container_uses_image_from_resolved_configuration(
+    container_creation_state: ContainerCreationState,
+) {
     let _ = container_creation_state;
 }
 
 #[scenario(
     path = "tests/features/container_creation.feature",
-    name = "Create container fails when image is whitespace only"
+    name = "Create container fails when resolved image is missing"
 )]
-fn create_container_fails_when_image_whitespace_only(
+fn create_container_fails_when_resolved_image_missing(
+    container_creation_state: ContainerCreationState,
+) {
+    let _ = container_creation_state;
+}
+
+#[scenario(
+    path = "tests/features/container_creation.feature",
+    name = "Create container fails when resolved image is whitespace only"
+)]
+fn create_container_fails_when_resolved_image_whitespace_only(
     container_creation_state: ContainerCreationState,
 ) {
     let _ = container_creation_state;

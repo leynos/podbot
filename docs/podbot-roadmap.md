@@ -94,7 +94,7 @@ execution.
 - [x] Support minimal mode with only /dev/fuse mounted.
 - [x] Configure appropriate capabilities and security options for SELinux
   environments.
-- [ ] Set the container image from configuration.
+- [x] Set the container image from configuration.
 
 **Completion criteria:** Containers start in both privileged and minimal modes.
 Inner Podman executes successfully within the container.

@@ -303,7 +303,9 @@ the privileged flag.
 
 Container creation validates that an image is configured. If `image` is missing
 or whitespace-only, the operation fails with a semantic
-`ConfigError::MissingRequired` for `image`.
+`ConfigError::MissingRequired` for `image`. The image value is taken from the
+resolved layered configuration (`AppConfig.image`) at request-construction
+time, so this validation happens before any engine create call is attempted.
 
 ## Error handling
 

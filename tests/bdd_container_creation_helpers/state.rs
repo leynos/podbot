@@ -39,7 +39,7 @@ pub enum FailureKind {
 /// Shared scenario state for container-creation behavioural tests.
 #[derive(Default, ScenarioState)]
 pub struct ContainerCreationState {
-    /// Configured image value used for request construction.
+    /// Resolved configuration image value used for request construction.
     pub(crate) image: Slot<Option<String>>,
 
     /// Security options used for request construction.
@@ -56,6 +56,9 @@ pub struct ContainerCreationState {
 
     /// Captured host configuration forwarded to the engine.
     pub(crate) captured_host_config: Slot<Option<HostConfig>>,
+
+    /// Captured image field forwarded to the engine.
+    pub(crate) captured_image: Slot<Option<String>>,
 
     /// Number of times the mocked engine create operation was invoked.
     pub(crate) engine_call_count: Slot<usize>,

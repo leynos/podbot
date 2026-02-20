@@ -17,8 +17,6 @@ use tempfile::NamedTempFile;
 use crate::test_utils::{EnvGuard, clean_env, set_env_var};
 
 /// Helper: Creates a CLI struct with a config file path.
-///
-/// Uses the `Ps` subcommand as it requires no additional arguments.
 const fn cli_with_config(config_path: Option<Utf8PathBuf>) -> Cli {
     Cli {
         config: config_path,
@@ -29,10 +27,6 @@ const fn cli_with_config(config_path: Option<Utf8PathBuf>) -> Cli {
 }
 
 /// Helper: Creates a temporary config file with the given TOML content.
-///
-/// # Errors
-///
-/// Returns an error if the temporary file cannot be created or written to.
 fn temp_config_file(content: &str) -> std::io::Result<NamedTempFile> {
     let mut file = NamedTempFile::new()?;
     file.write_all(content.as_bytes())?;

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use bollard::models::{ContainerCreateBody, ContainerCreateResponse, HostConfig};
 use bollard::query_parameters::CreateContainerOptions;
 use mockall::mock;
-use podbot::config::SandboxConfig;
+use podbot::config::{AppConfig, SandboxConfig};
 use podbot::engine::{
     ContainerCreator, ContainerSecurityOptions, CreateContainerFuture, CreateContainerRequest,
     EngineConnector, SelinuxLabelMode,
@@ -33,6 +33,7 @@ struct MockCaptureState {
     call_count: Arc<Mutex<usize>>,
     captured_options: Arc<Mutex<Option<CreateContainerOptions>>>,
     captured_host_config: Arc<Mutex<Option<HostConfig>>>,
+    captured_image: Arc<Mutex<Option<String>>>,
 }
 
 impl MockCaptureState {
@@ -41,6 +42,7 @@ impl MockCaptureState {
             call_count: Arc::new(Mutex::new(0_usize)),
             captured_options: Arc::new(Mutex::new(None)),
             captured_host_config: Arc::new(Mutex::new(None)),
+            captured_image: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -50,6 +52,14 @@ fn configured_sandbox_image(container_creation_state: &ContainerCreationState, i
     container_creation_state.image.set(Some(image));
 }
 
+#[given("resolved configuration provides sandbox image {image}")]
+fn resolved_configuration_provides_sandbox_image(
+    container_creation_state: &ContainerCreationState,
+    image: String,
+) {
+    configured_sandbox_image(container_creation_state, image);
+}
+
 #[given("sandbox image is configured as whitespace only")]
 fn sandbox_image_configured_as_whitespace_only(container_creation_state: &ContainerCreationState) {
     container_creation_state
@@ -57,9 +67,21 @@ fn sandbox_image_configured_as_whitespace_only(container_creation_state: &Contai
         .set(Some(String::from("   ")));
 }
 
+#[given("resolved configuration sandbox image is whitespace only")]
+fn resolved_configuration_image_is_whitespace_only(
+    container_creation_state: &ContainerCreationState,
+) {
+    sandbox_image_configured_as_whitespace_only(container_creation_state);
+}
+
 #[given("no sandbox image is configured")]
 fn no_sandbox_image_configured(container_creation_state: &ContainerCreationState) {
     container_creation_state.image.set(None);
+}
+
+#[given("resolved configuration has no sandbox image")]
+fn resolved_configuration_has_no_sandbox_image(container_creation_state: &ContainerCreationState) {
+    no_sandbox_image_configured(container_creation_state);
 }
 
 /// Helper function to set sandbox security options, reducing duplication in BDD steps.
@@ -186,6 +208,7 @@ fn setup_mock_creator(should_fail: bool, capture_state: &MockCaptureState) -> Mo
     let call_count_for_closure = Arc::clone(&capture_state.call_count);
     let captured_options_for_closure = Arc::clone(&capture_state.captured_options);
     let captured_host_config_for_closure = Arc::clone(&capture_state.captured_host_config);
+    let captured_image_for_closure = Arc::clone(&capture_state.captured_image);
     creator
         .expect_create_container()
         .returning(move |options, config| {
@@ -194,6 +217,9 @@ fn setup_mock_creator(should_fail: bool, capture_state: &MockCaptureState) -> Mo
             }
             if let Ok(mut locked) = captured_options_for_closure.lock() {
                 *locked = options;
+            }
+            if let Ok(mut locked) = captured_image_for_closure.lock() {
+                locked.clone_from(&config.image);
             }
             if let Ok(mut locked) = captured_host_config_for_closure.lock() {
                 *locked = config.host_config;
@@ -217,13 +243,17 @@ fn setup_mock_creator(should_fail: bool, capture_state: &MockCaptureState) -> Mo
 fn build_request_from_state(
     container_creation_state: &ContainerCreationState,
 ) -> Result<CreateContainerRequest, PodbotError> {
-    let image = container_creation_state
-        .image
-        .get()
-        .flatten()
-        .unwrap_or_default();
     let security = container_creation_state.security.get().unwrap_or_default();
-    CreateContainerRequest::new(image, security)
+    let config = AppConfig {
+        image: container_creation_state.image.get().flatten(),
+        sandbox: SandboxConfig {
+            privileged: security.privileged,
+            mount_dev_fuse: security.mount_dev_fuse,
+            selinux_label_mode: security.selinux_label_mode,
+        },
+        ..AppConfig::default()
+    };
+    CreateContainerRequest::from_app_config(&config)
         .map(|request| request.with_name(Some(String::from("podbot-sandbox-test"))))
 }
 
@@ -269,6 +299,11 @@ fn capture_mock_state(
         .lock()
         .map_err(|_| String::from("captured host config mutex is poisoned"))?
         .clone();
+    let image_value = capture_state
+        .captured_image
+        .lock()
+        .map_err(|_| String::from("captured image mutex is poisoned"))?
+        .clone();
 
     container_creation_state
         .engine_call_count
@@ -277,6 +312,7 @@ fn capture_mock_state(
     container_creation_state
         .captured_host_config
         .set(host_config_value);
+    container_creation_state.captured_image.set(image_value);
 
     Ok(())
 }

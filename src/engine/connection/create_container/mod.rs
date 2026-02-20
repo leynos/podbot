@@ -12,8 +12,8 @@ use bollard::models::{ContainerCreateBody, ContainerCreateResponse, DeviceMappin
 use bollard::query_parameters::{CreateContainerOptions, CreateContainerOptionsBuilder};
 
 use super::EngineConnector;
-use crate::config::SandboxConfig;
 pub use crate::config::SelinuxLabelMode;
+use crate::config::{AppConfig, SandboxConfig};
 use crate::error::{ConfigError, ContainerError, PodbotError};
 
 const DEV_FUSE_PATH: &str = "/dev/fuse";
@@ -124,6 +124,33 @@ impl CreateContainerRequest {
             env: None,
             security,
         })
+    }
+
+    /// Create a request from a resolved application configuration.
+    ///
+    /// This helper sources the image from `config.image` and security options
+    /// from `config.sandbox`.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use podbot::config::AppConfig;
+    /// use podbot::engine::CreateContainerRequest;
+    ///
+    /// let mut config = AppConfig::default();
+    /// config.image = Some(String::from("ghcr.io/example/sandbox:latest"));
+    ///
+    /// let request = CreateContainerRequest::from_app_config(&config);
+    /// assert!(request.is_ok());
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConfigError::MissingRequired` when `config.image` is missing,
+    /// empty, or whitespace-only.
+    pub fn from_app_config(config: &AppConfig) -> Result<Self, PodbotError> {
+        let security = ContainerSecurityOptions::from_sandbox_config(&config.sandbox);
+        Self::new(config.image.as_deref().unwrap_or_default(), security)
     }
 
     /// Attach an optional container name.
