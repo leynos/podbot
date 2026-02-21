@@ -3,6 +3,8 @@
 use std::sync::{Arc, Mutex};
 
 use bollard::query_parameters::UploadToContainerOptions;
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
 use mockall::mock;
 use podbot::engine::{
     ContainerUploader, CredentialUploadRequest, EngineConnector, UploadToContainerFuture,
@@ -147,13 +149,26 @@ fn write_credential_file(
     contents: &str,
 ) -> StepResult<()> {
     let host_home = ensure_host_home(state)?;
+    let host_home_dir =
+        Dir::open_ambient_dir(&host_home.path, ambient_authority()).map_err(|error| {
+            format!(
+                "failed to open host home directory '{}': {error}",
+                host_home.path
+            )
+        })?;
     let source_dir_path = host_home.path.join(source_directory);
-    std::fs::create_dir_all(source_dir_path.as_std_path()).map_err(|error| {
-        format!("failed to create credential source directory '{source_dir_path}': {error}")
+    host_home_dir
+        .create_dir_all(source_directory)
+        .map_err(|error| {
+            format!("failed to create credential source directory '{source_dir_path}': {error}")
+        })?;
+    let source_dir = host_home_dir.open_dir(source_directory).map_err(|error| {
+        format!("failed to open credential source directory '{source_dir_path}': {error}")
     })?;
 
     let file_path = source_dir_path.join(filename);
-    std::fs::write(file_path.as_std_path(), contents)
+    source_dir
+        .write(filename, contents)
         .map_err(|error| format!("failed to write credential file '{file_path}': {error}"))?;
 
     Ok(())

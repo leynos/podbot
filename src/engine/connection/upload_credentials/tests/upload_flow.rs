@@ -12,18 +12,15 @@ fn upload_credentials_uploads_selected_sources_and_reports_paths() {
     let (_tmp, host_home) = host_home_dir();
 
     let claude_dir = host_home.join(".claude");
-    create_dir(claude_dir.as_std_path());
+    create_dir(&claude_dir);
     write_file(
-        claude_dir.join("settings.json").as_std_path(),
+        &claude_dir.join("settings.json"),
         "{\"api_key\":\"claude\"}",
     );
 
     let codex_dir = host_home.join(".codex");
-    create_dir(codex_dir.as_std_path());
-    write_file(
-        codex_dir.join("auth.toml").as_std_path(),
-        "token = \"codex\"",
-    );
+    create_dir(&codex_dir);
+    write_file(&codex_dir.join("auth.toml"), "token = \"codex\"");
 
     let config = AppConfig {
         creds: CredsConfig {
@@ -71,12 +68,12 @@ fn upload_credentials_respects_copy_toggles(
     let (_tmp, host_home) = host_home_dir();
 
     let claude_dir = host_home.join(".claude");
-    create_dir(claude_dir.as_std_path());
-    write_file(claude_dir.join("settings.json").as_std_path(), "{}\n");
+    create_dir(&claude_dir);
+    write_file(&claude_dir.join("settings.json"), "{}\n");
 
     let codex_dir = host_home.join(".codex");
-    create_dir(codex_dir.as_std_path());
-    write_file(codex_dir.join("auth.toml").as_std_path(), "token = \"x\"\n");
+    create_dir(&codex_dir);
+    write_file(&codex_dir.join("auth.toml"), "token = \"x\"\n");
 
     let request = CredentialUploadRequest::new("container-456", host_home, copy_claude, copy_codex);
     let (uploader, captured) = successful_uploader();
@@ -120,11 +117,8 @@ fn upload_credentials_skips_missing_sources_without_error() {
     let (_tmp, host_home) = host_home_dir();
 
     let codex_dir = host_home.join(".codex");
-    create_dir(codex_dir.as_std_path());
-    write_file(
-        codex_dir.join("auth.toml").as_std_path(),
-        "token = \"codex\"",
-    );
+    create_dir(&codex_dir);
+    write_file(&codex_dir.join("auth.toml"), "token = \"codex\"");
 
     let request = CredentialUploadRequest::new("container-789", host_home, true, true);
     let (uploader, captured) = successful_uploader();
@@ -164,8 +158,8 @@ fn upload_credentials_maps_engine_failures_to_upload_failed() {
     let (_tmp, host_home) = host_home_dir();
 
     let claude_dir = host_home.join(".claude");
-    create_dir(claude_dir.as_std_path());
-    write_file(claude_dir.join("settings.json").as_std_path(), "{}\n");
+    create_dir(&claude_dir);
+    write_file(&claude_dir.join("settings.json"), "{}\n");
 
     let request = CredentialUploadRequest::new("container-failed", host_home, true, false);
     let (uploader, _) = failing_uploader(bollard::errors::Error::RequestTimeoutError);
@@ -192,7 +186,7 @@ fn upload_credentials_maps_engine_failures_to_upload_failed() {
 fn upload_credentials_errors_when_selected_source_is_not_directory() {
     let (_tmp, host_home) = host_home_dir();
 
-    write_file(host_home.join(".claude").as_std_path(), "not-a-directory");
+    write_file(&host_home.join(".claude"), "not-a-directory");
 
     let request = CredentialUploadRequest::new("container-invalid", host_home, true, false);
     let (uploader, captured) = successful_uploader();
@@ -213,6 +207,34 @@ fn upload_credentials_errors_when_selected_source_is_not_directory() {
                 && message.contains("exists but is not a directory")
         ),
         "expected upload-failed invalid-source mapping, got: {error:?}"
+    );
+    assert_eq!(captured_call(&captured).call_count, 0);
+}
+
+#[rstest]
+fn upload_credentials_errors_when_host_home_directory_cannot_be_opened() {
+    let (_tmp, host_home) = host_home_dir();
+    let missing_home = host_home.join("missing-home-directory");
+
+    let request = CredentialUploadRequest::new("container-missing-home", missing_home, true, true);
+    let (uploader, captured) = successful_uploader();
+
+    let error = runtime()
+        .block_on(EngineConnector::upload_credentials_async(
+            &uploader, &request,
+        ))
+        .expect_err("upload should fail when host home cannot be opened");
+
+    assert!(
+        matches!(
+            error,
+            PodbotError::Container(ContainerError::UploadFailed {
+                ref container_id,
+                ref message,
+            }) if container_id == "container-missing-home"
+                && message.contains("failed to open host home directory")
+        ),
+        "expected upload-failed host-home mapping, got: {error:?}"
     );
     assert_eq!(captured_call(&captured).call_count, 0);
 }

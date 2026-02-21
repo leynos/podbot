@@ -52,7 +52,7 @@ Required documentation outcomes for this task:
 - Use en-GB-oxendict spelling in documentation updates.
 - Validate with `make check-fmt`, `make lint`, and `make test`.
 - Because docs are updated, also run `make markdownlint`, `make fmt`, and
-  `make nixie` before finalising.
+  `make nixie` before finalizing.
 - Commit each logical change as an atomic commit, and gate each commit.
 
 ## Tolerances (exception triggers)
@@ -109,7 +109,7 @@ Required documentation outcomes for this task:
       `/tmp/markdownlint-podbot-2-3-1-agent-credentials.out`,
       `/tmp/fmt-podbot-2-3-1-agent-credentials.out`,
       `/tmp/nixie-podbot-2-3-1-agent-credentials.out`.
-- [x] (2026-02-21 UTC) Finalised outcomes and retrospective section.
+- [x] (2026-02-21 UTC) Finalized outcomes and retrospective section.
 
 ## Surprises and discoveries
 
@@ -127,7 +127,7 @@ Required documentation outcomes for this task:
   implementation moved forward in the branch. Rationale: preserve explicit
   approval boundaries for plan-first workflow. Date/Author: 2026-02-20 / Codex.
 - Decision: implementation will use an agent team with explicit file ownership
-  to keep changes parallelisable and avoid merge churn. Date/Author: 2026-02-20
+  to keep changes parallelizable and avoid merge churn. Date/Author: 2026-02-20
   / Codex.
 - Decision: canonical in-container credential targets are `/root/.claude` and
   `/root/.codex`, uploaded via Bollard `upload_to_container` with
@@ -168,7 +168,7 @@ Retrospective notes:
 
 - The uploader abstraction and archive helper split kept behavioural and unit
   coverage deterministic without daemon dependencies.
-- Formalising skip/no-op semantics removed ambiguity for mixed-agent host
+- Formalizing skip/no-op semantics removed ambiguity for mixed-agent host
   setups and made user-facing expectations clearer.
 
 ## Context and orientation
@@ -212,7 +212,7 @@ must not revert other agents' edits.
 
 ## Plan of work
 
-### Stage A: Finalise credential upload contract
+### Stage A: Finalize credential upload contract
 
 Define contract types and semantics before coding:
 

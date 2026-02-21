@@ -402,7 +402,7 @@ Verification notes:
    ```
 
 3. Compare permission bits for a representative file between host and
-   container, for example with `stat` on each side.
+   container, for example, with `stat` on each side.
 
 ## Security model
 

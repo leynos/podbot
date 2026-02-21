@@ -10,6 +10,9 @@ use tar::{Builder, EntryType, Header};
 const DEFAULT_DIRECTORY_MODE: u32 = 0o755;
 const DEFAULT_FILE_MODE: u32 = 0o644;
 
+/// Build an in-memory tar archive containing selected credential directories.
+///
+/// Directory and file entries preserve source mode bits where available.
 pub(super) fn build_tar_archive(
     host_home_dir: &Dir,
     source_directory_names: &[&str],
@@ -49,6 +52,14 @@ fn append_directory_contents(
             EntryKind::File => {
                 append_file_header(builder, current_dir, &entry.file_name, &entry_relative_path)?;
             }
+            EntryKind::Symlink => {
+                append_symlink_header(
+                    builder,
+                    current_dir,
+                    &entry.file_name,
+                    &entry_relative_path,
+                )?;
+            }
             EntryKind::Other => {}
         }
     }
@@ -60,6 +71,7 @@ fn append_directory_contents(
 enum EntryKind {
     Directory,
     File,
+    Symlink,
     Other,
 }
 
@@ -76,14 +88,11 @@ fn sorted_entries(directory: &Dir) -> io::Result<Vec<SortedEntry>> {
         let entry = entry_result?;
         let file_name = entry.file_name()?;
         let file_type = entry.file_type()?;
-
-        let entry_kind = if file_type.is_dir() {
-            EntryKind::Directory
-        } else if file_type.is_file() {
-            EntryKind::File
-        } else {
-            EntryKind::Other
-        };
+        let entry_kind = classify_entry_kind(
+            file_type.is_dir(),
+            file_type.is_file(),
+            file_type.is_symlink(),
+        );
 
         entries.push(SortedEntry {
             file_name,
@@ -93,6 +102,22 @@ fn sorted_entries(directory: &Dir) -> io::Result<Vec<SortedEntry>> {
 
     entries.sort_unstable_by(|left, right| left.file_name.cmp(&right.file_name));
     Ok(entries)
+}
+
+const fn classify_entry_kind(is_directory: bool, is_file: bool, is_symlink: bool) -> EntryKind {
+    if is_directory {
+        return EntryKind::Directory;
+    }
+
+    if is_file {
+        return EntryKind::File;
+    }
+
+    if is_symlink {
+        return EntryKind::Symlink;
+    }
+
+    EntryKind::Other
 }
 
 fn append_directory_header(
@@ -129,7 +154,25 @@ fn append_file_header(
     builder.append_data(&mut header, path, &mut file)
 }
 
-fn normalize_archive_path(path: &Utf8Path) -> String {
+fn append_symlink_header(
+    builder: &mut Builder<Vec<u8>>,
+    parent_dir: &Dir,
+    file_name: &str,
+    relative_path: &Utf8Path,
+) -> io::Result<()> {
+    let metadata = parent_dir.symlink_metadata(file_name)?;
+    let target = parent_dir.read_link_contents(file_name)?;
+    let mut header = Header::new_gnu();
+    header.set_entry_type(EntryType::Symlink);
+    header.set_size(0);
+    header.set_mode(metadata_mode(&metadata, DEFAULT_FILE_MODE));
+
+    let path = normalize_archive_path(relative_path);
+    let normalized_target = normalize_archive_path(target.as_path());
+    builder.append_link(&mut header, path, normalized_target)
+}
+
+pub(super) fn normalize_archive_path(path: &Utf8Path) -> String {
     path.as_str().replace('\\', "/")
 }
 

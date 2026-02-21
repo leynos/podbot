@@ -94,7 +94,7 @@ Credential injection is implemented by
 - When no selected source is present (including when both toggles are
   disabled), credential injection is a successful no-op and no daemon upload is
   attempted.
-- Tar headers preserve permission mode metadata from the source filesystem so
+- Tar headers preserve permission mode metadata from the source filesystem, so
   credential files retain readable permissions expected by agent binaries.
 - The result reports expected in-container credential paths in deterministic
   order (`/root/.claude` then `/root/.codex`) for families that were both

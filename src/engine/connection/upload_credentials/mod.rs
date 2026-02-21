@@ -19,6 +19,8 @@ use super::EngineConnector;
 use crate::config::AppConfig;
 use crate::error::{ContainerError, PodbotError};
 use archive::build_tar_archive;
+#[cfg(test)]
+use archive::normalize_archive_path;
 
 const CONTAINER_HOME_DIR: &str = "/root";
 const CLAUDE_CREDENTIAL_DIR: &str = ".claude";
@@ -152,25 +154,6 @@ struct CredentialUploadPlan {
     expected_container_paths: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct CredentialSource {
-    directory_name: &'static str,
-}
-
-impl CredentialSource {
-    const CLAUDE: Self = Self {
-        directory_name: CLAUDE_CREDENTIAL_DIR,
-    };
-
-    const CODEX: Self = Self {
-        directory_name: CODEX_CREDENTIAL_DIR,
-    };
-
-    fn container_path(self) -> String {
-        format!("{CONTAINER_HOME_DIR}/{}", self.directory_name)
-    }
-}
-
 impl EngineConnector {
     /// Upload selected host credentials into a container (async version).
     ///
@@ -186,8 +169,13 @@ impl EngineConnector {
         uploader: &U,
         request: &CredentialUploadRequest,
     ) -> Result<CredentialUploadResult, PodbotError> {
-        let plan = build_upload_plan(request)
-            .map_err(|error| map_upload_error(request.container_id(), error.to_string()))?;
+        let container_id = request.container_id().to_owned();
+        let plan = build_upload_plan(request).map_err(|error| {
+            PodbotError::from(ContainerError::UploadFailed {
+                container_id: container_id.clone(),
+                message: error.to_string(),
+            })
+        })?;
 
         let CredentialUploadPlan {
             archive_bytes,
@@ -201,13 +189,14 @@ impl EngineConnector {
         }
 
         uploader
-            .upload_to_container(
-                request.container_id(),
-                Some(build_upload_options()),
-                archive_bytes,
-            )
+            .upload_to_container(&container_id, Some(build_upload_options()), archive_bytes)
             .await
-            .map_err(|error| map_upload_error(request.container_id(), error.to_string()))?;
+            .map_err(|error| {
+                PodbotError::from(ContainerError::UploadFailed {
+                    container_id: container_id.clone(),
+                    message: error.to_string(),
+                })
+            })?;
 
         Ok(CredentialUploadResult {
             expected_container_paths,
@@ -241,84 +230,55 @@ fn build_upload_plan(request: &CredentialUploadRequest) -> io::Result<Credential
             ))
         })?;
 
-    let sources = selected_sources(&host_home_dir, request)?;
-    if sources.is_empty() {
+    let mut source_directory_names = Vec::new();
+    let mut expected_container_paths = Vec::new();
+
+    for (is_enabled, directory_name) in [
+        (request.copy_claude, CLAUDE_CREDENTIAL_DIR),
+        (request.copy_codex, CODEX_CREDENTIAL_DIR),
+    ] {
+        if !is_enabled {
+            continue;
+        }
+
+        match host_home_dir.metadata(directory_name) {
+            Ok(metadata) if metadata.is_dir() => {
+                source_directory_names.push(directory_name);
+                expected_container_paths.push(format!("{CONTAINER_HOME_DIR}/{directory_name}"));
+            }
+            Ok(_) => {
+                return Err(io::Error::other(format!(
+                    "credential source '{directory_name}' exists but is not a directory"
+                )));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "failed to inspect credential source '{directory_name}': {error}"
+                )));
+            }
+        }
+    }
+
+    if source_directory_names.is_empty() {
         return Ok(CredentialUploadPlan {
             archive_bytes: vec![],
             expected_container_paths: vec![],
         });
     }
 
+    let archive_bytes = build_tar_archive(&host_home_dir, &source_directory_names)?;
+
     Ok(CredentialUploadPlan {
-        archive_bytes: build_tar_archive(
-            &host_home_dir,
-            &sources
-                .iter()
-                .map(|source| source.directory_name)
-                .collect::<Vec<_>>(),
-        )?,
-        expected_container_paths: sources
-            .iter()
-            .map(|source| source.container_path())
-            .collect(),
+        archive_bytes,
+        expected_container_paths,
     })
-}
-
-fn selected_sources(
-    host_home_dir: &Dir,
-    request: &CredentialUploadRequest,
-) -> io::Result<Vec<CredentialSource>> {
-    let mut sources = vec![];
-
-    for source in requested_sources(request) {
-        if source_is_present(host_home_dir, source)? {
-            sources.push(source);
-        }
-    }
-
-    Ok(sources)
-}
-
-fn requested_sources(request: &CredentialUploadRequest) -> Vec<CredentialSource> {
-    let mut sources = vec![];
-
-    if request.copy_claude {
-        sources.push(CredentialSource::CLAUDE);
-    }
-
-    if request.copy_codex {
-        sources.push(CredentialSource::CODEX);
-    }
-
-    sources
-}
-
-fn source_is_present(host_home_dir: &Dir, source: CredentialSource) -> io::Result<bool> {
-    match host_home_dir.metadata(source.directory_name) {
-        Ok(metadata) if metadata.is_dir() => Ok(true),
-        Ok(_) => Err(io::Error::other(format!(
-            "credential source '{}' exists but is not a directory",
-            source.directory_name
-        ))),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(io::Error::other(format!(
-            "failed to inspect credential source '{}': {error}",
-            source.directory_name
-        ))),
-    }
 }
 
 fn build_upload_options() -> UploadToContainerOptions {
     UploadToContainerOptionsBuilder::default()
         .path(CONTAINER_HOME_DIR)
         .build()
-}
-
-fn map_upload_error(container_id: &str, message: String) -> PodbotError {
-    PodbotError::from(ContainerError::UploadFailed {
-        container_id: String::from(container_id),
-        message,
-    })
 }
 
 #[cfg(test)]

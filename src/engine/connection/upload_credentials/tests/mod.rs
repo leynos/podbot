@@ -4,10 +4,12 @@ mod tar_archive;
 mod upload_flow;
 
 use std::io;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use bollard::query_parameters::UploadToContainerOptions;
+use camino::Utf8Path;
+use cap_std::ambient_authority;
+use cap_std::fs_utf8::Dir;
 use mockall::mock;
 use tempfile::TempDir;
 
@@ -99,24 +101,45 @@ fn host_home_dir() -> (TempDir, Utf8PathBuf) {
     (temp_dir, utf8_path)
 }
 
-fn create_dir(path: &Path) {
-    std::fs::create_dir_all(path).expect("directory creation should succeed");
+fn create_dir(path: &Utf8Path) {
+    Dir::create_ambient_dir_all(path, ambient_authority())
+        .expect("directory creation should succeed");
 }
 
-fn write_file(path: &Path, contents: &str) {
-    std::fs::write(path, contents).expect("file write should succeed");
+fn write_file(path: &Utf8Path, contents: &str) {
+    let parent = path
+        .parent()
+        .expect("file path should include a parent directory");
+    let file_name = path
+        .file_name()
+        .expect("file path should include a file name");
+    let parent_dir = Dir::open_ambient_dir(parent, ambient_authority())
+        .expect("parent directory should be openable");
+    parent_dir
+        .write(file_name, contents)
+        .expect("file write should succeed");
 }
 
 #[cfg(unix)]
-fn set_mode(path: &Path, mode: u32) {
-    use std::os::unix::fs::PermissionsExt;
+fn set_mode(path: &Utf8Path, mode: u32) {
+    use cap_std::fs::PermissionsExt;
 
-    let permissions = std::fs::Permissions::from_mode(mode);
-    std::fs::set_permissions(path, permissions).expect("setting permissions should succeed");
+    let parent = path
+        .parent()
+        .expect("path should include a parent directory");
+    let file_name = path
+        .file_name()
+        .expect("path should include a final component");
+    let parent_dir = Dir::open_ambient_dir(parent, ambient_authority())
+        .expect("parent directory should be openable");
+    let permissions = cap_std::fs::Permissions::from_mode(mode);
+    parent_dir
+        .set_permissions(file_name, permissions)
+        .expect("setting permissions should succeed");
 }
 
 #[cfg(not(unix))]
-fn set_mode(_path: &Path, _mode: u32) {}
+fn set_mode(_path: &Utf8Path, _mode: u32) {}
 
 fn io_error(message: impl Into<String>) -> io::Error {
     io::Error::other(message.into())
