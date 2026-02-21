@@ -82,64 +82,85 @@ fn failing_uploader(
     uploader_with_result(Err(error))
 }
 
-fn captured_call(captured: &Arc<Mutex<CapturedUploadCall>>) -> CapturedUploadCall {
+fn captured_call(captured: &Arc<Mutex<CapturedUploadCall>>) -> io::Result<CapturedUploadCall> {
     captured
         .lock()
-        .expect("capture lock should succeed")
-        .clone()
+        .map_err(|_| io_error("capture lock should succeed"))
+        .map(|captured_call| captured_call.clone())
 }
 
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Runtime::new().expect("runtime creation should succeed")
+fn runtime() -> io::Result<tokio::runtime::Runtime> {
+    tokio::runtime::Runtime::new()
+        .map_err(|error| io_error(format!("runtime creation failed: {error}")))
 }
 
-fn host_home_dir() -> (TempDir, Utf8PathBuf) {
-    let temp_dir = tempfile::tempdir().expect("tempdir creation should succeed");
-    let utf8_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
-        .expect("tempdir path should be valid UTF-8");
+fn host_home_dir() -> io::Result<(TempDir, Utf8PathBuf)> {
+    let temp_dir = tempfile::tempdir()
+        .map_err(|error| io_error(format!("tempdir creation failed: {error}")))?;
+    let utf8_path = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).map_err(|path| {
+        io_error(format!(
+            "tempdir path should be valid UTF-8: {}",
+            path.display()
+        ))
+    })?;
 
-    (temp_dir, utf8_path)
+    Ok((temp_dir, utf8_path))
 }
 
-fn create_dir(path: &Utf8Path) {
-    Dir::create_ambient_dir_all(path, ambient_authority())
-        .expect("directory creation should succeed");
+fn create_dir(path: &Utf8Path) -> io::Result<()> {
+    Dir::create_ambient_dir_all(path, ambient_authority()).map_err(|error| {
+        io_error(format!(
+            "directory creation should succeed for '{path}': {error}"
+        ))
+    })
 }
 
-fn write_file(path: &Utf8Path, contents: &str) {
+fn write_file(path: &Utf8Path, contents: &str) -> io::Result<()> {
     let parent = path
         .parent()
-        .expect("file path should include a parent directory");
+        .ok_or_else(|| io_error("file path should include a parent directory"))?;
     let file_name = path
         .file_name()
-        .expect("file path should include a file name");
-    let parent_dir = Dir::open_ambient_dir(parent, ambient_authority())
-        .expect("parent directory should be openable");
+        .ok_or_else(|| io_error("file path should include a file name"))?;
+    let parent_dir = Dir::open_ambient_dir(parent, ambient_authority()).map_err(|error| {
+        io_error(format!(
+            "parent directory should be openable for '{parent}': {error}"
+        ))
+    })?;
     parent_dir
         .write(file_name, contents)
-        .expect("file write should succeed");
+        .map_err(|error| io_error(format!("file write should succeed for '{path}': {error}")))
 }
 
 #[cfg(unix)]
-fn set_mode(path: &Utf8Path, mode: u32) {
+fn set_mode(path: &Utf8Path, mode: u32) -> io::Result<()> {
     use cap_std::fs::PermissionsExt;
 
     let parent = path
         .parent()
-        .expect("path should include a parent directory");
+        .ok_or_else(|| io_error("path should include a parent directory"))?;
     let file_name = path
         .file_name()
-        .expect("path should include a final component");
-    let parent_dir = Dir::open_ambient_dir(parent, ambient_authority())
-        .expect("parent directory should be openable");
+        .ok_or_else(|| io_error("path should include a final component"))?;
+    let parent_dir = Dir::open_ambient_dir(parent, ambient_authority()).map_err(|error| {
+        io_error(format!(
+            "parent directory should be openable for '{parent}': {error}"
+        ))
+    })?;
     let permissions = cap_std::fs::Permissions::from_mode(mode);
     parent_dir
         .set_permissions(file_name, permissions)
-        .expect("setting permissions should succeed");
+        .map_err(|error| {
+            io_error(format!(
+                "setting permissions should succeed for '{path}': {error}"
+            ))
+        })
 }
 
 #[cfg(not(unix))]
-fn set_mode(_path: &Utf8Path, _mode: u32) {}
+fn set_mode(_path: &Utf8Path, _mode: u32) -> io::Result<()> {
+    Ok(())
+}
 
 fn io_error(message: impl Into<String>) -> io::Error {
     io::Error::other(message.into())

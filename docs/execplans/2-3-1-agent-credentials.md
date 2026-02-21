@@ -138,9 +138,12 @@ Required documentation outcomes for this task:
   sending an upload request. Rationale: support hosts configured for one agent
   while keeping defaults enabled for both toggles. Date/Author: 2026-02-21 /
   Codex.
-- Decision: upload-path errors (tar build or daemon upload) map to
-  `ContainerError::UploadFailed`. Rationale: preserve semantic error handling
-  with container-context diagnostics. Date/Author: 2026-02-21 / Codex.
+- Decision: host-side credential selection and tar-build failures map to
+  `FilesystemError::IoError`, while daemon transfer failures map to
+  `ContainerError::UploadFailed`. Rationale: callers can distinguish local
+  filesystem faults from remote upload faults while preserving
+  container-context diagnostics for daemon errors. Date/Author: 2026-02-21 /
+  Codex.
 - Decision: tar entries preserve source permission metadata for files and
   directories. Rationale: avoid credential-read regressions caused by
   permission drift. Date/Author: 2026-02-21 / Codex.
@@ -156,7 +159,8 @@ Step 2.3.1 implementation outcomes:
 - Upload results report expected in-container paths for selected and present
   credential families.
 - Tar archive entries preserve source permission metadata.
-- Upload failures are mapped to `ContainerError::UploadFailed`.
+- Local preparation failures are mapped to `FilesystemError::IoError`, while
+  daemon transfer failures are mapped to `ContainerError::UploadFailed`.
 
 Verification outcomes recorded in this docs-owner slice:
 
@@ -194,7 +198,7 @@ Current relevant files:
 
 ## Agent team and ownership
 
-Implementation will use a three-agent team plus integrator:
+Implementation will use a three-agent team plus an integrator:
 
 - Agent A (engine upload core): owns `src/engine/connection/*` credential upload
   module, uploader trait abstraction, tar archive construction, and error
@@ -219,8 +223,9 @@ Define contract types and semantics before coding:
 - input: resolved `AppConfig.creds`, host home directory, and target container
   identifier;
 - output: deterministic set of upload operations (0, 1, or 2);
-- error mapping: engine upload failures map to `ContainerError::UploadFailed`
-  with the target container ID.
+- error mapping: local selection/archive failures map to
+  `FilesystemError::IoError`; engine upload failures map to
+  `ContainerError::UploadFailed` with the target container ID.
 
 Lock missing-source semantics per credential directory (skip vs fail) and
 document rationale.

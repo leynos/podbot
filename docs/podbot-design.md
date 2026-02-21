@@ -100,7 +100,8 @@ Credential injection is implemented by
   order (`/root/.claude` then `/root/.codex`) for families that were both
   selected and present.
 
-Archive construction failures and Bollard `upload_to_container` failures are
+Host-side credential selection and archive construction failures are mapped to
+`FilesystemError::IoError`, while Bollard `upload_to_container` failures are
 mapped to `ContainerError::UploadFailed` with the target `container_id`.
 
 ## Security model

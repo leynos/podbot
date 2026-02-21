@@ -173,6 +173,9 @@ fn new_entry_header(entry_type: EntryType, size: u64, mode: u32) -> Header {
     header
 }
 
+/// Normalize archive entry paths to forward-slash separators.
+///
+/// Tar archives use `/` as the path separator, including on Windows hosts.
 pub(super) fn normalize_archive_path(path: &Utf8Path) -> String {
     path.as_str().replace('\\', "/")
 }

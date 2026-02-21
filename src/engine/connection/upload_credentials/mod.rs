@@ -17,7 +17,7 @@ mod archive;
 
 use super::EngineConnector;
 use crate::config::AppConfig;
-use crate::error::{ContainerError, PodbotError};
+use crate::error::{ContainerError, FilesystemError, PodbotError};
 use archive::build_tar_archive;
 #[cfg(test)]
 use archive::normalize_archive_path;
@@ -128,6 +128,23 @@ impl CredentialUploadRequest {
     pub fn container_id(&self) -> &str {
         &self.container_id
     }
+
+    /// Open the configured host home directory as a capability-oriented handle.
+    ///
+    /// This handle can be reused across multiple upload calls to avoid repeated
+    /// ambient directory opens.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `io::Error` when the host home directory cannot be opened.
+    pub fn open_host_home_dir(&self) -> io::Result<Dir> {
+        Dir::open_ambient_dir(&self.host_home_dir, ambient_authority()).map_err(|error| {
+            io::Error::other(format!(
+                "failed to open host home directory '{}': {error}",
+                self.host_home_dir
+            ))
+        })
+    }
 }
 
 /// Result of a credential upload operation.
@@ -169,19 +186,36 @@ impl EngineConnector {
     ///
     /// # Errors
     ///
-    /// Returns `ContainerError::UploadFailed` when archive construction or
+    /// Returns `FilesystemError::IoError` when host-side credential selection or
+    /// archive construction fails, and `ContainerError::UploadFailed` when the
     /// daemon upload fails.
     pub async fn upload_credentials_async<U: ContainerUploader>(
         uploader: &U,
         request: &CredentialUploadRequest,
     ) -> Result<CredentialUploadResult, PodbotError> {
+        let host_home_dir = request
+            .open_host_home_dir()
+            .map_err(|error| map_local_upload_error(request, &error))?;
+
+        Self::upload_credentials_with_host_home_dir_async(uploader, request, &host_home_dir).await
+    }
+
+    /// Upload selected host credentials into a container (async version),
+    /// using a pre-opened host home directory capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FilesystemError::IoError` when host-side credential selection or
+    /// archive construction fails, and `ContainerError::UploadFailed` when the
+    /// daemon upload fails.
+    pub async fn upload_credentials_with_host_home_dir_async<U: ContainerUploader>(
+        uploader: &U,
+        request: &CredentialUploadRequest,
+        host_home_dir: &Dir,
+    ) -> Result<CredentialUploadResult, PodbotError> {
         let container_id = request.container_id().to_owned();
-        let plan = build_upload_plan(request).map_err(|error| {
-            PodbotError::from(ContainerError::UploadFailed {
-                container_id: container_id.clone(),
-                message: error.to_string(),
-            })
-        })?;
+        let plan = build_upload_plan(host_home_dir, request)
+            .map_err(|error| map_local_upload_error(request, &error))?;
 
         let CredentialUploadPlan {
             archive_bytes,
@@ -216,7 +250,8 @@ impl EngineConnector {
     ///
     /// # Errors
     ///
-    /// Returns `ContainerError::UploadFailed` when archive construction or
+    /// Returns `FilesystemError::IoError` when host-side credential selection or
+    /// archive construction fails, and `ContainerError::UploadFailed` when the
     /// daemon upload fails.
     pub fn upload_credentials<U: ContainerUploader>(
         runtime: &tokio::runtime::Handle,
@@ -225,43 +260,76 @@ impl EngineConnector {
     ) -> Result<CredentialUploadResult, PodbotError> {
         runtime.block_on(Self::upload_credentials_async(uploader, request))
     }
-}
 
-fn build_upload_plan(request: &CredentialUploadRequest) -> io::Result<CredentialUploadPlan> {
-    let host_home_dir = open_host_home_dir(request)?;
-    let selected_sources = select_sources(&host_home_dir, request)?;
-    build_plan_from_selected_sources(&host_home_dir, selected_sources)
-}
-
-fn open_host_home_dir(request: &CredentialUploadRequest) -> io::Result<Dir> {
-    Dir::open_ambient_dir(&request.host_home_dir, ambient_authority()).map_err(|error| {
-        io::Error::other(format!(
-            "failed to open host home directory '{}': {error}",
-            request.host_home_dir
+    /// Upload selected host credentials into a container, using a pre-opened
+    /// host home directory capability.
+    ///
+    /// This synchronous helper blocks on
+    /// [`Self::upload_credentials_with_host_home_dir_async`] via a
+    /// caller-provided Tokio runtime handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns `FilesystemError::IoError` when host-side credential selection or
+    /// archive construction fails, and `ContainerError::UploadFailed` when the
+    /// daemon upload fails.
+    pub fn upload_credentials_with_host_home_dir<U: ContainerUploader>(
+        runtime: &tokio::runtime::Handle,
+        uploader: &U,
+        request: &CredentialUploadRequest,
+        host_home_dir: &Dir,
+    ) -> Result<CredentialUploadResult, PodbotError> {
+        runtime.block_on(Self::upload_credentials_with_host_home_dir_async(
+            uploader,
+            request,
+            host_home_dir,
         ))
-    })
+    }
 }
 
-fn select_sources(
+fn build_upload_plan(
     host_home_dir: &Dir,
     request: &CredentialUploadRequest,
-) -> io::Result<SelectedSources> {
+) -> io::Result<CredentialUploadPlan> {
     let mut selected_sources = SelectedSources::default();
 
-    include_selected_source(
-        host_home_dir,
-        request.copy_claude,
-        CLAUDE_CREDENTIAL_DIR,
-        &mut selected_sources,
-    )?;
-    include_selected_source(
-        host_home_dir,
-        request.copy_codex,
-        CODEX_CREDENTIAL_DIR,
-        &mut selected_sources,
-    )?;
+    for (is_enabled, directory_name) in [
+        (request.copy_claude, CLAUDE_CREDENTIAL_DIR),
+        (request.copy_codex, CODEX_CREDENTIAL_DIR),
+    ] {
+        if !is_enabled {
+            continue;
+        }
 
-    Ok(selected_sources)
+        match host_home_dir.metadata(directory_name) {
+            Ok(metadata) if metadata.is_dir() => {
+                selected_sources.source_directory_names.push(directory_name);
+                selected_sources
+                    .expected_container_paths
+                    .push(format!("{CONTAINER_HOME_DIR}/{directory_name}"));
+            }
+            Ok(_) => {
+                return Err(io::Error::other(format!(
+                    "credential source '{directory_name}' exists but is not a directory"
+                )));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "failed to inspect credential source '{directory_name}': {error}"
+                )));
+            }
+        }
+    }
+
+    build_plan_from_selected_sources(host_home_dir, selected_sources)
+}
+
+fn map_local_upload_error(request: &CredentialUploadRequest, error: &io::Error) -> PodbotError {
+    PodbotError::from(FilesystemError::IoError {
+        path: request.host_home_dir.as_std_path().to_path_buf(),
+        message: error.to_string(),
+    })
 }
 
 fn build_plan_from_selected_sources(
@@ -281,34 +349,6 @@ fn build_plan_from_selected_sources(
         archive_bytes,
         expected_container_paths: selected_sources.expected_container_paths,
     })
-}
-
-fn include_selected_source(
-    host_home_dir: &Dir,
-    is_enabled: bool,
-    directory_name: &'static str,
-    selected_sources: &mut SelectedSources,
-) -> io::Result<()> {
-    if !is_enabled {
-        return Ok(());
-    }
-
-    match host_home_dir.metadata(directory_name) {
-        Ok(metadata) if metadata.is_dir() => {
-            selected_sources.source_directory_names.push(directory_name);
-            selected_sources
-                .expected_container_paths
-                .push(format!("{CONTAINER_HOME_DIR}/{directory_name}"));
-            Ok(())
-        }
-        Ok(_) => Err(io::Error::other(format!(
-            "credential source '{directory_name}' exists but is not a directory"
-        ))),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(io::Error::other(format!(
-            "failed to inspect credential source '{directory_name}': {error}"
-        ))),
-    }
 }
 
 fn build_upload_options() -> UploadToContainerOptions {

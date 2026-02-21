@@ -381,8 +381,9 @@ filesystem using a tar upload to `/root`.
 - Selected directories that are missing are skipped.
 - If nothing is selected or present, credential injection succeeds as a no-op
   and no upload request is sent.
-- Upload or archive-build failures are reported as
-  `ContainerError::UploadFailed`.
+- Host-side selection or archive-build failures are reported as
+  `FilesystemError::IoError`.
+- Daemon upload failures are reported as `ContainerError::UploadFailed`.
 
 When credentials are uploaded, expected container paths are:
 

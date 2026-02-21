@@ -9,6 +9,7 @@ use tar::EntryType;
 
 use super::*;
 
+/// Parsed tar entry metadata used by archive assertions in tests.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct TarEntry {
     pub(super) path: String,
@@ -19,26 +20,26 @@ pub(super) struct TarEntry {
 #[rstest]
 #[cfg(unix)]
 fn tar_archive_preserves_directory_and_file_permissions() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir();
+    let (_tmp, host_home) = host_home_dir()?;
 
     let claude_dir = host_home.join(".claude");
-    create_dir(&claude_dir);
-    set_mode(&claude_dir, 0o700);
+    create_dir(&claude_dir)?;
+    set_mode(&claude_dir, 0o700)?;
 
     let credentials_path = claude_dir.join("credentials.json");
-    write_file(&credentials_path, "{\"token\":\"abc\"}\n");
-    set_mode(&credentials_path, 0o600);
+    write_file(&credentials_path, "{\"token\":\"abc\"}\n")?;
+    set_mode(&credentials_path, 0o600)?;
 
     let request = CredentialUploadRequest::new("container-perms", host_home, true, false);
     let (uploader, captured) = successful_uploader();
 
-    runtime()
+    runtime()?
         .block_on(EngineConnector::upload_credentials_async(
             &uploader, &request,
         ))
         .map_err(|error| io_error(format!("upload should succeed: {error}")))?;
 
-    let captured_call = captured_call(&captured);
+    let captured_call = captured_call(&captured)?;
     let entries = parse_archive_entries(&captured_call.archive_bytes)?;
 
     let claude_dir_entry = entries
@@ -70,12 +71,12 @@ fn tar_archive_preserves_directory_and_file_permissions() -> std::io::Result<()>
 #[rstest]
 #[cfg(unix)]
 fn tar_archive_preserves_symlink_entries() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir();
+    let (_tmp, host_home) = host_home_dir()?;
     let host_home_dir = Dir::open_ambient_dir(&host_home, ambient_authority())?;
 
     let claude_dir = host_home.join(".claude");
-    create_dir(&claude_dir);
-    write_file(&claude_dir.join("target.toml"), "token = \"abc\"\n");
+    create_dir(&claude_dir)?;
+    write_file(&claude_dir.join("target.toml"), "token = \"abc\"\n")?;
 
     let source_dir = host_home_dir.open_dir(".claude")?;
     source_dir.symlink("target.toml", "linked.toml")?;
@@ -83,13 +84,13 @@ fn tar_archive_preserves_symlink_entries() -> std::io::Result<()> {
     let request = CredentialUploadRequest::new("container-symlink", host_home, true, false);
     let (uploader, captured) = successful_uploader();
 
-    runtime()
+    runtime()?
         .block_on(EngineConnector::upload_credentials_async(
             &uploader, &request,
         ))
         .map_err(|error| io_error(format!("upload should succeed: {error}")))?;
 
-    let captured_call = captured_call(&captured);
+    let captured_call = captured_call(&captured)?;
     let entries = parse_archive_entries(&captured_call.archive_bytes)?;
     let symlink_entry = entries
         .iter()
@@ -123,6 +124,7 @@ fn normalize_archive_path_uses_forward_slashes_on_windows_paths() {
     assert_eq!(archive_path, ".claude/subdir/credentials.json");
 }
 
+/// Parse archive bytes into comparable entry records for test assertions.
 pub(super) fn parse_archive_entries(archive_bytes: &[u8]) -> std::io::Result<Vec<TarEntry>> {
     let mut archive = tar::Archive::new(Cursor::new(archive_bytes));
     let mut entries = vec![];
