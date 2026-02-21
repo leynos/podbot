@@ -39,29 +39,30 @@ impl MockCaptureState {
     }
 }
 
-#[given("host has Claude credentials")]
-fn host_has_claude_credentials(
-    credential_injection_state: &CredentialInjectionState,
-) -> StepResult<()> {
-    write_credential_file(
-        credential_injection_state,
-        ".claude",
-        "settings.json",
-        "{\"api_key\":\"claude\"}\n",
-    )
+macro_rules! credential_step {
+    ($fn_name:ident, $desc:literal, $dir:literal, $file:literal, $content:literal) => {
+        #[given($desc)]
+        fn $fn_name(credential_injection_state: &CredentialInjectionState) -> StepResult<()> {
+            write_credential_file(credential_injection_state, $dir, $file, $content)
+        }
+    };
 }
 
-#[given("host has Codex credentials")]
-fn host_has_codex_credentials(
-    credential_injection_state: &CredentialInjectionState,
-) -> StepResult<()> {
-    write_credential_file(
-        credential_injection_state,
-        ".codex",
-        "auth.toml",
-        "token = \"codex\"\n",
-    )
-}
+credential_step!(
+    host_has_claude_credentials,
+    "host has Claude credentials",
+    ".claude",
+    "settings.json",
+    "{\"api_key\":\"claude\"}\n"
+);
+
+credential_step!(
+    host_has_codex_credentials,
+    "host has Codex credentials",
+    ".codex",
+    "auth.toml",
+    "token = \"codex\"\n"
+);
 
 #[given("copy_claude toggle is enabled")]
 fn copy_claude_toggle_is_enabled(credential_injection_state: &CredentialInjectionState) {
