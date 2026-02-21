@@ -57,9 +57,11 @@ where
             }) if path == &expected_path && message.contains(expectation.expected_message_substring)
         ),
         format!(
-            "expected filesystem error with path={expected_path:?} and message containing \
-             '{}', got: {error:?}",
-            expectation.expected_message_substring
+            concat!(
+                "expected filesystem error with path={:?} ",
+                "and message containing '{}', got: {:?}"
+            ),
+            expected_path, expectation.expected_message_substring, error
         ),
     )?;
     ensure(

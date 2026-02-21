@@ -11,6 +11,7 @@ use camino::Utf8Path;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use mockall::mock;
+use rstest::fixture;
 use tempfile::TempDir;
 
 use super::*;
@@ -89,11 +90,13 @@ fn captured_call(captured: &Arc<Mutex<CapturedUploadCall>>) -> io::Result<Captur
         .map(|captured_call| captured_call.clone())
 }
 
+#[fixture]
 fn runtime() -> io::Result<tokio::runtime::Runtime> {
     tokio::runtime::Runtime::new()
         .map_err(|error| io_error(format!("runtime creation failed: {error}")))
 }
 
+#[fixture]
 fn host_home_dir() -> io::Result<(TempDir, Utf8PathBuf)> {
     let temp_dir = tempfile::tempdir()
         .map_err(|error| io_error(format!("tempdir creation failed: {error}")))?;
