@@ -154,6 +154,12 @@ struct CredentialUploadPlan {
     expected_container_paths: Vec<String>,
 }
 
+#[derive(Debug, Default)]
+struct SelectedSources {
+    source_directory_names: Vec<&'static str>,
+    expected_container_paths: Vec<String>,
+}
+
 impl EngineConnector {
     /// Upload selected host credentials into a container (async version).
     ///
@@ -230,49 +236,63 @@ fn build_upload_plan(request: &CredentialUploadRequest) -> io::Result<Credential
             ))
         })?;
 
-    let mut source_directory_names = Vec::new();
-    let mut expected_container_paths = Vec::new();
+    let mut selected_sources = SelectedSources::default();
 
-    for (is_enabled, directory_name) in [
-        (request.copy_claude, CLAUDE_CREDENTIAL_DIR),
-        (request.copy_codex, CODEX_CREDENTIAL_DIR),
-    ] {
-        if !is_enabled {
-            continue;
-        }
+    include_selected_source(
+        &host_home_dir,
+        request.copy_claude,
+        CLAUDE_CREDENTIAL_DIR,
+        &mut selected_sources,
+    )?;
+    include_selected_source(
+        &host_home_dir,
+        request.copy_codex,
+        CODEX_CREDENTIAL_DIR,
+        &mut selected_sources,
+    )?;
 
-        match host_home_dir.metadata(directory_name) {
-            Ok(metadata) if metadata.is_dir() => {
-                source_directory_names.push(directory_name);
-                expected_container_paths.push(format!("{CONTAINER_HOME_DIR}/{directory_name}"));
-            }
-            Ok(_) => {
-                return Err(io::Error::other(format!(
-                    "credential source '{directory_name}' exists but is not a directory"
-                )));
-            }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(io::Error::other(format!(
-                    "failed to inspect credential source '{directory_name}': {error}"
-                )));
-            }
-        }
-    }
-
-    if source_directory_names.is_empty() {
+    if selected_sources.source_directory_names.is_empty() {
         return Ok(CredentialUploadPlan {
             archive_bytes: vec![],
             expected_container_paths: vec![],
         });
     }
 
-    let archive_bytes = build_tar_archive(&host_home_dir, &source_directory_names)?;
+    let archive_bytes =
+        build_tar_archive(&host_home_dir, &selected_sources.source_directory_names)?;
 
     Ok(CredentialUploadPlan {
         archive_bytes,
-        expected_container_paths,
+        expected_container_paths: selected_sources.expected_container_paths,
     })
+}
+
+fn include_selected_source(
+    host_home_dir: &Dir,
+    is_enabled: bool,
+    directory_name: &'static str,
+    selected_sources: &mut SelectedSources,
+) -> io::Result<()> {
+    if !is_enabled {
+        return Ok(());
+    }
+
+    match host_home_dir.metadata(directory_name) {
+        Ok(metadata) if metadata.is_dir() => {
+            selected_sources.source_directory_names.push(directory_name);
+            selected_sources
+                .expected_container_paths
+                .push(format!("{CONTAINER_HOME_DIR}/{directory_name}"));
+            Ok(())
+        }
+        Ok(_) => Err(io::Error::other(format!(
+            "credential source '{directory_name}' exists but is not a directory"
+        ))),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(io::Error::other(format!(
+            "failed to inspect credential source '{directory_name}': {error}"
+        ))),
+    }
 }
 
 fn build_upload_options() -> UploadToContainerOptions {

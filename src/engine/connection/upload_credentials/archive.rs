@@ -49,16 +49,8 @@ fn append_directory_contents(
                 let child_dir = current_dir.open_dir(&entry.file_name)?;
                 append_directory_contents(builder, &child_dir, &entry_relative_path)?;
             }
-            EntryKind::File => {
-                append_file_header(builder, current_dir, &entry.file_name, &entry_relative_path)?;
-            }
-            EntryKind::Symlink => {
-                append_symlink_header(
-                    builder,
-                    current_dir,
-                    &entry.file_name,
-                    &entry_relative_path,
-                )?;
+            EntryKind::File | EntryKind::Symlink => {
+                append_non_directory_entry(builder, current_dir, &entry, &entry_relative_path)?;
             }
             EntryKind::Other => {}
         }
@@ -125,51 +117,60 @@ fn append_directory_header(
     relative_path: &Utf8Path,
     metadata: &Metadata,
 ) -> io::Result<()> {
-    let mut header = Header::new_gnu();
-    header.set_entry_type(EntryType::Directory);
-    header.set_size(0);
-    header.set_mode(metadata_mode(metadata, DEFAULT_DIRECTORY_MODE));
-    header.set_cksum();
+    let mut header = new_entry_header(
+        EntryType::Directory,
+        0,
+        metadata_mode(metadata, DEFAULT_DIRECTORY_MODE),
+    );
 
     let path = format!("{}/", normalize_archive_path(relative_path));
     builder.append_data(&mut header, path, io::empty())
 }
 
-fn append_file_header(
+fn append_non_directory_entry(
     builder: &mut Builder<Vec<u8>>,
     parent_dir: &Dir,
-    file_name: &str,
+    entry: &SortedEntry,
     relative_path: &Utf8Path,
 ) -> io::Result<()> {
-    let metadata = parent_dir.metadata(file_name)?;
-    let mut file = parent_dir.open(file_name)?;
-
-    let mut header = Header::new_gnu();
-    header.set_entry_type(EntryType::Regular);
-    header.set_size(metadata.len());
-    header.set_mode(metadata_mode(&metadata, DEFAULT_FILE_MODE));
-    header.set_cksum();
-
     let path = normalize_archive_path(relative_path);
-    builder.append_data(&mut header, path, &mut file)
+    match entry.entry_kind {
+        EntryKind::File => {
+            let metadata = parent_dir.metadata(&entry.file_name)?;
+            let mut file = parent_dir.open(&entry.file_name)?;
+            let mut header = new_entry_header(
+                EntryType::Regular,
+                metadata.len(),
+                metadata_mode(&metadata, DEFAULT_FILE_MODE),
+            );
+
+            builder.append_data(&mut header, path, &mut file)
+        }
+        EntryKind::Symlink => {
+            let metadata = parent_dir.symlink_metadata(&entry.file_name)?;
+            let target = parent_dir.read_link_contents(&entry.file_name)?;
+            let mut header = new_entry_header(
+                EntryType::Symlink,
+                0,
+                metadata_mode(&metadata, DEFAULT_FILE_MODE),
+            );
+
+            let normalized_target = normalize_archive_path(target.as_path());
+            builder.append_link(&mut header, path, normalized_target)
+        }
+        EntryKind::Directory | EntryKind::Other => Err(io::Error::other(
+            "non-directory entry helper received invalid entry kind",
+        )),
+    }
 }
 
-fn append_symlink_header(
-    builder: &mut Builder<Vec<u8>>,
-    parent_dir: &Dir,
-    file_name: &str,
-    relative_path: &Utf8Path,
-) -> io::Result<()> {
-    let metadata = parent_dir.symlink_metadata(file_name)?;
-    let target = parent_dir.read_link_contents(file_name)?;
+fn new_entry_header(entry_type: EntryType, size: u64, mode: u32) -> Header {
     let mut header = Header::new_gnu();
-    header.set_entry_type(EntryType::Symlink);
-    header.set_size(0);
-    header.set_mode(metadata_mode(&metadata, DEFAULT_FILE_MODE));
-
-    let path = normalize_archive_path(relative_path);
-    let normalized_target = normalize_archive_path(target.as_path());
-    builder.append_link(&mut header, path, normalized_target)
+    header.set_entry_type(entry_type);
+    header.set_size(size);
+    header.set_mode(mode);
+    header.set_cksum();
+    header
 }
 
 pub(super) fn normalize_archive_path(path: &Utf8Path) -> String {
