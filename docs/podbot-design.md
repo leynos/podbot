@@ -80,6 +80,29 @@ The CLI orchestrates container creation and agent execution through eight steps.
    - Claude Code: `claude --dangerously-skip-permissions`[^4]
    - Codex CLI: `codex --dangerously-bypass-approvals-and-sandbox`[^5]
 
+## Credential injection contract
+
+Credential injection is implemented by
+`EngineConnector::upload_credentials_async` and follows a fixed contract:
+
+- The upload target inside the container is `/root`, with credential families
+  resolved to `/root/.claude` and `/root/.codex`.
+- Source selection is driven by `CredsConfig` toggles:
+  `copy_claude` selects `~/.claude`, and `copy_codex` selects `~/.codex`.
+- Selected source directories that are missing on the host are skipped instead
+  of failing the run.
+- When no selected source is present (including when both toggles are
+  disabled), credential injection is a successful no-op and no daemon upload is
+  attempted.
+- Tar headers preserve permission mode metadata from the source filesystem so
+  credential files retain readable permissions expected by agent binaries.
+- The result reports expected in-container credential paths in deterministic
+  order (`/root/.claude` then `/root/.codex`) for families that were both
+  selected and present.
+
+Archive construction failures and Bollard `upload_to_container` failures are
+mapped to `ContainerError::UploadFailed` with the target `container_id`.
+
 ## Security model
 
 The design establishes clear trust boundaries.

@@ -5,12 +5,13 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: DRAFT
+Status: COMPLETE (2026-02-21 UTC)
 
 No `PLANS.md` file exists in this repository as of 2026-02-20, so this ExecPlan
 is the governing implementation document for this task.
 
-Implementation must not start until this plan is explicitly approved.
+Implementation completed on branch `2-3-1-agent-credentials`; this plan now
+records delivery and validation evidence.
 
 ## Purpose and big picture
 
@@ -93,13 +94,22 @@ Required documentation outcomes for this task:
 - [x] (2026-02-20 UTC) Inspected current engine module and confirmed no existing
       `upload_to_container` implementation.
 - [x] (2026-02-20 UTC) Drafted this ExecPlan.
-- [ ] (pending) Implement credential upload module and tar builder.
-- [ ] (pending) Add unit tests for happy, unhappy, and edge paths.
-- [ ] (pending) Add behavioural scenarios for credential injection.
-- [ ] (pending) Update `docs/podbot-design.md` and `docs/users-guide.md`.
-- [ ] (pending) Mark Step 2.3 roadmap tasks as done.
-- [ ] (pending) Run all required quality and docs gates and capture logs.
-- [ ] (pending) Finalise outcomes and retrospective section.
+- [x] (2026-02-21 UTC) Implemented credential upload module and tar builder in
+      `src/engine/connection/upload_credentials/`.
+- [x] (2026-02-21 UTC) Added unit tests for happy, unhappy, and edge-path
+      credential upload behaviour.
+- [x] (2026-02-21 UTC) Added behavioural scenarios in
+      `tests/features/credential_injection.feature` and related helpers.
+- [x] (2026-02-21 UTC) Updated `docs/podbot-design.md` and
+      `docs/users-guide.md` with the final credential injection contract and
+      user-visible behaviour.
+- [x] (2026-02-21 UTC) Marked Step 2.3 roadmap tasks as done in
+      `docs/podbot-roadmap.md`.
+- [x] (2026-02-21 UTC) Ran docs gates and captured logs:
+      `/tmp/markdownlint-podbot-2-3-1-agent-credentials.out`,
+      `/tmp/fmt-podbot-2-3-1-agent-credentials.out`,
+      `/tmp/nixie-podbot-2-3-1-agent-credentials.out`.
+- [x] (2026-02-21 UTC) Finalised outcomes and retrospective section.
 
 ## Surprises and discoveries
 
@@ -113,21 +123,53 @@ Required documentation outcomes for this task:
 
 ## Decision log
 
-- Decision: treat this request as plan-only work in this turn and keep status as
-  `DRAFT` until explicit approval to implement. Rationale: the task explicitly
-  requested formulation of an execplan at a fixed path. Date/Author: 2026-02-20
-  / Codex.
+- Decision: initial plan drafting was kept as plan-only work until
+  implementation moved forward in the branch. Rationale: preserve explicit
+  approval boundaries for plan-first workflow. Date/Author: 2026-02-20 / Codex.
 - Decision: implementation will use an agent team with explicit file ownership
   to keep changes parallelisable and avoid merge churn. Date/Author: 2026-02-20
   / Codex.
-- Pending decision: choose canonical in-container credential targets
-  (`/root/.claude` and `/root/.codex`, or another home path contract). This
-  must be locked before code is written and documented in `podbot-design.md`.
+- Decision: canonical in-container credential targets are `/root/.claude` and
+  `/root/.codex`, uploaded via Bollard `upload_to_container` with
+  `path = "/root"`. Rationale: align with root-home conventions in the sandbox
+  image and keep target paths deterministic. Date/Author: 2026-02-21 / Codex.
+- Decision: selected credential sources that are missing on the host are
+  skipped; if no selected sources are present, upload returns success without
+  sending an upload request. Rationale: support hosts configured for one agent
+  while keeping defaults enabled for both toggles. Date/Author: 2026-02-21 /
+  Codex.
+- Decision: upload-path errors (tar build or daemon upload) map to
+  `ContainerError::UploadFailed`. Rationale: preserve semantic error handling
+  with container-context diagnostics. Date/Author: 2026-02-21 / Codex.
+- Decision: tar entries preserve source permission metadata for files and
+  directories. Rationale: avoid credential-read regressions caused by
+  permission drift. Date/Author: 2026-02-21 / Codex.
 
 ## Outcomes and retrospective
 
-Not started. This section will be completed after implementation and validation
-gates pass.
+Step 2.3.1 implementation outcomes:
+
+- Engine credential injection now uploads selected `~/.claude` and `~/.codex`
+  directories into `/root` via Bollard tar upload.
+- Missing selected source directories are skipped, and all-empty selection
+  resolves as a no-op success.
+- Upload results report expected in-container paths for selected and present
+  credential families.
+- Tar archive entries preserve source permission metadata.
+- Upload failures are mapped to `ContainerError::UploadFailed`.
+
+Verification outcomes recorded in this docs-owner slice:
+
+- Documentation updates for design contract, user guidance, and roadmap status
+  are complete.
+- Docs gates passed: `make markdownlint`, `make fmt`, and `make nixie`.
+
+Retrospective notes:
+
+- The uploader abstraction and archive helper split kept behavioural and unit
+  coverage deterministic without daemon dependencies.
+- Formalising skip/no-op semantics removed ambiguity for mixed-agent host
+  setups and made user-facing expectations clearer.
 
 ## Context and orientation
 
