@@ -2,6 +2,7 @@
 
 mod tar_archive;
 mod upload_flow;
+mod upload_flow_filesystem_errors;
 
 use std::io;
 use std::sync::{Arc, Mutex};

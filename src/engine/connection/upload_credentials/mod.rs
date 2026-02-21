@@ -266,7 +266,7 @@ impl EngineConnector {
     ///
     /// This synchronous helper blocks on
     /// [`Self::upload_credentials_with_host_home_dir_async`] via a
-    /// caller-provided Tokio runtime handle.
+    /// caller-provided `Tokio` runtime handle.
     ///
     /// # Errors
     ///
