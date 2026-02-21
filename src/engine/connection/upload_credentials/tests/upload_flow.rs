@@ -8,6 +8,71 @@ use super::*;
 use crate::config::{AppConfig, CredsConfig};
 use crate::error::{ContainerError, FilesystemError, PodbotError};
 
+#[derive(Clone, Copy)]
+struct UploadFailureExpectation<'a> {
+    container_id: &'a str,
+    copy_claude: bool,
+    copy_codex: bool,
+    expected_message_substring: &'a str,
+}
+
+/// Helper to assert that credential upload fails with a host filesystem error.
+fn assert_upload_fails_with_filesystem_error<F>(
+    setup: F,
+    expectation: UploadFailureExpectation<'_>,
+) -> std::io::Result<()>
+where
+    F: FnOnce(&Utf8Path) -> std::io::Result<Utf8PathBuf>,
+{
+    let (_tmp, host_home) = host_home_dir()?;
+    let host_home_path = setup(&host_home)?;
+    let expected_path = host_home_path.as_std_path().to_path_buf();
+
+    let request = CredentialUploadRequest::new(
+        expectation.container_id,
+        host_home_path,
+        expectation.copy_claude,
+        expectation.copy_codex,
+    );
+    let (uploader, captured) = successful_uploader();
+
+    let result = runtime()?.block_on(EngineConnector::upload_credentials_async(
+        &uploader, &request,
+    ));
+    let error = match result {
+        Ok(success) => {
+            return Err(io_error(format!(
+                "expected upload failure, got success: {success:?}"
+            )));
+        }
+        Err(error) => error,
+    };
+
+    ensure(
+        matches!(
+            error,
+            PodbotError::Filesystem(FilesystemError::IoError {
+                ref path,
+                ref message,
+            }) if path == &expected_path && message.contains(expectation.expected_message_substring)
+        ),
+        format!(
+            "expected filesystem error with path={expected_path:?} and message containing \
+             '{}', got: {error:?}",
+            expectation.expected_message_substring
+        ),
+    )?;
+    ensure(
+        captured_call(&captured)?.call_count == 0,
+        format!(
+            "expected no daemon upload call for container '{}'",
+            expectation.container_id
+        ),
+    )?;
+
+    Ok(())
+}
+
 fn ensure(condition: bool, failure_message: impl Into<String>) -> std::io::Result<()> {
     if condition {
         return Ok(());
@@ -261,121 +326,48 @@ fn upload_credentials_maps_engine_failures_to_upload_failed() -> std::io::Result
 
 #[rstest]
 fn upload_credentials_errors_when_selected_source_is_not_directory() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
-    let expected_path = host_home.as_std_path().to_path_buf();
-
-    write_file(&host_home.join(".claude"), "not-a-directory")?;
-
-    let request = CredentialUploadRequest::new("container-invalid", host_home, true, false);
-    let (uploader, captured) = successful_uploader();
-
-    let result = runtime()?.block_on(EngineConnector::upload_credentials_async(
-        &uploader, &request,
-    ));
-    let error = match result {
-        Ok(success) => {
-            return Err(io_error(format!(
-                "expected local source failure, got success: {success:?}"
-            )));
-        }
-        Err(error) => error,
-    };
-
-    ensure(
-        matches!(
-            error,
-            PodbotError::Filesystem(FilesystemError::IoError {
-                ref path,
-                ref message,
-            }) if path == &expected_path && message.contains("exists but is not a directory")
-        ),
-        format!("expected filesystem invalid-source mapping, got: {error:?}"),
-    )?;
-    ensure(
-        captured_call(&captured)?.call_count == 0,
-        "expected no daemon upload call for invalid source directory",
-    )?;
-
-    Ok(())
+    assert_upload_fails_with_filesystem_error(
+        |host_home| {
+            write_file(&host_home.join(".claude"), "not-a-directory")?;
+            Ok(host_home.to_path_buf())
+        },
+        UploadFailureExpectation {
+            container_id: "container-invalid",
+            copy_claude: true,
+            copy_codex: false,
+            expected_message_substring: "exists but is not a directory",
+        },
+    )
 }
 
 #[rstest]
 fn upload_credentials_errors_when_host_home_directory_cannot_be_opened() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
-    let missing_home = host_home.join("missing-home-directory");
-    let expected_path = missing_home.as_std_path().to_path_buf();
-
-    let request = CredentialUploadRequest::new("container-missing-home", missing_home, true, true);
-    let (uploader, captured) = successful_uploader();
-
-    let result = runtime()?.block_on(EngineConnector::upload_credentials_async(
-        &uploader, &request,
-    ));
-    let error = match result {
-        Ok(success) => {
-            return Err(io_error(format!(
-                "expected host-home open failure, got success: {success:?}"
-            )));
-        }
-        Err(error) => error,
-    };
-
-    ensure(
-        matches!(
-            error,
-            PodbotError::Filesystem(FilesystemError::IoError {
-                ref path,
-                ref message,
-            }) if path == &expected_path && message.contains("failed to open host home directory")
-        ),
-        format!("expected filesystem host-home mapping, got: {error:?}"),
-    )?;
-    ensure(
-        captured_call(&captured)?.call_count == 0,
-        "expected no daemon upload call when host home cannot be opened",
-    )?;
-
-    Ok(())
+    assert_upload_fails_with_filesystem_error(
+        |host_home| Ok(host_home.join("missing-home-directory")),
+        UploadFailureExpectation {
+            container_id: "container-missing-home",
+            copy_claude: true,
+            copy_codex: true,
+            expected_message_substring: "failed to open host home directory",
+        },
+    )
 }
 
 #[rstest]
 fn upload_credentials_errors_when_host_home_path_is_not_directory() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
-    let host_home_file = host_home.join("host-home-file");
-    let expected_path = host_home_file.as_std_path().to_path_buf();
-    write_file(&host_home_file, "not-a-directory")?;
-
-    let request = CredentialUploadRequest::new("container-home-file", host_home_file, true, true);
-    let (uploader, captured) = successful_uploader();
-
-    let result = runtime()?.block_on(EngineConnector::upload_credentials_async(
-        &uploader, &request,
-    ));
-    let error = match result {
-        Ok(success) => {
-            return Err(io_error(format!(
-                "expected host-home-not-directory failure, got success: {success:?}"
-            )));
-        }
-        Err(error) => error,
-    };
-
-    ensure(
-        matches!(
-            error,
-            PodbotError::Filesystem(FilesystemError::IoError {
-                ref path,
-                ref message,
-            }) if path == &expected_path && message.contains("failed to open host home directory")
-        ),
-        format!("expected filesystem host-home mapping, got: {error:?}"),
-    )?;
-    ensure(
-        captured_call(&captured)?.call_count == 0,
-        "expected no daemon upload call when host home path is invalid",
-    )?;
-
-    Ok(())
+    assert_upload_fails_with_filesystem_error(
+        |host_home| {
+            let host_home_file = host_home.join("host-home-file");
+            write_file(&host_home_file, "not-a-directory")?;
+            Ok(host_home_file)
+        },
+        UploadFailureExpectation {
+            container_id: "container-home-file",
+            copy_claude: true,
+            copy_codex: true,
+            expected_message_substring: "failed to open host home directory",
+        },
+    )
 }
 
 #[rstest]
