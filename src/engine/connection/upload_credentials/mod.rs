@@ -246,7 +246,7 @@ impl EngineConnector {
     /// Upload selected host credentials into a container.
     ///
     /// This synchronous helper blocks on [`Self::upload_credentials_async`] via
-    /// a caller-provided Tokio runtime handle.
+    /// a caller-provided `Tokio` runtime handle.
     ///
     /// # Errors
     ///
