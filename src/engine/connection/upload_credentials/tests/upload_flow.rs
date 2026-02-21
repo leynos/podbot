@@ -326,51 +326,63 @@ fn upload_credentials_maps_engine_failures_to_upload_failed() -> std::io::Result
     Ok(())
 }
 
-#[rstest]
-fn upload_credentials_errors_when_selected_source_is_not_directory() -> std::io::Result<()> {
-    assert_upload_fails_with_filesystem_error(
-        |host_home| {
-            write_file(&host_home.join(".claude"), "not-a-directory")?;
-            Ok(host_home.to_path_buf())
-        },
-        UploadFailureExpectation {
-            container_id: "container-invalid",
-            copy_claude: true,
-            copy_codex: false,
-            expected_message_substring: "exists but is not a directory",
-        },
-    )
+macro_rules! filesystem_error_test {
+    (
+        $test_name:ident,
+        $setup:expr,
+        container_id = $container_id:literal,
+        copy_claude = $copy_claude:expr,
+        copy_codex = $copy_codex:expr,
+        message_contains = $message:literal
+    ) => {
+        #[rstest]
+        fn $test_name() -> std::io::Result<()> {
+            assert_upload_fails_with_filesystem_error(
+                $setup,
+                UploadFailureExpectation {
+                    container_id: $container_id,
+                    copy_claude: $copy_claude,
+                    copy_codex: $copy_codex,
+                    expected_message_substring: $message,
+                },
+            )
+        }
+    };
 }
 
-#[rstest]
-fn upload_credentials_errors_when_host_home_directory_cannot_be_opened() -> std::io::Result<()> {
-    assert_upload_fails_with_filesystem_error(
-        |host_home| Ok(host_home.join("missing-home-directory")),
-        UploadFailureExpectation {
-            container_id: "container-missing-home",
-            copy_claude: true,
-            copy_codex: true,
-            expected_message_substring: "failed to open host home directory",
-        },
-    )
-}
+filesystem_error_test!(
+    upload_credentials_errors_when_selected_source_is_not_directory,
+    |host_home| {
+        write_file(&host_home.join(".claude"), "not-a-directory")?;
+        Ok(host_home.to_path_buf())
+    },
+    container_id = "container-invalid",
+    copy_claude = true,
+    copy_codex = false,
+    message_contains = "exists but is not a directory"
+);
 
-#[rstest]
-fn upload_credentials_errors_when_host_home_path_is_not_directory() -> std::io::Result<()> {
-    assert_upload_fails_with_filesystem_error(
-        |host_home| {
-            let host_home_file = host_home.join("host-home-file");
-            write_file(&host_home_file, "not-a-directory")?;
-            Ok(host_home_file)
-        },
-        UploadFailureExpectation {
-            container_id: "container-home-file",
-            copy_claude: true,
-            copy_codex: true,
-            expected_message_substring: "failed to open host home directory",
-        },
-    )
-}
+filesystem_error_test!(
+    upload_credentials_errors_when_host_home_directory_cannot_be_opened,
+    |host_home| Ok(host_home.join("missing-home-directory")),
+    container_id = "container-missing-home",
+    copy_claude = true,
+    copy_codex = true,
+    message_contains = "failed to open host home directory"
+);
+
+filesystem_error_test!(
+    upload_credentials_errors_when_host_home_path_is_not_directory,
+    |host_home| {
+        let host_home_file = host_home.join("host-home-file");
+        write_file(&host_home_file, "not-a-directory")?;
+        Ok(host_home_file)
+    },
+    container_id = "container-home-file",
+    copy_claude = true,
+    copy_codex = true,
+    message_contains = "failed to open host home directory"
+);
 
 #[rstest]
 fn upload_credentials_with_host_home_dir_uses_provided_capability() -> std::io::Result<()> {
