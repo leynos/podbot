@@ -228,29 +228,46 @@ impl EngineConnector {
 }
 
 fn build_upload_plan(request: &CredentialUploadRequest) -> io::Result<CredentialUploadPlan> {
-    let host_home_dir = Dir::open_ambient_dir(&request.host_home_dir, ambient_authority())
-        .map_err(|error| {
-            io::Error::other(format!(
-                "failed to open host home directory '{}': {error}",
-                request.host_home_dir
-            ))
-        })?;
+    let host_home_dir = open_host_home_dir(request)?;
+    let selected_sources = select_sources(&host_home_dir, request)?;
+    build_plan_from_selected_sources(&host_home_dir, selected_sources)
+}
 
+fn open_host_home_dir(request: &CredentialUploadRequest) -> io::Result<Dir> {
+    Dir::open_ambient_dir(&request.host_home_dir, ambient_authority()).map_err(|error| {
+        io::Error::other(format!(
+            "failed to open host home directory '{}': {error}",
+            request.host_home_dir
+        ))
+    })
+}
+
+fn select_sources(
+    host_home_dir: &Dir,
+    request: &CredentialUploadRequest,
+) -> io::Result<SelectedSources> {
     let mut selected_sources = SelectedSources::default();
 
     include_selected_source(
-        &host_home_dir,
+        host_home_dir,
         request.copy_claude,
         CLAUDE_CREDENTIAL_DIR,
         &mut selected_sources,
     )?;
     include_selected_source(
-        &host_home_dir,
+        host_home_dir,
         request.copy_codex,
         CODEX_CREDENTIAL_DIR,
         &mut selected_sources,
     )?;
 
+    Ok(selected_sources)
+}
+
+fn build_plan_from_selected_sources(
+    host_home_dir: &Dir,
+    selected_sources: SelectedSources,
+) -> io::Result<CredentialUploadPlan> {
     if selected_sources.source_directory_names.is_empty() {
         return Ok(CredentialUploadPlan {
             archive_bytes: vec![],
@@ -258,8 +275,7 @@ fn build_upload_plan(request: &CredentialUploadRequest) -> io::Result<Credential
         });
     }
 
-    let archive_bytes =
-        build_tar_archive(&host_home_dir, &selected_sources.source_directory_names)?;
+    let archive_bytes = build_tar_archive(host_home_dir, &selected_sources.source_directory_names)?;
 
     Ok(CredentialUploadPlan {
         archive_bytes,
