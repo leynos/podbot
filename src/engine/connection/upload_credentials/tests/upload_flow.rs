@@ -238,3 +238,32 @@ fn upload_credentials_errors_when_host_home_directory_cannot_be_opened() {
     );
     assert_eq!(captured_call(&captured).call_count, 0);
 }
+
+#[rstest]
+fn upload_credentials_errors_when_host_home_path_is_not_directory() {
+    let (_tmp, host_home) = host_home_dir();
+    let host_home_file = host_home.join("host-home-file");
+    write_file(&host_home_file, "not-a-directory");
+
+    let request = CredentialUploadRequest::new("container-home-file", host_home_file, true, true);
+    let (uploader, captured) = successful_uploader();
+
+    let error = runtime()
+        .block_on(EngineConnector::upload_credentials_async(
+            &uploader, &request,
+        ))
+        .expect_err("upload should fail when host home path is not a directory");
+
+    assert!(
+        matches!(
+            error,
+            PodbotError::Container(ContainerError::UploadFailed {
+                ref container_id,
+                ref message,
+            }) if container_id == "container-home-file"
+                && message.contains("failed to open host home directory")
+        ),
+        "expected upload-failed host-home mapping, got: {error:?}"
+    );
+    assert_eq!(captured_call(&captured).call_count, 0);
+}

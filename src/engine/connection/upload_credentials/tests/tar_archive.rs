@@ -114,6 +114,15 @@ fn normalize_archive_path_uses_forward_slashes() {
     assert_eq!(archive_path, ".claude/subdir/credentials.json");
 }
 
+#[rstest]
+#[cfg(windows)]
+fn normalize_archive_path_uses_forward_slashes_on_windows_paths() {
+    let nested_path = Utf8Path::new(r".claude\subdir\credentials.json");
+    let archive_path = normalize_archive_path(nested_path);
+
+    assert_eq!(archive_path, ".claude/subdir/credentials.json");
+}
+
 pub(super) fn parse_archive_entries(archive_bytes: &[u8]) -> std::io::Result<Vec<TarEntry>> {
     let mut archive = tar::Archive::new(Cursor::new(archive_bytes));
     let mut entries = vec![];
