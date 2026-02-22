@@ -5,7 +5,6 @@
 
 use std::future::Future;
 use std::io;
-use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use bollard::query_parameters::{UploadToContainerOptions, UploadToContainerOptionsBuilder};
@@ -15,13 +14,16 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 
 mod archive;
+mod error_mapping;
+mod plan_builder;
 
 use super::EngineConnector;
 use crate::config::AppConfig;
-use crate::error::{ContainerError, FilesystemError, PodbotError};
-use archive::build_tar_archive;
+use crate::error::{ContainerError, PodbotError};
 #[cfg(test)]
 use archive::normalize_archive_path;
+pub(crate) use error_mapping::{LocalUploadError, map_local_upload_error, select_error_path};
+pub(crate) use plan_builder::build_upload_plan;
 
 const CONTAINER_HOME_DIR: &str = "/root";
 const CLAUDE_CREDENTIAL_DIR: &str = ".claude";
@@ -167,14 +169,8 @@ impl CredentialUploadResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct CredentialUploadPlan {
+pub(crate) struct CredentialUploadPlan {
     archive_bytes: Vec<u8>,
-    expected_container_paths: Vec<String>,
-}
-
-#[derive(Debug, Default)]
-struct SelectedSources {
-    source_directory_names: Vec<&'static str>,
     expected_container_paths: Vec<String>,
 }
 
@@ -196,7 +192,7 @@ impl EngineConnector {
     ) -> Result<CredentialUploadResult, PodbotError> {
         let host_home_dir = request.open_host_home_dir().map_err(|error| {
             map_local_upload_error(LocalUploadError {
-                path: request.host_home_dir.as_std_path().to_path_buf(),
+                path: request.host_home_dir.clone(),
                 error,
             })
         })?;
@@ -220,7 +216,7 @@ impl EngineConnector {
         let container_id = request.container_id().to_owned();
         let plan = build_upload_plan(host_home_dir, request).map_err(|error| {
             map_local_upload_error(LocalUploadError {
-                path: select_error_path(&error, request.host_home_dir.as_std_path()),
+                path: select_error_path(&error, &request.host_home_dir),
                 error,
             })
         })?;
@@ -293,103 +289,6 @@ impl EngineConnector {
             host_home_dir,
         ))
     }
-}
-
-#[derive(Debug)]
-struct LocalUploadError {
-    path: PathBuf,
-    error: io::Error,
-}
-
-/// Try to include a credential source in the upload plan.
-///
-/// Returns `Ok(Some((dir_name, container_path)))` when the source is enabled,
-/// present, and valid. Returns `Ok(None)` when disabled or missing. Returns
-/// `Err` when the source exists but is invalid.
-fn include_credential_source(
-    host_home_dir: &Dir,
-    is_enabled: bool,
-    directory_name: &'static str,
-) -> io::Result<Option<(&'static str, String)>> {
-    if !is_enabled {
-        return Ok(None);
-    }
-
-    match host_home_dir.metadata(directory_name) {
-        Ok(metadata) if metadata.is_dir() => {
-            let container_path = format!("{CONTAINER_HOME_DIR}/{directory_name}");
-            Ok(Some((directory_name, container_path)))
-        }
-        Ok(_) => Err(io::Error::other(format!(
-            "credential source '{directory_name}' exists but is not a directory"
-        ))),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(io::Error::other(format!(
-            "failed to inspect credential source '{directory_name}': {error}"
-        ))),
-    }
-}
-
-fn build_upload_plan(
-    host_home_dir: &Dir,
-    request: &CredentialUploadRequest,
-) -> io::Result<CredentialUploadPlan> {
-    let mut selected_sources = SelectedSources::default();
-
-    for (is_enabled, directory_name) in [
-        (request.copy_claude, CLAUDE_CREDENTIAL_DIR),
-        (request.copy_codex, CODEX_CREDENTIAL_DIR),
-    ] {
-        if let Some((dir_name, container_path)) =
-            include_credential_source(host_home_dir, is_enabled, directory_name)?
-        {
-            selected_sources.source_directory_names.push(dir_name);
-            selected_sources
-                .expected_container_paths
-                .push(container_path);
-        }
-    }
-
-    build_plan_from_selected_sources(host_home_dir, selected_sources)
-}
-
-fn map_local_upload_error(local_error: LocalUploadError) -> PodbotError {
-    let LocalUploadError { path, error } = local_error;
-    PodbotError::from(FilesystemError::IoError {
-        path,
-        message: error.to_string(),
-    })
-}
-
-fn select_error_path(error: &impl ToString, host_home_dir: &Path) -> PathBuf {
-    let error_message = error.to_string();
-    if error_message.contains(CLAUDE_CREDENTIAL_DIR) {
-        return host_home_dir.join(CLAUDE_CREDENTIAL_DIR);
-    }
-    if error_message.contains(CODEX_CREDENTIAL_DIR) {
-        return host_home_dir.join(CODEX_CREDENTIAL_DIR);
-    }
-
-    host_home_dir.to_path_buf()
-}
-
-fn build_plan_from_selected_sources(
-    host_home_dir: &Dir,
-    selected_sources: SelectedSources,
-) -> io::Result<CredentialUploadPlan> {
-    if selected_sources.source_directory_names.is_empty() {
-        return Ok(CredentialUploadPlan {
-            archive_bytes: vec![],
-            expected_container_paths: vec![],
-        });
-    }
-
-    let archive_bytes = build_tar_archive(host_home_dir, &selected_sources.source_directory_names)?;
-
-    Ok(CredentialUploadPlan {
-        archive_bytes,
-        expected_container_paths: selected_sources.expected_container_paths,
-    })
 }
 
 fn build_upload_options() -> UploadToContainerOptions {
