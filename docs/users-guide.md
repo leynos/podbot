@@ -371,6 +371,40 @@ then `PODBOT_IMAGE`, then file/default values). Validation occurs before the
 engine create call, so no container-create request is sent when the resolved
 image is empty.
 
+### Credential injection behaviour
+
+At sandbox startup, podbot can copy host agent credentials into the container
+filesystem using a tar upload to `/root`.
+
+- `creds.copy_claude = true` selects `~/.claude`.
+- `creds.copy_codex = true` selects `~/.codex`.
+- Selected directories that are missing are skipped.
+- If nothing is selected or present, credential injection succeeds as a no-op
+  and no upload request is sent.
+- Host-side selection or archive-build failures are reported as
+  `FilesystemError::IoError`.
+- Daemon upload failures are reported as `ContainerError::UploadFailed`.
+
+When credentials are uploaded, expected container paths are:
+
+- `/root/.claude` for Claude credentials.
+- `/root/.codex` for Codex credentials.
+
+Permission bits from source files and directories are preserved in the uploaded
+tar entries.
+
+Verification notes:
+
+1. Start a sandbox with the desired `copy_claude` and `copy_codex` settings.
+2. Check which directories exist in the container:
+
+   ```bash
+   podbot exec <container> -- ls -la /root
+   ```
+
+3. Compare permission bits for a representative file between host and
+   container, for example, with `stat` on each side.
+
 ## Security model
 
 Podbot's security model is based on capability-based containment:
