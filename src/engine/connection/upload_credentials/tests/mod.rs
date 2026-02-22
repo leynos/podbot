@@ -169,3 +169,11 @@ fn set_mode(_path: &Utf8Path, _mode: u32) -> io::Result<()> {
 fn io_error(message: impl Into<String>) -> io::Error {
     io::Error::other(message.into())
 }
+
+pub(crate) fn ensure(condition: bool, failure_message: impl Into<String>) -> io::Result<()> {
+    if condition {
+        return Ok(());
+    }
+
+    Err(io_error(failure_message))
+}

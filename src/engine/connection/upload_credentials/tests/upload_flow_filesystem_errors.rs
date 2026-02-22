@@ -20,11 +20,11 @@ fn assert_upload_fails_with_filesystem_error<F>(
     expectation: UploadFailureExpectation<'_>,
 ) -> std::io::Result<()>
 where
-    F: FnOnce(&Utf8Path) -> std::io::Result<Utf8PathBuf>,
+    F: FnOnce(&Utf8Path) -> std::io::Result<(Utf8PathBuf, Utf8PathBuf)>,
 {
     let (_tmp, host_home) = host_home_dir()?;
-    let host_home_path = setup(&host_home)?;
-    let expected_path = host_home_path.as_std_path().to_path_buf();
+    let (host_home_path, expected_path_buf) = setup(&host_home)?;
+    let expected_path = expected_path_buf.as_std_path().to_path_buf();
 
     let request = CredentialUploadRequest::new(
         expectation.container_id,
@@ -72,15 +72,6 @@ where
 
     Ok(())
 }
-
-fn ensure(condition: bool, failure_message: impl Into<String>) -> std::io::Result<()> {
-    if condition {
-        return Ok(());
-    }
-
-    Err(io_error(failure_message))
-}
-
 macro_rules! filesystem_error_test {
     (
         $test_name:ident,
@@ -108,8 +99,9 @@ macro_rules! filesystem_error_test {
 filesystem_error_test!(
     upload_credentials_errors_when_selected_source_is_not_directory,
     |host_home| {
-        write_file(&host_home.join(".claude"), "not-a-directory")?;
-        Ok(host_home.to_path_buf())
+        let selected_source = host_home.join(".claude");
+        write_file(&selected_source, "not-a-directory")?;
+        Ok((host_home.to_path_buf(), selected_source))
     },
     container_id = "container-invalid",
     copy_claude = true,
@@ -119,7 +111,10 @@ filesystem_error_test!(
 
 filesystem_error_test!(
     upload_credentials_errors_when_host_home_directory_cannot_be_opened,
-    |host_home| Ok(host_home.join("missing-home-directory")),
+    |host_home| {
+        let missing_home_dir = host_home.join("missing-home-directory");
+        Ok((missing_home_dir.clone(), missing_home_dir))
+    },
     container_id = "container-missing-home",
     copy_claude = true,
     copy_codex = true,
@@ -131,7 +126,7 @@ filesystem_error_test!(
     |host_home| {
         let host_home_file = host_home.join("host-home-file");
         write_file(&host_home_file, "not-a-directory")?;
-        Ok(host_home_file)
+        Ok((host_home_file.clone(), host_home_file))
     },
     container_id = "container-home-file",
     copy_claude = true,

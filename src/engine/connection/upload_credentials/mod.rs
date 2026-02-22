@@ -193,9 +193,12 @@ impl EngineConnector {
         uploader: &U,
         request: &CredentialUploadRequest,
     ) -> Result<CredentialUploadResult, PodbotError> {
-        let host_home_dir = request
-            .open_host_home_dir()
-            .map_err(|error| map_local_upload_error(request, &error))?;
+        let host_home_dir = request.open_host_home_dir().map_err(|error| {
+            map_local_upload_error(LocalUploadError {
+                path: request.host_home_dir.clone(),
+                error,
+            })
+        })?;
 
         Self::upload_credentials_with_host_home_dir_async(uploader, request, &host_home_dir).await
     }
@@ -214,8 +217,7 @@ impl EngineConnector {
         host_home_dir: &Dir,
     ) -> Result<CredentialUploadResult, PodbotError> {
         let container_id = request.container_id().to_owned();
-        let plan = build_upload_plan(host_home_dir, request)
-            .map_err(|error| map_local_upload_error(request, &error))?;
+        let plan = build_upload_plan(host_home_dir, request).map_err(map_local_upload_error)?;
 
         let CredentialUploadPlan {
             archive_bytes,
@@ -287,47 +289,85 @@ impl EngineConnector {
     }
 }
 
+#[derive(Debug)]
+struct LocalUploadError {
+    path: Utf8PathBuf,
+    error: io::Error,
+}
+
+/// Try to include a credential source in the upload plan.
+///
+/// Returns `Ok(Some((dir_name, container_path)))` when the source is enabled,
+/// present, and valid. Returns `Ok(None)` when disabled or missing. Returns
+/// `Err` when the source exists but is invalid.
+fn include_credential_source(
+    host_home_dir: &Dir,
+    is_enabled: bool,
+    directory_name: &'static str,
+) -> io::Result<Option<(&'static str, String)>> {
+    if !is_enabled {
+        return Ok(None);
+    }
+
+    match host_home_dir.metadata(directory_name) {
+        Ok(metadata) if metadata.is_dir() => {
+            let container_path = format!("{CONTAINER_HOME_DIR}/{directory_name}");
+            Ok(Some((directory_name, container_path)))
+        }
+        Ok(_) => Err(io::Error::other(format!(
+            "credential source '{directory_name}' exists but is not a directory"
+        ))),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(io::Error::other(format!(
+            "failed to inspect credential source '{directory_name}': {error}"
+        ))),
+    }
+}
+
 fn build_upload_plan(
     host_home_dir: &Dir,
     request: &CredentialUploadRequest,
-) -> io::Result<CredentialUploadPlan> {
-    let mut selected_sources = SelectedSources::default();
-
-    for (is_enabled, directory_name) in [
+) -> Result<CredentialUploadPlan, LocalUploadError> {
+    let selected_pairs = [
         (request.copy_claude, CLAUDE_CREDENTIAL_DIR),
         (request.copy_codex, CODEX_CREDENTIAL_DIR),
-    ] {
-        if !is_enabled {
-            continue;
-        }
+    ]
+    .into_iter()
+    .map(|(is_enabled, directory_name)| {
+        include_credential_source(host_home_dir, is_enabled, directory_name).map_err(|error| {
+            LocalUploadError {
+                path: request.host_home_dir.join(directory_name),
+                error,
+            }
+        })
+    })
+    .collect::<Result<Vec<_>, LocalUploadError>>()?
+    .into_iter()
+    .filter_map(|selected_pair| {
+        let (directory_name, container_path) = selected_pair?;
+        Some((directory_name, container_path))
+    })
+    .collect::<Vec<_>>();
 
-        match host_home_dir.metadata(directory_name) {
-            Ok(metadata) if metadata.is_dir() => {
-                selected_sources.source_directory_names.push(directory_name);
-                selected_sources
-                    .expected_container_paths
-                    .push(format!("{CONTAINER_HOME_DIR}/{directory_name}"));
-            }
-            Ok(_) => {
-                return Err(io::Error::other(format!(
-                    "credential source '{directory_name}' exists but is not a directory"
-                )));
-            }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                return Err(io::Error::other(format!(
-                    "failed to inspect credential source '{directory_name}': {error}"
-                )));
-            }
-        }
-    }
+    let (source_directory_names, expected_container_paths): (Vec<_>, Vec<_>) =
+        selected_pairs.into_iter().unzip();
+    let selected_sources = SelectedSources {
+        source_directory_names,
+        expected_container_paths,
+    };
 
-    build_plan_from_selected_sources(host_home_dir, selected_sources)
+    build_plan_from_selected_sources(host_home_dir, selected_sources).map_err(|error| {
+        LocalUploadError {
+            path: request.host_home_dir.clone(),
+            error,
+        }
+    })
 }
 
-fn map_local_upload_error(request: &CredentialUploadRequest, error: &io::Error) -> PodbotError {
+fn map_local_upload_error(local_error: LocalUploadError) -> PodbotError {
+    let LocalUploadError { path, error } = local_error;
     PodbotError::from(FilesystemError::IoError {
-        path: request.host_home_dir.as_std_path().to_path_buf(),
+        path: path.as_std_path().to_path_buf(),
         message: error.to_string(),
     })
 }

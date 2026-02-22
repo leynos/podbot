@@ -8,17 +8,20 @@ use super::*;
 use crate::config::{AppConfig, CredsConfig};
 use crate::error::{ContainerError, PodbotError};
 
-fn ensure(condition: bool, failure_message: impl Into<String>) -> std::io::Result<()> {
-    if condition {
-        return Ok(());
-    }
-
-    Err(io_error(failure_message))
+struct ToggleCase {
+    copy_claude: bool,
+    copy_codex: bool,
+    expected_paths: Vec<&'static str>,
+    expected_archive_entry: &'static str,
 }
 
 #[rstest]
-fn upload_credentials_uploads_selected_sources_and_reports_paths() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
+fn upload_credentials_uploads_selected_sources_and_reports_paths(
+    runtime: std::io::Result<tokio::runtime::Runtime>,
+    host_home_dir: std::io::Result<(tempfile::TempDir, camino::Utf8PathBuf)>,
+) -> std::io::Result<()> {
+    let runtime_handle = runtime?;
+    let (_tmp, host_home) = host_home_dir?;
 
     let claude_dir = host_home.join(".claude");
     create_dir(&claude_dir)?;
@@ -42,7 +45,7 @@ fn upload_credentials_uploads_selected_sources_and_reports_paths() -> std::io::R
     let request = CredentialUploadRequest::from_app_config("container-123", host_home, &config);
     let (uploader, captured) = successful_uploader();
 
-    let result = runtime()?
+    let result = runtime_handle
         .block_on(EngineConnector::upload_credentials_async(
             &uploader, &request,
         ))
@@ -87,15 +90,25 @@ fn upload_credentials_uploads_selected_sources_and_reports_paths() -> std::io::R
 }
 
 #[rstest]
-#[case::only_claude(true, false, vec!["/root/.claude"], ".claude/")]
-#[case::only_codex(false, true, vec!["/root/.codex"], ".codex/")]
+#[case::only_claude(ToggleCase {
+    copy_claude: true,
+    copy_codex: false,
+    expected_paths: vec!["/root/.claude"],
+    expected_archive_entry: ".claude/",
+})]
+#[case::only_codex(ToggleCase {
+    copy_claude: false,
+    copy_codex: true,
+    expected_paths: vec!["/root/.codex"],
+    expected_archive_entry: ".codex/",
+})]
 fn upload_credentials_respects_copy_toggles(
-    #[case] copy_claude: bool,
-    #[case] copy_codex: bool,
-    #[case] expected_paths: Vec<&str>,
-    #[case] expected_archive_entry: &str,
+    #[case] case: ToggleCase,
+    runtime: std::io::Result<tokio::runtime::Runtime>,
+    host_home_dir: std::io::Result<(tempfile::TempDir, camino::Utf8PathBuf)>,
 ) -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
+    let runtime_handle = runtime?;
+    let (_tmp, host_home) = host_home_dir?;
 
     let claude_dir = host_home.join(".claude");
     create_dir(&claude_dir)?;
@@ -105,16 +118,22 @@ fn upload_credentials_respects_copy_toggles(
     create_dir(&codex_dir)?;
     write_file(&codex_dir.join("auth.toml"), "token = \"x\"\n")?;
 
-    let request = CredentialUploadRequest::new("container-456", host_home, copy_claude, copy_codex);
+    let request = CredentialUploadRequest::new(
+        "container-456",
+        host_home,
+        case.copy_claude,
+        case.copy_codex,
+    );
     let (uploader, captured) = successful_uploader();
 
-    let result = runtime()?
+    let result = runtime_handle
         .block_on(EngineConnector::upload_credentials_async(
             &uploader, &request,
         ))
         .map_err(|error| io_error(format!("upload should succeed: {error}")))?;
 
-    let expected_paths_values: Vec<String> = expected_paths.into_iter().map(String::from).collect();
+    let expected_paths_values: Vec<String> =
+        case.expected_paths.into_iter().map(String::from).collect();
     ensure(
         result.expected_container_paths() == expected_paths_values.as_slice(),
         format!(
@@ -136,18 +155,21 @@ fn upload_credentials_respects_copy_toggles(
     ensure(
         entry_paths
             .iter()
-            .any(|path| path == expected_archive_entry),
-        format!("expected archive entry '{expected_archive_entry}' in {entry_paths:?}"),
+            .any(|path| path == case.expected_archive_entry),
+        format!(
+            "expected archive entry '{}' in {entry_paths:?}",
+            case.expected_archive_entry
+        ),
     )?;
 
-    if !copy_claude {
+    if !case.copy_claude {
         ensure(
             !entry_paths.iter().any(|path| path.starts_with(".claude/")),
             format!("did not expect .claude entries when disabled, got {entry_paths:?}"),
         )?;
     }
 
-    if !copy_codex {
+    if !case.copy_codex {
         ensure(
             !entry_paths.iter().any(|path| path.starts_with(".codex/")),
             format!("did not expect .codex entries when disabled, got {entry_paths:?}"),
@@ -158,8 +180,12 @@ fn upload_credentials_respects_copy_toggles(
 }
 
 #[rstest]
-fn upload_credentials_skips_missing_sources_without_error() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
+fn upload_credentials_skips_missing_sources_without_error(
+    runtime: std::io::Result<tokio::runtime::Runtime>,
+    host_home_dir: std::io::Result<(tempfile::TempDir, camino::Utf8PathBuf)>,
+) -> std::io::Result<()> {
+    let runtime_handle = runtime?;
+    let (_tmp, host_home) = host_home_dir?;
 
     let codex_dir = host_home.join(".codex");
     create_dir(&codex_dir)?;
@@ -168,7 +194,7 @@ fn upload_credentials_skips_missing_sources_without_error() -> std::io::Result<(
     let request = CredentialUploadRequest::new("container-789", host_home, true, true);
     let (uploader, captured) = successful_uploader();
 
-    let result = runtime()?
+    let result = runtime_handle
         .block_on(EngineConnector::upload_credentials_async(
             &uploader, &request,
         ))
@@ -195,13 +221,17 @@ fn upload_credentials_skips_missing_sources_without_error() -> std::io::Result<(
 }
 
 #[rstest]
-fn upload_credentials_is_noop_when_all_sources_missing_or_disabled() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
+fn upload_credentials_is_noop_when_all_sources_missing_or_disabled(
+    runtime: std::io::Result<tokio::runtime::Runtime>,
+    host_home_dir: std::io::Result<(tempfile::TempDir, camino::Utf8PathBuf)>,
+) -> std::io::Result<()> {
+    let runtime_handle = runtime?;
+    let (_tmp, host_home) = host_home_dir?;
 
     let request = CredentialUploadRequest::new("container-empty", host_home, true, true);
     let (uploader, captured) = successful_uploader();
 
-    let result = runtime()?
+    let result = runtime_handle
         .block_on(EngineConnector::upload_credentials_async(
             &uploader, &request,
         ))
@@ -223,8 +253,12 @@ fn upload_credentials_is_noop_when_all_sources_missing_or_disabled() -> std::io:
 }
 
 #[rstest]
-fn upload_credentials_maps_engine_failures_to_upload_failed() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
+fn upload_credentials_maps_engine_failures_to_upload_failed(
+    runtime: std::io::Result<tokio::runtime::Runtime>,
+    host_home_dir: std::io::Result<(tempfile::TempDir, camino::Utf8PathBuf)>,
+) -> std::io::Result<()> {
+    let runtime_handle = runtime?;
+    let (_tmp, host_home) = host_home_dir?;
 
     let claude_dir = host_home.join(".claude");
     create_dir(&claude_dir)?;
@@ -233,7 +267,7 @@ fn upload_credentials_maps_engine_failures_to_upload_failed() -> std::io::Result
     let request = CredentialUploadRequest::new("container-failed", host_home, true, false);
     let (uploader, _) = failing_uploader(bollard::errors::Error::RequestTimeoutError);
 
-    let result = runtime()?.block_on(EngineConnector::upload_credentials_async(
+    let result = runtime_handle.block_on(EngineConnector::upload_credentials_async(
         &uploader, &request,
     ));
     let error = match result {
@@ -260,25 +294,29 @@ fn upload_credentials_maps_engine_failures_to_upload_failed() -> std::io::Result
 }
 
 #[rstest]
-fn upload_credentials_with_host_home_dir_uses_provided_capability() -> std::io::Result<()> {
-    let (_tmp, host_home) = host_home_dir()?;
+fn upload_credentials_with_host_home_dir_uses_provided_capability(
+    runtime: std::io::Result<tokio::runtime::Runtime>,
+    host_home_dir: std::io::Result<(tempfile::TempDir, camino::Utf8PathBuf)>,
+) -> std::io::Result<()> {
+    let runtime_handle = runtime?;
+    let (_tmp, host_home) = host_home_dir?;
 
     let claude_dir = host_home.join(".claude");
     create_dir(&claude_dir)?;
     write_file(&claude_dir.join("settings.json"), "{}\n")?;
 
-    let host_home_dir = Dir::open_ambient_dir(&host_home, ambient_authority())?;
+    let host_home_capability = Dir::open_ambient_dir(&host_home, ambient_authority())?;
     let unreachable_path = host_home.join("missing-home-directory");
     let request =
         CredentialUploadRequest::new("container-capability", unreachable_path, true, false);
     let (uploader, captured) = successful_uploader();
 
-    let result = runtime()?
+    let result = runtime_handle
         .block_on(
             EngineConnector::upload_credentials_with_host_home_dir_async(
                 &uploader,
                 &request,
-                &host_home_dir,
+                &host_home_capability,
             ),
         )
         .map_err(|error| {
