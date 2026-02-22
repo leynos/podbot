@@ -287,35 +287,6 @@ impl EngineConnector {
     }
 }
 
-/// Try to include a credential source in the upload plan.
-///
-/// Returns `Ok(Some((dir_name, container_path)))` when the source is enabled,
-/// present, and valid. Returns `Ok(None)` when disabled or missing. Returns
-/// `Err` when the source exists but is invalid.
-fn include_credential_source(
-    host_home_dir: &Dir,
-    is_enabled: bool,
-    directory_name: &'static str,
-) -> io::Result<Option<(&'static str, String)>> {
-    if !is_enabled {
-        return Ok(None);
-    }
-
-    match host_home_dir.metadata(directory_name) {
-        Ok(metadata) if metadata.is_dir() => {
-            let container_path = format!("{CONTAINER_HOME_DIR}/{directory_name}");
-            Ok(Some((directory_name, container_path)))
-        }
-        Ok(_) => Err(io::Error::other(format!(
-            "credential source '{directory_name}' exists but is not a directory"
-        ))),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(io::Error::other(format!(
-            "failed to inspect credential source '{directory_name}': {error}"
-        ))),
-    }
-}
-
 fn build_upload_plan(
     host_home_dir: &Dir,
     request: &CredentialUploadRequest,
@@ -326,13 +297,28 @@ fn build_upload_plan(
         (request.copy_claude, CLAUDE_CREDENTIAL_DIR),
         (request.copy_codex, CODEX_CREDENTIAL_DIR),
     ] {
-        if let Some((dir_name, container_path)) =
-            include_credential_source(host_home_dir, is_enabled, directory_name)?
-        {
-            selected_sources.source_directory_names.push(dir_name);
-            selected_sources
-                .expected_container_paths
-                .push(container_path);
+        if !is_enabled {
+            continue;
+        }
+
+        match host_home_dir.metadata(directory_name) {
+            Ok(metadata) if metadata.is_dir() => {
+                selected_sources.source_directory_names.push(directory_name);
+                selected_sources
+                    .expected_container_paths
+                    .push(format!("{CONTAINER_HOME_DIR}/{directory_name}"));
+            }
+            Ok(_) => {
+                return Err(io::Error::other(format!(
+                    "credential source '{directory_name}' exists but is not a directory"
+                )));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(io::Error::other(format!(
+                    "failed to inspect credential source '{directory_name}': {error}"
+                )));
+            }
         }
     }
 
