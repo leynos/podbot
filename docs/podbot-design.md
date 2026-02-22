@@ -518,12 +518,34 @@ podbot run --repo owner/name --agent codex|claude
 podbot token-daemon
 podbot ps
 podbot stop <container>
-podbot exec <container> <command>
+podbot exec <container> [--detach] -- <command...>
 ```
 
 The `run` subcommand orchestrates the full execution flow. The `token-daemon`
 subcommand can run standalone, potentially as a user systemd service, to manage
 token refresh independently of active sessions.
+
+### Interactive exec semantics
+
+`podbot exec` supports two execution modes:
+
+- Attached mode (default) wires local stdin/stdout/stderr to the exec session.
+- Detached mode (`--detach`) starts the exec session without stream
+  attachment and waits for completion.
+
+Pseudo-terminal (TTY) allocation is enabled only for attached mode when both
+local stdin and stdout are terminals. Detached mode always uses `tty = false`.
+
+When TTY is enabled, podbot sends an initial resize to match the current
+terminal dimensions. On Unix targets, podbot then subscribes to `SIGWINCH` and
+propagates later window-size changes with daemon `resize_exec` calls. If
+terminal dimensions cannot be read, resize calls are skipped without failing
+the exec session.
+
+After start, podbot polls exec inspect until the process exits and then reads
+the daemon-reported exit code. If the daemon reports completion without an exit
+code, podbot raises `ContainerError::ExecFailed`. Exit code `0` maps to CLI
+success, while non-zero codes are propagated as the process exit status.
 
 ## Module structure
 

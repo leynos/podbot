@@ -5,11 +5,10 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: DRAFT
+Status: COMPLETE (2026-02-22)
 
-No `PLANS.md` file exists in this repository as of 2026-02-22, so this
-ExecPlan is the governing implementation document for Step 2.4 interactive
-execution.
+No `PLANS.md` file exists in this repository as of 2026-02-22, so this ExecPlan
+is the governing implementation document for Step 2.4 interactive execution.
 
 ## Purpose and big picture
 
@@ -27,8 +26,8 @@ After this change, `podbot exec` will support:
 The feature is complete only when unit tests (`rstest`) and behavioural tests
 (`rstest-bdd` v0.5.0) cover happy, unhappy, and edge cases, required docs are
 updated (`docs/podbot-design.md`, `docs/users-guide.md`), roadmap Step 2.4
-items are checked done, and `make check-fmt`, `make lint`, and `make test`
-all pass.
+items are checked done, and `make check-fmt`, `make lint`, and `make test` all
+pass.
 
 ## Constraints
 
@@ -90,15 +89,14 @@ Current implementation and docs anchors:
 - CLI `exec` surface exists but is stubbed:
   `src/config/cli.rs`, `src/main.rs`.
 - Engine wrapper currently covers connect, health check, create, and upload but
-  has no exec module yet:
-  `src/engine/connection/mod.rs`,
+  has no exec module yet: `src/engine/connection/mod.rs`,
   `src/engine/connection/create_container/mod.rs`,
   `src/engine/connection/upload_credentials/mod.rs`.
 - Existing behavioural test style for engine/container features uses
   `rstest-bdd` helpers, feature files, scenario state slots, and mock-backed
-  step modules:
-  `tests/bdd_engine_connection.rs`, `tests/bdd_container_creation.rs`,
-  `tests/bdd_credential_injection.rs` plus helper directories.
+  step modules: `tests/bdd_engine_connection.rs`,
+  `tests/bdd_container_creation.rs`, `tests/bdd_credential_injection.rs` plus
+  helper directories.
 
 ## Agent team execution model
 
@@ -136,9 +134,8 @@ Coordination rule:
 
 ### Stage A: Add exec module and typed request model
 
-Create an exec-focused engine module at
-`src/engine/connection/exec/mod.rs` and wire it from
-`src/engine/connection/mod.rs` and `src/engine/mod.rs`.
+Create an exec-focused engine module at `src/engine/connection/exec/mod.rs` and
+wire it from `src/engine/connection/mod.rs` and `src/engine/mod.rs`.
 
 Introduce additive types similar to existing create/upload seams:
 
@@ -157,8 +154,8 @@ Mapping rules:
 
 ### Stage B: Implement attached and detached execution flows
 
-Implement async-first execution APIs under `EngineConnector` with a sync wrapper,
-matching existing module patterns.
+Implement async-first execution APIs under `EngineConnector` with a sync
+wrapper, matching existing module patterns.
 
 Attached flow must:
 
@@ -173,8 +170,8 @@ Detached flow must:
 - wait for completion via inspect loop;
 - return captured exit code.
 
-Both flows must return `ExecResult` with explicit exit code and map missing exit
-status to a semantic `ExecFailed` error.
+Both flows must return `ExecResult` with explicit exit code and map missing
+exit status to a semantic `ExecFailed` error.
 
 ### Stage C: Handle terminal resize (`SIGWINCH`) for interactive mode
 
@@ -209,7 +206,8 @@ Exit-code behaviour contract:
 
 ### Stage E: Unit tests (`rstest`) for happy, unhappy, and edge cases
 
-Add/extend unit tests around the new exec module, using fixtures and mock traits.
+Add/extend unit tests around the new exec module, using fixtures and mock
+traits.
 
 Required coverage:
 
@@ -303,14 +301,25 @@ Acceptance is met only when all are true:
       exec stub/engine module boundaries.
 - [x] (2026-02-22 UTC) Drafted this ExecPlan at
       `docs/execplans/2-4-1-interactive-execution.md`.
-- [ ] Implement Stage A exec module and request/result abstractions.
-- [ ] Implement Stage B attached/detached exec flows.
-- [ ] Implement Stage C resize propagation.
-- [ ] Implement Stage D CLI wiring and exit behaviour.
-- [ ] Implement Stage E `rstest` unit coverage.
-- [ ] Implement Stage F `rstest-bdd` behavioural coverage.
-- [ ] Implement Stage G design docs, user guide, and roadmap updates.
-- [ ] Run Stage H full gate stack and archive evidence paths.
+- [x] (2026-02-22 UTC) Implemented Stage A with new exec module, typed request/
+      result types, and a mockable `ContainerExecClient` seam.
+- [x] (2026-02-22 UTC) Implemented Stage B attached/detached execution flows
+      with create/start/inspect lifecycle management and exit-code capture.
+- [x] (2026-02-22 UTC) Implemented Stage C terminal resize behaviour with
+      initial resize and Unix `SIGWINCH` propagation for attached TTY sessions.
+- [x] (2026-02-22 UTC) Implemented Stage D CLI wiring for `podbot exec`,
+      including detached mode and process exit-code propagation.
+- [x] (2026-02-22 UTC) Implemented Stage E `rstest` unit tests for happy,
+      unhappy, and edge paths in `src/engine/connection/exec/tests.rs`.
+- [x] (2026-02-22 UTC) Implemented Stage F `rstest-bdd` behavioural scenarios
+      in `tests/features/interactive_exec.feature` and helper modules.
+- [x] (2026-02-22 UTC) Implemented Stage G documentation updates in
+      `docs/podbot-design.md`, `docs/users-guide.md`, and roadmap completion in
+      `docs/podbot-roadmap.md`.
+- [x] (2026-02-22 UTC) Completed Stage H gate stack with passing runs logged at
+      `/tmp/check-fmt-podbot-2-4-1-interactive-execution.out`,
+      `/tmp/lint-podbot-2-4-1-interactive-execution.out`, and
+      `/tmp/test-podbot-2-4-1-interactive-execution.out`.
 
 ## Surprises and discoveries
 
@@ -319,14 +328,12 @@ Acceptance is met only when all are true:
 - The engine module already uses trait seams for daemon-independent unit tests
   in create/upload flows, so Step 2.4 should mirror that pattern rather than
   introducing integration-test-only coverage.
-- `grepai` and `leta` exploration support in this environment is partially
-  constrained (socket/daemon limitations), so planning used deterministic file
-  inspection fallback.
+- The workspace hit a transient `No space left on device` failure during test
+  file creation; `cargo clean` recovered enough space and work resumed without
+  code changes.
 
 ## Decision log
 
-- Decision: keep this document in `DRAFT` status and stop before implementation.
-  Rationale: explicit user request was to formulate the plan.
 - Decision: define detached mode as no stream attachment but still wait for and
   report exit code. Rationale: satisfies both detached execution support and
   explicit exit-code completion criteria in Step 2.4.
@@ -336,12 +343,34 @@ Acceptance is met only when all are true:
 - Decision: maintain existing command form `podbot exec <container> -- <command`
   `...>` and add mode control additively. Rationale: preserves backward
   compatibility while enabling detached mode.
+- Decision: use `stty size` behind a small `TerminalSizeProvider` seam for
+  terminal dimensions. Rationale: keeps production logic simple and testable
+  without coupling tests to host terminal state.
+- Decision: treat daemon completion without `exit_code` as
+  `ContainerError::ExecFailed`. Rationale: avoids silently fabricating success
+  or failure for ambiguous daemon responses.
 
 ## Outcomes and retrospective
 
-Pending implementation. Populate after Stage H with:
+Shipped:
 
-- what shipped;
-- which risks materialized;
-- what changed from initial design;
-- follow-up tasks deferred beyond Step 2.4.
+- New exec lifecycle support in `EngineConnector` with attached and detached
+  modes, stream forwarding, resize propagation, and exit-code capture.
+- CLI `exec` now supports `--detach` and propagates command exit status to the
+  podbot process exit code.
+- Unit and behavioural test coverage for happy/unhappy/edge paths using
+  `rstest` and `rstest-bdd` v0.5.0.
+- Design, user, and roadmap docs updated to match implemented behaviour.
+
+Risk outcomes:
+
+- Terminal resize complexity was contained by splitting logic into
+  `attached.rs` and `terminal.rs`.
+- Stream forwarding deadlock risk was mitigated by explicit stdin-task abort and
+  join handling after output-stream completion.
+- Detached semantics ambiguity was resolved by explicit wait-for-exit behaviour
+  and documented in user/design docs.
+
+Follow-up beyond Step 2.4:
+
+- None required for roadmap Step 2.4 completion.

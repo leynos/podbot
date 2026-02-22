@@ -108,6 +108,10 @@ pub struct ExecArgs {
     #[arg(required = true)]
     pub container: String,
 
+    /// Run the command in detached mode (no stream attachment).
+    #[arg(short = 'd', long, default_value_t = false)]
+    pub detach: bool,
+
     /// Command to execute.
     #[arg(required = true, trailing_var_arg = true)]
     pub command: Vec<String>,
