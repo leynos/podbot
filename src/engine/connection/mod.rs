@@ -7,6 +7,7 @@
 mod create_container;
 mod error_classification;
 mod health_check;
+mod upload_credentials;
 
 use std::fmt;
 
@@ -18,6 +19,9 @@ use crate::error::PodbotError;
 pub use create_container::{
     ContainerCreator, ContainerSecurityOptions, CreateContainerFuture, CreateContainerRequest,
     SelinuxLabelMode,
+};
+pub use upload_credentials::{
+    ContainerUploader, CredentialUploadRequest, CredentialUploadResult, UploadToContainerFuture,
 };
 
 // =============================================================================

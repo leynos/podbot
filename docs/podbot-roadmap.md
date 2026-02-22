@@ -105,11 +105,11 @@ Copy agent credentials into the container filesystem.
 
 **Tasks:**
 
-- [ ] Implement upload_to_container using tar archive format.
-- [ ] Copy ~/.claude credentials when configured.
-- [ ] Copy ~/.codex credentials when configured.
-- [ ] Preserve file permissions during upload.
-- [ ] Verify credentials appear at expected paths within container.
+- [x] Implement upload_to_container using tar archive format.
+- [x] Copy ~/.claude credentials when configured.
+- [x] Copy ~/.codex credentials when configured.
+- [x] Preserve file permissions during upload.
+- [x] Verify credentials appear at expected paths within container.
 
 **Completion criteria:** Credentials upload successfully. File permissions
 match source. Agent binaries can read their credentials.
