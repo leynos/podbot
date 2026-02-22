@@ -16,14 +16,15 @@ struct UploadFailureExpectation<'a> {
 
 /// Helper to assert that credential upload fails with a host filesystem error.
 fn assert_upload_fails_with_filesystem_error<F>(
+    runtime: &tokio::runtime::Runtime,
+    host_home: &Utf8Path,
     setup: F,
     expectation: UploadFailureExpectation<'_>,
 ) -> std::io::Result<()>
 where
     F: FnOnce(&Utf8Path) -> std::io::Result<(Utf8PathBuf, Utf8PathBuf)>,
 {
-    let (_tmp, host_home) = host_home_dir()?;
-    let (host_home_path, expected_path_buf) = setup(&host_home)?;
+    let (host_home_path, expected_path_buf) = setup(host_home)?;
     let expected_path = expected_path_buf.as_std_path().to_path_buf();
 
     let request = CredentialUploadRequest::new(
@@ -34,7 +35,7 @@ where
     );
     let (uploader, captured) = successful_uploader();
 
-    let result = runtime()?.block_on(EngineConnector::upload_credentials_async(
+    let result = runtime.block_on(EngineConnector::upload_credentials_async(
         &uploader, &request,
     ));
     let error = match result {
@@ -82,8 +83,15 @@ macro_rules! filesystem_error_test {
         message_contains = $message:literal
     ) => {
         #[rstest]
-        fn $test_name() -> std::io::Result<()> {
+        fn $test_name(
+            runtime: std::io::Result<tokio::runtime::Runtime>,
+            host_home_dir: std::io::Result<(tempfile::TempDir, camino::Utf8PathBuf)>,
+        ) -> std::io::Result<()> {
+            let runtime_handle = runtime?;
+            let (_tmp, host_home) = host_home_dir?;
             assert_upload_fails_with_filesystem_error(
+                &runtime_handle,
+                &host_home,
                 $setup,
                 UploadFailureExpectation {
                     container_id: $container_id,

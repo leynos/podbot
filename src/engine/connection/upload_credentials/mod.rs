@@ -5,6 +5,7 @@
 
 use std::future::Future;
 use std::io;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use bollard::query_parameters::{UploadToContainerOptions, UploadToContainerOptionsBuilder};
@@ -195,7 +196,7 @@ impl EngineConnector {
     ) -> Result<CredentialUploadResult, PodbotError> {
         let host_home_dir = request.open_host_home_dir().map_err(|error| {
             map_local_upload_error(LocalUploadError {
-                path: request.host_home_dir.clone(),
+                path: request.host_home_dir.as_std_path().to_path_buf(),
                 error,
             })
         })?;
@@ -218,15 +219,10 @@ impl EngineConnector {
     ) -> Result<CredentialUploadResult, PodbotError> {
         let container_id = request.container_id().to_owned();
         let plan = build_upload_plan(host_home_dir, request).map_err(|error| {
-            let path = if error.to_string().contains(CLAUDE_CREDENTIAL_DIR) {
-                request.host_home_dir.join(CLAUDE_CREDENTIAL_DIR)
-            } else if error.to_string().contains(CODEX_CREDENTIAL_DIR) {
-                request.host_home_dir.join(CODEX_CREDENTIAL_DIR)
-            } else {
-                request.host_home_dir.clone()
-            };
-
-            map_local_upload_error(LocalUploadError { path, error })
+            map_local_upload_error(LocalUploadError {
+                path: select_error_path(&error, request.host_home_dir.as_std_path()),
+                error,
+            })
         })?;
 
         let CredentialUploadPlan {
@@ -301,7 +297,7 @@ impl EngineConnector {
 
 #[derive(Debug)]
 struct LocalUploadError {
-    path: Utf8PathBuf,
+    path: PathBuf,
     error: io::Error,
 }
 
@@ -360,9 +356,21 @@ fn build_upload_plan(
 fn map_local_upload_error(local_error: LocalUploadError) -> PodbotError {
     let LocalUploadError { path, error } = local_error;
     PodbotError::from(FilesystemError::IoError {
-        path: path.as_std_path().to_path_buf(),
+        path,
         message: error.to_string(),
     })
+}
+
+fn select_error_path(error: &impl ToString, host_home_dir: &Path) -> PathBuf {
+    let error_message = error.to_string();
+    if error_message.contains(CLAUDE_CREDENTIAL_DIR) {
+        return host_home_dir.join(CLAUDE_CREDENTIAL_DIR);
+    }
+    if error_message.contains(CODEX_CREDENTIAL_DIR) {
+        return host_home_dir.join(CODEX_CREDENTIAL_DIR);
+    }
+
+    host_home_dir.to_path_buf()
 }
 
 fn build_plan_from_selected_sources(
