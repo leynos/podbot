@@ -217,7 +217,17 @@ impl EngineConnector {
         host_home_dir: &Dir,
     ) -> Result<CredentialUploadResult, PodbotError> {
         let container_id = request.container_id().to_owned();
-        let plan = build_upload_plan(host_home_dir, request).map_err(map_local_upload_error)?;
+        let plan = build_upload_plan(host_home_dir, request).map_err(|error| {
+            let path = if error.to_string().contains(CLAUDE_CREDENTIAL_DIR) {
+                request.host_home_dir.join(CLAUDE_CREDENTIAL_DIR)
+            } else if error.to_string().contains(CODEX_CREDENTIAL_DIR) {
+                request.host_home_dir.join(CODEX_CREDENTIAL_DIR)
+            } else {
+                request.host_home_dir.clone()
+            };
+
+            map_local_upload_error(LocalUploadError { path, error })
+        })?;
 
         let CredentialUploadPlan {
             archive_bytes,
@@ -327,41 +337,24 @@ fn include_credential_source(
 fn build_upload_plan(
     host_home_dir: &Dir,
     request: &CredentialUploadRequest,
-) -> Result<CredentialUploadPlan, LocalUploadError> {
-    let selected_pairs = [
+) -> io::Result<CredentialUploadPlan> {
+    let mut selected_sources = SelectedSources::default();
+
+    for (is_enabled, directory_name) in [
         (request.copy_claude, CLAUDE_CREDENTIAL_DIR),
         (request.copy_codex, CODEX_CREDENTIAL_DIR),
-    ]
-    .into_iter()
-    .map(|(is_enabled, directory_name)| {
-        include_credential_source(host_home_dir, is_enabled, directory_name).map_err(|error| {
-            LocalUploadError {
-                path: request.host_home_dir.join(directory_name),
-                error,
-            }
-        })
-    })
-    .collect::<Result<Vec<_>, LocalUploadError>>()?
-    .into_iter()
-    .filter_map(|selected_pair| {
-        let (directory_name, container_path) = selected_pair?;
-        Some((directory_name, container_path))
-    })
-    .collect::<Vec<_>>();
-
-    let (source_directory_names, expected_container_paths): (Vec<_>, Vec<_>) =
-        selected_pairs.into_iter().unzip();
-    let selected_sources = SelectedSources {
-        source_directory_names,
-        expected_container_paths,
-    };
-
-    build_plan_from_selected_sources(host_home_dir, selected_sources).map_err(|error| {
-        LocalUploadError {
-            path: request.host_home_dir.clone(),
-            error,
+    ] {
+        if let Some((dir_name, container_path)) =
+            include_credential_source(host_home_dir, is_enabled, directory_name)?
+        {
+            selected_sources.source_directory_names.push(dir_name);
+            selected_sources
+                .expected_container_paths
+                .push(container_path);
         }
-    })
+    }
+
+    build_plan_from_selected_sources(host_home_dir, selected_sources)
 }
 
 fn map_local_upload_error(local_error: LocalUploadError) -> PodbotError {
