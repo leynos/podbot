@@ -8,6 +8,7 @@ use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use futures_util::{Stream, StreamExt};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 use super::terminal::{TerminalSizeProvider, resize_exec_to_current_terminal_async};
@@ -30,36 +31,97 @@ pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: Termin
 ) -> Result<(), PodbotError> {
     let mut stdout = tokio::io::stdout();
     let mut stderr = tokio::io::stderr();
-
-    #[cfg(unix)]
-    let mut sigwinch =
-        initialize_resize_handling_async(client, request, exec_id, size_provider).await?;
-    #[cfg(not(unix))]
-    initialize_resize_handling_async(client, request, exec_id, size_provider).await?;
-
-    let stdin_task = tokio::spawn(async move { forward_stdin_to_exec_async(input).await });
-
-    #[cfg(unix)]
-    let session_result = run_output_loop_with_resize_async(
+    run_attached_session_with_stdio_async(
         client,
         request,
         exec_id,
-        size_provider,
         &mut output,
+        input,
+        size_provider,
         &mut stdout,
         &mut stderr,
-        &mut sigwinch,
+    )
+    .await
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "attached-session orchestration needs stream, IO, and resize state together"
+)]
+async fn run_attached_session_with_stdio_async<C: ContainerExecClient, P: TerminalSizeProvider>(
+    client: &C,
+    request: &ExecRequest,
+    exec_id: &str,
+    output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    input: Pin<Box<dyn AsyncWrite + Send>>,
+    size_provider: &P,
+    stdout: &mut tokio::io::Stdout,
+    stderr: &mut tokio::io::Stderr,
+) -> Result<(), PodbotError> {
+    let stdin_task = spawn_stdin_forwarding_task(input);
+    let session_result = run_output_session_with_resize_init_async(
+        client,
+        request,
+        exec_id,
+        output,
+        size_provider,
+        stdout,
+        stderr,
     )
     .await;
+    stop_stdin_forwarding_task(stdin_task).await;
+    session_result
+}
 
-    #[cfg(not(unix))]
-    let session_result =
-        run_output_loop_async(request, &mut output, &mut stdout, &mut stderr).await;
+fn spawn_stdin_forwarding_task(
+    input: Pin<Box<dyn AsyncWrite + Send>>,
+) -> JoinHandle<io::Result<()>> {
+    tokio::spawn(async move { forward_stdin_to_exec_async(input).await })
+}
 
+async fn stop_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     stdin_task.abort();
     drop(stdin_task.await);
+}
 
-    session_result
+#[expect(
+    clippy::too_many_arguments,
+    reason = "platform-specific session loop needs stream, IO, and resize dependencies"
+)]
+async fn run_output_session_with_resize_init_async<
+    C: ContainerExecClient,
+    P: TerminalSizeProvider,
+>(
+    client: &C,
+    request: &ExecRequest,
+    exec_id: &str,
+    output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    size_provider: &P,
+    stdout: &mut tokio::io::Stdout,
+    stderr: &mut tokio::io::Stderr,
+) -> Result<(), PodbotError> {
+    #[cfg(unix)]
+    {
+        let mut sigwinch =
+            initialize_resize_handling_async(client, request, exec_id, size_provider).await?;
+        return run_output_loop_with_resize_async(
+            client,
+            request,
+            exec_id,
+            size_provider,
+            output,
+            stdout,
+            stderr,
+            &mut sigwinch,
+        )
+        .await;
+    }
+
+    #[cfg(not(unix))]
+    {
+        initialize_resize_handling_async(client, request, exec_id, size_provider).await?;
+        run_output_loop_async(request, output, stdout, stderr).await
+    }
 }
 
 pub(super) async fn wait_for_exit_code_async<C: ContainerExecClient>(
