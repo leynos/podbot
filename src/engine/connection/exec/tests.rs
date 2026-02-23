@@ -1,10 +1,5 @@
 //! Unit tests for container exec lifecycle handling.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
-
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use futures_util::stream;
@@ -14,6 +9,7 @@ use rstest::{fixture, rstest};
 use super::terminal::TerminalSize;
 use super::*;
 use crate::error::{ContainerError, PodbotError};
+mod lifecycle_helpers;
 mod validation_tests;
 
 mock! {
@@ -168,36 +164,6 @@ fn setup_create_exec_failure(client: &mut MockExecClient, error: BollardError) {
     });
 }
 
-fn setup_inspect_exec_with_running_transition(
-    client: &mut MockExecClient,
-    exit_code: i64,
-    running_checks: usize,
-) {
-    let call_index = Arc::new(AtomicUsize::new(0));
-    let call_index_for_mock = Arc::clone(&call_index);
-    client
-        .expect_inspect_exec()
-        .times(running_checks + 1)
-        .returning(move |exec_id| {
-            assert!(!exec_id.is_empty(), "exec id should be populated");
-            let current_index = call_index_for_mock.fetch_add(1, Ordering::SeqCst);
-            let response = if current_index < running_checks {
-                bollard::models::ExecInspectResponse {
-                    running: Some(true),
-                    exit_code: None,
-                    ..bollard::models::ExecInspectResponse::default()
-                }
-            } else {
-                bollard::models::ExecInspectResponse {
-                    running: Some(false),
-                    exit_code: Some(exit_code),
-                    ..bollard::models::ExecInspectResponse::default()
-                }
-            };
-            Box::pin(async move { Ok(response) })
-        });
-}
-
 fn setup_inspect_exec_missing_exit_code(client: &mut MockExecClient) {
     client.expect_inspect_exec().times(1).returning(|_| {
         Box::pin(async {
@@ -253,26 +219,66 @@ fn execute_and_assert_success(
     );
 }
 
+fn make_detached_exec_request(container_id: &str, command: Vec<String>) -> ExecRequest {
+    ExecRequest::new(container_id, command, ExecMode::Detached)
+        .expect("detached request should build")
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "helper keeps explicit expected exec id and exit code for readability"
+)]
+fn execute_detached_and_assert_result(
+    runtime: &tokio::runtime::Runtime,
+    client: &MockExecClient,
+    request: &ExecRequest,
+    expected_exec_id: &str,
+    expected_exit_code: i64,
+) {
+    let result = runtime
+        .block_on(EngineConnector::exec_async(client, request))
+        .expect("exec should succeed");
+    assert_eq!(result.exec_id(), expected_exec_id);
+    assert_eq!(result.exit_code(), expected_exit_code);
+}
+
+fn assert_exec_failed_with_message(
+    result: Result<ExecResult, PodbotError>,
+    expected_message_fragment: &str,
+    assertion_context: &str,
+) {
+    match result {
+        Err(PodbotError::Container(ContainerError::ExecFailed { message, .. }))
+            if message.contains(expected_message_fragment) => {}
+        other => panic!("{assertion_context}, got {other:?}"),
+    }
+}
+
+fn assert_exec_failed_for_container_with_message(
+    result: Result<ExecResult, PodbotError>,
+    expected_container_id: &str,
+    expected_message_fragment: &str,
+    assertion_context: &str,
+) {
+    match result {
+        Err(PodbotError::Container(ContainerError::ExecFailed {
+            container_id,
+            message,
+        })) if container_id == expected_container_id
+            && message.contains(expected_message_fragment) => {}
+        other => panic!("{assertion_context}, got {other:?}"),
+    }
+}
+
 #[rstest]
 fn exec_async_detached_returns_exit_code(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
     setup_create_exec_simple(&mut client, "exec-1");
     setup_start_exec_detached(&mut client);
-    setup_inspect_exec_with_running_transition(&mut client, 7, 1);
+    lifecycle_helpers::setup_inspect_exec_with_running_transition(&mut client, 7, 1);
 
-    let request = ExecRequest::new(
-        "sandbox-123",
-        vec![String::from("true")],
-        ExecMode::Detached,
-    )
-    .expect("detached request should build");
-
-    let result = runtime
-        .block_on(EngineConnector::exec_async(&client, &request))
-        .expect("exec should succeed");
-
-    assert_eq!(result.exec_id(), "exec-1");
-    assert_eq!(result.exit_code(), 7);
+    let request = make_detached_exec_request("sandbox-123", vec![String::from("true")]);
+    execute_detached_and_assert_result(&runtime, &client, &request, "exec-1", 7);
 }
 
 #[rstest]
@@ -280,21 +286,14 @@ fn exec_async_maps_create_exec_failures(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
     setup_create_exec_failure(&mut client, BollardError::RequestTimeoutError);
 
-    let request = ExecRequest::new(
-        "sandbox-123",
-        vec![String::from("false")],
-        ExecMode::Detached,
-    )
-    .expect("detached request should build");
+    let request = make_detached_exec_request("sandbox-123", vec![String::from("false")]);
 
     let result = runtime.block_on(EngineConnector::exec_async(&client, &request));
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Container(ContainerError::ExecFailed { ref container_id, ref message }))
-                if container_id == "sandbox-123" && message.contains("create exec failed")
-        ),
-        "expected create-exec failure mapping, got {result:?}"
+    assert_exec_failed_for_container_with_message(
+        result,
+        "sandbox-123",
+        "create exec failed",
+        "expected create-exec failure mapping",
     );
 }
 
@@ -305,21 +304,13 @@ fn exec_async_errors_when_exit_code_missing(runtime: tokio::runtime::Runtime) {
     setup_start_exec_detached(&mut client);
     setup_inspect_exec_missing_exit_code(&mut client);
 
-    let request = ExecRequest::new(
-        "sandbox-123",
-        vec![String::from("false")],
-        ExecMode::Detached,
-    )
-    .expect("detached request should build");
+    let request = make_detached_exec_request("sandbox-123", vec![String::from("false")]);
 
     let result = runtime.block_on(EngineConnector::exec_async(&client, &request));
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Container(ContainerError::ExecFailed { ref message, .. }))
-                if message.contains("without an exit code")
-        ),
-        "expected missing-exit-code failure, got {result:?}"
+    assert_exec_failed_with_message(
+        result,
+        "without an exit code",
+        "expected missing-exit-code failure",
     );
 }
 
@@ -337,13 +328,10 @@ fn exec_async_attached_rejects_detached_start_response(runtime: tokio::runtime::
     .expect("attached request should build");
 
     let result = runtime.block_on(EngineConnector::exec_async(&client, &request));
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Container(ContainerError::ExecFailed { ref message, .. }))
-                if message.contains("detached start result")
-        ),
-        "expected attached/detached mismatch failure, got {result:?}"
+    assert_exec_failed_with_message(
+        result,
+        "detached start result",
+        "expected attached/detached mismatch failure",
     );
 }
 
@@ -376,13 +364,10 @@ fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runti
         &request,
         &terminal_size_provider,
     ));
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Container(ContainerError::ExecFailed { ref message, .. }))
-                if message.contains("resize exec failed")
-        ),
-        "expected resize failure mapping, got {result:?}"
+    assert_exec_failed_with_message(
+        result,
+        "resize exec failed",
+        "expected resize failure mapping",
     );
 }
 
