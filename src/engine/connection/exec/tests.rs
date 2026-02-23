@@ -36,7 +36,7 @@ impl TerminalSizeProvider for StubTerminalSizeProvider {
 }
 
 type RuntimeFixture = std::io::Result<tokio::runtime::Runtime>;
-type TestResult = std::io::Result<()>;
+type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 struct AttachedResizeCase {
     tty: bool,
@@ -180,14 +180,13 @@ fn setup_create_exec_simple(client: &mut MockExecClient, exec_id: &'static str) 
     });
 }
 
-fn make_attached_exec_request(container_id: &str, tty: bool) -> ExecRequest {
-    ExecRequest::new(
+fn make_attached_exec_request(container_id: &str, tty: bool) -> Result<ExecRequest, PodbotError> {
+    Ok(ExecRequest::new(
         container_id,
         vec![String::from("echo"), String::from("hello")],
         ExecMode::Attached,
-    )
-    .expect("attached request should build")
-    .with_tty(tty)
+    )?
+    .with_tty(tty))
 }
 
 fn make_terminal_size_provider(width: u16, height: u16) -> StubTerminalSizeProvider {
@@ -226,9 +225,11 @@ fn setup_attached_resize_expectation_for_case(
     }
 }
 
-fn make_detached_exec_request(container_id: &str, command: Vec<String>) -> ExecRequest {
+fn make_detached_exec_request(
+    container_id: &str,
+    command: Vec<String>,
+) -> Result<ExecRequest, PodbotError> {
     ExecRequest::new(container_id, command, ExecMode::Detached)
-        .expect("detached request should build")
 }
 
 use detached_helpers::{
@@ -246,7 +247,7 @@ fn exec_async_detached_returns_exit_code(runtime: RuntimeFixture) -> TestResult 
     setup_start_exec_detached(&mut client);
     lifecycle_helpers::setup_inspect_exec_with_running_transition(&mut client, 7, 1);
 
-    let request = make_detached_exec_request("sandbox-123", vec![String::from("true")]);
+    let request = make_detached_exec_request("sandbox-123", vec![String::from("true")])?;
     execute_detached_and_assert_result(
         &runtime_handle,
         &client,
@@ -265,7 +266,7 @@ fn exec_async_maps_create_exec_failures(runtime: RuntimeFixture) -> TestResult {
     let mut client = MockExecClient::new();
     setup_create_exec_failure(&mut client, BollardError::RequestTimeoutError);
 
-    let request = make_detached_exec_request("sandbox-123", vec![String::from("false")]);
+    let request = make_detached_exec_request("sandbox-123", vec![String::from("false")])?;
 
     let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
     assert_exec_failed_for_container_with_message(
@@ -285,7 +286,7 @@ fn exec_async_errors_when_exit_code_missing(runtime: RuntimeFixture) -> TestResu
     setup_start_exec_detached(&mut client);
     setup_inspect_exec_once(&mut client, None);
 
-    let request = make_detached_exec_request("sandbox-123", vec![String::from("false")]);
+    let request = make_detached_exec_request("sandbox-123", vec![String::from("false")])?;
 
     let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
     assert_exec_failed_with_message(
@@ -356,7 +357,7 @@ fn exec_async_attached_resize_behaviour(
     );
     setup_inspect_exec_once(&mut client, Some(0));
 
-    let request = make_attached_exec_request("sandbox-123", case.tty);
+    let request = make_attached_exec_request("sandbox-123", case.tty)?;
     let terminal_size_provider = StubTerminalSizeProvider {
         terminal_size: Some(case.terminal_size),
     };
@@ -373,7 +374,7 @@ fn exec_async_attached_propagates_resize_failures(runtime: RuntimeFixture) -> Te
     setup_resize_exec_failure(&mut client, BollardError::RequestTimeoutError);
     client.expect_inspect_exec().never();
 
-    let request = make_attached_exec_request("sandbox-123", true);
+    let request = make_attached_exec_request("sandbox-123", true)?;
     let terminal_size_provider = make_terminal_size_provider(120, 42);
 
     let result = runtime_handle.block_on(EngineConnector::exec_async_with_terminal_size_provider(
