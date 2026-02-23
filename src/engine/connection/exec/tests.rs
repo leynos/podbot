@@ -117,13 +117,10 @@ fn setup_resize_exec_expectation(
 }
 
 fn setup_resize_exec_failure(client: &mut MockExecClient, error: BollardError) {
-    let mut pending_error = Some(error);
-    client.expect_resize_exec().times(1).returning(move |_, _| {
-        let next_error = pending_error
-            .take()
-            .expect("resize exec failure expectation consumed once");
-        Box::pin(async move { Err(next_error) })
-    });
+    client
+        .expect_resize_exec()
+        .times(1)
+        .return_once(move |_, _| Box::pin(async move { Err(error) }));
 }
 
 fn setup_inspect_exec_once(client: &mut MockExecClient, exit_code: Option<i64>) {
@@ -167,13 +164,10 @@ fn setup_start_exec_returns_detached(client: &mut MockExecClient) {
 }
 
 fn setup_create_exec_failure(client: &mut MockExecClient, error: BollardError) {
-    let mut pending_error = Some(error);
-    client.expect_create_exec().times(1).returning(move |_, _| {
-        let next_error = pending_error
-            .take()
-            .expect("create exec failure expectation consumed once");
-        Box::pin(async move { Err(next_error) })
-    });
+    client
+        .expect_create_exec()
+        .times(1)
+        .return_once(move |_, _| Box::pin(async move { Err(error) }));
 }
 
 fn setup_create_exec_simple(client: &mut MockExecClient, exec_id: &'static str) {
