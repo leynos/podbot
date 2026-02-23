@@ -42,17 +42,103 @@ fn runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().expect("runtime creation should succeed")
 }
 
+fn setup_create_exec_expectation(client: &mut MockExecClient, exec_id: &'static str, tty: bool) {
+    client
+        .expect_create_exec()
+        .times(1)
+        .returning(move |_, options| {
+            assert_eq!(options.tty, Some(tty));
+            Box::pin(async move {
+                Ok(CreateExecResults {
+                    id: String::from(exec_id),
+                })
+            })
+        });
+}
+
+fn setup_start_exec_attached(
+    client: &mut MockExecClient,
+    tty: bool,
+    output_messages: Vec<&'static [u8]>,
+) {
+    client
+        .expect_start_exec()
+        .times(1)
+        .returning(move |_, options| {
+            assert_eq!(
+                options,
+                Some(StartExecOptions {
+                    detach: false,
+                    tty,
+                    output_capacity: None
+                })
+            );
+            let output_chunks = output_messages
+                .iter()
+                .map(|message| {
+                    Ok(LogOutput::StdOut {
+                        message: Vec::from(*message).into(),
+                    })
+                })
+                .collect::<Vec<Result<LogOutput, BollardError>>>();
+            let output_stream = stream::iter(output_chunks);
+            Box::pin(async move {
+                Ok(bollard::exec::StartExecResults::Attached {
+                    output: Box::pin(output_stream),
+                    input: Box::pin(tokio::io::sink()),
+                })
+            })
+        });
+}
+
+fn setup_resize_exec_expectation(
+    client: &mut MockExecClient,
+    exec_id: &'static str,
+    width: u16,
+    height: u16,
+) {
+    client
+        .expect_resize_exec()
+        .times(1)
+        .returning(move |actual_exec_id, options| {
+            assert_eq!(actual_exec_id, exec_id);
+            assert_eq!(options, ResizeExecOptions { width, height });
+            Box::pin(async { Ok(()) })
+        });
+}
+
+fn setup_inspect_exec_completion(client: &mut MockExecClient, exit_code: i64) {
+    client.expect_inspect_exec().times(1).returning(move |_| {
+        Box::pin(async move {
+            Ok(bollard::models::ExecInspectResponse {
+                running: Some(false),
+                exit_code: Some(exit_code),
+                ..bollard::models::ExecInspectResponse::default()
+            })
+        })
+    });
+}
+
+fn assert_exec_request_validation_error(
+    result: Result<ExecRequest, PodbotError>,
+    expected_field: &str,
+) {
+    let field = match result {
+        Err(PodbotError::Config(
+            ConfigError::MissingRequired { field } | ConfigError::InvalidValue { field, .. },
+        )) => field,
+        other => panic!("expected validation error for '{expected_field}', got {other:?}"),
+    };
+    assert_eq!(
+        field, expected_field,
+        "expected validation error for '{expected_field}', got field '{field}'"
+    );
+}
+
 #[rstest]
 fn exec_request_rejects_empty_command() {
     let result = ExecRequest::new("sandbox", vec![], ExecMode::Attached);
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Config(ConfigError::MissingRequired { ref field }))
-                if field == "command"
-        ),
-        "expected missing command error, got {result:?}"
-    );
+    assert_exec_request_validation_error(result, "command");
 }
 
 #[rstest]
@@ -83,14 +169,7 @@ fn exec_request_allows_blank_non_executable_entries(#[case] command: Vec<String>
 #[rstest]
 fn exec_request_rejects_blank_container_id() {
     let result = ExecRequest::new("   ", vec![String::from("echo")], ExecMode::Detached);
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Config(ConfigError::MissingRequired { ref field }))
-                if field == "container"
-        ),
-        "expected missing container error, got {result:?}"
-    );
+    assert_exec_request_validation_error(result, "container");
 }
 
 #[rstest]
@@ -267,59 +346,10 @@ fn exec_async_attached_rejects_detached_start_response(runtime: tokio::runtime::
 #[rstest]
 fn exec_async_attached_calls_resize_when_tty_enabled(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
-    client
-        .expect_create_exec()
-        .times(1)
-        .returning(|_, options| {
-            assert_eq!(options.tty, Some(true));
-            Box::pin(async {
-                Ok(CreateExecResults {
-                    id: String::from("exec-4"),
-                })
-            })
-        });
-    client.expect_start_exec().times(1).returning(|_, options| {
-        assert_eq!(
-            options,
-            Some(StartExecOptions {
-                detach: false,
-                tty: true,
-                output_capacity: None
-            })
-        );
-        let output_stream = stream::iter(vec![Ok(LogOutput::StdOut {
-            message: Vec::from(&b"ok"[..]).into(),
-        })]);
-        Box::pin(async move {
-            Ok(bollard::exec::StartExecResults::Attached {
-                output: Box::pin(output_stream),
-                input: Box::pin(tokio::io::sink()),
-            })
-        })
-    });
-    client
-        .expect_resize_exec()
-        .times(1)
-        .returning(|exec_id, options| {
-            assert_eq!(exec_id, "exec-4");
-            assert_eq!(
-                options,
-                ResizeExecOptions {
-                    width: 120,
-                    height: 42
-                }
-            );
-            Box::pin(async { Ok(()) })
-        });
-    client.expect_inspect_exec().times(1).returning(|_| {
-        Box::pin(async {
-            Ok(bollard::models::ExecInspectResponse {
-                running: Some(false),
-                exit_code: Some(0),
-                ..bollard::models::ExecInspectResponse::default()
-            })
-        })
-    });
+    setup_create_exec_expectation(&mut client, "exec-4", true);
+    setup_start_exec_attached(&mut client, true, vec![&b"ok"[..]]);
+    setup_resize_exec_expectation(&mut client, "exec-4", 120, 42);
+    setup_inspect_exec_completion(&mut client, 0);
 
     let request = ExecRequest::new(
         "sandbox-123",
@@ -409,44 +439,10 @@ fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runti
 #[rstest]
 fn exec_async_attached_skips_resize_when_tty_disabled(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
-    client
-        .expect_create_exec()
-        .times(1)
-        .returning(|_, options| {
-            assert_eq!(options.tty, Some(false));
-            Box::pin(async {
-                Ok(CreateExecResults {
-                    id: String::from("exec-5"),
-                })
-            })
-        });
-    client.expect_start_exec().times(1).returning(|_, options| {
-        assert_eq!(
-            options,
-            Some(StartExecOptions {
-                detach: false,
-                tty: false,
-                output_capacity: None
-            })
-        );
-        let output_stream = stream::iter(Vec::<Result<LogOutput, BollardError>>::new());
-        Box::pin(async move {
-            Ok(bollard::exec::StartExecResults::Attached {
-                output: Box::pin(output_stream),
-                input: Box::pin(tokio::io::sink()),
-            })
-        })
-    });
+    setup_create_exec_expectation(&mut client, "exec-5", false);
+    setup_start_exec_attached(&mut client, false, vec![]);
     client.expect_resize_exec().never();
-    client.expect_inspect_exec().times(1).returning(|_| {
-        Box::pin(async {
-            Ok(bollard::models::ExecInspectResponse {
-                running: Some(false),
-                exit_code: Some(0),
-                ..bollard::models::ExecInspectResponse::default()
-            })
-        })
-    });
+    setup_inspect_exec_completion(&mut client, 0);
 
     let request = ExecRequest::new(
         "sandbox-123",
