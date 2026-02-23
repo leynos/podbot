@@ -22,6 +22,13 @@ use crate::error::PodbotError;
 /// The function forwards local stdin to the exec input stream, mirrors exec
 /// output to local stdout/stderr, applies terminal resize handling, and returns
 /// once the attached output stream completes or an error is encountered.
+///
+/// `client`, `request`, and `exec_id` identify the active exec session.
+/// `output` and `input` carry daemon stream traffic for the attached process.
+/// `size_provider` supplies terminal dimensions used for resize propagation.
+///
+/// Returns `Ok(())` when stream forwarding completes successfully, otherwise a
+/// mapped `PodbotError` describing session, stream, or resize failures.
 #[expect(
     clippy::too_many_arguments,
     reason = "entrypoint signature mirrors Bollard attached exec state requirements"

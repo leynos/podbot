@@ -38,6 +38,14 @@ impl TerminalSizeProvider for StubTerminalSizeProvider {
 type RuntimeFixture = std::io::Result<tokio::runtime::Runtime>;
 type TestResult = std::io::Result<()>;
 
+struct AttachedResizeCase {
+    tty: bool,
+    exec_id: &'static str,
+    terminal_size: TerminalSize,
+    output_messages: Vec<&'static [u8]>,
+    should_resize: bool,
+}
+
 #[fixture]
 fn runtime() -> RuntimeFixture {
     tokio::runtime::Runtime::new()
@@ -118,12 +126,12 @@ fn setup_resize_exec_failure(client: &mut MockExecClient, error: BollardError) {
     });
 }
 
-fn setup_inspect_exec_completion(client: &mut MockExecClient, exit_code: i64) {
+fn setup_inspect_exec_once(client: &mut MockExecClient, exit_code: Option<i64>) {
     client.expect_inspect_exec().times(1).returning(move |_| {
         Box::pin(async move {
             Ok(bollard::models::ExecInspectResponse {
                 running: Some(false),
-                exit_code: Some(exit_code),
+                exit_code,
                 ..bollard::models::ExecInspectResponse::default()
             })
         })
@@ -168,18 +176,6 @@ fn setup_create_exec_failure(client: &mut MockExecClient, error: BollardError) {
     });
 }
 
-fn setup_inspect_exec_missing_exit_code(client: &mut MockExecClient) {
-    client.expect_inspect_exec().times(1).returning(|_| {
-        Box::pin(async {
-            Ok(bollard::models::ExecInspectResponse {
-                running: Some(false),
-                exit_code: None,
-                ..bollard::models::ExecInspectResponse::default()
-            })
-        })
-    });
-}
-
 fn setup_create_exec_simple(client: &mut MockExecClient, exec_id: &'static str) {
     client.expect_create_exec().times(1).returning(move |_, _| {
         Box::pin(async move {
@@ -221,6 +217,19 @@ fn execute_and_assert_success(
         result.is_ok(),
         "attached execution should succeed: {result:?}"
     );
+}
+
+fn setup_attached_resize_expectation_for_case(
+    client: &mut MockExecClient,
+    exec_id: &'static str,
+    terminal_size: TerminalSize,
+    should_resize: bool,
+) {
+    if should_resize {
+        setup_resize_exec_expectation(client, exec_id, terminal_size.width, terminal_size.height);
+    } else {
+        client.expect_resize_exec().never();
+    }
 }
 
 fn make_detached_exec_request(container_id: &str, command: Vec<String>) -> ExecRequest {
@@ -280,7 +289,7 @@ fn exec_async_errors_when_exit_code_missing(runtime: RuntimeFixture) -> TestResu
     let mut client = MockExecClient::new();
     setup_create_exec_simple(&mut client, "exec-2");
     setup_start_exec_detached(&mut client);
-    setup_inspect_exec_missing_exit_code(&mut client);
+    setup_inspect_exec_once(&mut client, None);
 
     let request = make_detached_exec_request("sandbox-123", vec![String::from("false")]);
 
@@ -317,16 +326,46 @@ fn exec_async_attached_rejects_detached_start_response(runtime: RuntimeFixture) 
 }
 
 #[rstest]
-fn exec_async_attached_calls_resize_when_tty_enabled(runtime: RuntimeFixture) -> TestResult {
+#[case(AttachedResizeCase {
+    tty: true,
+    exec_id: "exec-4",
+    terminal_size: TerminalSize {
+        width: 120,
+        height: 42,
+    },
+    output_messages: vec![&b"ok"[..]],
+    should_resize: true,
+})]
+#[case(AttachedResizeCase {
+    tty: false,
+    exec_id: "exec-5",
+    terminal_size: TerminalSize {
+        width: 80,
+        height: 24,
+    },
+    output_messages: vec![],
+    should_resize: false,
+})]
+fn exec_async_attached_resize_behaviour(
+    runtime: RuntimeFixture,
+    #[case] case: AttachedResizeCase,
+) -> TestResult {
     let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
-    setup_create_exec_expectation(&mut client, "exec-4", true);
-    setup_start_exec_attached(&mut client, true, vec![&b"ok"[..]]);
-    setup_resize_exec_expectation(&mut client, "exec-4", 120, 42);
-    setup_inspect_exec_completion(&mut client, 0);
+    setup_create_exec_expectation(&mut client, case.exec_id, case.tty);
+    setup_start_exec_attached(&mut client, case.tty, case.output_messages);
+    setup_attached_resize_expectation_for_case(
+        &mut client,
+        case.exec_id,
+        case.terminal_size,
+        case.should_resize,
+    );
+    setup_inspect_exec_once(&mut client, Some(0));
 
-    let request = make_attached_exec_request("sandbox-123", true);
-    let terminal_size_provider = make_terminal_size_provider(120, 42);
+    let request = make_attached_exec_request("sandbox-123", case.tty);
+    let terminal_size_provider = StubTerminalSizeProvider {
+        terminal_size: Some(case.terminal_size),
+    };
     execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider);
     Ok(())
 }
@@ -353,20 +392,5 @@ fn exec_async_attached_propagates_resize_failures(runtime: RuntimeFixture) -> Te
         "resize exec failed",
         "expected resize failure mapping",
     );
-    Ok(())
-}
-
-#[rstest]
-fn exec_async_attached_skips_resize_when_tty_disabled(runtime: RuntimeFixture) -> TestResult {
-    let runtime_handle = runtime?;
-    let mut client = MockExecClient::new();
-    setup_create_exec_expectation(&mut client, "exec-5", false);
-    setup_start_exec_attached(&mut client, false, vec![]);
-    client.expect_resize_exec().never();
-    setup_inspect_exec_completion(&mut client, 0);
-
-    let request = make_attached_exec_request("sandbox-123", false);
-    let terminal_size_provider = make_terminal_size_provider(80, 24);
-    execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider);
     Ok(())
 }
