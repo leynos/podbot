@@ -8,7 +8,7 @@ pub(super) struct DetachedExecExpectation<'a> {
     pub(super) exit_code: i64,
 }
 
-pub(super) fn setup_start_exec_detached_impl(client: &mut MockExecClient) {
+pub(super) fn setup_start_exec_detached(client: &mut MockExecClient) {
     client.expect_start_exec().times(1).returning(|_, options| {
         assert_eq!(
             options,
@@ -22,7 +22,7 @@ pub(super) fn setup_start_exec_detached_impl(client: &mut MockExecClient) {
     });
 }
 
-pub(super) fn setup_start_exec_returns_detached_impl(client: &mut MockExecClient) {
+pub(super) fn setup_start_exec_returns_detached(client: &mut MockExecClient) {
     client.expect_start_exec().times(1).returning(|_, options| {
         assert_eq!(
             options,
@@ -36,20 +36,23 @@ pub(super) fn setup_start_exec_returns_detached_impl(client: &mut MockExecClient
     });
 }
 
-pub(super) fn execute_detached_and_assert_result_impl(
+pub(super) fn execute_detached_and_assert_result(
     runtime: &tokio::runtime::Runtime,
     client: &MockExecClient,
     request: &ExecRequest,
+) -> Result<ExecResult, PodbotError> {
+    runtime.block_on(EngineConnector::exec_async(client, request))
+}
+
+pub(super) fn assert_detached_exec_expectation(
+    result: &ExecResult,
     expected: DetachedExecExpectation<'_>,
 ) {
-    let result = runtime
-        .block_on(EngineConnector::exec_async(client, request))
-        .expect("exec should succeed");
     assert_eq!(result.exec_id(), expected.exec_id);
     assert_eq!(result.exit_code(), expected.exit_code);
 }
 
-pub(super) fn assert_exec_failed_with_message_impl(
+pub(super) fn assert_exec_failed_with_message(
     result: Result<ExecResult, PodbotError>,
     expected_message_fragment: &str,
     assertion_context: &str,
@@ -61,7 +64,7 @@ pub(super) fn assert_exec_failed_with_message_impl(
     }
 }
 
-pub(super) fn assert_exec_failed_for_container_with_message_impl(
+pub(super) fn assert_exec_failed_for_container_with_message(
     result: Result<ExecResult, PodbotError>,
     expected_container_id: &str,
     expected_message_fragment: &str,
