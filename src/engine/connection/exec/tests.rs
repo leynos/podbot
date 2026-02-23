@@ -9,6 +9,7 @@ use rstest::{fixture, rstest};
 use super::terminal::TerminalSize;
 use super::*;
 use crate::error::{ContainerError, PodbotError};
+mod detached_helpers;
 mod lifecycle_helpers;
 mod validation_tests;
 
@@ -34,9 +35,12 @@ impl TerminalSizeProvider for StubTerminalSizeProvider {
     }
 }
 
+type RuntimeFixture = std::io::Result<tokio::runtime::Runtime>;
+type TestResult = std::io::Result<()>;
+
 #[fixture]
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Runtime::new().expect("runtime creation should succeed")
+fn runtime() -> RuntimeFixture {
+    tokio::runtime::Runtime::new()
 }
 
 fn setup_create_exec_expectation(client: &mut MockExecClient, exec_id: &'static str, tty: bool) {
@@ -224,81 +228,55 @@ fn make_detached_exec_request(container_id: &str, command: Vec<String>) -> ExecR
         .expect("detached request should build")
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "helper keeps explicit expected exec id and exit code for readability"
-)]
-fn execute_detached_and_assert_result(
-    runtime: &tokio::runtime::Runtime,
-    client: &MockExecClient,
-    request: &ExecRequest,
-    expected_exec_id: &str,
-    expected_exit_code: i64,
-) {
-    let result = runtime
-        .block_on(EngineConnector::exec_async(client, request))
-        .expect("exec should succeed");
-    assert_eq!(result.exec_id(), expected_exec_id);
-    assert_eq!(result.exit_code(), expected_exit_code);
-}
-
-fn assert_exec_failed_with_message(
-    result: Result<ExecResult, PodbotError>,
-    expected_message_fragment: &str,
-    assertion_context: &str,
-) {
-    match result {
-        Err(PodbotError::Container(ContainerError::ExecFailed { message, .. }))
-            if message.contains(expected_message_fragment) => {}
-        other => panic!("{assertion_context}, got {other:?}"),
-    }
-}
-
-fn assert_exec_failed_for_container_with_message(
-    result: Result<ExecResult, PodbotError>,
-    expected_container_id: &str,
-    expected_message_fragment: &str,
-    assertion_context: &str,
-) {
-    match result {
-        Err(PodbotError::Container(ContainerError::ExecFailed {
-            container_id,
-            message,
-        })) if container_id == expected_container_id
-            && message.contains(expected_message_fragment) => {}
-        other => panic!("{assertion_context}, got {other:?}"),
-    }
-}
+use detached_helpers::{
+    DetachedExecExpectation,
+    assert_exec_failed_for_container_with_message_impl as assert_exec_failed_for_container_with_message,
+    assert_exec_failed_with_message_impl as assert_exec_failed_with_message,
+    execute_detached_and_assert_result_impl as execute_detached_and_assert_result,
+};
 
 #[rstest]
-fn exec_async_detached_returns_exit_code(runtime: tokio::runtime::Runtime) {
+fn exec_async_detached_returns_exit_code(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
     setup_create_exec_simple(&mut client, "exec-1");
     setup_start_exec_detached(&mut client);
     lifecycle_helpers::setup_inspect_exec_with_running_transition(&mut client, 7, 1);
 
     let request = make_detached_exec_request("sandbox-123", vec![String::from("true")]);
-    execute_detached_and_assert_result(&runtime, &client, &request, "exec-1", 7);
+    execute_detached_and_assert_result(
+        &runtime_handle,
+        &client,
+        &request,
+        DetachedExecExpectation {
+            exec_id: "exec-1",
+            exit_code: 7,
+        },
+    );
+    Ok(())
 }
 
 #[rstest]
-fn exec_async_maps_create_exec_failures(runtime: tokio::runtime::Runtime) {
+fn exec_async_maps_create_exec_failures(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
     setup_create_exec_failure(&mut client, BollardError::RequestTimeoutError);
 
     let request = make_detached_exec_request("sandbox-123", vec![String::from("false")]);
 
-    let result = runtime.block_on(EngineConnector::exec_async(&client, &request));
+    let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
     assert_exec_failed_for_container_with_message(
         result,
         "sandbox-123",
         "create exec failed",
         "expected create-exec failure mapping",
     );
+    Ok(())
 }
 
 #[rstest]
-fn exec_async_errors_when_exit_code_missing(runtime: tokio::runtime::Runtime) {
+fn exec_async_errors_when_exit_code_missing(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
     setup_create_exec_simple(&mut client, "exec-2");
     setup_start_exec_detached(&mut client);
@@ -306,16 +284,18 @@ fn exec_async_errors_when_exit_code_missing(runtime: tokio::runtime::Runtime) {
 
     let request = make_detached_exec_request("sandbox-123", vec![String::from("false")]);
 
-    let result = runtime.block_on(EngineConnector::exec_async(&client, &request));
+    let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
     assert_exec_failed_with_message(
         result,
         "without an exit code",
         "expected missing-exit-code failure",
     );
+    Ok(())
 }
 
 #[rstest]
-fn exec_async_attached_rejects_detached_start_response(runtime: tokio::runtime::Runtime) {
+fn exec_async_attached_rejects_detached_start_response(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
     setup_create_exec_simple(&mut client, "exec-3");
     setup_start_exec_returns_detached(&mut client);
@@ -327,16 +307,18 @@ fn exec_async_attached_rejects_detached_start_response(runtime: tokio::runtime::
     )
     .expect("attached request should build");
 
-    let result = runtime.block_on(EngineConnector::exec_async(&client, &request));
+    let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
     assert_exec_failed_with_message(
         result,
         "detached start result",
         "expected attached/detached mismatch failure",
     );
+    Ok(())
 }
 
 #[rstest]
-fn exec_async_attached_calls_resize_when_tty_enabled(runtime: tokio::runtime::Runtime) {
+fn exec_async_attached_calls_resize_when_tty_enabled(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
     setup_create_exec_expectation(&mut client, "exec-4", true);
     setup_start_exec_attached(&mut client, true, vec![&b"ok"[..]]);
@@ -345,11 +327,13 @@ fn exec_async_attached_calls_resize_when_tty_enabled(runtime: tokio::runtime::Ru
 
     let request = make_attached_exec_request("sandbox-123", true);
     let terminal_size_provider = make_terminal_size_provider(120, 42);
-    execute_and_assert_success(&runtime, &client, &request, &terminal_size_provider);
+    execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider);
+    Ok(())
 }
 
 #[rstest]
-fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runtime) {
+fn exec_async_attached_propagates_resize_failures(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
     setup_create_exec_expectation(&mut client, "exec-6", true);
     setup_start_exec_attached(&mut client, true, vec![]);
@@ -359,7 +343,7 @@ fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runti
     let request = make_attached_exec_request("sandbox-123", true);
     let terminal_size_provider = make_terminal_size_provider(120, 42);
 
-    let result = runtime.block_on(EngineConnector::exec_async_with_terminal_size_provider(
+    let result = runtime_handle.block_on(EngineConnector::exec_async_with_terminal_size_provider(
         &client,
         &request,
         &terminal_size_provider,
@@ -369,10 +353,12 @@ fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runti
         "resize exec failed",
         "expected resize failure mapping",
     );
+    Ok(())
 }
 
 #[rstest]
-fn exec_async_attached_skips_resize_when_tty_disabled(runtime: tokio::runtime::Runtime) {
+fn exec_async_attached_skips_resize_when_tty_disabled(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
     setup_create_exec_expectation(&mut client, "exec-5", false);
     setup_start_exec_attached(&mut client, false, vec![]);
@@ -381,5 +367,6 @@ fn exec_async_attached_skips_resize_when_tty_disabled(runtime: tokio::runtime::R
 
     let request = make_attached_exec_request("sandbox-123", false);
     let terminal_size_provider = make_terminal_size_provider(80, 24);
-    execute_and_assert_success(&runtime, &client, &request, &terminal_size_provider);
+    execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider);
+    Ok(())
 }

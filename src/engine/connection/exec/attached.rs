@@ -17,6 +17,11 @@ use super::terminal::{maybe_sigwinch_listener, wait_for_sigwinch};
 use super::{ContainerExecClient, EXEC_INSPECT_POLL_INTERVAL_MS, ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
+/// Run an attached exec session by wiring stdio and streaming daemon output.
+///
+/// The function forwards local stdin to the exec input stream, mirrors exec
+/// output to local stdout/stderr, applies terminal resize handling, and returns
+/// once the attached output stream completes or an error is encountered.
 #[expect(
     clippy::too_many_arguments,
     reason = "entrypoint signature mirrors Bollard attached exec state requirements"
@@ -81,6 +86,8 @@ fn spawn_stdin_forwarding_task(
 
 async fn stop_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     stdin_task.abort();
+    // Ignore the join result here because an aborted stdin task is expected
+    // during attached-session shutdown.
     drop(stdin_task.await);
 }
 
@@ -124,6 +131,11 @@ async fn run_output_session_with_resize_init_async<
     }
 }
 
+/// Poll exec inspect until completion and return the reported exit code.
+///
+/// While the exec is still running, this function sleeps between inspect calls
+/// using `EXEC_INSPECT_POLL_INTERVAL_MS`. It returns an `ExecFailed` error when
+/// inspect itself fails or when completion is reported without an exit code.
 pub(super) async fn wait_for_exit_code_async<C: ContainerExecClient>(
     client: &C,
     container_id: &str,
@@ -181,6 +193,8 @@ async fn write_exec_output_chunk(
         LogOutput::StdOut { message }
         | LogOutput::Console { message }
         | LogOutput::StdIn { message } => {
+            // Route StdIn records to stdout to preserve attached-session echo
+            // behaviour for interactive terminal use.
             stdout.write_all(message.as_ref()).await.map_err(|error| {
                 exec_failed(
                     container_id,
