@@ -107,6 +107,13 @@ fn setup_resize_exec_expectation(
         });
 }
 
+fn setup_resize_exec_failure(client: &mut MockExecClient) {
+    client
+        .expect_resize_exec()
+        .times(1)
+        .returning(|_, _| Box::pin(async { Err(BollardError::RequestTimeoutError) }));
+}
+
 fn setup_inspect_exec_completion(client: &mut MockExecClient, exit_code: i64) {
     client.expect_inspect_exec().times(1).returning(move |_| {
         Box::pin(async move {
@@ -378,34 +385,9 @@ fn exec_async_attached_calls_resize_when_tty_enabled(runtime: tokio::runtime::Ru
 #[rstest]
 fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
-    client.expect_create_exec().times(1).returning(|_, _| {
-        Box::pin(async {
-            Ok(CreateExecResults {
-                id: String::from("exec-6"),
-            })
-        })
-    });
-    client.expect_start_exec().times(1).returning(|_, options| {
-        assert_eq!(
-            options,
-            Some(StartExecOptions {
-                detach: false,
-                tty: true,
-                output_capacity: None
-            })
-        );
-        let output_stream = stream::iter(Vec::<Result<LogOutput, BollardError>>::new());
-        Box::pin(async move {
-            Ok(bollard::exec::StartExecResults::Attached {
-                output: Box::pin(output_stream),
-                input: Box::pin(tokio::io::sink()),
-            })
-        })
-    });
-    client
-        .expect_resize_exec()
-        .times(1)
-        .returning(|_, _| Box::pin(async { Err(BollardError::RequestTimeoutError) }));
+    setup_create_exec_expectation(&mut client, "exec-6", true);
+    setup_start_exec_attached(&mut client, true, vec![]);
+    setup_resize_exec_failure(&mut client);
     client.expect_inspect_exec().never();
 
     let request = ExecRequest::new(
