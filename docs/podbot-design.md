@@ -539,13 +539,14 @@ local stdin and stdout are terminals. Detached mode always uses `tty = false`.
 When TTY is enabled, podbot sends an initial resize to match the current
 terminal dimensions. On Unix targets, podbot then subscribes to `SIGWINCH` and
 propagates later window-size changes with daemon `resize_exec` calls. If
-terminal dimensions cannot be read, resize calls are skipped without failing
-the exec session.
+terminal dimensions cannot be read (for example when `stty size` is
+unavailable), resize calls are skipped without failing the exec session.
 
 After start, podbot polls exec inspect until the process exits and then reads
 the daemon-reported exit code. If the daemon reports completion without an exit
 code, podbot raises `ContainerError::ExecFailed`. Exit code `0` maps to CLI
-success, while non-zero codes are propagated as the process exit status.
+success. Non-zero values in `1..=255` are returned directly, negative values
+map to `1`, and values above `255` are clamped to `255`.
 
 ## Module structure
 

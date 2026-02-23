@@ -34,8 +34,9 @@ fn main() -> EyreResult<()> {
     // Load configuration with layered precedence: defaults < file < env < CLI.
     // The CLI is passed to extract --config, --engine-socket, and --image.
     let config = load_config(&cli).map_err(Report::from)?;
+    let runtime = create_runtime().map_err(Report::from)?;
 
-    match run(&cli, &config) {
+    match run(&cli, &config, runtime.handle()) {
         Ok(CommandOutcome::Success) => Ok(()),
         Ok(CommandOutcome::CommandExit { code }) => {
             std::process::exit(normalize_process_exit_code(code))
@@ -48,13 +49,17 @@ fn main() -> EyreResult<()> {
 ///
 /// Keeps semantic errors inside the run loop so the CLI boundary owns
 /// conversion to `eyre::Report`.
-fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
+fn run(
+    cli: &Cli,
+    config: &AppConfig,
+    runtime_handle: &tokio::runtime::Handle,
+) -> PodbotResult<CommandOutcome> {
     match &cli.command {
         Commands::Run(args) => run_agent(config, args),
         Commands::TokenDaemon(args) => run_token_daemon(args),
         Commands::Ps => list_containers(),
         Commands::Stop(args) => stop_container(args),
-        Commands::Exec(args) => exec_in_container(config, args),
+        Commands::Exec(args) => exec_in_container(config, args, runtime_handle),
     }
 }
 
@@ -121,7 +126,11 @@ fn stop_container(args: &StopArgs) -> PodbotResult<CommandOutcome> {
 }
 
 /// Execute a command in a running container.
-fn exec_in_container(config: &AppConfig, args: &ExecArgs) -> PodbotResult<CommandOutcome> {
+fn exec_in_container(
+    config: &AppConfig,
+    args: &ExecArgs,
+    runtime_handle: &tokio::runtime::Handle,
+) -> PodbotResult<CommandOutcome> {
     let env = mockable::DefaultEnv::new();
     let resolver = SocketResolver::new(&env);
     let docker =
@@ -136,13 +145,7 @@ fn exec_in_container(config: &AppConfig, args: &ExecArgs) -> PodbotResult<Comman
         !args.detach && std::io::stdin().is_terminal() && std::io::stdout().is_terminal(),
     );
 
-    let runtime = tokio::runtime::Runtime::new().map_err(|error| {
-        podbot::error::PodbotError::from(ContainerError::RuntimeCreationFailed {
-            message: error.to_string(),
-        })
-    })?;
-
-    let exec_result = runtime.block_on(EngineConnector::exec_async(&docker, &request))?;
+    let exec_result = EngineConnector::exec(runtime_handle, &docker, &request)?;
     if exec_result.exit_code() == 0 {
         Ok(CommandOutcome::Success)
     } else {
@@ -152,6 +155,52 @@ fn exec_in_container(config: &AppConfig, args: &ExecArgs) -> PodbotResult<Comman
     }
 }
 
+fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
+    tokio::runtime::Runtime::new().map_err(|error| {
+        podbot::error::PodbotError::from(ContainerError::RuntimeCreationFailed {
+            message: error.to_string(),
+        })
+    })
+}
+
+/// Normalize container exit codes to process exit codes.
+///
+/// Container engines can report values outside the platform shell convention.
+/// podbot preserves values in the `0..=255` range, maps negative values to `1`,
+/// and clamps oversized values to `255`.
 fn normalize_process_exit_code(code: i64) -> i32 {
+    const MAX_PROCESS_EXIT_CODE: i64 = u8::MAX as i64;
+
+    if code < 0 {
+        return 1;
+    }
+    if code > MAX_PROCESS_EXIT_CODE {
+        return i32::from(u8::MAX);
+    }
+
     i32::try_from(code).unwrap_or(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_process_exit_code;
+
+    #[test]
+    fn normalize_process_exit_code_preserves_valid_range() {
+        assert_eq!(normalize_process_exit_code(0), 0);
+        assert_eq!(normalize_process_exit_code(42), 42);
+        assert_eq!(normalize_process_exit_code(255), 255);
+    }
+
+    #[test]
+    fn normalize_process_exit_code_maps_negative_values_to_one() {
+        assert_eq!(normalize_process_exit_code(-1), 1);
+        assert_eq!(normalize_process_exit_code(i64::MIN), 1);
+    }
+
+    #[test]
+    fn normalize_process_exit_code_clamps_oversized_values() {
+        assert_eq!(normalize_process_exit_code(256), 255);
+        assert_eq!(normalize_process_exit_code(i64::MAX), 255);
+    }
 }

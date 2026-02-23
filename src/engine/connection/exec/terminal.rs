@@ -1,5 +1,6 @@
 //! Terminal-size and resize-signal helpers for interactive exec sessions.
 
+use std::io::IsTerminal;
 use std::process::Command;
 
 use bollard::exec::ResizeExecOptions;
@@ -23,6 +24,10 @@ pub(super) struct SystemTerminalSizeProvider;
 
 impl TerminalSizeProvider for SystemTerminalSizeProvider {
     fn terminal_size(&self) -> Option<TerminalSize> {
+        if !local_stdio_is_terminal() {
+            return None;
+        }
+
         let output = Command::new(STTY_COMMAND).arg("size").output().ok()?;
         if !output.status.success() {
             return None;
@@ -65,6 +70,10 @@ fn parse_stty_size(output: &str) -> Option<TerminalSize> {
     let height = parts.next()?.parse::<u16>().ok()?;
     let width = parts.next()?.parse::<u16>().ok()?;
     Some(TerminalSize { width, height })
+}
+
+fn local_stdio_is_terminal() -> bool {
+    std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
 }
 
 #[cfg(unix)]

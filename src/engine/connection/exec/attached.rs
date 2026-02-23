@@ -7,7 +7,7 @@ use std::time::Duration;
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use futures_util::{Stream, StreamExt};
-use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::time::sleep;
 
 use super::terminal::{
@@ -19,15 +19,7 @@ use crate::error::PodbotError;
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "attached exec loop needs explicit state to keep helpers simple"
-)]
-#[expect(
-    clippy::cognitive_complexity,
-    reason = "attached flow combines stream forwarding and resize handling"
-)]
-#[expect(
-    clippy::integer_division_remainder_used,
-    reason = "false positive triggered inside tokio::select! expansion"
+    reason = "entrypoint signature mirrors Bollard attached exec state requirements"
 )]
 pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: TerminalSizeProvider>(
     client: &C,
@@ -37,64 +29,38 @@ pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: Termin
     input: Pin<Box<dyn AsyncWrite + Send>>,
     size_provider: &P,
 ) -> Result<(), PodbotError> {
-    let stdin_task = tokio::spawn(async move { forward_stdin_to_exec_async(input).await });
     let mut stdout = tokio::io::stdout();
     let mut stderr = tokio::io::stderr();
 
     #[cfg(unix)]
-    let mut sigwinch = maybe_sigwinch_listener(request)?;
+    let mut sigwinch =
+        initialize_resize_handling_async(client, request, exec_id, size_provider).await?;
+    #[cfg(not(unix))]
+    initialize_resize_handling_async(client, request, exec_id, size_provider).await?;
 
-    if request.tty() {
-        resize_exec_to_current_terminal_async(
-            client,
-            request.container_id(),
-            exec_id,
-            size_provider,
-        )
-        .await?;
-    }
+    let stdin_task = tokio::spawn(async move { forward_stdin_to_exec_async(input).await });
 
-    loop {
-        #[cfg(unix)]
-        {
-            tokio::select! {
-                maybe_chunk = output.next() => {
-                    if !write_exec_output_chunk(request.container_id(), maybe_chunk, &mut stdout, &mut stderr).await? {
-                        break;
-                    }
-                }
-                () = wait_for_sigwinch(&mut sigwinch), if sigwinch.is_some() => {
-                    resize_exec_to_current_terminal_async(client, request.container_id(), exec_id, size_provider).await?;
-                }
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            let maybe_chunk = output.next().await;
-            if !write_exec_output_chunk(
-                request.container_id(),
-                maybe_chunk,
-                &mut stdout,
-                &mut stderr,
-            )
-            .await?
-            {
-                break;
-            }
-        }
-    }
+    #[cfg(unix)]
+    let session_result = run_output_loop_with_resize_async(
+        client,
+        request,
+        exec_id,
+        size_provider,
+        &mut output,
+        &mut stdout,
+        &mut stderr,
+        &mut sigwinch,
+    )
+    .await;
+
+    #[cfg(not(unix))]
+    let session_result =
+        run_output_loop_async(request, &mut output, &mut stdout, &mut stderr).await;
 
     stdin_task.abort();
-    if let Err(join_error) = stdin_task.await {
-        if !join_error.is_cancelled() {
-            return Err(exec_failed(
-                request.container_id(),
-                format!("failed to join stdin forwarding task: {join_error}"),
-            ));
-        }
-    }
+    drop(stdin_task.await);
 
-    Ok(())
+    session_result
 }
 
 pub(super) async fn wait_for_exit_code_async<C: ContainerExecClient>(
@@ -174,48 +140,95 @@ async fn write_exec_output_chunk(
 
 async fn forward_stdin_to_exec_async(mut input: Pin<Box<dyn AsyncWrite + Send>>) -> io::Result<()> {
     let mut stdin = tokio::io::stdin();
-    let mut buffer = [0_u8; 8192];
-
-    loop {
-        let bytes_read = stdin.read(&mut buffer).await?;
-        if bytes_read == 0 {
-            break;
-        }
-        let bytes = buffer.get(..bytes_read).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "read size exceeded stdin buffer length",
-            )
-        })?;
-        write_all_pinned_async(input.as_mut(), bytes).await?;
-    }
-
-    flush_pinned_async(input.as_mut()).await
+    tokio::io::copy(&mut stdin, &mut input).await?;
+    input.flush().await
 }
 
-async fn write_all_pinned_async(
-    mut writer: Pin<&mut (dyn AsyncWrite + Send)>,
-    mut bytes: &[u8],
-) -> io::Result<()> {
-    while !bytes.is_empty() {
-        let written = std::future::poll_fn(|cx| writer.as_mut().poll_write(cx, bytes)).await?;
-        if written == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::WriteZero,
-                "failed to forward stdin to exec session",
-            ));
-        }
-        bytes = bytes.get(written..).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "write size exceeded buffered stdin chunk length",
-            )
-        })?;
+#[cfg(unix)]
+async fn initialize_resize_handling_async<C: ContainerExecClient, P: TerminalSizeProvider>(
+    client: &C,
+    request: &ExecRequest,
+    exec_id: &str,
+    size_provider: &P,
+) -> Result<Option<tokio::signal::unix::Signal>, PodbotError> {
+    let sigwinch = maybe_sigwinch_listener(request)?;
+    maybe_resize_exec_async(client, request, exec_id, size_provider).await?;
+    Ok(sigwinch)
+}
+
+#[cfg(not(unix))]
+async fn initialize_resize_handling_async<C: ContainerExecClient, P: TerminalSizeProvider>(
+    client: &C,
+    request: &ExecRequest,
+    exec_id: &str,
+    size_provider: &P,
+) -> Result<(), PodbotError> {
+    maybe_resize_exec_async(client, request, exec_id, size_provider).await
+}
+
+async fn maybe_resize_exec_async<C: ContainerExecClient, P: TerminalSizeProvider>(
+    client: &C,
+    request: &ExecRequest,
+    exec_id: &str,
+    size_provider: &P,
+) -> Result<(), PodbotError> {
+    if request.tty() {
+        resize_exec_to_current_terminal_async(
+            client,
+            request.container_id(),
+            exec_id,
+            size_provider,
+        )
+        .await?;
     }
 
     Ok(())
 }
 
-async fn flush_pinned_async(mut writer: Pin<&mut (dyn AsyncWrite + Send)>) -> io::Result<()> {
-    std::future::poll_fn(|cx| writer.as_mut().poll_flush(cx)).await
+#[cfg(unix)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "stream and signal loop requires explicit IO and resize state"
+)]
+#[expect(
+    clippy::integer_division_remainder_used,
+    reason = "false positive triggered inside tokio::select! expansion"
+)]
+async fn run_output_loop_with_resize_async<C: ContainerExecClient, P: TerminalSizeProvider>(
+    client: &C,
+    request: &ExecRequest,
+    exec_id: &str,
+    size_provider: &P,
+    output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    stdout: &mut tokio::io::Stdout,
+    stderr: &mut tokio::io::Stderr,
+    sigwinch: &mut Option<tokio::signal::unix::Signal>,
+) -> Result<(), PodbotError> {
+    loop {
+        tokio::select! {
+            maybe_chunk = output.next() => {
+                if !write_exec_output_chunk(request.container_id(), maybe_chunk, stdout, stderr).await? {
+                    return Ok(());
+                }
+            }
+            () = wait_for_sigwinch(sigwinch), if sigwinch.is_some() => {
+                resize_exec_to_current_terminal_async(client, request.container_id(), exec_id, size_provider).await?;
+            }
+        }
+    }
+}
+
+#[cfg(not(unix))]
+async fn run_output_loop_async(
+    request: &ExecRequest,
+    output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    stdout: &mut tokio::io::Stdout,
+    stderr: &mut tokio::io::Stderr,
+) -> Result<(), PodbotError> {
+    loop {
+        let maybe_chunk = output.next().await;
+        if !write_exec_output_chunk(request.container_id(), maybe_chunk, stdout, stderr).await? {
+            return Ok(());
+        }
+    }
 }

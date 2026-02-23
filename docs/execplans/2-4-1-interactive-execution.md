@@ -67,9 +67,9 @@ pass.
   Severity: medium. Likelihood: medium. Mitigation: isolate size capture behind
   a small helper seam and test with injected values.
 - Risk: attached stream forwarding can create deadlocks if stdin/stdout tasks do
-  not close correctly. Severity: high. Likelihood: medium. Mitigation: model IO
-  forwarding as explicit tasks with clear shutdown ordering and unit tests for
-  close/error paths.
+  not close correctly. Severity: high. Likelihood: medium. Mitigation: model
+  input/output (IO) forwarding as explicit tasks with clear shutdown ordering
+  and unit tests for close/error paths.
 - Risk: detached mode semantics are underspecified by roadmap wording. Severity:
   medium. Likelihood: medium. Mitigation: define and document one explicit
   behaviour (no stream attachment, but wait for and return exit code).

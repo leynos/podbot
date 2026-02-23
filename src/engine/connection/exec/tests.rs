@@ -56,6 +56,23 @@ fn exec_request_rejects_empty_command() {
 }
 
 #[rstest]
+fn exec_request_rejects_blank_command_entries() {
+    let result = ExecRequest::new(
+        "sandbox",
+        vec![String::from("   "), String::from("echo")],
+        ExecMode::Attached,
+    );
+    assert!(
+        matches!(
+            result,
+            Err(PodbotError::Config(ConfigError::InvalidValue { ref field, .. }))
+                if field == "command"
+        ),
+        "expected invalid command error, got {result:?}"
+    );
+}
+
+#[rstest]
 fn exec_request_rejects_blank_container_id() {
     let result = ExecRequest::new("   ", vec![String::from("echo")], ExecMode::Detached);
     assert!(
@@ -317,6 +334,67 @@ fn exec_async_attached_calls_resize_when_tty_enabled(runtime: tokio::runtime::Ru
     assert!(
         result.is_ok(),
         "attached execution should succeed: {result:?}"
+    );
+}
+
+#[rstest]
+fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runtime) {
+    let mut client = MockExecClient::new();
+    client.expect_create_exec().times(1).returning(|_, _| {
+        Box::pin(async {
+            Ok(CreateExecResults {
+                id: String::from("exec-6"),
+            })
+        })
+    });
+    client.expect_start_exec().times(1).returning(|_, options| {
+        assert_eq!(
+            options,
+            Some(StartExecOptions {
+                detach: false,
+                tty: true,
+                output_capacity: None
+            })
+        );
+        let output_stream = stream::iter(Vec::<Result<LogOutput, BollardError>>::new());
+        Box::pin(async move {
+            Ok(bollard::exec::StartExecResults::Attached {
+                output: Box::pin(output_stream),
+                input: Box::pin(tokio::io::sink()),
+            })
+        })
+    });
+    client
+        .expect_resize_exec()
+        .times(1)
+        .returning(|_, _| Box::pin(async { Err(BollardError::RequestTimeoutError) }));
+    client.expect_inspect_exec().never();
+
+    let request = ExecRequest::new(
+        "sandbox-123",
+        vec![String::from("echo"), String::from("hello")],
+        ExecMode::Attached,
+    )
+    .expect("attached request should build");
+    let terminal_size_provider = StubTerminalSizeProvider {
+        terminal_size: Some(TerminalSize {
+            width: 120,
+            height: 42,
+        }),
+    };
+
+    let result = runtime.block_on(EngineConnector::exec_async_with_terminal_size_provider(
+        &client,
+        &request,
+        &terminal_size_provider,
+    ));
+    assert!(
+        matches!(
+            result,
+            Err(PodbotError::Container(ContainerError::ExecFailed { ref message, .. }))
+                if message.contains("resize exec failed")
+        ),
+        "expected resize failure mapping, got {result:?}"
     );
 }
 

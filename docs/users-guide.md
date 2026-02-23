@@ -100,10 +100,13 @@ Execution behaviour:
 - When TTY is enabled, podbot sends an initial resize to the daemon. On Unix
   targets, podbot also listens for `SIGWINCH` and propagates window-size
   changes. Detached mode, or attached mode with TTY disabled, does not register
-  a resize listener.
-- Podbot polls exec status until the command exits, then uses the daemon
-  exit code as the CLI outcome: `0` returns success and non-zero codes are
-  propagated as the process exit status.
+  a resize listener. podbot reads terminal size using `stty size`; if that
+  command is unavailable or returns unexpected output, resize propagation is
+  skipped and execution continues.
+- podbot polls exec status until the command exits, then uses the daemon exit
+  code as the CLI outcome. Exit code `0` returns success. Non-zero values in
+  the `1..=255` range are returned directly, negative values are mapped to `1`,
+  and values above `255` are clamped to `255`.
 - If the daemon reports completion without an exit code, podbot returns an exec
   failure instead of guessing the result.
 
