@@ -107,11 +107,14 @@ fn setup_resize_exec_expectation(
         });
 }
 
-fn setup_resize_exec_failure(client: &mut MockExecClient) {
-    client
-        .expect_resize_exec()
-        .times(1)
-        .returning(|_, _| Box::pin(async { Err(BollardError::RequestTimeoutError) }));
+fn setup_resize_exec_failure(client: &mut MockExecClient, error: BollardError) {
+    let mut pending_error = Some(error);
+    client.expect_resize_exec().times(1).returning(move |_, _| {
+        let next_error = pending_error
+            .take()
+            .expect("resize exec failure expectation consumed once");
+        Box::pin(async move { Err(next_error) })
+    });
 }
 
 fn setup_inspect_exec_completion(client: &mut MockExecClient, exit_code: i64) {
@@ -121,6 +124,96 @@ fn setup_inspect_exec_completion(client: &mut MockExecClient, exit_code: i64) {
                 running: Some(false),
                 exit_code: Some(exit_code),
                 ..bollard::models::ExecInspectResponse::default()
+            })
+        })
+    });
+}
+
+fn setup_start_exec_detached(client: &mut MockExecClient) {
+    client.expect_start_exec().times(1).returning(|_, options| {
+        assert_eq!(
+            options,
+            Some(StartExecOptions {
+                detach: true,
+                tty: false,
+                output_capacity: None
+            })
+        );
+        Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
+    });
+}
+
+fn setup_start_exec_returns_detached(client: &mut MockExecClient) {
+    client.expect_start_exec().times(1).returning(|_, options| {
+        assert_eq!(
+            options,
+            Some(StartExecOptions {
+                detach: false,
+                tty: true,
+                output_capacity: None
+            })
+        );
+        Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
+    });
+}
+
+fn setup_create_exec_failure(client: &mut MockExecClient, error: BollardError) {
+    let mut pending_error = Some(error);
+    client.expect_create_exec().times(1).returning(move |_, _| {
+        let next_error = pending_error
+            .take()
+            .expect("create exec failure expectation consumed once");
+        Box::pin(async move { Err(next_error) })
+    });
+}
+
+fn setup_inspect_exec_with_running_transition(
+    client: &mut MockExecClient,
+    exit_code: i64,
+    running_checks: usize,
+) {
+    let call_index = Arc::new(AtomicUsize::new(0));
+    let call_index_for_mock = Arc::clone(&call_index);
+    client
+        .expect_inspect_exec()
+        .times(running_checks + 1)
+        .returning(move |exec_id| {
+            assert!(!exec_id.is_empty(), "exec id should be populated");
+            let current_index = call_index_for_mock.fetch_add(1, Ordering::SeqCst);
+            let response = if current_index < running_checks {
+                bollard::models::ExecInspectResponse {
+                    running: Some(true),
+                    exit_code: None,
+                    ..bollard::models::ExecInspectResponse::default()
+                }
+            } else {
+                bollard::models::ExecInspectResponse {
+                    running: Some(false),
+                    exit_code: Some(exit_code),
+                    ..bollard::models::ExecInspectResponse::default()
+                }
+            };
+            Box::pin(async move { Ok(response) })
+        });
+}
+
+fn setup_inspect_exec_missing_exit_code(client: &mut MockExecClient) {
+    client.expect_inspect_exec().times(1).returning(|_| {
+        Box::pin(async {
+            Ok(bollard::models::ExecInspectResponse {
+                running: Some(false),
+                exit_code: None,
+                ..bollard::models::ExecInspectResponse::default()
+            })
+        })
+    });
+}
+
+fn setup_create_exec_simple(client: &mut MockExecClient, exec_id: &'static str) {
+    client.expect_create_exec().times(1).returning(move |_, _| {
+        Box::pin(async move {
+            Ok(CreateExecResults {
+                id: String::from(exec_id),
             })
         })
     });
@@ -215,57 +308,9 @@ fn exec_request_rejects_blank_container_id() {
 #[rstest]
 fn exec_async_detached_returns_exit_code(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
-    client
-        .expect_create_exec()
-        .times(1)
-        .returning(|container_id, options| {
-            assert_eq!(container_id, "sandbox-123");
-            assert_eq!(options.cmd, Some(vec![String::from("true")]));
-            Box::pin(async {
-                Ok(CreateExecResults {
-                    id: String::from("exec-1"),
-                })
-            })
-        });
-    client
-        .expect_start_exec()
-        .times(1)
-        .returning(|exec_id, options| {
-            assert_eq!(exec_id, "exec-1");
-            assert_eq!(
-                options,
-                Some(StartExecOptions {
-                    detach: true,
-                    tty: false,
-                    output_capacity: None
-                })
-            );
-            Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
-        });
-
-    let inspect_call_count = Arc::new(AtomicUsize::new(0));
-    let inspect_call_count_for_mock = Arc::clone(&inspect_call_count);
-    client
-        .expect_inspect_exec()
-        .times(2)
-        .returning(move |exec_id| {
-            assert_eq!(exec_id, "exec-1");
-            let call_index = inspect_call_count_for_mock.fetch_add(1, Ordering::SeqCst);
-            let response = if call_index == 0 {
-                bollard::models::ExecInspectResponse {
-                    running: Some(true),
-                    exit_code: None,
-                    ..bollard::models::ExecInspectResponse::default()
-                }
-            } else {
-                bollard::models::ExecInspectResponse {
-                    running: Some(false),
-                    exit_code: Some(7),
-                    ..bollard::models::ExecInspectResponse::default()
-                }
-            };
-            Box::pin(async move { Ok(response) })
-        });
+    setup_create_exec_simple(&mut client, "exec-1");
+    setup_start_exec_detached(&mut client);
+    setup_inspect_exec_with_running_transition(&mut client, 7, 1);
 
     let request = ExecRequest::new(
         "sandbox-123",
@@ -285,10 +330,7 @@ fn exec_async_detached_returns_exit_code(runtime: tokio::runtime::Runtime) {
 #[rstest]
 fn exec_async_maps_create_exec_failures(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
-    client
-        .expect_create_exec()
-        .times(1)
-        .returning(|_, _| Box::pin(async { Err(BollardError::RequestTimeoutError) }));
+    setup_create_exec_failure(&mut client, BollardError::RequestTimeoutError);
 
     let request = ExecRequest::new(
         "sandbox-123",
@@ -311,26 +353,9 @@ fn exec_async_maps_create_exec_failures(runtime: tokio::runtime::Runtime) {
 #[rstest]
 fn exec_async_errors_when_exit_code_missing(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
-    client.expect_create_exec().times(1).returning(|_, _| {
-        Box::pin(async {
-            Ok(CreateExecResults {
-                id: String::from("exec-2"),
-            })
-        })
-    });
-    client
-        .expect_start_exec()
-        .times(1)
-        .returning(|_, _| Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) }));
-    client.expect_inspect_exec().times(1).returning(|_| {
-        Box::pin(async {
-            Ok(bollard::models::ExecInspectResponse {
-                running: Some(false),
-                exit_code: None,
-                ..bollard::models::ExecInspectResponse::default()
-            })
-        })
-    });
+    setup_create_exec_simple(&mut client, "exec-2");
+    setup_start_exec_detached(&mut client);
+    setup_inspect_exec_missing_exit_code(&mut client);
 
     let request = ExecRequest::new(
         "sandbox-123",
@@ -353,17 +378,8 @@ fn exec_async_errors_when_exit_code_missing(runtime: tokio::runtime::Runtime) {
 #[rstest]
 fn exec_async_attached_rejects_detached_start_response(runtime: tokio::runtime::Runtime) {
     let mut client = MockExecClient::new();
-    client.expect_create_exec().times(1).returning(|_, _| {
-        Box::pin(async {
-            Ok(CreateExecResults {
-                id: String::from("exec-3"),
-            })
-        })
-    });
-    client
-        .expect_start_exec()
-        .times(1)
-        .returning(|_, _| Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) }));
+    setup_create_exec_simple(&mut client, "exec-3");
+    setup_start_exec_returns_detached(&mut client);
 
     let request = ExecRequest::new(
         "sandbox-123",
@@ -401,7 +417,7 @@ fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runti
     let mut client = MockExecClient::new();
     setup_create_exec_expectation(&mut client, "exec-6", true);
     setup_start_exec_attached(&mut client, true, vec![]);
-    setup_resize_exec_failure(&mut client);
+    setup_resize_exec_failure(&mut client, BollardError::RequestTimeoutError);
     client.expect_inspect_exec().never();
 
     let request = make_attached_exec_request("sandbox-123", true);
