@@ -8,6 +8,34 @@ pub(super) struct DetachedExecExpectation<'a> {
     pub(super) exit_code: i64,
 }
 
+pub(super) fn setup_start_exec_detached_impl(client: &mut MockExecClient) {
+    client.expect_start_exec().times(1).returning(|_, options| {
+        assert_eq!(
+            options,
+            Some(StartExecOptions {
+                detach: true,
+                tty: false,
+                output_capacity: None
+            })
+        );
+        Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
+    });
+}
+
+pub(super) fn setup_start_exec_returns_detached_impl(client: &mut MockExecClient) {
+    client.expect_start_exec().times(1).returning(|_, options| {
+        assert_eq!(
+            options,
+            Some(StartExecOptions {
+                detach: false,
+                tty: true,
+                output_capacity: None
+            })
+        );
+        Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
+    });
+}
+
 pub(super) fn execute_detached_and_assert_result_impl(
     runtime: &tokio::runtime::Runtime,
     client: &MockExecClient,

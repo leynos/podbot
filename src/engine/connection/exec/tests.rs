@@ -46,6 +46,16 @@ struct AttachedResizeCase {
     should_resize: bool,
 }
 
+struct ErrorScenario {
+    name: &'static str,
+    exec_id: &'static str,
+    mode: ExecMode,
+    command: Vec<String>,
+    setup_failure: fn(&mut MockExecClient),
+    expected_container_id: Option<&'static str>,
+    expected_message_fragment: &'static str,
+}
+
 #[fixture]
 fn runtime() -> RuntimeFixture {
     tokio::runtime::Runtime::new()
@@ -135,34 +145,6 @@ fn setup_inspect_exec_once(client: &mut MockExecClient, exit_code: Option<i64>) 
     });
 }
 
-fn setup_start_exec_detached(client: &mut MockExecClient) {
-    client.expect_start_exec().times(1).returning(|_, options| {
-        assert_eq!(
-            options,
-            Some(StartExecOptions {
-                detach: true,
-                tty: false,
-                output_capacity: None
-            })
-        );
-        Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
-    });
-}
-
-fn setup_start_exec_returns_detached(client: &mut MockExecClient) {
-    client.expect_start_exec().times(1).returning(|_, options| {
-        assert_eq!(
-            options,
-            Some(StartExecOptions {
-                detach: false,
-                tty: true,
-                output_capacity: None
-            })
-        );
-        Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
-    });
-}
-
 fn setup_create_exec_failure(client: &mut MockExecClient, error: BollardError) {
     client
         .expect_create_exec()
@@ -178,6 +160,21 @@ fn setup_create_exec_simple(client: &mut MockExecClient, exec_id: &'static str) 
             })
         })
     });
+}
+
+fn setup_create_exec_failure_scenario(client: &mut MockExecClient) {
+    setup_create_exec_failure(client, BollardError::RequestTimeoutError);
+}
+
+fn setup_missing_exit_code_scenario(client: &mut MockExecClient) {
+    setup_create_exec_simple(client, "exec-2");
+    setup_start_exec_detached(client);
+    setup_inspect_exec_once(client, None);
+}
+
+fn setup_attached_detached_response_scenario(client: &mut MockExecClient) {
+    setup_create_exec_simple(client, "exec-3");
+    setup_start_exec_returns_detached(client);
 }
 
 fn make_attached_exec_request(container_id: &str, tty: bool) -> Result<ExecRequest, PodbotError> {
@@ -237,6 +234,8 @@ use detached_helpers::{
     assert_exec_failed_for_container_with_message_impl as assert_exec_failed_for_container_with_message,
     assert_exec_failed_with_message_impl as assert_exec_failed_with_message,
     execute_detached_and_assert_result_impl as execute_detached_and_assert_result,
+    setup_start_exec_detached_impl as setup_start_exec_detached,
+    setup_start_exec_returns_detached_impl as setup_start_exec_returns_detached,
 };
 
 #[rstest]
@@ -261,62 +260,63 @@ fn exec_async_detached_returns_exit_code(runtime: RuntimeFixture) -> TestResult 
 }
 
 #[rstest]
-fn exec_async_maps_create_exec_failures(runtime: RuntimeFixture) -> TestResult {
+#[case(ErrorScenario {
+    name: "create_exec_failure",
+    exec_id: "exec-create-failure",
+    mode: ExecMode::Detached,
+    command: vec![String::from("false")],
+    setup_failure: setup_create_exec_failure_scenario,
+    expected_container_id: Some("sandbox-123"),
+    expected_message_fragment: "create exec failed",
+})]
+#[case(ErrorScenario {
+    name: "missing_exit_code",
+    exec_id: "exec-2",
+    mode: ExecMode::Detached,
+    command: vec![String::from("false")],
+    setup_failure: setup_missing_exit_code_scenario,
+    expected_container_id: None,
+    expected_message_fragment: "without an exit code",
+})]
+#[case(ErrorScenario {
+    name: "attached_rejects_detached_response",
+    exec_id: "exec-3",
+    mode: ExecMode::Attached,
+    command: vec![String::from("echo"), String::from("hello")],
+    setup_failure: setup_attached_detached_response_scenario,
+    expected_container_id: None,
+    expected_message_fragment: "detached start result",
+})]
+fn exec_async_error_scenarios(
+    runtime: RuntimeFixture,
+    #[case] scenario: ErrorScenario,
+) -> TestResult {
     let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
-    setup_create_exec_failure(&mut client, BollardError::RequestTimeoutError);
+    (scenario.setup_failure)(&mut client);
 
-    let request = make_detached_exec_request("sandbox-123", vec![String::from("false")])?;
-
+    let request = ExecRequest::new("sandbox-123", scenario.command, scenario.mode)?;
     let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
-    assert_exec_failed_for_container_with_message(
-        result,
-        "sandbox-123",
-        "create exec failed",
-        "expected create-exec failure mapping",
+    let assertion_context = format!(
+        "{} ({}) expected error mapping",
+        scenario.name, scenario.exec_id
     );
-    Ok(())
-}
 
-#[rstest]
-fn exec_async_errors_when_exit_code_missing(runtime: RuntimeFixture) -> TestResult {
-    let runtime_handle = runtime?;
-    let mut client = MockExecClient::new();
-    setup_create_exec_simple(&mut client, "exec-2");
-    setup_start_exec_detached(&mut client);
-    setup_inspect_exec_once(&mut client, None);
+    if let Some(expected_container_id) = scenario.expected_container_id {
+        assert_exec_failed_for_container_with_message(
+            result,
+            expected_container_id,
+            scenario.expected_message_fragment,
+            &assertion_context,
+        );
+    } else {
+        assert_exec_failed_with_message(
+            result,
+            scenario.expected_message_fragment,
+            &assertion_context,
+        );
+    }
 
-    let request = make_detached_exec_request("sandbox-123", vec![String::from("false")])?;
-
-    let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
-    assert_exec_failed_with_message(
-        result,
-        "without an exit code",
-        "expected missing-exit-code failure",
-    );
-    Ok(())
-}
-
-#[rstest]
-fn exec_async_attached_rejects_detached_start_response(runtime: RuntimeFixture) -> TestResult {
-    let runtime_handle = runtime?;
-    let mut client = MockExecClient::new();
-    setup_create_exec_simple(&mut client, "exec-3");
-    setup_start_exec_returns_detached(&mut client);
-
-    let request = ExecRequest::new(
-        "sandbox-123",
-        vec![String::from("echo"), String::from("hello")],
-        ExecMode::Attached,
-    )
-    .expect("attached request should build");
-
-    let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
-    assert_exec_failed_with_message(
-        result,
-        "detached start result",
-        "expected attached/detached mismatch failure",
-    );
     Ok(())
 }
 
