@@ -97,6 +97,8 @@ pub(super) fn maybe_sigwinch_listener(
 #[cfg(unix)]
 pub(super) async fn wait_for_sigwinch(signal: &mut Option<tokio::signal::unix::Signal>) {
     if let Some(listener) = signal.as_mut() {
+        // `wait_for_sigwinch` only needs to await the `listener` notification on `signal`.
+        // The returned value is intentionally ignored.
         let _ = listener.recv().await;
     }
 }
@@ -104,13 +106,24 @@ pub(super) async fn wait_for_sigwinch(signal: &mut Option<tokio::signal::unix::S
 #[cfg(test)]
 mod tests {
     use super::parse_stty_size;
+    use rstest::rstest;
 
-    #[test]
-    fn parse_stty_size_parses_row_column_pairs() {
-        let parsed = parse_stty_size("42 120\n");
-        assert_eq!(
-            parsed.map(|size| (size.width, size.height)),
-            Some((120, 42))
-        );
+    #[rstest]
+    #[case("42 120\n", Some((120, 42)))]
+    #[case("42 120   \n", Some((120, 42)))]
+    #[case("  42   120", Some((120, 42)))]
+    #[case("42\n120", Some((120, 42)))]
+    #[case("120 42", Some((42, 120)))]
+    #[case("foo", None)]
+    #[case("42", None)]
+    #[case("", None)]
+    #[case("0 0", Some((0, 0)))]
+    #[case("65535 65535", Some((65535, 65535)))]
+    fn parse_stty_size_returns_expected_dimensions(
+        #[case] input: &str,
+        #[case] expected: Option<(u16, u16)>,
+    ) {
+        let parsed = parse_stty_size(input);
+        assert_eq!(parsed.map(|size| (size.width, size.height)), expected);
     }
 }
