@@ -189,6 +189,8 @@ fn configure_start_exec_expectation(
 fn configure_resize_expectation(client: &mut MockExecClient, mode: ExecMode) {
     match mode {
         ExecMode::Attached => {
+            // Attached mode may still skip resize when terminal dimensions are
+            // unavailable, so this expectation intentionally allows zero calls.
             client
                 .expect_resize_exec()
                 .times(0..)

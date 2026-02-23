@@ -45,6 +45,8 @@ fn reported_exit_code_is(
 fn execution_fails_with_exec_error(
     interactive_exec_state: &InteractiveExecState,
 ) -> StepResult<()> {
+    // This assertion intentionally matches the rendered error prefix from
+    // `ContainerError::ExecFailed` to verify user-facing diagnostics.
     let outcome = interactive_exec_state
         .outcome
         .get()
@@ -69,6 +71,8 @@ fn execution_fails_with_exec_error(
 fn execution_fails_due_to_missing_exit_code(
     interactive_exec_state: &InteractiveExecState,
 ) -> StepResult<()> {
+    // This assertion intentionally couples to the missing-exit-code wording
+    // emitted by exec inspect failure mapping in the engine layer.
     let outcome = interactive_exec_state
         .outcome
         .get()
