@@ -42,11 +42,9 @@ fn reported_exit_code_is(
     }
 }
 
-// Note: This assertion intentionally matches the phrase
-// "failed to execute command in container", produced by
-// `ContainerError::ExecFailed` in `src/error.rs`
-// (`#[error("failed to execute command in container '{container_id}': {message}")]`).
-// If that producer message changes, update this assertion.
+// Note: This assertion depends on the error message format defined in
+// src/error.rs ContainerError::ExecFailed. If that message changes, this test
+// must be updated accordingly.
 #[then("execution fails with an exec error")]
 fn execution_fails_with_exec_error(
     interactive_exec_state: &InteractiveExecState,
@@ -68,11 +66,9 @@ fn execution_fails_with_exec_error(
     }
 }
 
-// Note: This assertion intentionally matches the phrase "without an exit code",
-// produced by `wait_for_exit_code_async` in
-// `src/engine/connection/exec/attached.rs` via
-// `format!("exec session '{exec_id}' completed without an exit code")`.
-// If that producer message changes, update this assertion.
+// Note: This assertion depends on the error message format in
+// src/engine/connection/exec/attached.rs wait_for_exit_code_async. If that
+// message changes, this test must be updated accordingly.
 #[then("execution fails due to missing exit code")]
 fn execution_fails_due_to_missing_exit_code(
     interactive_exec_state: &InteractiveExecState,
