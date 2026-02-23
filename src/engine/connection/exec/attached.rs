@@ -10,10 +10,9 @@ use futures_util::{Stream, StreamExt};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::time::sleep;
 
-use super::terminal::{
-    TerminalSizeProvider, maybe_sigwinch_listener, resize_exec_to_current_terminal_async,
-    wait_for_sigwinch,
-};
+use super::terminal::{TerminalSizeProvider, resize_exec_to_current_terminal_async};
+#[cfg(unix)]
+use super::terminal::{maybe_sigwinch_listener, wait_for_sigwinch};
 use super::{ContainerExecClient, EXEC_INSPECT_POLL_INTERVAL_MS, ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
