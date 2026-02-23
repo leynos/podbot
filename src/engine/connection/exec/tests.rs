@@ -142,6 +142,39 @@ fn assert_exec_request_validation_error(
     );
 }
 
+fn make_attached_exec_request(container_id: &str, tty: bool) -> ExecRequest {
+    ExecRequest::new(
+        container_id,
+        vec![String::from("echo"), String::from("hello")],
+        ExecMode::Attached,
+    )
+    .expect("attached request should build")
+    .with_tty(tty)
+}
+
+fn make_terminal_size_provider(width: u16, height: u16) -> StubTerminalSizeProvider {
+    StubTerminalSizeProvider {
+        terminal_size: Some(TerminalSize { width, height }),
+    }
+}
+
+fn execute_and_assert_success(
+    runtime: &tokio::runtime::Runtime,
+    client: &MockExecClient,
+    request: &ExecRequest,
+    terminal_size_provider: &StubTerminalSizeProvider,
+) {
+    let result = runtime.block_on(EngineConnector::exec_async_with_terminal_size_provider(
+        client,
+        request,
+        terminal_size_provider,
+    ));
+    assert!(
+        result.is_ok(),
+        "attached execution should succeed: {result:?}"
+    );
+}
+
 #[rstest]
 fn exec_request_rejects_empty_command() {
     let result = ExecRequest::new("sandbox", vec![], ExecMode::Attached);
@@ -358,28 +391,9 @@ fn exec_async_attached_calls_resize_when_tty_enabled(runtime: tokio::runtime::Ru
     setup_resize_exec_expectation(&mut client, "exec-4", 120, 42);
     setup_inspect_exec_completion(&mut client, 0);
 
-    let request = ExecRequest::new(
-        "sandbox-123",
-        vec![String::from("echo"), String::from("hello")],
-        ExecMode::Attached,
-    )
-    .expect("attached request should build");
-    let terminal_size_provider = StubTerminalSizeProvider {
-        terminal_size: Some(TerminalSize {
-            width: 120,
-            height: 42,
-        }),
-    };
-
-    let result = runtime.block_on(EngineConnector::exec_async_with_terminal_size_provider(
-        &client,
-        &request,
-        &terminal_size_provider,
-    ));
-    assert!(
-        result.is_ok(),
-        "attached execution should succeed: {result:?}"
-    );
+    let request = make_attached_exec_request("sandbox-123", true);
+    let terminal_size_provider = make_terminal_size_provider(120, 42);
+    execute_and_assert_success(&runtime, &client, &request, &terminal_size_provider);
 }
 
 #[rstest]
@@ -390,18 +404,8 @@ fn exec_async_attached_propagates_resize_failures(runtime: tokio::runtime::Runti
     setup_resize_exec_failure(&mut client);
     client.expect_inspect_exec().never();
 
-    let request = ExecRequest::new(
-        "sandbox-123",
-        vec![String::from("echo"), String::from("hello")],
-        ExecMode::Attached,
-    )
-    .expect("attached request should build");
-    let terminal_size_provider = StubTerminalSizeProvider {
-        terminal_size: Some(TerminalSize {
-            width: 120,
-            height: 42,
-        }),
-    };
+    let request = make_attached_exec_request("sandbox-123", true);
+    let terminal_size_provider = make_terminal_size_provider(120, 42);
 
     let result = runtime.block_on(EngineConnector::exec_async_with_terminal_size_provider(
         &client,
@@ -426,27 +430,7 @@ fn exec_async_attached_skips_resize_when_tty_disabled(runtime: tokio::runtime::R
     client.expect_resize_exec().never();
     setup_inspect_exec_completion(&mut client, 0);
 
-    let request = ExecRequest::new(
-        "sandbox-123",
-        vec![String::from("echo"), String::from("hello")],
-        ExecMode::Attached,
-    )
-    .expect("attached request should build")
-    .with_tty(false);
-    let terminal_size_provider = StubTerminalSizeProvider {
-        terminal_size: Some(TerminalSize {
-            width: 80,
-            height: 24,
-        }),
-    };
-
-    let result = runtime.block_on(EngineConnector::exec_async_with_terminal_size_provider(
-        &client,
-        &request,
-        &terminal_size_provider,
-    ));
-    assert!(
-        result.is_ok(),
-        "attached execution should succeed: {result:?}"
-    );
+    let request = make_attached_exec_request("sandbox-123", false);
+    let terminal_size_provider = make_terminal_size_provider(80, 24);
+    execute_and_assert_success(&runtime, &client, &request, &terminal_size_provider);
 }
