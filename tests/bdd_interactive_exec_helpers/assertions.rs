@@ -41,12 +41,13 @@ fn reported_exit_code_is(
     }
 }
 
+// Note: This assertion depends on the error message format defined in
+// src/error.rs ContainerError::ExecFailed. If that message changes, this test
+// must be updated accordingly.
 #[then("execution fails with an exec error")]
 fn execution_fails_with_exec_error(
     interactive_exec_state: &InteractiveExecState,
 ) -> StepResult<()> {
-    // This assertion intentionally matches the rendered error prefix from
-    // `ContainerError::ExecFailed` to verify user-facing diagnostics.
     let outcome = interactive_exec_state
         .outcome
         .get()
@@ -67,12 +68,13 @@ fn execution_fails_with_exec_error(
     }
 }
 
+// Note: This assertion depends on the error message format in
+// src/engine/connection/exec/attached.rs wait_for_exit_code_async. If that
+// message changes, this test must be updated accordingly.
 #[then("execution fails due to missing exit code")]
 fn execution_fails_due_to_missing_exit_code(
     interactive_exec_state: &InteractiveExecState,
 ) -> StepResult<()> {
-    // This assertion intentionally couples to the missing-exit-code wording
-    // emitted by exec inspect failure mapping in the engine layer.
     let outcome = interactive_exec_state
         .outcome
         .get()
