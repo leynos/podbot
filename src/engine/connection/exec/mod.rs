@@ -314,10 +314,11 @@ fn validate_command(command: Vec<String>) -> Result<Vec<String>, PodbotError> {
         }));
     }
 
-    if command.iter().any(|entry| entry.trim().is_empty()) {
+    let executable = command.first().map(String::as_str).unwrap_or_default();
+    if executable.trim().is_empty() {
         return Err(PodbotError::from(ConfigError::InvalidValue {
             field: String::from("command"),
-            reason: String::from("command entries must not be empty"),
+            reason: String::from("command executable must not be empty"),
         }));
     }
 

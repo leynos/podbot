@@ -56,20 +56,28 @@ fn exec_request_rejects_empty_command() {
 }
 
 #[rstest]
-fn exec_request_rejects_blank_command_entries() {
-    let result = ExecRequest::new(
-        "sandbox",
-        vec![String::from("   "), String::from("echo")],
-        ExecMode::Attached,
-    );
+#[case(vec![String::new()])]
+#[case(vec![String::from("   "), String::from("echo")])]
+fn exec_request_rejects_blank_executable_entry(#[case] command: Vec<String>) {
+    let result = ExecRequest::new("sandbox", command, ExecMode::Attached);
     assert!(
         matches!(
             result,
             Err(PodbotError::Config(ConfigError::InvalidValue { ref field, .. }))
                 if field == "command"
         ),
-        "expected invalid command error, got {result:?}"
+        "expected invalid executable error, got {result:?}"
     );
+}
+
+#[rstest]
+#[case(vec![String::from("echo"), String::new()])]
+#[case(vec![String::from("echo"), String::from("   ")])]
+fn exec_request_allows_blank_non_executable_entries(#[case] command: Vec<String>) {
+    let expected = command.clone();
+    let request = ExecRequest::new("sandbox", command, ExecMode::Attached)
+        .expect("command with blank non-executable arguments should be accepted");
+    assert_eq!(request.command(), expected.as_slice());
 }
 
 #[rstest]
