@@ -6,7 +6,7 @@ steps grouping related work and tasks defining atomic execution units.
 
 Podbot is delivered through two interfaces:
 
-- A CLI for terminal operators.
+- A Command-Line Interface (CLI) for terminal operators.
 - A Rust library for embedding in larger agent-hosting tools.
 
 Roadmap items must preserve this dual-delivery model.
@@ -175,7 +175,7 @@ Implement the background daemon that refreshes tokens before expiry.
 
 **Tasks:**
 
-- [ ] Create the runtime directory at $XDG_RUNTIME_DIR/podbot/<container_id>/.
+- [ ] Create the runtime directory at $XDG_RUNTIME_DIR/podbot/\<container_id>/.
 - [ ] Set directory mode 0700 and file mode 0600.
 - [ ] Write the initial token to ghapp_token within the directory.
 - [ ] Implement a refresh loop with a five-minute buffer before expiry.
@@ -185,7 +185,7 @@ Implement the background daemon that refreshes tokens before expiry.
 **Completion criteria:** Tokens refresh automatically before expiry. Atomic
 writes prevent partial reads. The daemon runs reliably over extended periods.
 
-### Step 3.4: GIT_ASKPASS mechanism
+### Step 3.4: GIT_ASKPASS mechanism (Git credential helper variable)
 
 Configure the container to use token-based Git authentication.
 
@@ -193,7 +193,8 @@ Configure the container to use token-based Git authentication.
 
 - [ ] Document the helper script that reads /run/secrets/ghapp_token.
 - [ ] Configure the read-only bind mount for the token file.
-- [ ] Set GIT_ASKPASS environment variable in the container.
+- [ ] Set the `GIT_ASKPASS` Git credential helper environment variable in the
+  container.
 - [ ] Verify Git clone and fetch operations succeed after token refresh.
 
 **Completion criteria:** Git operations authenticate using the mounted token.
@@ -254,7 +255,7 @@ interaction works correctly. Container cleanup occurs on agent exit.
 
 ## Phase 5: Library API and embedding support
 
-Expose podbot orchestration as a stable library API that can be called by
+Expose Podbot orchestration as a stable library API that can be called by
 external host applications without shelling out to the CLI.
 
 ### Step 5.1: Extract command orchestration into library modules
@@ -265,7 +266,7 @@ functions.
 **Tasks:**
 
 - [ ] Introduce a public orchestration module for run, exec, stop, ps, and
-  token-daemon operations.
+  token daemon operations.
 - [ ] Replace binary-local orchestration logic with calls into library
   orchestration functions.
 - [ ] Ensure orchestration returns typed outcomes rather than printing
@@ -278,7 +279,7 @@ The binary becomes a thin adapter layer over library orchestration.
 
 ### Step 5.2: Decouple configuration APIs from Clap
 
-Ensure embedders can configure podbot without constructing CLI parse types.
+Ensure embedders can configure Podbot without constructing CLI parse types.
 
 **Tasks:**
 
@@ -303,7 +304,7 @@ Define and document the supported long-term API surface.
   `eyre` types.
 - [ ] Gate CLI-only dependencies and code paths behind a binary or feature
   boundary.
-- [ ] Add integration tests that embed podbot as a library from a host-style
+- [ ] Add integration tests that embed Podbot as a library from a host-style
   call path.
 
 **Completion criteria:** Podbot can be integrated as a dependency in another
@@ -350,7 +351,7 @@ Implement commands for managing running containers.
 
 **Tasks:**
 
-- [ ] Add ps to list active podbot containers with status.
+- [ ] Add ps to list active Podbot containers with status.
 - [ ] Create stop to terminate a container by ID or name.
 - [ ] Provide exec to run arbitrary commands within a container.
 - [ ] Format output for readability.
