@@ -195,6 +195,28 @@ fn invoke_exec(cli_state: &CliState) {
     }
 }
 
+#[given("the CLI is invoked with exec --detach my-container -- echo hello")]
+fn invoke_exec_detached(cli_state: &CliState) {
+    let result: Result<Cli, clap::Error> = Cli::try_parse_from([
+        "podbot",
+        "exec",
+        "--detach",
+        "my-container",
+        "--",
+        "echo",
+        "hello",
+    ]);
+    match result {
+        Ok(_) => {
+            cli_state.success.set(true);
+        }
+        Err(e) => {
+            cli_state.error.set(e.to_string());
+            cli_state.success.set(false);
+        }
+    }
+}
+
 #[then("the invocation succeeds")]
 #[expect(
     clippy::expect_used,
@@ -268,5 +290,13 @@ fn token_daemon_succeeds(cli_state: CliState) {
     name = "Exec command succeeds with container and command"
 )]
 fn exec_succeeds(cli_state: CliState) {
+    let _ = cli_state;
+}
+
+#[scenario(
+    path = "tests/features/cli.feature",
+    name = "Exec command succeeds in detached mode"
+)]
+fn exec_detached_succeeds(cli_state: CliState) {
     let _ = cli_state;
 }

@@ -120,10 +120,10 @@ Attach a terminal to the agent process for interactive sessions.
 
 **Tasks:**
 
-- [ ] Implement exec with TTY attachment for interactive sessions.
-- [ ] Handle terminal resize signals (SIGWINCH).
-- [ ] Support both attached and detached execution modes.
-- [ ] Capture exit codes from executed commands.
+- [x] Implement exec with TTY attachment for interactive sessions.
+- [x] Handle terminal resize signals (SIGWINCH).
+- [x] Support both attached and detached execution modes.
+- [x] Capture exit codes from executed commands.
 
 **Completion criteria:** Interactive sessions work with proper terminal
 handling. Resize events propagate correctly. Exit codes return accurately.

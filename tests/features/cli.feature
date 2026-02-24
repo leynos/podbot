@@ -39,3 +39,7 @@ Feature: Command-line interface
   Scenario: Exec command succeeds with container and command
     Given the CLI is invoked with exec my-container -- echo hello
     Then the invocation succeeds
+
+  Scenario: Exec command succeeds in detached mode
+    Given the CLI is invoked with exec --detach my-container -- echo hello
+    Then the invocation succeeds

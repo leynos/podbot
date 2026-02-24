@@ -15,7 +15,8 @@
 mod connection;
 
 pub use connection::{
-    ContainerCreator, ContainerSecurityOptions, ContainerUploader, CreateContainerFuture,
-    CreateContainerRequest, CredentialUploadRequest, CredentialUploadResult, EngineConnector,
-    SelinuxLabelMode, SocketResolver, UploadToContainerFuture,
+    ContainerCreator, ContainerExecClient, ContainerSecurityOptions, ContainerUploader,
+    CreateContainerFuture, CreateContainerRequest, CreateExecFuture, CredentialUploadRequest,
+    CredentialUploadResult, EngineConnector, ExecMode, ExecRequest, ExecResult, InspectExecFuture,
+    ResizeExecFuture, SelinuxLabelMode, SocketResolver, StartExecFuture, UploadToContainerFuture,
 };

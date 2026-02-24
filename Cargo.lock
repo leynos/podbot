@@ -2092,6 +2092,7 @@ dependencies = [
  "cap-std 4.0.0",
  "clap",
  "eyre",
+ "futures-util",
  "mockable",
  "mockall 0.13.1",
  "octocrab",

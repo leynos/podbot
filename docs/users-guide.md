@@ -80,6 +80,36 @@ Execute a command in a running container.
 podbot exec <container> -- command arg1 arg2
 ```
 
+Use attached mode by default, or detached mode with `--detach`:
+
+```bash
+# Attached mode (default): streams are forwarded to the local terminal
+podbot exec <container> -- sh -lc "echo hello"
+
+# Detached mode: no stream attachment, but podbot still waits for completion
+podbot exec --detach <container> -- sh -lc "exit 7"
+```
+
+Execution behaviour:
+
+- Attached mode forwards stdin/stdout/stderr between the local terminal and the
+  container exec session.
+- Detached mode does not attach streams and always uses `tty = false`.
+- TTY allocation is enabled only when attached mode is selected and both local
+  stdin and stdout are terminals.
+- When TTY is enabled, podbot sends an initial resize to the daemon. On Unix
+  targets, podbot also listens for `SIGWINCH` and propagates window-size
+  changes. Detached mode, or attached mode with TTY disabled, does not register
+  a resize listener. podbot reads terminal size using `stty size`; if that
+  command is unavailable or returns unexpected output, resize propagation is
+  skipped and execution continues.
+- podbot polls exec status until the command exits, then uses the daemon exit
+  code as the CLI outcome. Exit code `0` returns success. Non-zero values in
+  the `1..=255` range are returned directly, negative values are mapped to `1`,
+  and values above `255` are clamped to `255`.
+- If the daemon reports completion without an exit code, podbot returns an exec
+  failure instead of guessing the result.
+
 ## Configuration
 
 Configuration can be provided via:
