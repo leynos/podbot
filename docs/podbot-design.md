@@ -596,6 +596,7 @@ A suggested organisation for maintainability:
 src/
 ├── lib.rs              # Public library entry points and re-exports
 ├── main.rs             # Thin CLI adapter over library APIs
+├── error.rs            # Error types and conversions
 ├── api/                # Orchestration API: run, exec, stop, ps, token daemon
 ├── config/             # Configuration module (types + loader + CLI adapter)
 │   ├── mod.rs          # Module docs and re-exports
