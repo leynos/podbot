@@ -177,10 +177,10 @@ The token strategy works as follows:
 
 <!-- markdownlint-disable MD029 -->
 
-1. On container creation, the CLI establishes a runtime directory at
+1. On container creation, the host process establishes a runtime directory at
    `$XDG_RUNTIME_DIR/podbot/<container_id>/`.
 
-1. The CLI writes the initial token to `ghapp_token` within this directory,
+1. The host process writes the initial token to `ghapp_token` within this directory,
    with mode `0600` and directory mode `0700`.
 
 1. The container receives a read-only bind mount:
@@ -663,20 +663,20 @@ stronger guarantees should consider VM-based isolation.
 
 ______________________________________________________________________
 
-\[^1\]: Bollard Docker struct documentation:
+[^1]: Bollard Docker struct documentation:
 <https://docs.rs/bollard/latest/bollard/struct.Docker.html>
 
-\[^2\]: Octocrab builder and installation token documentation:
+[^2]: Octocrab builder and installation token documentation:
 <https://docs.rs/octocrab/latest/octocrab/struct.OctocrabBuilder.html>
 
-\[^3\]: GitHub App installation authentication:
+[^3]: GitHub App installation authentication:
 <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation>
 
-\[^4\]: Claude Code best practices, including permissive mode:
+[^4]: Claude Code best practices, including permissive mode:
 <https://www.anthropic.com/engineering/claude-code-best-practices>
 
-\[^5\]: Codex CLI security documentation:
+[^5]: Codex CLI security documentation:
 <https://developers.openai.com/codex/security/>
 
-\[^6\]: OrthoConfig repository:
+[^6]: OrthoConfig repository:
 <https://github.com/leynos/ortho-config>
