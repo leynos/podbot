@@ -4,6 +4,13 @@ This roadmap breaks down the implementation of the sandboxed agent runner into
 achievable, measurable tasks. Each phase represents a strategic milestone, with
 steps grouping related work and tasks defining atomic execution units.
 
+Podbot is delivered through two interfaces:
+
+- A Command-Line Interface (CLI) for terminal operators.
+- A Rust library for embedding in larger agent-hosting tools.
+
+Roadmap items must preserve this dual-delivery model.
+
 ## Phase 1: Foundation and configuration
 
 Establish the project's dependency graph and configuration system, providing
@@ -168,7 +175,7 @@ Implement the background daemon that refreshes tokens before expiry.
 
 **Tasks:**
 
-- [ ] Create the runtime directory at $XDG_RUNTIME_DIR/podbot/<container_id>/.
+- [ ] Create the runtime directory at $XDG_RUNTIME_DIR/podbot/\<container_id>/.
 - [ ] Set directory mode 0700 and file mode 0600.
 - [ ] Write the initial token to ghapp_token within the directory.
 - [ ] Implement a refresh loop with a five-minute buffer before expiry.
@@ -178,7 +185,7 @@ Implement the background daemon that refreshes tokens before expiry.
 **Completion criteria:** Tokens refresh automatically before expiry. Atomic
 writes prevent partial reads. The daemon runs reliably over extended periods.
 
-### Step 3.4: GIT_ASKPASS mechanism
+### Step 3.4: GIT_ASKPASS mechanism (Git credential helper variable)
 
 Configure the container to use token-based Git authentication.
 
@@ -186,7 +193,8 @@ Configure the container to use token-based Git authentication.
 
 - [ ] Document the helper script that reads /run/secrets/ghapp_token.
 - [ ] Configure the read-only bind mount for the token file.
-- [ ] Set GIT_ASKPASS environment variable in the container.
+- [ ] Set the `GIT_ASKPASS` Git credential helper environment variable in the
+  container.
 - [ ] Verify Git clone and fetch operations succeed after token refresh.
 
 **Completion criteria:** Git operations authenticate using the mounted token.
@@ -245,11 +253,68 @@ Launch the agent in permissive mode and attach the terminal.
 **Completion criteria:** Agents start successfully in permissive mode. Terminal
 interaction works correctly. Container cleanup occurs on agent exit.
 
-## Phase 5: CLI
+## Phase 5: Library API and embedding support
+
+Expose Podbot orchestration as a stable library API that can be called by
+external host applications without shelling out to the CLI.
+
+### Step 5.1: Extract command orchestration into library modules
+
+Move subcommand behaviour from binary entrypoint code into reusable library
+functions.
+
+**Tasks:**
+
+- [ ] Introduce a public orchestration module for run, exec, stop, ps, and
+  token daemon operations.
+- [ ] Replace binary-local orchestration logic with calls into library
+  orchestration functions.
+- [ ] Ensure orchestration returns typed outcomes rather than printing
+  directly.
+- [ ] Keep side-effecting process control (`std::process::exit`) in the CLI
+  adapter only.
+
+**Completion criteria:** All command flows are invocable through library APIs.
+The binary becomes a thin adapter layer over library orchestration.
+
+### Step 5.2: Decouple configuration APIs from Clap
+
+Ensure embedders can configure Podbot without constructing CLI parse types.
+
+**Tasks:**
+
+- [ ] Add a library-facing configuration loader that accepts explicit load
+  options and overrides.
+- [ ] Keep Clap-dependent structures in a CLI adapter layer.
+- [ ] Provide conversion helpers from parsed CLI flags into library load
+  options.
+- [ ] Add tests for library configuration loading independent of CLI parsing.
+
+**Completion criteria:** Library consumers can resolve `AppConfig` without
+using `clap::Parser` or `Cli` structs.
+
+### Step 5.3: Stabilize public library boundaries
+
+Define and document the supported long-term API surface.
+
+**Tasks:**
+
+- [ ] Document supported public modules and request/response types.
+- [ ] Ensure public APIs use semantic errors (`PodbotError`) and avoid opaque
+  `eyre` types.
+- [ ] Gate CLI-only dependencies and code paths behind a binary or feature
+  boundary.
+- [ ] Add integration tests that embed Podbot as a library from a host-style
+  call path.
+
+**Completion criteria:** Podbot can be integrated as a dependency in another
+Rust tool with documented, versioned APIs and no CLI coupling requirements.
+
+## Phase 6: CLI
 
 Complete the user-facing command interface with all subcommands.
 
-### Step 5.1: Subcommand dispatch
+### Step 6.1: Subcommand dispatch
 
 Implement the argument parsing and subcommand routing.
 
@@ -265,7 +330,7 @@ Implement the argument parsing and subcommand routing.
 **Completion criteria:** All subcommands parse correctly. Help text describes
 each command and its arguments. Invalid arguments produce clear errors.
 
-### Step 5.2: Run subcommand
+### Step 6.2: Run subcommand
 
 Implement the primary workflow for launching agent sessions.
 
@@ -280,13 +345,13 @@ Implement the primary workflow for launching agent sessions.
 **Completion criteria:** The run command launches complete agent sessions.
 Required arguments enforce presence. The full orchestration executes correctly.
 
-### Step 5.3: Management subcommands
+### Step 6.3: Management subcommands
 
 Implement commands for managing running containers.
 
 **Tasks:**
 
-- [ ] Add ps to list active podbot containers with status.
+- [ ] Add ps to list active Podbot containers with status.
 - [ ] Create stop to terminate a container by ID or name.
 - [ ] Provide exec to run arbitrary commands within a container.
 - [ ] Format output for readability.
@@ -294,7 +359,7 @@ Implement commands for managing running containers.
 **Completion criteria:** Management commands operate correctly against running
 containers. Output formats are clear and consistent.
 
-### Step 5.4: Token daemon subcommand
+### Step 6.4: Token daemon subcommand
 
 Support standalone token daemon execution.
 
@@ -308,11 +373,11 @@ Support standalone token daemon execution.
 **Completion criteria:** The daemon runs independently of agent sessions.
 Systemd integration works correctly. Shutdown handles cleanly.
 
-## Phase 6: Container image
+## Phase 7: Container image
 
 Create the sandbox container image with all required components.
 
-### Step 6.1: Base image definition
+### Step 7.1: Base image definition
 
 Define the Containerfile for the sandbox environment.
 
@@ -327,7 +392,7 @@ Define the Containerfile for the sandbox environment.
 **Completion criteria:** The image builds successfully. Inner Podman executes
 within the container. Git operations function correctly.
 
-### Step 6.2: Agent binaries
+### Step 7.2: Agent binaries
 
 Add the AI agent binaries to the image.
 
@@ -341,7 +406,7 @@ Add the AI agent binaries to the image.
 **Completion criteria:** Both agent binaries execute within the container.
 Version information displays correctly.
 
-### Step 6.3: GIT_ASKPASS helper
+### Step 7.3: GIT_ASKPASS helper
 
 Install the helper script for token-based authentication.
 
@@ -355,7 +420,7 @@ Install the helper script for token-based authentication.
 **Completion criteria:** The helper script reads tokens correctly. Git
 operations authenticate using the helper. Permissions are appropriate.
 
-### Step 6.4: Image build automation
+### Step 7.4: Image build automation
 
 Automate image building and distribution.
 

@@ -4,24 +4,27 @@ This document describes a sandboxed execution environment for running AI coding
 agents (Claude Code, Codex) with repository access. The design prioritizes
 security by treating the host container engine as high-trust infrastructure,
 while the agent container operates in a low-trust playpen with no access to the
-host socket.
+host socket. Podbot must be usable both as a Command-Line Interface (CLI) tool
+and as an embeddable Rust library for larger agent-hosting systems.
 
 ## Overview
 
-The core principle is straightforward: the Rust Command-Line Interface (CLI)
-acts as the sole holder of the host Podman or Docker socket. The agent
-container never receives access to this socket. Instead, the agent runs an
-inner Podman service for any nested container operations (such as `act` for
-GitHub Actions or `cross` for cross-compilation), ensuring that mount paths
-resolve within the sandbox filesystem rather than the host.
+The core principle is straightforward: Podbot core logic is the sole holder of
+the host Podman or Docker socket. Whether called by the Podbot CLI or by a
+host application embedding the library, the agent container never receives
+access to this socket. Instead, the agent runs an inner Podman service for any
+nested container operations (such as `act` for GitHub Actions or `cross` for
+cross-compilation), ensuring that mount paths resolve within the sandbox
+filesystem rather than the host.
 
 For screen readers: The following diagram illustrates the trust boundary
-between the host CLI and the sandboxed agent container.
+between the host control process (CLI or embedding host application) and the
+sandboxed agent container.
 
 ```mermaid
 flowchart TB
     subgraph Host["Host system (high trust)"]
-        CLI["Rust CLI"]
+        CLI["Podbot host process<br/>(CLI or embedding host app)"]
         Socket["Podman/Docker socket"]
         TokenFile["Token file<br/>(XDG_RUNTIME_DIR)"]
         CLI --> Socket
@@ -40,11 +43,36 @@ flowchart TB
     TokenFile -.->|"Read-only bind mount"| Agent
 ```
 
-_Figure 1: Trust boundaries between host CLI and sandboxed agent._
+_Figure 1: Trust boundaries between host control process and sandboxed agent._
+
+## Dual delivery model
+
+Podbot has two first-class delivery surfaces:
+
+- A Podbot binary for terminal operators.
+- A Podbot library API for embedding within larger agent-hosting tools.
+
+The library owns orchestration primitives, default workflow implementations, and
+semantic error handling. The host process (CLI or embedding application)
+controls lifecycle by deciding when and how to call those library APIs. The CLI
+is an adapter layer that handles:
+
+- Argument parsing via Clap.
+- Operator-facing output formatting.
+- Process exit code conversion and `std::process::exit` invocation.
+
+Library APIs must not depend on CLI-only types and must not perform direct
+process termination. Library functions return typed request and response values
+plus semantic errors (`PodbotError`) so host applications can integrate their
+own logging, retries, scheduling, and policy controls.
 
 ## Execution flow
 
-The CLI orchestrates container creation and agent execution through eight steps.
+The host process (CLI or embedding application) initiates orchestration by
+calling the Podbot library. The library then performs container creation and
+agent execution through seven steps.
+
+<!-- markdownlint-disable MD029 -->
 
 1. **Create outer container** from a pre-configured image containing:
 
@@ -53,32 +81,34 @@ The CLI orchestrates container creation and agent execution through eight steps.
    - `claude` and `codex` binaries
    - A helper script for Git authentication via token file
 
-2. **Inject agent credentials** from `~/.claude` and `~/.codex` by copying into
+1. **Inject agent credentials** from `~/.claude` and `~/.codex` by copying into
    the container filesystem using Bollard's `upload_to_container` method.[^1]
    Bind-mounting the home directory would expose unnecessary host state.
 
-3. **Configure Git identity** by reading `user.name` and `user.email` from the
+1. **Configure Git identity** by reading `user.name` and `user.email` from the
    host and executing `git config --global` within the container.
 
-4. **Create a GitHub App installation access token** using Octocrab.[^2]
+1. **Create a GitHub App installation access token** using Octocrab.[^2]
    Installation tokens expire after one hour.[^3]
 
-5. **Start a token renewal daemon** that refreshes the installation token before
+1. **Start a token renewal daemon** that refreshes the installation token before
    expiry. Rather than repeatedly executing commands or copying files into the
    container, this daemon writes the token to a host-side file and relies on a
    read-only bind mount for the container to observe updates.
 
-6. **Clone the repository** specified by the operator. GitHub supports
+1. **Clone the repository** specified by the operator. GitHub supports
    Hypertext Transfer Protocol (HTTP) access using the installation token in
    the form `x-access-token:TOKEN@github.com/owner/repo`.[^3] However,
    embedding tokens in Uniform Resource Locators (URLs) risks leaking
    credentials into process arguments and shell history. A safer approach uses
    `GIT_ASKPASS` with a script that reads from `/run/secrets/ghapp_token`.
 
-7. **Start the agent in permissive mode**, attached to the terminal:
+1. **Start the agent in permissive mode**, attached to the terminal:
 
    - Claude Code: `claude --dangerously-skip-permissions`[^4]
    - Codex CLI: `codex --dangerously-bypass-approvals-and-sandbox`[^5]
+
+<!-- markdownlint-enable MD029 -->
 
 ## Credential injection contract
 
@@ -108,13 +138,14 @@ mapped to `ContainerError::UploadFailed` with the target `container_id`.
 
 The design establishes clear trust boundaries.
 
-| Component       | Trust level | Socket access     | Notes                                     |
+| Component | Trust level | Socket access | Notes |
 | --------------- | ----------- | ----------------- | ----------------------------------------- |
-| Rust CLI        | High        | Host socket       | Single auditable chokepoint               |
-| Agent container | Low         | Inner socket only | Cannot reach host engine                  |
-| Token daemon    | High        | None              | Runs on host, writes to runtime directory |
+| Podbot CLI host process | High | Host socket | Auditable chokepoint when running the binary |
+| Embedding host process with Podbot library | High | Host socket | Equivalent authority to the CLI host process when embedded |
+| Agent container | Low | Inner socket only | Cannot reach host engine |
+| Token daemon | High | None | Runs on host, writes to runtime directory |
 
-_Table 1: Trust levels and socket access by component._
+_Table 1: Trust levels and socket access by component and delivery mode._
 
 The agent container cannot escalate to host access because:
 
@@ -131,7 +162,7 @@ at the cost of operational complexity.
 
 For additional hardening, network egress could be restricted to model endpoints
 and GitHub. Both Claude Code and Codex documentation note prompt injection
-risks when broad network access is enabled.[^4][^5]
+risks when broad network access is enabled.[^4] [^5]
 
 ## Error handling boundary
 
@@ -144,21 +175,25 @@ expire after one hour and must be refreshed without interrupting the agent.
 
 The token strategy works as follows:
 
-1. On container creation, the CLI establishes a runtime directory at
+<!-- markdownlint-disable MD029 -->
+
+1. On container creation, the host process establishes a runtime directory at
    `$XDG_RUNTIME_DIR/podbot/<container_id>/`.
 
-2. The CLI writes the initial token to `ghapp_token` within this directory,
+1. The host process writes the initial token to `ghapp_token` within this directory,
    with mode `0600` and directory mode `0700`.
 
-3. The container receives a read-only bind mount:
+1. The container receives a read-only bind mount:
    `<token_path>:/run/secrets/ghapp_token:ro`.
 
-4. The token daemon refreshes the token with a time buffer using Octocrab's
+1. The token daemon refreshes the token with a time buffer using Octocrab's
    `installation_token_with_buffer` method,[^2] writing atomically via rename
    from a temporary file.
 
-5. Inside the container, `GIT_ASKPASS` reads the mounted file, ensuring Git
+1. Inside the container, `GIT_ASKPASS` reads the mounted file, ensuring Git
    operations continue working after token refresh.
+
+<!-- markdownlint-enable MD029 -->
 
 ```rust,no_run
 // Token refresh pseudocode
@@ -212,14 +247,14 @@ handling design.
 
 ### Supported protocols
 
-| Protocol    | Scheme prefix | Bollard method        | Use case                                            |
+| Protocol | Scheme prefix | Bollard method | Use case |
 | ----------- | ------------- | --------------------- | --------------------------------------------------- |
-| Unix socket | `unix://`     | `connect_with_socket` | Local Docker/Podman daemon (default on Linux/macOS) |
-| Named pipe  | `npipe://`    | `connect_with_socket` | Local Docker on Windows                             |
-| TCP         | `tcp://`      | `connect_with_http`   | Remote daemon over network                          |
-| HTTP        | `http://`     | `connect_with_http`   | Remote daemon (explicit HTTP)                       |
-| HTTPS       | `https://`    | `connect_with_http`   | Remote daemon with TLS                              |
-| Bare path   | (none)        | `connect_with_socket` | Convenience shorthand for socket paths              |
+| Unix socket | `unix://` | `connect_with_socket` | Local Docker/Podman daemon (default on Linux/macOS) |
+| Named pipe | `npipe://` | `connect_with_socket` | Local Docker on Windows |
+| TCP | `tcp://` | `connect_with_http` | Remote daemon over network |
+| HTTP | `http://` | `connect_with_http` | Remote daemon (explicit HTTP) |
+| HTTPS | `https://` | `connect_with_http` | Remote daemon with TLS |
+| Bare path | (none) | `connect_with_socket` | Convenience shorthand for socket paths |
 
 _Table 2: Supported connection protocols and their Bollard dispatch._
 
@@ -264,7 +299,12 @@ support cross-platform testing and configuration portability.
 ## Configuration
 
 The CLI reads configuration from `~/.config/podbot/config.toml` with
-environment and flag overrides.
+environment and flag overrides. Library consumers must be able to resolve
+configuration without requiring CLI parsing types, so configuration loading is
+split into:
+
+- A library-facing loader that accepts explicit load options and overrides.
+- A CLI adapter that maps parsed flags to those library load options.
 
 ```toml
 engine_socket = "unix:///run/user/1000/podman/podman.sock"
@@ -293,7 +333,7 @@ mode = "podbot"
 
 The `agent.mode` setting defines the execution mode for the agent. The current
 implementation accepts only `podbot`, which indicates the default
-podbot-managed execution path. This value is reserved for future expansion when
+Podbot-managed execution path. This value is reserved for future expansion when
 additional execution modes are introduced.
 
 The `sandbox.privileged` setting controls the trade-off between compatibility
@@ -536,15 +576,15 @@ token refresh independently of active sessions.
 Pseudo-terminal (TTY) allocation is enabled only for attached mode when both
 local stdin and stdout are terminals. Detached mode always uses `tty = false`.
 
-When TTY is enabled, podbot sends an initial resize to match the current
-terminal dimensions. On Unix targets, podbot then subscribes to `SIGWINCH` and
+When TTY is enabled, Podbot sends an initial resize to match the current
+terminal dimensions. On Unix targets, Podbot then subscribes to `SIGWINCH` and
 propagates later window-size changes with daemon `resize_exec` calls. If
 terminal dimensions cannot be read (for example, when `stty size` is
 unavailable), resize calls are skipped without failing the exec session.
 
-After start, podbot polls exec inspect until the process exits and then reads
+After start, Podbot polls exec inspect until the process exits and then reads
 the daemon-reported exit code. If the daemon reports completion without an exit
-code, podbot raises `ContainerError::ExecFailed`. Exit code `0` maps to CLI
+code, Podbot raises `ContainerError::ExecFailed`. Exit code `0` maps to CLI
 success. Non-zero values in `1..=255` are returned directly, negative values
 map to `1`, and values above `255` are clamped to `255`.
 
@@ -554,22 +594,48 @@ A suggested organisation for maintainability:
 
 ```plaintext
 src/
-├── main.rs             # Configuration loading, subcommand dispatch
-├── config/             # Configuration module (CLI + structs + tests)
+├── lib.rs              # Public library entry points and re-exports
+├── main.rs             # Thin CLI adapter over library APIs
+├── error.rs            # Error types and conversions
+├── api/                # Orchestration API: run, exec, stop, ps, token daemon
+├── config/             # Configuration module (types + loader + CLI adapter)
 │   ├── mod.rs          # Module docs and re-exports
-│   ├── cli.rs          # Clap argument definitions
+│   ├── cli.rs          # Clap argument definitions (CLI-only adapter layer)
 │   ├── types.rs        # AppConfig, GitHubConfig, SandboxConfig, AgentConfig
-│   └── tests.rs        # Unit tests for configuration types
-├── engine.rs           # Bollard wrapper: connect, create, upload, exec
+│   └── tests.rs        # Unit tests for configuration types and loading
+├── engine/             # Bollard wrapper: connect, create, upload, exec
 ├── github.rs           # Octocrab App authentication, token acquisition
 ├── token_daemon.rs     # Token refresh loop, atomic file writes
-└── run_flow.rs         # Orchestration of steps 1–7
+└── run_flow.rs         # Shared orchestration internals used by api and CLI
 ```
 
-The `engine.rs` module encapsulates all Bollard interactions, providing a
-testable abstraction over container operations. The `github.rs` module handles
-Octocrab configuration and token acquisition without exposing API details to
-calling code.
+The `engine/` module directory (exposed as `podbot::engine`) encapsulates all
+Bollard interactions, providing a testable abstraction over container
+operations. The `github.rs` module handles Octocrab configuration and token
+acquisition without exposing API details to calling code.
+
+Public versus internal intent:
+
+- Public library modules: `api/`, `config/` (types and loader surfaces),
+  `engine/`, and `error`.
+- Internal library modules (subject to refactor): `run_flow.rs`,
+  `token_daemon.rs`, and `github.rs` until the external API is stabilized.
+
+### Library API boundary requirements
+
+The stable library boundary should follow these constraints:
+
+- `PodbotError` is the top-level semantic error enum for library consumers. It
+  wraps domain-specific error enums (configuration, container, GitHub, and
+  filesystem) so callers can branch on failure class. See
+  [Error handling](#error-handling).
+- Public APIs must use semantic error enums (`PodbotError`) rather than
+  `eyre::Report`.
+- Public orchestration APIs must not print to stdout or stderr directly.
+- Library operations return outcomes as data; only CLI adapters convert those
+  outcomes into terminal output and process exits.
+- Configuration loaders exposed to library consumers must not require `Cli`
+  structs or Clap traits.
 
 ## Container image requirements
 
@@ -599,19 +665,19 @@ stronger guarantees should consider VM-based isolation.
 ______________________________________________________________________
 
 [^1]: Bollard Docker struct documentation:
-      <https://docs.rs/bollard/latest/bollard/struct.Docker.html>
+<https://docs.rs/bollard/latest/bollard/struct.Docker.html>
 
 [^2]: Octocrab builder and installation token documentation:
-      <https://docs.rs/octocrab/latest/octocrab/struct.OctocrabBuilder.html>
+<https://docs.rs/octocrab/latest/octocrab/struct.OctocrabBuilder.html>
 
 [^3]: GitHub App installation authentication:
-      <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation>
+<https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation>
 
 [^4]: Claude Code best practices, including permissive mode:
-      <https://www.anthropic.com/engineering/claude-code-best-practices>
+<https://www.anthropic.com/engineering/claude-code-best-practices>
 
 [^5]: Codex CLI security documentation:
-      <https://developers.openai.com/codex/security/>
+<https://developers.openai.com/codex/security/>
 
 [^6]: OrthoConfig repository:
-      <https://github.com/leynos/ortho-config>
+<https://github.com/leynos/ortho-config>
