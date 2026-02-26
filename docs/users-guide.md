@@ -493,6 +493,60 @@ inspect, retry, or map to specific responses:
 At the application boundary, these are converted to human-readable error
 reports using `eyre`.
 
+## Library API
+
+Podbot can be embedded as a Rust library dependency in addition to its use as
+a CLI tool. The `podbot::api` module exposes orchestration functions that
+accept library-owned types and return typed outcomes without printing to
+stdout/stderr or calling `std::process::exit`.
+
+### Available functions
+
+| Function                                   | Description                                     |
+| ------------------------------------------ | ----------------------------------------------- |
+| `podbot::api::exec(params)`                | Execute a command in a running container        |
+| `podbot::api::run_agent(config)`           | Run an AI agent in a sandboxed container (stub) |
+| `podbot::api::stop_container(container)`   | Stop a running container (stub)                 |
+| `podbot::api::list_containers()`           | List running podbot containers (stub)           |
+| `podbot::api::run_token_daemon(container)` | Run the token refresh daemon (stub)             |
+
+### Return type
+
+All orchestration functions return `podbot::error::Result<CommandOutcome>`:
+
+- `CommandOutcome::Success` indicates a zero exit code.
+- `CommandOutcome::CommandExit { code }` carries the non-zero exit code
+  reported by the container engine.
+
+### Example usage
+
+```rust,no_run
+use podbot::api::{CommandOutcome, ExecParams, exec};
+use podbot::config::AppConfig;
+use podbot::engine::ExecMode;
+
+fn run_command(config: &AppConfig, runtime_handle: &tokio::runtime::Handle) {
+    let env = mockable::DefaultEnv::new();
+    let result = exec(ExecParams {
+        config,
+        container: "my-container",
+        command: vec!["echo".into(), "hello".into()],
+        mode: ExecMode::Attached,
+        tty: false,
+        runtime_handle,
+        env: &env,
+    });
+
+    match result {
+        Ok(CommandOutcome::Success) => println!("Command succeeded"),
+        Ok(CommandOutcome::CommandExit { code }) => {
+            println!("Command exited with code {code}");
+        }
+        Err(e) => eprintln!("Error: {e}"),
+    }
+}
+```
+
 ## Development
 
 ### Running tests

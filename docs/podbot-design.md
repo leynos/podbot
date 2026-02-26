@@ -769,6 +769,9 @@ src/
 ├── main.rs             # Thin CLI adapter over library APIs
 ├── error.rs            # Error types and conversions
 ├── api/                # Orchestration API: run, host, exec, stop, ps, token daemon
+│   ├── mod.rs          # CommandOutcome type, stub functions, re-exports
+│   ├── exec.rs         # Exec orchestration (extracted from main.rs)
+│   └── tests.rs        # Unit tests for API module
 ├── config/             # Configuration module (types + loader + CLI adapter)
 │   ├── mod.rs          # Module docs and re-exports
 │   ├── cli.rs          # Clap argument definitions (CLI-only adapter layer)
@@ -808,6 +811,9 @@ The stable library boundary should follow these constraints:
 - Public orchestration APIs must not print to stdout or stderr directly.
 - Library operations return outcomes as data; only CLI adapters convert those
   outcomes into terminal output and process exits.
+- `CommandOutcome` is the typed return value from all orchestration functions.
+  `Success` means exit code 0; `CommandExit { code }` carries the non-zero
+  exit code for the CLI to map to a process exit code.
 - Configuration loaders exposed to library consumers must not require `Cli`
   structs or Clap traits.
 
