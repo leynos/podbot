@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: DONE
 
 ## Purpose and big picture
 
@@ -82,28 +82,61 @@ wired into the orchestration flow (that is Step 3.1, tasks 2-4).
 ## Progress
 
 - [x] (2026-02-25 UTC) Drafted this ExecPlan.
-- [ ] Add `jsonwebtoken` dependency to `Cargo.toml`.
-- [ ] Generate test key fixtures (RSA, EC, Ed25519) in `tests/fixtures/`.
-- [ ] Create `src/github.rs` with `load_private_key` and helpers.
-- [ ] Register `pub mod github;` in `src/lib.rs` and update module docs.
-- [ ] Add unit tests in `src/github.rs` (happy, unhappy, edge cases).
-- [ ] Run code quality gates: `make check-fmt`, `make lint`, `make test`.
-- [ ] Commit core implementation.
-- [ ] Create BDD feature file `tests/features/github_private_key.feature`.
-- [ ] Create BDD harness and helper modules.
-- [ ] Run quality gates again.
-- [ ] Commit BDD tests.
-- [ ] Update `docs/podbot-design.md` with private key loading contract.
-- [ ] Update `docs/users-guide.md` with key file requirements.
-- [ ] Mark roadmap task as done in `docs/podbot-roadmap.md`.
-- [ ] Run documentation gates: `make markdownlint`, `make fmt`,
-  `make nixie`.
-- [ ] Commit documentation updates.
-- [ ] Finalise outcomes and retrospective.
+- [x] (2026-02-25 UTC) Add `jsonwebtoken` dependency to `Cargo.toml`.
+- [x] (2026-02-25 UTC) Generate test key fixtures (RSA, EC, Ed25519)
+  in `tests/fixtures/`.
+- [x] (2026-02-25 UTC) Create `src/github.rs` with `load_private_key`
+  and helpers.
+- [x] (2026-02-25 UTC) Register `pub mod github;` in `src/lib.rs` and
+  update module docs.
+- [x] (2026-02-25 UTC) Add unit tests in `src/github.rs` (happy,
+  unhappy, edge cases).
+- [x] (2026-02-25 UTC) Run code quality gates: `make check-fmt`,
+  `make lint`, `make test`.
+- [x] (2026-02-25 UTC) Commit core implementation.
+- [x] (2026-02-25 UTC) Create BDD feature file
+  `tests/features/github_private_key.feature`.
+- [x] (2026-02-25 UTC) Create BDD harness and helper modules.
+- [x] (2026-02-25 UTC) Run quality gates again.
+- [x] (2026-02-25 UTC) Commit BDD tests.
+- [x] (2026-02-25 UTC) Update `docs/podbot-design.md` with private
+  key loading contract.
+- [x] (2026-02-25 UTC) Update `docs/users-guide.md` with key file
+  requirements.
+- [x] (2026-02-25 UTC) Mark roadmap task as done in
+  `docs/podbot-roadmap.md`.
+- [x] (2026-02-25 UTC) Run documentation gates: `make markdownlint`,
+  `make fmt`, `make nixie`.
+- [x] (2026-02-25 UTC) Commit documentation updates.
+- [x] (2026-02-25 UTC) Finalise outcomes and retrospective.
 
 ## Surprises and discoveries
 
-(To be populated during implementation.)
+- `openssl genrsa 2048` produces PKCS#8 format (`PRIVATE KEY` header) by
+  default on newer OpenSSL versions. The `-traditional` flag is needed to get
+  PKCS#1 format (`RSA PRIVATE KEY` header). Both formats are accepted by
+  `EncodingKey::from_rsa_pem`, but the PKCS#1 format is more conventional for
+  test fixtures.
+
+- `clippy::expect_used` fires on BDD integration test files in `tests/`
+  because clippy processes them with `--all-targets`. The existing BDD helpers
+  use `StepResult<T> = Result<T, String>` with `ok_or_else` and `map_err`
+  instead of `expect`. This pattern avoids the lint entirely.
+
+- `rstest-bdd` reads `.feature` files at compile time via the `#[scenario]`
+  macro. Changes to feature files are not tracked as dependencies for
+  incremental compilation; a `cargo clean -p podbot` is needed after modifying
+  feature file content.
+
+- The `{expected}` parameter capture in `rstest-bdd` step definitions
+  captures the literal text from the feature file including any quotes.
+  Unquoted text should be used in feature files for parameterised steps
+  (following the pattern in `tests/features/cli.feature`).
+
+- Step function parameter names in `rstest-bdd` must match the fixture
+  function name exactly (e.g. `github_private_key_state`, not `state`). A
+  mismatch produces a runtime panic: "requires fixtures … but the following
+  are missing".
 
 ## Decision log
 
@@ -124,7 +157,26 @@ wired into the orchestration flow (that is Step 3.1, tasks 2-4).
 
 ## Outcomes and retrospective
 
-(To be populated on completion.)
+All acceptance criteria met. The implementation was delivered across three
+commits:
+
+1. `a168514` — Core implementation: `src/github.rs` with
+   `load_private_key` function and 9 unit tests, `jsonwebtoken` dependency,
+   test key fixtures, and `pub mod github` registration in `src/lib.rs`.
+2. `2e78fce` — BDD tests: 6 scenarios in
+   `tests/features/github_private_key.feature` with harness and helper modules
+   following the established `StepResult` pattern.
+3. `015d6d9` — Documentation: private key loading contract in
+   `podbot-design.md`, key file requirements in `users-guide.md`, and roadmap
+   task marked complete.
+
+No tolerances were triggered. No new dependencies beyond `jsonwebtoken` were
+needed. All quality gates passed: `make check-fmt`, `make lint`, `make test`,
+`make markdownlint`, `make fmt`, `make nixie`.
+
+The two key discoveries (feature file compile-time caching and `rstest-bdd`
+fixture name matching) are documented above in Surprises and should inform
+future BDD test authoring.
 
 ## Context and orientation
 
