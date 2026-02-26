@@ -26,9 +26,9 @@ no way to override this without changing the privileged flag.
 After this change:
 
 - A new `sandbox.selinux_label_mode` field in the TOML (Tom's Obvious, Minimal
-  Language) configuration (and
-  `PODBOT_SANDBOX_SELINUX_LABEL_MODE` environment variable) lets operators
-  choose between `"keep_default"` and `"disable_for_container"`.
+  Language) configuration (and `PODBOT_SANDBOX_SELINUX_LABEL_MODE` environment
+  variable) lets operators choose between `"keep_default"` and
+  `"disable_for_container"`.
 - Existing configuration files that omit the field default to
   `"disable_for_container"`, preserving current behaviour.
 - The `from_sandbox_config` constructor passes the field through directly
@@ -62,18 +62,14 @@ After this change:
 ## Risks
 
 - Risk: users-guide.md line count exceeds 400 lines.
-  Severity: low
-  Likelihood: medium
-  Mitigation: AGENTS.md says "code file" for the 400-line limit.
-  Documentation files are not code files. The guide reaches 424 lines,
-  which is acceptable.
+  Severity: low Likelihood: medium Mitigation: AGENTS.md says "code file" for
+  the 400-line limit. Documentation files are not code files. The guide reaches
+  424 lines, which is acceptable.
 
 - Risk: serde rename strategy mismatch with existing enums.
-  Severity: low
-  Likelihood: low
-  Mitigation: SelinuxLabelMode uses snake_case (multi-word variants),
-  while AgentKind/AgentMode use lowercase (single-word variants). Both
-  are correct for their respective variant naming patterns.
+  Severity: low Likelihood: low Mitigation: SelinuxLabelMode uses snake_case
+  (multi-word variants), while AgentKind/AgentMode use lowercase (single-word
+  variants). Both are correct for their respective variant naming patterns.
 
 ## Progress
 
@@ -110,42 +106,38 @@ After this change:
 
 - Observation: The `doc_markdown` Clippy lint requires `SELinux` to be
   backtick-quoted in doc comments. The original engine definition used
-  backticks but the new config definition initially omitted them.
-  Evidence: Clippy error during `make lint`.
-  Impact: Five doc comment lines needed backtick-quoting. Fixed in the
-  same commit.
+  backticks, but the new config definition initially omitted them. Evidence:
+  Clippy error during `make lint`. Impact: Five doc comment lines needed
+  backtick-quoting. Fixed in the same commit.
 
 - Observation: `make fmt` reformats all markdown files, producing
   collateral diffs in table alignment across files that were not manually
-  changed.
-  Evidence: Known from previous tasks (recorded in MEMORY.md).
-  Impact: Documentation commit includes formatting changes from `make fmt`.
+  changed. Evidence: Known from previous tasks (recorded in MEMORY.md). Impact:
+  Documentation commit includes formatting changes from `make fmt`.
 
 ## Decision log
 
 - Decision: Use `#[serde(rename_all = "snake_case")]` for SelinuxLabelMode.
-  Rationale: Multi-word variants (KeepDefault, DisableForContainer)
-  serialise naturally as "keep_default" and "disable_for_container" with
-  snake_case. Single-word enums like AgentKind use "lowercase" instead.
-  Date/Author: 2026-02-15 / agent
+  Rationale: Multi-word variants (KeepDefault, DisableForContainer) serialize
+  naturally as "keep_default" and "disable_for_container" with snake_case.
+  Single-word enums like AgentKind use "lowercase" instead. Date/Author:
+  2026-02-15 / agent.
 
 - Decision: Env var typed as String, not a new EnvVarType variant.
   Rationale: Matches the existing pattern for PODBOT_AGENT_KIND and
-  PODBOT_AGENT_MODE. Invalid values are caught during merge_from_layers
-  by serde, not at collect_env_vars.
-  Date/Author: 2026-02-15 / agent
+  PODBOT_AGENT_MODE. Invalid values are caught during merge_from_layers by
+  serde, not at collect_env_vars. Date/Author: 2026-02-15 / agent.
 
 - Decision: Keep `impl SelinuxLabelMode` block in engine module.
-  Rationale: The `requires_label_disable` method is engine-specific
-  logic that translates a config value into a build_host_config decision.
-  Moving it to config/types.rs would leak engine concerns into config.
-  Date/Author: 2026-02-15 / agent
+  Rationale: The `requires_label_disable` method is engine-specific logic that
+  translates a config value into a build_host_config decision. Moving it to
+  config/types.rs would leak engine concerns into config. Date/Author:
+  2026-02-15 / agent.
 
 - Decision: Re-export via `pub use crate::config::SelinuxLabelMode` in
-  create_container/mod.rs.
-  Rationale: Preserves the existing `podbot::engine::SelinuxLabelMode`
-  path used by BDD tests and the connection/mod.rs re-export chain.
-  Date/Author: 2026-02-15 / agent
+  create_container/mod.rs. Rationale: Preserves the existing
+  `podbot::engine::SelinuxLabelMode` path used by BDD tests and the
+  connection/mod.rs re-export chain. Date/Author: 2026-02-15 / agent.
 
 ## Outcomes and retrospective
 

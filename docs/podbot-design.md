@@ -10,10 +10,10 @@ and as an embeddable Rust library for larger agent-hosting systems.
 ## Overview
 
 The core principle is straightforward: Podbot core logic is the sole holder of
-the host Podman or Docker socket. Whether called by the Podbot CLI or by a
-host application embedding the library, the agent container never receives
-access to this socket. Instead, the agent runs an inner Podman service for any
-nested container operations (such as `act` for GitHub Actions or `cross` for
+the host Podman or Docker socket. Whether called by the Podbot CLI or by a host
+application embedding the library, the agent container never receives access to
+this socket. Instead, the agent runs an inner Podman service for any nested
+container operations (such as `act` for GitHub Actions or `cross` for
 cross-compilation), ensuring that mount paths resolve within the sandbox
 filesystem rather than the host.
 
@@ -52,8 +52,8 @@ Podbot has two first-class delivery surfaces:
 - A Podbot binary for terminal operators.
 - A Podbot library API for embedding within larger agent-hosting tools.
 
-The library owns orchestration primitives, default workflow implementations, and
-semantic error handling. The host process (CLI or embedding application)
+The library owns orchestration primitives, default workflow implementations,
+and semantic error handling. The host process (CLI or embedding application)
 controls lifecycle by deciding when and how to call those library APIs. The CLI
 is an adapter layer that handles:
 
@@ -81,29 +81,29 @@ agent execution through seven steps.
    - `claude` and `codex` binaries
    - A helper script for Git authentication via token file
 
-1. **Inject agent credentials** from `~/.claude` and `~/.codex` by copying into
+2. **Inject agent credentials** from `~/.claude` and `~/.codex` by copying into
    the container filesystem using Bollard's `upload_to_container` method.[^1]
    Bind-mounting the home directory would expose unnecessary host state.
 
-1. **Configure Git identity** by reading `user.name` and `user.email` from the
+3. **Configure Git identity** by reading `user.name` and `user.email` from the
    host and executing `git config --global` within the container.
 
-1. **Create a GitHub App installation access token** using Octocrab.[^2]
+4. **Create a GitHub App installation access token** using Octocrab.[^2]
    Installation tokens expire after one hour.[^3]
 
-1. **Start a token renewal daemon** that refreshes the installation token before
+5. **Start a token renewal daemon** that refreshes the installation token before
    expiry. Rather than repeatedly executing commands or copying files into the
    container, this daemon writes the token to a host-side file and relies on a
    read-only bind mount for the container to observe updates.
 
-1. **Clone the repository** specified by the operator. GitHub supports
+6. **Clone the repository** specified by the operator. GitHub supports
    Hypertext Transfer Protocol (HTTP) access using the installation token in
    the form `x-access-token:TOKEN@github.com/owner/repo`.[^3] However,
    embedding tokens in Uniform Resource Locators (URLs) risks leaking
    credentials into process arguments and shell history. A safer approach uses
    `GIT_ASKPASS` with a script that reads from `/run/secrets/ghapp_token`.
 
-1. **Start the agent in permissive mode**, attached to the terminal:
+7. **Start the agent in permissive mode**, attached to the terminal:
 
    - Claude Code: `claude --dangerously-skip-permissions`[^4]
    - Codex CLI: `codex --dangerously-bypass-approvals-and-sandbox`[^5]
@@ -138,12 +138,12 @@ mapped to `ContainerError::UploadFailed` with the target `container_id`.
 
 The design establishes clear trust boundaries.
 
-| Component | Trust level | Socket access | Notes |
-| --------------- | ----------- | ----------------- | ----------------------------------------- |
-| Podbot CLI host process | High | Host socket | Auditable chokepoint when running the binary |
-| Embedding host process with Podbot library | High | Host socket | Equivalent authority to the CLI host process when embedded |
-| Agent container | Low | Inner socket only | Cannot reach host engine |
-| Token daemon | High | None | Runs on host, writes to runtime directory |
+| Component                                  | Trust level | Socket access     | Notes                                                      |
+| ------------------------------------------ | ----------- | ----------------- | ---------------------------------------------------------- |
+| Podbot CLI host process                    | High        | Host socket       | Auditable chokepoint when running the binary               |
+| Embedding host process with Podbot library | High        | Host socket       | Equivalent authority to the CLI host process when embedded |
+| Agent container                            | Low         | Inner socket only | Cannot reach host engine                                   |
+| Token daemon                               | High        | None              | Runs on host, writes to runtime directory                  |
 
 _Table 1: Trust levels and socket access by component and delivery mode._
 
@@ -180,17 +180,17 @@ The token strategy works as follows:
 1. On container creation, the host process establishes a runtime directory at
    `$XDG_RUNTIME_DIR/podbot/<container_id>/`.
 
-1. The host process writes the initial token to `ghapp_token` within this directory,
-   with mode `0600` and directory mode `0700`.
+2. The host process writes the initial token to `ghapp_token` within this
+   directory, with mode `0600` and directory mode `0700`.
 
-1. The container receives a read-only bind mount:
+3. The container receives a read-only bind mount:
    `<token_path>:/run/secrets/ghapp_token:ro`.
 
-1. The token daemon refreshes the token with a time buffer using Octocrab's
+4. The token daemon refreshes the token with a time buffer using Octocrab's
    `installation_token_with_buffer` method,[^2] writing atomically via rename
    from a temporary file.
 
-1. Inside the container, `GIT_ASKPASS` reads the mounted file, ensuring Git
+5. Inside the container, `GIT_ASKPASS` reads the mounted file, ensuring Git
    operations continue working after token refresh.
 
 <!-- markdownlint-enable MD029 -->
@@ -232,6 +232,26 @@ Octocrab handles GitHub App authentication and token management.[^2] The
 `OctocrabBuilder::app(app_id, key)` constructor establishes App identity, and
 the installation method acquires scoped tokens with automatic caching.
 
+#### Private key loading contract
+
+The `github::load_private_key` function reads a PEM-encoded RSA private key
+from the filesystem path specified in `GitHubConfig.private_key_path`. It opens
+the parent directory using `cap_std::fs_utf8::Dir` with ambient authority,
+reads the file, validates the PEM format, and returns a
+`jsonwebtoken::EncodingKey` suitable for `OctocrabBuilder::app()`.
+
+Only RSA keys are accepted. Octocrab v0.49.5 hardcodes `Algorithm::RS256` in
+its `create_jwt` function, and the GitHub API only supports RS256 for App
+authentication. Ed25519 and ECDSA keys are rejected at load time with clear
+error messages rather than deferring failure to JWT signing. Supported PEM
+formats are PKCS#1 (`RSA PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`); the latter
+is ambiguous across key types so validation is deferred to
+`EncodingKey::from_rsa_pem`.
+
+Errors are reported via `GitHubError::PrivateKeyLoadFailed { path, message }`
+with diagnostic messages covering: missing parent directory, unreadable file,
+empty file, wrong key type (ECDSA, OpenSSH format), and invalid PEM content.
+
 ### OrthoConfig
 
 OrthoConfig provides layered configuration with predictable precedence: CLI
@@ -247,14 +267,14 @@ handling design.
 
 ### Supported protocols
 
-| Protocol | Scheme prefix | Bollard method | Use case |
+| Protocol    | Scheme prefix | Bollard method        | Use case                                            |
 | ----------- | ------------- | --------------------- | --------------------------------------------------- |
-| Unix socket | `unix://` | `connect_with_socket` | Local Docker/Podman daemon (default on Linux/macOS) |
-| Named pipe | `npipe://` | `connect_with_socket` | Local Docker on Windows |
-| TCP | `tcp://` | `connect_with_http` | Remote daemon over network |
-| HTTP | `http://` | `connect_with_http` | Remote daemon (explicit HTTP) |
-| HTTPS | `https://` | `connect_with_http` | Remote daemon with TLS |
-| Bare path | (none) | `connect_with_socket` | Convenience shorthand for socket paths |
+| Unix socket | `unix://`     | `connect_with_socket` | Local Docker/Podman daemon (default on Linux/macOS) |
+| Named pipe  | `npipe://`    | `connect_with_socket` | Local Docker on Windows                             |
+| TCP         | `tcp://`      | `connect_with_http`   | Remote daemon over network                          |
+| HTTP        | `http://`     | `connect_with_http`   | Remote daemon (explicit HTTP)                       |
+| HTTPS       | `https://`    | `connect_with_http`   | Remote daemon with TLS                              |
+| Bare path   | (none)        | `connect_with_socket` | Convenience shorthand for socket paths              |
 
 _Table 2: Supported connection protocols and their Bollard dispatch._
 

@@ -174,6 +174,33 @@ copy_claude = true
 copy_codex = true
 ```
 
+### Private key file requirements
+
+The `private_key_path` field must point to a PEM-encoded RSA private key.
+GitHub App authentication uses the RS256 algorithm exclusively, so only RSA
+keys are supported.
+
+Accepted formats:
+
+- **PKCS#1:** header `-----BEGIN RSA PRIVATE KEY-----`
+- **PKCS#8:** header `-----BEGIN PRIVATE KEY-----` (must contain an RSA key)
+
+To generate a suitable key:
+
+```bash
+openssl genrsa -out github-app.pem 2048
+```
+
+Common error messages when loading the key:
+
+| Message                                             | Cause                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| "file is empty"                                     | The key file exists but contains no data.                                      |
+| "failed to read file"                               | The file does not exist or cannot be read.                                     |
+| "the file appears to contain an ECDSA key"          | An EC key was provided instead of RSA.                                         |
+| "the file appears to contain an OpenSSH-format key" | An OpenSSH key was provided; convert with `ssh-keygen -p -m pem -f <keyfile>`. |
+| "invalid RSA private key"                           | The file contents are not valid PEM-encoded RSA data.                          |
+
 ### Environment variables
 
 All configuration options can be set via environment variables using the
