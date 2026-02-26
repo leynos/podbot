@@ -2,8 +2,8 @@
 
 This ExecPlan (execution plan) is a living document. The sections
 `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as
-work proceeds.
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: IN PROGRESS
 
@@ -22,8 +22,8 @@ hardcodes `Algorithm::RS256` and GitHub's API only supports RS256 for App
 authentication.
 
 Observable outcome: unit tests and BDD scenarios exercise happy and unhappy
-paths. Running `make test` shows the new tests passing. The function is not
-yet wired into the orchestration flow (that is Step 3.1, tasks 2-4).
+paths. Running `make test` shows the new tests passing. The function is not yet
+wired into the orchestration flow (that is Step 3.1, tasks 2-4).
 
 ## Constraints
 
@@ -41,8 +41,8 @@ yet wired into the orchestration flow (that is Step 3.1, tasks 2-4).
   `Cargo.lock` (v10.2.0 via octocrab) to avoid duplicate compilation.
 - Only RSA keys are accepted. Ed25519 and ECDSA PEM files must be rejected
   at load time with a clear error stating that GitHub App authentication
-  requires an RSA private key. This prevents a deferred failure at JWT
-  signing where octocrab hardcodes RS256.
+  requires an RSA private key. This prevents a deferred failure at JWT signing
+  where octocrab hardcodes RS256.
 
 ## Tolerances (exception triggers)
 
@@ -61,28 +61,23 @@ yet wired into the orchestration flow (that is Step 3.1, tasks 2-4).
 
 - Risk: `jsonwebtoken` version drift between octocrab's transitive
   dependency and our direct dependency could cause duplicate compilation or
-  type mismatches.
-  Severity: medium. Likelihood: low.
-  Mitigation: pin to exactly `10.2.0` with `features = ["use_pem"]`,
-  matching the existing `Cargo.lock` entry.
+  type mismatches. Severity: medium. Likelihood: low. Mitigation: pin to
+  exactly `10.2.0` with `features = ["use_pem"]`, matching the existing
+  `Cargo.lock` entry.
 
 - Risk: `EncodingKey` does not implement `Debug` or `Clone`, complicating
-  storage or logging.
-  Severity: low. Likelihood: medium.
-  Mitigation: return by value; callers store directly. If needed later, wrap
-  in a newtype with manual `Debug`.
+  storage or logging. Severity: low. Likelihood: medium. Mitigation: return by
+  value; callers store directly. If needed later, wrap in a newtype with manual
+  `Debug`.
 
 - Risk: BDD integration tests in `tests/` cannot access `pub(crate)`
-  modules.
-  Severity: medium. Likelihood: certain.
-  Mitigation: register `github` as `pub mod github;` in `lib.rs` with
-  documentation noting it is internal and subject to change.
+  modules. Severity: medium. Likelihood: certain. Mitigation: register `github`
+  as `pub mod github;` in `lib.rs` with documentation noting it is internal and
+  subject to change.
 
 - Risk: test RSA key generation requires `openssl` to be available in the
-  build environment.
-  Severity: low. Likelihood: low.
-  Mitigation: generate once, commit the fixture file. The key is test-only
-  with no security value.
+  build environment. Severity: low. Likelihood: low. Mitigation: generate once,
+  commit the fixture file. The key is test-only with no security value.
 
 ## Progress
 
@@ -113,21 +108,19 @@ yet wired into the orchestration flow (that is Step 3.1, tasks 2-4).
 ## Decision log
 
 - Decision: only accept RSA private keys; reject Ed25519 and ECDSA at load
-  time with a clear error message.
-  Rationale: octocrab v0.49.5 hardcodes `Algorithm::RS256` in `create_jwt`
-  (`auth.rs:85`). GitHub's API only supports RS256 for App authentication.
-  Loading a non-RSA key would succeed at read time but fail later at JWT
-  signing with a cryptic `InvalidAlgorithm` error. Failing fast with an
-  actionable message ("GitHub App authentication requires an RSA private
-  key") is a better user experience.
-  Date/Author: 2026-02-25 / DevBoxer.
+  time with a clear error message. Rationale: octocrab v0.49.5 hardcodes
+  `Algorithm::RS256` in `create_jwt` (`auth.rs:85`). GitHub's API only supports
+  RS256 for App authentication. Loading a non-RSA key would succeed at read
+  time but fail later at JWT signing with a cryptic `InvalidAlgorithm` error.
+  Failing fast with an actionable message ("GitHub App authentication requires
+  an RSA private key") is a better user experience. Date/Author: 2026-02-25 /
+  DevBoxer.
 
 - Decision: register `github` as `pub mod github;` in `lib.rs` despite the
-  design document listing it as internal.
-  Rationale: BDD integration tests in `tests/` can only access `pub` items
-  from the crate. The module is documented as unstable and subject to
-  change. This follows the same pattern as `engine` and `config`.
-  Date/Author: 2026-02-25 / DevBoxer.
+  design document listing it as internal. Rationale: BDD integration tests in
+  `tests/` can only access `pub` items from the crate. The module is documented
+  as unstable and subject to change. This follows the same pattern as `engine`
+  and `config`. Date/Author: 2026-02-25 / DevBoxer.
 
 ## Outcomes and retrospective
 
@@ -150,17 +143,18 @@ Key files for this task:
   `is_configured()` methods.
 
 - `src/error.rs` (467 lines): defines `GitHubError::PrivateKeyLoadFailed {
-  path: PathBuf, message: String }`. This variant already exists and
-  propagates through `PodbotError` via `#[from]`.
+  path: PathBuf, message: String
+  }`. This variant already exists and propagates through `PodbotError` via `
+  #[from]`.
 
 - `Cargo.toml`: lists `octocrab = "0.49.5"` which transitively depends on
-  `jsonwebtoken = "10.2.0"` with `use_pem` feature. The `jsonwebtoken`
-  crate is not yet a direct dependency.
+  `jsonwebtoken = "10.2.0"` with `use_pem` feature. The `jsonwebtoken` crate is
+  not yet a direct dependency.
 
 - `src/engine/connection/upload_credentials/mod.rs` (302 lines):
-  demonstrates the `cap_std::fs_utf8::Dir` + `ambient_authority()` pattern
-  for capability-oriented filesystem access. The `open_host_home_dir`
-  method (line 143) shows the idiomatic approach.
+  demonstrates the `cap_std::fs_utf8::Dir` + `ambient_authority()` pattern for
+  capability-oriented filesystem access. The `open_host_home_dir` method (line
+  143) shows the idiomatic approach.
 
 - `tests/bdd_error_handling.rs` and `tests/bdd_credential_injection*`:
   established patterns for BDD tests using `rstest-bdd` v0.5.0 with
@@ -168,13 +162,13 @@ Key files for this task:
 
 Octocrab's `OctocrabBuilder::app()` accepts
 `(AppId, jsonwebtoken::EncodingKey)`. Critically, octocrab's `create_jwt`
-function hardcodes `Algorithm::RS256` (`auth.rs:85`) and validates that the
-key family matches the algorithm at encode time. This means only RSA keys
-work; Ed25519 and ECDSA keys would trigger `ErrorKind::InvalidAlgorithm` at
-JWT signing. `EncodingKey::from_rsa_pem(bytes)` parses PEM-encoded RSA keys
-and validates the format. This is the function we will use, with an
-additional PEM header check to detect and reject non-RSA key types with a
-clear error before reaching `from_rsa_pem`.
+function hardcodes `Algorithm::RS256` (`auth.rs:85`) and validates that the key
+family matches the algorithm at encode time. This means only RSA keys work;
+Ed25519 and ECDSA keys would trigger `ErrorKind::InvalidAlgorithm` at JWT
+signing. `EncodingKey::from_rsa_pem(bytes)` parses PEM-encoded RSA keys and
+validates the format. This is the function we will use, with an additional PEM
+header check to detect and reject non-RSA key types with a clear error before
+reaching `from_rsa_pem`.
 
 ## Agent team and ownership
 
@@ -198,8 +192,8 @@ Add `jsonwebtoken` as a direct dependency in `Cargo.toml` under
 jsonwebtoken = { version = "10.2.0", default-features = false, features = ["use_pem"] }
 ```
 
-Generate test key fixtures (committed to the repository; test-only, no
-security value):
+Generate test key fixtures (committed to the repository; test-only, no security
+value):
 
 ```bash
 mkdir -p tests/fixtures
@@ -216,8 +210,8 @@ Validation: `cargo check` succeeds. `Cargo.lock` does not add a second
 ### Stage B: Core implementation (`src/github.rs`)
 
 Create `src/github.rs` as a new module. Register it in `src/lib.rs` as
-`pub mod github;` with a note that it is internal and subject to change.
-Update the module-level doc comment in `lib.rs` to list it.
+`pub mod github;` with a note that it is internal and subject to change. Update
+the module-level doc comment in `lib.rs` to list it.
 
 The module provides one public function:
 
@@ -230,25 +224,25 @@ pub fn load_private_key(
 Internal structure uses four private helpers:
 
 1. `open_key_directory(key_path) -> Result<(Dir, &str), GitHubError>`:
-   splits the path into parent directory and filename, opens the parent as
-   a `cap_std::fs_utf8::Dir` via `ambient_authority()`.
+   splits the path into parent directory and filename, opens the parent as a
+   `cap_std::fs_utf8::Dir` via `ambient_authority()`.
 
 2. `read_key_file(dir, file_name, display_path) -> Result<String,
-   GitHubError>`: reads the file to a string, returns an error if the file
-   is empty.
+   GitHubError>
+   `: reads the file to a string, returns an error if the file is empty.
 
-3. `validate_rsa_pem(pem_contents, display_path) ->
-   Result<(), GitHubError>`: inspects the PEM header to detect non-RSA key
-   types. Checks for known non-RSA PEM tags (`EC PRIVATE KEY`,
-   `OPENSSH PRIVATE KEY`) and returns a targeted error. RSA keys use
-   either `RSA PRIVATE KEY` (PKCS#1) or `PRIVATE KEY` (PKCS#8). Since
-   `PRIVATE KEY` is ambiguous, delegate to `from_rsa_pem` for the
-   definitive check.
+3. `validate_rsa_pem(pem_contents, display_path)`:
+   inspects the PEM header to detect non-RSA key types. Checks for known
+   non-RSA PEM tags (`EC PRIVATE KEY`, `OPENSSH PRIVATE KEY`) and returns a
+   targeted error. RSA keys use either `RSA PRIVATE KEY` (PKCS#1) or
+   `PRIVATE KEY` (PKCS#8). Since `PRIVATE KEY` is ambiguous, delegate to
+   `from_rsa_pem` for the definitive check.
 
 4. `parse_rsa_pem(pem_contents, display_path) ->
-   Result<EncodingKey, GitHubError>`: calls `validate_rsa_pem` first, then
-   `EncodingKey::from_rsa_pem(pem_contents.as_bytes())`, mapping
-   `jsonwebtoken::errors::Error` to `GitHubError::PrivateKeyLoadFailed`.
+   Result<EncodingKey,
+   GitHubError>`: calls `validate_rsa_pem` first, then `EncodingKey::from_rsa_pem(pem_contents.as_bytes())
+    `, mapping `jsonwebtoken::errors::Error` to `
+   GitHubError::PrivateKeyLoadFailed`.
 
 A separate private function is used for testability:
 
@@ -260,8 +254,7 @@ fn load_private_key_from_dir(
 ) -> Result<EncodingKey, GitHubError>
 ```
 
-This allows unit tests to inject a `Dir` backed by a
-`tempfile::TempDir`.
+This allows unit tests to inject a `Dir` backed by a `tempfile::TempDir`.
 
 All errors use `GitHubError::PrivateKeyLoadFailed { path, message }`:
 
@@ -282,21 +275,21 @@ Validation: `make check-fmt && make lint` pass.
 Add a `#[cfg(test)] mod tests` block using `rstest` fixtures and
 `tempfile::TempDir` + `cap_std::fs_utf8::Dir` for filesystem isolation.
 
-Test cases cover happy paths, unhappy paths, and edge cases including
-non-RSA key rejection. Use parameterised `#[case]` for the non-RSA key
-type and invalid-content variants.
+Test cases cover happy paths, unhappy paths, and edge cases including non-RSA
+key rejection. Use parameterised `#[case]` for the non-RSA key type and
+invalid-content variants.
 
 Validation: `make test` passes with all new tests green.
 
 ### Stage D: BDD tests
 
-Create `tests/features/github_private_key.feature` with six scenarios
-covering valid RSA key loading, missing file, empty file, invalid PEM,
-ECDSA rejection, and Ed25519 rejection.
+Create `tests/features/github_private_key.feature` with six scenarios covering
+valid RSA key loading, missing file, empty file, invalid PEM, ECDSA rejection,
+and Ed25519 rejection.
 
-Create `tests/bdd_github_private_key.rs` with `#[scenario]` macro
-bindings and `tests/bdd_github_private_key_helpers/` directory with state,
-steps, and assertions modules.
+Create `tests/bdd_github_private_key.rs` with `#[scenario]` macro bindings and
+`tests/bdd_github_private_key_helpers/` directory with state, steps, and
+assertions modules.
 
 Validation: `make test` passes with BDD scenarios green.
 
@@ -334,8 +327,8 @@ set -o pipefail; make nixie 2>&1 | tee /tmp/nixie-3-1-1.out
 
 ## Interfaces and dependencies
 
-New direct dependency: `jsonwebtoken = { version = "10.2.0",
-default-features = false, features = ["use_pem"] }`.
+New direct dependency: `jsonwebtoken` version `10.2.0` with
+`default-features = false` and `features = ["use_pem"]`.
 
 Public interface added to `podbot::github`:
 
@@ -389,6 +382,6 @@ Quality criteria:
 
 ## Idempotence and recovery
 
-All stages are re-runnable. `cargo check` and `make test` are idempotent.
-The test key fixtures can be regenerated with `openssl` if needed (RSA, EC,
+All stages are re-runnable. `cargo check` and `make test` are idempotent. The
+test key fixtures can be regenerated with `openssl` if needed (RSA, EC,
 Ed25519). No destructive operations are involved.
