@@ -38,3 +38,27 @@ Feature: GitHub App private key loading
     When the private key is loaded
     Then the private key load fails
     And the error mentions invalid RSA private key
+
+  Scenario: Public key is rejected with a clear error
+    Given a public key file exists at the configured path
+    When the private key is loaded
+    Then the private key load fails
+    And the error mentions public key
+
+  Scenario: Certificate is rejected with a clear error
+    Given a certificate file exists at the configured path
+    When the private key is loaded
+    Then the private key load fails
+    And the error mentions certificate
+
+  Scenario: OpenSSH key is rejected with a clear error
+    Given an OpenSSH private key file exists at the configured path
+    When the private key is loaded
+    Then the private key load fails
+    And the error mentions OpenSSH
+
+  Scenario: Encrypted key is rejected with a clear error
+    Given an encrypted private key file exists at the configured path
+    When the private key is loaded
+    Then the private key load fails
+    And the error mentions encrypted

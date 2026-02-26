@@ -23,7 +23,7 @@ pub enum KeyLoadOutcome {
 }
 
 /// State shared across GitHub private key loading scenarios.
-#[derive(ScenarioState)]
+#[derive(Default, ScenarioState)]
 pub struct GitHubPrivateKeyState {
     /// Temporary directory backing the test key file.
     pub(crate) temp_dir: Slot<Arc<TempDir>>,
@@ -31,20 +31,6 @@ pub struct GitHubPrivateKeyState {
     pub(crate) key_path: Slot<Utf8PathBuf>,
     /// Outcome of the most recent load attempt.
     pub(crate) outcome: Slot<KeyLoadOutcome>,
-}
-
-#[expect(
-    clippy::derivable_impls,
-    reason = "ScenarioState guidance discourages deriving Default in this module"
-)]
-impl Default for GitHubPrivateKeyState {
-    fn default() -> Self {
-        Self {
-            temp_dir: Slot::default(),
-            key_path: Slot::default(),
-            outcome: Slot::default(),
-        }
-    }
 }
 
 /// Fixture providing fresh state for each GitHub private key scenario.

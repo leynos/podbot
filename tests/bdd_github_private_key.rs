@@ -55,3 +55,35 @@ fn ecdsa_key_is_rejected_with_a_clear_error(github_private_key_state: GitHubPriv
 fn ed25519_key_is_rejected_with_a_clear_error(github_private_key_state: GitHubPrivateKeyState) {
     let _ = github_private_key_state;
 }
+
+#[scenario(
+    path = "tests/features/github_private_key.feature",
+    name = "Public key is rejected with a clear error"
+)]
+fn public_key_is_rejected_with_a_clear_error(github_private_key_state: GitHubPrivateKeyState) {
+    let _ = github_private_key_state;
+}
+
+#[scenario(
+    path = "tests/features/github_private_key.feature",
+    name = "Certificate is rejected with a clear error"
+)]
+fn certificate_is_rejected_with_a_clear_error(github_private_key_state: GitHubPrivateKeyState) {
+    let _ = github_private_key_state;
+}
+
+#[scenario(
+    path = "tests/features/github_private_key.feature",
+    name = "OpenSSH key is rejected with a clear error"
+)]
+fn openssh_key_is_rejected_with_a_clear_error(github_private_key_state: GitHubPrivateKeyState) {
+    let _ = github_private_key_state;
+}
+
+#[scenario(
+    path = "tests/features/github_private_key.feature",
+    name = "Encrypted key is rejected with a clear error"
+)]
+fn encrypted_key_is_rejected_with_a_clear_error(github_private_key_state: GitHubPrivateKeyState) {
+    let _ = github_private_key_state;
+}

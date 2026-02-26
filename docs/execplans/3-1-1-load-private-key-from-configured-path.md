@@ -17,13 +17,14 @@ specified in `GitHubConfig.private_key_path`. After this change, calling
 `GitHubError::PrivateKeyLoadFailed` with a clear diagnostic message.
 
 Non-RSA keys (Ed25519, ECDSA) are rejected at load time with an actionable
-error rather than deferring failure to JWT signing, because octocrab v0.49.5
-hardcodes `Algorithm::RS256` and GitHub's API only supports RS256 for App
-authentication.
+error rather than deferring failure to JSON Web Token (JWT) signing, because
+octocrab v0.49.5 hardcodes `Algorithm::RS256` and GitHub's API only supports
+RS256 for App authentication.
 
-Observable outcome: unit tests and BDD scenarios exercise happy and unhappy
-paths. Running `make test` shows the new tests passing. The function is not yet
-wired into the orchestration flow (that is Step 3.1, tasks 2-4).
+Observable outcome: unit tests and behaviour-driven development (BDD) scenarios
+exercise happy and unhappy paths. Running `make test` shows the new tests
+passing. The function is not yet wired into the orchestration flow (that is
+Step 3.1, tasks 2-4).
 
 ## Constraints
 
@@ -60,7 +61,7 @@ wired into the orchestration flow (that is Step 3.1, tasks 2-4).
 ## Risks
 
 - Risk: `jsonwebtoken` version drift between octocrab's transitive
-  dependency and our direct dependency could cause duplicate compilation or
+  dependency and the direct dependency could cause duplicate compilation or
   type mismatches. Severity: medium. Likelihood: low. Mitigation: pin to
   exactly `10.2.0` with `features = ["use_pem"]`, matching the existing
   `Cargo.lock` entry.
@@ -130,13 +131,13 @@ wired into the orchestration flow (that is Step 3.1, tasks 2-4).
 
 - The `{expected}` parameter capture in `rstest-bdd` step definitions
   captures the literal text from the feature file including any quotes.
-  Unquoted text should be used in feature files for parameterised steps
+  Unquoted text should be used in feature files for parameterized steps
   (following the pattern in `tests/features/cli.feature`).
 
 - Step function parameter names in `rstest-bdd` must match the fixture
   function name exactly (e.g. `github_private_key_state`, not `state`). A
-  mismatch produces a runtime panic: "requires fixtures … but the following
-  are missing".
+  mismatch produces a runtime panic: "requires fixtures … but the following are
+  missing".
 
 ## Decision log
 
@@ -180,9 +181,9 @@ future BDD test authoring.
 
 ## Context and orientation
 
-Podbot is a Rust application (edition 2024, MSRV 1.88) that creates secure
-containers for AI coding agents. The project is structured as a dual-delivery
-library and CLI binary.
+Podbot is a Rust application (edition 2024, minimum supported Rust version
+(MSRV) 1.88) that creates secure containers for AI coding agents. The project
+is structured as a dual-delivery library and CLI binary.
 
 Key files for this task:
 
@@ -218,7 +219,7 @@ function hardcodes `Algorithm::RS256` (`auth.rs:85`) and validates that the key
 family matches the algorithm at encode time. This means only RSA keys work;
 Ed25519 and ECDSA keys would trigger `ErrorKind::InvalidAlgorithm` at JWT
 signing. `EncodingKey::from_rsa_pem(bytes)` parses PEM-encoded RSA keys and
-validates the format. This is the function we will use, with an additional PEM
+validates the format. This function is used together with an additional PEM
 header check to detect and reject non-RSA key types with a clear error before
 reaching `from_rsa_pem`.
 
@@ -328,7 +329,7 @@ Add a `#[cfg(test)] mod tests` block using `rstest` fixtures and
 `tempfile::TempDir` + `cap_std::fs_utf8::Dir` for filesystem isolation.
 
 Test cases cover happy paths, unhappy paths, and edge cases including non-RSA
-key rejection. Use parameterised `#[case]` for the non-RSA key type and
+key rejection. Use parameterized `#[case]` for the non-RSA key type and
 invalid-content variants.
 
 Validation: `make test` passes with all new tests green.

@@ -106,7 +106,7 @@ After this change:
 
 - Observation: The `doc_markdown` Clippy lint requires `SELinux` to be
   backtick-quoted in doc comments. The original engine definition used
-  backticks but the new config definition initially omitted them. Evidence:
+  backticks, but the new config definition initially omitted them. Evidence:
   Clippy error during `make lint`. Impact: Five doc comment lines needed
   backtick-quoting. Fixed in the same commit.
 
@@ -121,23 +121,23 @@ After this change:
   Rationale: Multi-word variants (KeepDefault, DisableForContainer) serialise
   naturally as "keep_default" and "disable_for_container" with snake_case.
   Single-word enums like AgentKind use "lowercase" instead. Date/Author:
-  2026-02-15 / agent
+  2026-02-15 / agent.
 
 - Decision: Env var typed as String, not a new EnvVarType variant.
   Rationale: Matches the existing pattern for PODBOT_AGENT_KIND and
   PODBOT_AGENT_MODE. Invalid values are caught during merge_from_layers by
-  serde, not at collect_env_vars. Date/Author: 2026-02-15 / agent
+  serde, not at collect_env_vars. Date/Author: 2026-02-15 / agent.
 
 - Decision: Keep `impl SelinuxLabelMode` block in engine module.
   Rationale: The `requires_label_disable` method is engine-specific logic that
   translates a config value into a build_host_config decision. Moving it to
   config/types.rs would leak engine concerns into config. Date/Author:
-  2026-02-15 / agent
+  2026-02-15 / agent.
 
 - Decision: Re-export via `pub use crate::config::SelinuxLabelMode` in
   create_container/mod.rs. Rationale: Preserves the existing
   `podbot::engine::SelinuxLabelMode` path used by BDD tests and the
-  connection/mod.rs re-export chain. Date/Author: 2026-02-15 / agent
+  connection/mod.rs re-export chain. Date/Author: 2026-02-15 / agent.
 
 ## Outcomes and retrospective
 
