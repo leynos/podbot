@@ -63,7 +63,7 @@ Step 3.1, tasks 2-4).
 - Risk: `jsonwebtoken` version drift between octocrab's transitive
   dependency and the direct dependency could cause duplicate compilation or
   type mismatches. Severity: medium. Likelihood: low. Mitigation: pin to
-  exactly `10.2.0` with `features = ["use_pem"]`, matching the existing
+  exactly `10.2.0` with `features = ["use_pem", "rust_crypto"]`, matching the existing
   `Cargo.lock` entry.
 
 - Risk: `EncodingKey` does not implement `Debug` or `Clone`, complicating
@@ -86,11 +86,11 @@ Step 3.1, tasks 2-4).
 - [x] (2026-02-25 UTC) Add `jsonwebtoken` dependency to `Cargo.toml`.
 - [x] (2026-02-25 UTC) Generate test key fixtures (RSA, EC, Ed25519)
   in `tests/fixtures/`.
-- [x] (2026-02-25 UTC) Create `src/github.rs` with `load_private_key`
+- [x] (2026-02-25 UTC) Create `src/github/mod.rs` with `load_private_key`
   and helpers.
 - [x] (2026-02-25 UTC) Register `pub mod github;` in `src/lib.rs` and
   update module docs.
-- [x] (2026-02-25 UTC) Add unit tests in `src/github.rs` (happy,
+- [x] (2026-02-25 UTC) Add unit tests in `src/github/tests.rs` (happy,
   unhappy, edge cases).
 - [x] (2026-02-25 UTC) Run code quality gates: `make check-fmt`,
   `make lint`, `make test`.
@@ -109,7 +109,7 @@ Step 3.1, tasks 2-4).
 - [x] (2026-02-25 UTC) Run documentation gates: `make markdownlint`,
   `make fmt`, `make nixie`.
 - [x] (2026-02-25 UTC) Commit documentation updates.
-- [x] (2026-02-25 UTC) Finalise outcomes and retrospective.
+- [x] (2026-02-25 UTC) Finalize outcomes and retrospective.
 
 ## Surprises and discoveries
 
@@ -161,10 +161,11 @@ Step 3.1, tasks 2-4).
 All acceptance criteria met. The implementation was delivered across three
 commits:
 
-1. `a168514` — Core implementation: `src/github.rs` with
-   `load_private_key` function and 9 unit tests, `jsonwebtoken` dependency,
-   test key fixtures, and `pub mod github` registration in `src/lib.rs`.
-2. `2e78fce` — BDD tests: 6 scenarios in
+1. `a168514` — Core implementation: `src/github/mod.rs` with
+   `load_private_key` function and 14 unit tests (in `src/github/tests.rs`),
+   `jsonwebtoken` dependency, test key fixtures, and `pub mod github`
+   registration in `src/lib.rs`.
+2. `2e78fce` — BDD tests: 10 scenarios in
    `tests/features/github_private_key.feature` with harness and helper modules
    following the established `StepResult` pattern.
 3. `015d6d9` — Documentation: private key loading contract in
@@ -227,7 +228,8 @@ reaching `from_rsa_pem`.
 
 Implementation uses a single integrator agent that:
 
-- owns all new files (`src/github.rs`, test harnesses, fixtures);
+- owns all new files (`src/github/mod.rs`, `src/github/tests.rs`, test
+  harnesses, fixtures);
 - updates `src/lib.rs` and `Cargo.toml` for module registration and
   dependency additions;
 - updates documentation files (`podbot-design.md`, `users-guide.md`,
@@ -242,7 +244,7 @@ Add `jsonwebtoken` as a direct dependency in `Cargo.toml` under
 `[dependencies]`:
 
 ```toml
-jsonwebtoken = { version = "10.2.0", default-features = false, features = ["use_pem"] }
+jsonwebtoken = { version = "10.2.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 ```
 
 Generate test key fixtures (committed to the repository; test-only, no security
@@ -260,9 +262,9 @@ openssl genpkey -algorithm ed25519 \
 Validation: `cargo check` succeeds. `Cargo.lock` does not add a second
 `jsonwebtoken` entry.
 
-### Stage B: Core implementation (`src/github.rs`)
+### Stage B: Core implementation (`src/github/mod.rs`)
 
-Create `src/github.rs` as a new module. Register it in `src/lib.rs` as
+Create `src/github/mod.rs` as a new module. Register it in `src/lib.rs` as
 `pub mod github;` with a note that it is internal and subject to change. Update
 the module-level doc comment in `lib.rs` to list it.
 
@@ -323,7 +325,7 @@ All errors use `GitHubError::PrivateKeyLoadFailed { path, message }`:
 
 Validation: `make check-fmt && make lint` pass.
 
-### Stage C: Unit tests in `src/github.rs`
+### Stage C: Unit tests in `src/github/tests.rs`
 
 Add a `#[cfg(test)] mod tests` block using `rstest` fixtures and
 `tempfile::TempDir` + `cap_std::fs_utf8::Dir` for filesystem isolation.
@@ -336,9 +338,10 @@ Validation: `make test` passes with all new tests green.
 
 ### Stage D: BDD tests
 
-Create `tests/features/github_private_key.feature` with six scenarios covering
+Create `tests/features/github_private_key.feature` with 10 scenarios covering
 valid RSA key loading, missing file, empty file, invalid PEM, ECDSA rejection,
-and Ed25519 rejection.
+Ed25519 rejection, public key rejection, certificate rejection, OpenSSH key
+rejection, and encrypted key rejection.
 
 Create `tests/bdd_github_private_key.rs` with `#[scenario]` macro bindings and
 `tests/bdd_github_private_key_helpers/` directory with state, steps, and
@@ -381,7 +384,7 @@ set -o pipefail; make nixie 2>&1 | tee /tmp/nixie-3-1-1.out
 ## Interfaces and dependencies
 
 New direct dependency: `jsonwebtoken` version `10.2.0` with
-`default-features = false` and `features = ["use_pem"]`.
+`default-features = false` and `features = ["use_pem", "rust_crypto"]`.
 
 Public interface added to `podbot::github`:
 
@@ -403,7 +406,7 @@ Reuses:
 
 Running `make test` passes and the following new tests exist:
 
-Unit tests in `src/github.rs`:
+Unit tests in `src/github/tests.rs` (14 cases):
 
 - `tests::load_valid_rsa_key_succeeds`
 - `tests::load_missing_file_returns_error`
@@ -414,8 +417,13 @@ Unit tests in `src/github.rs`:
 - `tests::error_includes_file_path`
 - `tests::load_private_key_resolves_full_path`
 - `tests::load_private_key_missing_parent_returns_error`
+- `tests::load_invalid_key_types_return_clear_error::case_1_public_key`
+- `tests::load_invalid_key_types_return_clear_error::case_2_rsa_public_key`
+- `tests::load_invalid_key_types_return_clear_error::case_3_certificate`
+- `tests::load_invalid_key_types_return_clear_error::case_4_encrypted_pkcs8`
+- `tests::load_invalid_key_types_return_clear_error::case_5_legacy_encrypted`
 
-BDD scenarios in `tests/bdd_github_private_key.rs`:
+BDD scenarios in `tests/bdd_github_private_key.rs` (10 scenarios):
 
 - Valid RSA private key is loaded successfully
 - Missing key file produces a clear error
@@ -423,6 +431,10 @@ BDD scenarios in `tests/bdd_github_private_key.rs`:
 - Invalid PEM content produces a clear error
 - ECDSA key is rejected with a clear error
 - Ed25519 key is rejected with a clear error
+- Public key is rejected with a clear error
+- Certificate is rejected with a clear error
+- OpenSSH key is rejected with a clear error
+- Encrypted key is rejected with a clear error
 
 Quality criteria:
 

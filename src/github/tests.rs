@@ -167,104 +167,70 @@ fn load_private_key_missing_parent_returns_error() {
 }
 
 #[rstest]
-fn load_public_key_returns_clear_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
-    let public_pem = concat!(
+#[case::public_key(
+    "pub.pem",
+    concat!(
         "-----BEGIN PUBLIC KEY-----\n",
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\n",
         "-----END PUBLIC KEY-----\n"
-    );
-    dir.write("pub.pem", public_pem)
-        .expect("should write public key");
-    let path = Utf8Path::new("/config/pub.pem");
-    let result = load_private_key_from_dir(&dir, "pub.pem", path);
-    assert!(result.is_err(), "expected Err for public key");
-    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(
-        message.contains("public key"),
-        "error should mention public key: {message}"
-    );
-}
-
-#[rstest]
-fn load_rsa_public_key_returns_clear_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
-    let rsa_pub_pem = concat!(
+    ),
+    "public key"
+)]
+#[case::rsa_public_key(
+    "rsa_pub.pem",
+    concat!(
         "-----BEGIN RSA PUBLIC KEY-----\n",
         "MIIBCgKCAQEA4LAdQBFm\n",
         "-----END RSA PUBLIC KEY-----\n"
-    );
-    dir.write("rsa_pub.pem", rsa_pub_pem)
-        .expect("should write RSA public key");
-    let path = Utf8Path::new("/config/rsa_pub.pem");
-    let result = load_private_key_from_dir(&dir, "rsa_pub.pem", path);
-    assert!(result.is_err(), "expected Err for RSA public key");
-    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(
-        message.contains("public key"),
-        "error should mention public key: {message}"
-    );
-}
-
-#[rstest]
-fn load_certificate_returns_clear_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
-    let cert_pem = concat!(
+    ),
+    "public key"
+)]
+#[case::certificate(
+    "cert.pem",
+    concat!(
         "-----BEGIN CERTIFICATE-----\n",
         "MIICGzCCAaGgAwIBAgIBADAK\n",
         "-----END CERTIFICATE-----\n"
-    );
-    dir.write("cert.pem", cert_pem)
-        .expect("should write certificate");
-    let path = Utf8Path::new("/config/cert.pem");
-    let result = load_private_key_from_dir(&dir, "cert.pem", path);
-    assert!(result.is_err(), "expected Err for certificate");
-    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(
-        message.contains("certificate"),
-        "error should mention certificate: {message}"
-    );
-}
-
-#[rstest]
-fn load_encrypted_pkcs8_key_returns_clear_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
-    let enc_pem = concat!(
+    ),
+    "certificate"
+)]
+#[case::encrypted_pkcs8(
+    "encrypted.pem",
+    concat!(
         "-----BEGIN ENCRYPTED PRIVATE KEY-----\n",
         "MIIFHDBOBgkqhkiG9w0BBQ0w\n",
         "-----END ENCRYPTED PRIVATE KEY-----\n"
-    );
-    dir.write("encrypted.pem", enc_pem)
-        .expect("should write encrypted key");
-    let path = Utf8Path::new("/config/encrypted.pem");
-    let result = load_private_key_from_dir(&dir, "encrypted.pem", path);
-    assert!(result.is_err(), "expected Err for encrypted key");
-    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(
-        message.contains("encrypted"),
-        "error should mention encryption: {message}"
-    );
-}
-
-#[rstest]
-fn load_legacy_encrypted_key_returns_clear_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
-    let legacy_enc_pem = concat!(
+    ),
+    "encrypted"
+)]
+#[case::legacy_encrypted(
+    "legacy_enc.pem",
+    concat!(
         "-----BEGIN RSA PRIVATE KEY-----\n",
         "Proc-Type: 4,ENCRYPTED\n",
         "DEK-Info: AES-256-CBC,AABBCCDD\n",
         "\n",
         "MIIBCgKCAQEA4LAdQBFm\n",
         "-----END RSA PRIVATE KEY-----\n"
-    );
-    dir.write("legacy_enc.pem", legacy_enc_pem)
-        .expect("should write legacy encrypted key");
-    let path = Utf8Path::new("/config/legacy_enc.pem");
-    let result = load_private_key_from_dir(&dir, "legacy_enc.pem", path);
-    assert!(result.is_err(), "expected Err for legacy encrypted key");
+    ),
+    "encrypted"
+)]
+fn load_invalid_key_types_return_clear_error(
+    temp_key_dir: (TempDir, Utf8Dir),
+    #[case] file_name: &str,
+    #[case] pem_content: &str,
+    #[case] expected_keyword: &str,
+) {
+    let (_tmp, dir) = temp_key_dir;
+    dir.write(file_name, pem_content)
+        .expect("should write key file");
+    let display = format!("/config/{file_name}");
+    let path = Utf8Path::new(&display);
+    let result = load_private_key_from_dir(&dir, file_name, path);
+    assert!(result.is_err(), "expected Err for {file_name}");
     let message = result.err().map(|e| e.to_string()).unwrap_or_default();
     assert!(
-        message.contains("encrypted"),
-        "error should mention encryption: {message}"
+        message.contains(expected_keyword),
+        "error for {file_name} should mention '{expected_keyword}': {message}"
     );
 }
