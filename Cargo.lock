@@ -2093,6 +2093,7 @@ dependencies = [
  "clap",
  "eyre",
  "futures-util",
+ "jsonwebtoken",
  "mockable",
  "mockall 0.13.1",
  "octocrab",
