@@ -22,4 +22,7 @@ description = "PEM header string constants used for key type detection"
 regex = '''-----BEGIN (EC |OPENSSH |ENCRYPTED |RSA )?PRIVATE KEY-----'''
 allowlist.paths = [
     '''src/github/mod\.rs''',
+    '''src/github/tests\.rs''',
+    '''tests/bdd_github_private_key_helpers/steps\.rs''',
+    '''docs/users-guide\.md''',
 ]

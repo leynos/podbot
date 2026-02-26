@@ -172,27 +172,20 @@ fn validate_rsa_pem(pem_contents: &str, display_path: &Utf8Path) -> Result<(), G
 /// and legacy OpenSSL-encrypted keys with a `Proc-Type: 4,ENCRYPTED`
 /// header.
 fn is_encrypted_pem(pem_contents: &str) -> bool {
-    let mut lines = pem_contents.lines();
+    // PKCS#8 encrypted key: explicit header on the first line.
+    let first_line_encrypted = pem_contents
+        .lines()
+        .next()
+        .is_some_and(|first| first.contains(ENCRYPTED_PRIVATE_KEY_TAG));
 
-    // PKCS#8 encrypted key with an explicit header.
-    if let Some(first) = lines.next() {
-        if first.contains(ENCRYPTED_PRIVATE_KEY_TAG) {
-            return true;
-        }
-    }
+    // Legacy OpenSSL: Proc-Type header before the blank-line separator.
+    let legacy_encrypted = pem_contents
+        .lines()
+        .skip(1)
+        .take_while(|line| !line.is_empty())
+        .any(|line| line.starts_with("Proc-Type:") && line.contains("4,ENCRYPTED"));
 
-    // Legacy OpenSSL encryption header before the blank-line separator.
-    for line in lines {
-        if line.is_empty() {
-            break;
-        }
-
-        if line.starts_with("Proc-Type:") && line.contains("4,ENCRYPTED") {
-            return true;
-        }
-    }
-
-    false
+    first_line_encrypted || legacy_encrypted
 }
 
 /// Parse PEM content into an RSA `EncodingKey`.
