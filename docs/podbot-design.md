@@ -252,6 +252,26 @@ Errors are reported via `GitHubError::PrivateKeyLoadFailed { path, message }`
 with diagnostic messages covering: missing parent directory, unreadable file,
 empty file, wrong key type (ECDSA, OpenSSH format), and invalid PEM content.
 
+#### App client construction contract
+
+The `github::build_app_client` function constructs an authenticated Octocrab
+client from a GitHub App ID and an RSA private key. It accepts the App ID as a
+`u64` rather than `octocrab::models::AppId` to decouple the public interface
+from Octocrab types, wrapping the value internally. The function is synchronous
+and makes no network calls; credential validation against GitHub occurs later
+when the client acquires an installation token (Step 3.2).
+
+Construction requires a Tokio runtime context because Octocrab's builder
+internally spawns a Tower `Buffer` background task. Callers must ensure a
+runtime is available (production code runs inside `#[tokio::main]`; tests
+create a runtime explicitly).
+
+Errors are reported via `GitHubError::AuthenticationFailed { message }`. In
+practice, construction only fails if the underlying HTTP client (powered by
+`reqwest`) cannot initialise — for example, due to TLS backend failure. The App
+ID is not validated at construction time; GitHub validates it when the client
+attempts to acquire a token.
+
 ### OrthoConfig
 
 OrthoConfig provides layered configuration with predictable precedence: CLI
