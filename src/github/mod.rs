@@ -1,6 +1,7 @@
 //! GitHub App authentication and token management.
 //!
-//! This module handles loading GitHub App credentials for JWT signing.
+//! This module handles loading GitHub App credentials for JWT signing
+//! and constructing an authenticated Octocrab client for App operations.
 //! It validates that private key files contain PEM-encoded RSA keys,
 //! rejecting Ed25519 and ECDSA keys at load time because GitHub App
 //! authentication requires RS256.
@@ -14,6 +15,9 @@ use camino::Utf8Path;
 use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir;
 use jsonwebtoken::EncodingKey;
+
+use octocrab::Octocrab;
+use octocrab::models::AppId;
 
 use crate::error::GitHubError;
 
@@ -61,6 +65,30 @@ const ENCRYPTED_PRIVATE_KEY_TAG: &str = "-----BEGIN ENCRYPTED PRIVATE KEY-----";
 pub fn load_private_key(key_path: &Utf8Path) -> Result<EncodingKey, GitHubError> {
     let (dir, file_name) = open_key_directory(key_path)?;
     load_private_key_from_dir(&dir, file_name, key_path)
+}
+
+/// Build an authenticated Octocrab client for GitHub App operations.
+///
+/// Configures `OctocrabBuilder` with the given App ID and RSA private
+/// key, producing a client ready for JWT signing and installation token
+/// acquisition.
+///
+/// The client is constructed synchronously and does not make network
+/// calls. Credential validation against GitHub occurs later, when the
+/// client is used to acquire an installation token (Step 3.2).
+///
+/// # Errors
+///
+/// Returns [`GitHubError::AuthenticationFailed`] if the Octocrab
+/// builder fails to construct the HTTP client (for example, due to TLS
+/// initialisation failure).
+pub fn build_app_client(app_id: u64, private_key: EncodingKey) -> Result<Octocrab, GitHubError> {
+    Octocrab::builder()
+        .app(AppId(app_id), private_key)
+        .build()
+        .map_err(|error| GitHubError::AuthenticationFailed {
+            message: format!("failed to build GitHub App client: {error}"),
+        })
 }
 
 /// Load a private key from an already-opened directory capability.
