@@ -63,8 +63,8 @@ Step 3.1, tasks 2-4).
 - Risk: `jsonwebtoken` version drift between octocrab's transitive
   dependency and the direct dependency could cause duplicate compilation or
   type mismatches. Severity: medium. Likelihood: low. Mitigation: pin to
-  exactly `10.2.0` with `features = ["use_pem", "rust_crypto"]`, matching the existing
-  `Cargo.lock` entry.
+  exactly `10.2.0` with `features = ["use_pem", "rust_crypto"]`, matching the
+  existing `Cargo.lock` entry.
 
 - Risk: `EncodingKey` does not implement `Debug` or `Clone`, complicating
   storage or logging. Severity: low. Likelihood: medium. Mitigation: return by
