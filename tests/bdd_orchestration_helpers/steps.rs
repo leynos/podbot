@@ -15,6 +15,26 @@ use super::state::{OrchestrationResult, OrchestrationState};
 
 pub(crate) type StepResult<T> = Result<T, String>;
 
+/// Helper to invoke an orchestration operation and capture its outcome in state.
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "returns StepResult for consistency with rstest-bdd step callers"
+)]
+fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F) -> StepResult<()>
+where
+    F: FnOnce() -> podbot::error::Result<CommandOutcome>,
+{
+    match operation() {
+        Ok(outcome) => orchestration_state
+            .result
+            .set(OrchestrationResult::Ok(outcome)),
+        Err(e) => orchestration_state
+            .result
+            .set(OrchestrationResult::Err(e.to_string())),
+    }
+    Ok(())
+}
+
 mock! {
     #[derive(Debug)]
     OrcExecClient {}
@@ -110,79 +130,31 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
     Ok(())
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
 #[when("run orchestration is invoked")]
 fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
     let config = AppConfig::default();
-    match run_agent(&config) {
-        Ok(outcome) => orchestration_state
-            .result
-            .set(OrchestrationResult::Ok(outcome)),
-        Err(e) => orchestration_state
-            .result
-            .set(OrchestrationResult::Err(e.to_string())),
-    }
-    Ok(())
+    invoke_orchestration(orchestration_state, || run_agent(&config))
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
 #[when("stop orchestration is invoked with container {container}")]
 fn when_stop_invoked(
     orchestration_state: &OrchestrationState,
     container: String,
 ) -> StepResult<()> {
-    match stop_container(&container) {
-        Ok(outcome) => orchestration_state
-            .result
-            .set(OrchestrationResult::Ok(outcome)),
-        Err(e) => orchestration_state
-            .result
-            .set(OrchestrationResult::Err(e.to_string())),
-    }
-    Ok(())
+    invoke_orchestration(orchestration_state, || stop_container(&container))
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
 #[when("list containers orchestration is invoked")]
 fn when_list_containers_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
-    match list_containers() {
-        Ok(outcome) => orchestration_state
-            .result
-            .set(OrchestrationResult::Ok(outcome)),
-        Err(e) => orchestration_state
-            .result
-            .set(OrchestrationResult::Err(e.to_string())),
-    }
-    Ok(())
+    invoke_orchestration(orchestration_state, list_containers)
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
 #[when("token daemon orchestration is invoked with container {container}")]
 fn when_token_daemon_invoked(
     orchestration_state: &OrchestrationState,
     container: String,
 ) -> StepResult<()> {
-    match run_token_daemon(&container) {
-        Ok(outcome) => orchestration_state
-            .result
-            .set(OrchestrationResult::Ok(outcome)),
-        Err(e) => orchestration_state
-            .result
-            .set(OrchestrationResult::Err(e.to_string())),
-    }
-    Ok(())
+    invoke_orchestration(orchestration_state, || run_token_daemon(&container))
 }
 
 fn configure_create_exec(client: &mut MockOrcExecClient) {
