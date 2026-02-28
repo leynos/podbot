@@ -3,11 +3,14 @@
 use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
-use podbot::api::{CommandOutcome, list_containers, run_agent, run_token_daemon, stop_container};
+use podbot::api::{
+    CommandOutcome, ExecWithClientParams, exec_with_client, list_containers, run_agent,
+    run_token_daemon, stop_container,
+};
 use podbot::config::AppConfig;
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, EngineConnector, ExecMode, ExecRequest,
-    InspectExecFuture, ResizeExecFuture, StartExecFuture,
+    ContainerExecClient, CreateExecFuture, ExecMode, InspectExecFuture, ResizeExecFuture,
+    StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
 
@@ -92,10 +95,6 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
         .ok_or_else(|| String::from("command should be configured"))?;
     let exit_code = orchestration_state.exit_code.get().unwrap_or(0);
 
-    let request = ExecRequest::new("orc-sandbox", command, mode)
-        .map_err(|e| format!("failed to build request: {e}"))?
-        .with_tty(tty);
-
     let mut client = MockOrcExecClient::new();
     configure_create_exec(&mut client);
     configure_start_exec(&mut client, mode);
@@ -104,30 +103,17 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
 
     let runtime =
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
-    let exec_result = runtime.block_on(EngineConnector::exec_async(&client, &request));
 
-    let outcome = match exec_result {
-        Ok(result) => {
-            if result.exit_code() == 0 {
-                CommandOutcome::Success
-            } else {
-                CommandOutcome::CommandExit {
-                    code: result.exit_code(),
-                }
-            }
-        }
-        Err(e) => {
-            orchestration_state
-                .result
-                .set(OrchestrationResult::Err(e.to_string()));
-            return Ok(());
-        }
-    };
-
-    orchestration_state
-        .result
-        .set(OrchestrationResult::Ok(outcome));
-    Ok(())
+    invoke_orchestration(orchestration_state, || {
+        exec_with_client(ExecWithClientParams {
+            client: &client,
+            container: "orc-sandbox",
+            command: command.clone(),
+            mode,
+            tty,
+            runtime_handle: runtime.handle(),
+        })
+    })
 }
 
 #[when("run orchestration is invoked")]

@@ -495,10 +495,10 @@ reports using `eyre`.
 
 ## Library API
 
-Podbot can be embedded as a Rust library dependency in addition to its use as
-a CLI tool. The `podbot::api` module exposes orchestration functions that
-accept library-owned types and return typed outcomes without printing to
-stdout/stderr or calling `std::process::exit`.
+Podbot can be embedded as a Rust library dependency in addition to its use as a
+CLI tool. The `podbot::api` module exposes orchestration functions that accept
+library-owned types and return typed outcomes without printing to stdout/stderr
+or calling `std::process::exit`.
 
 ### Available functions
 

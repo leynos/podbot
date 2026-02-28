@@ -812,8 +812,8 @@ The stable library boundary should follow these constraints:
 - Library operations return outcomes as data; only CLI adapters convert those
   outcomes into terminal output and process exits.
 - `CommandOutcome` is the typed return value from all orchestration functions.
-  `Success` means exit code 0; `CommandExit { code }` carries the non-zero
-  exit code for the CLI to map to a process exit code.
+  `Success` means exit code 0; `CommandExit { code }` carries the non-zero exit
+  code for the CLI to map to a process exit code.
 - Configuration loaders exposed to library consumers must not require `Cli`
   structs or Clap traits.
 

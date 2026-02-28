@@ -118,7 +118,7 @@ After this change:
 ## Decision log
 
 - Decision: Use `#[serde(rename_all = "snake_case")]` for SelinuxLabelMode.
-  Rationale: Multi-word variants (KeepDefault, DisableForContainer) serialize
+  Rationale: Multi-word variants (KeepDefault, DisableForContainer) serialise
   naturally as "keep_default" and "disable_for_container" with snake_case.
   Single-word enums like AgentKind use "lowercase" instead. Date/Author:
   2026-02-15 / agent.

@@ -9,8 +9,8 @@ Status: COMPLETE
 
 ## Purpose / big picture
 
-After this change, external Rust applications can import `podbot::api` and
-call orchestration functions (`exec`, `run_agent`, `stop_container`,
+After this change, external Rust applications can import `podbot::api` and call
+orchestration functions (`exec`, `run_agent`, `stop_container`,
 `list_containers`, `run_token_daemon`) without shelling out to the CLI binary.
 The CLI binary (`src/main.rs`) becomes a thin adapter that parses arguments,
 calls library orchestration, formats output, and converts outcomes to process
@@ -70,29 +70,25 @@ escalation, not workarounds.
 ## Risks
 
 - Risk: BDD test scaffolding for orchestration may conflict with existing test
-  binary names or fixture names.
-  Severity: low
-  Likelihood: low
-  Mitigation: use distinct names prefixed with `orchestration_` for state types
-  and fixture functions.
+  binary names or fixture names. Severity: low Likelihood: low Mitigation: use
+  distinct names prefixed with `orchestration_` for state types and fixture
+  functions.
 
 - Risk: the `CommandOutcome` type move could break clippy lint expectations in
-  `main.rs` (the `#[expect(...)]` attributes on stub handlers).
-  Severity: low
-  Likelihood: high
-  Mitigation: when stubs move to the library, `print_stdout` suppression stays
-  in CLI; `unnecessary_wraps` moves to library stubs with FIXME issue link.
+  `main.rs` (the `#[expect(...)]` attributes on stub handlers). Severity: low
+  Likelihood: high Mitigation: when stubs move to the library, `print_stdout`
+  suppression stays in CLI; `unnecessary_wraps` moves to library stubs with
+  FIXME issue link.
 
 - Risk: `api::exec()` testability — the function creates its own
   `DefaultEnv` and `EngineConnector` internally, making mock injection
-  difficult for end-to-end BDD tests.
-  Severity: medium
-  Likelihood: high
+  difficult for end-to-end BDD tests. Severity: medium Likelihood: high
   Mitigation: accept `env: &impl mockable::Env` as a parameter following the
-  project's DI convention (`docs/reliable-testing-in-rust-via-dependency-injection.md`).
-  This makes the function testable with `MockEnv`. Engine connection is already
-  tested by `bdd_interactive_exec`; the new BDD suite focuses on outcome
-  mapping and stub behaviour.
+  project's DI convention
+  (`docs/reliable-testing-in-rust-via-dependency-injection.md`). This makes the
+  function testable with `MockEnv`. Engine connection is already tested by
+  `bdd_interactive_exec`; the new BDD suite focuses on outcome mapping and stub
+  behaviour.
 
 ## Progress
 
@@ -109,8 +105,8 @@ escalation, not workarounds.
 ## Surprises & discoveries
 
 - Surprise: clippy `too_many_arguments` triggered on the initial `exec()`
-  function with 7 parameters. Resolution: introduced `ExecParams<'a, E>`
-  struct to group parameters, following the pattern from `bollard`.
+  function with 7 parameters. Resolution: introduced `ExecParams<'a, E>` struct
+  to group parameters, following the pattern from `bollard`.
 
 - Surprise: clippy `missing_const_for_fn` triggered on stub functions instead
   of `unnecessary_wraps`. The stubs were trivial enough to be const-eligible.
@@ -119,16 +115,16 @@ escalation, not workarounds.
 
 - Discovery: BDD step functions that don't use `?` trigger
   `unnecessary_wraps`. The existing test suites solve this with
-  `#[expect(clippy::unnecessary_wraps, reason = "rstest-bdd step functions
-  must return StepResult for consistency")]`.
+  `#[expect(clippy::unnecessary_wraps,
+  reason = "rstest-bdd step functions must return StepResult
+  for consistency")]`.
 
 ## Decision log
 
 - Decision: keep `normalize_process_exit_code` in `main.rs` rather than moving
-  to the library.
-  Rationale: this function converts `i64` to process exit codes (`i32` clamped
-  to 0–255), which is purely a CLI concern. Library embedders may have
-  different exit-code mapping requirements.
+  to the library. Rationale: this function converts `i64` to process exit codes
+  (`i32` clamped to 0–255), which is purely a CLI concern. Library embedders
+  may have different exit-code mapping requirements.
 
 - Decision: `CommandOutcome` uses `i64` for exit codes (not `u8` or `i32`).
   Rationale: container engines report exit codes as `i64` (Bollard's
@@ -136,14 +132,13 @@ escalation, not workarounds.
   level would lose information.
 
 - Decision: `api::exec()` accepts `tty: bool` parameter rather than detecting
-  terminals.
-  Rationale: `std::io::stdin().is_terminal()` is a CLI concern. Library
-  embedders may not have a terminal at all. Pushing terminal detection to the
-  caller follows the design doc requirement.
+  terminals. Rationale: `std::io::stdin().is_terminal()` is a CLI concern.
+  Library embedders may not have a terminal at all. Pushing terminal detection
+  to the caller follows the design doc requirement.
 
 - Decision: `api::exec()` accepts `env: &impl mockable::Env` rather than
-  creating `DefaultEnv` internally.
-  Rationale: follows the project's DI convention documented in
+  creating `DefaultEnv` internally. Rationale: follows the project's DI
+  convention documented in
   `docs/reliable-testing-in-rust-via-dependency-injection.md`. Makes the
   function testable with `MockEnv` without requiring a live engine socket.
 
@@ -154,12 +149,11 @@ escalation, not workarounds.
 - Decision: BDD exec-orchestration tests exercise outcome mapping via
   `MockEnv` pointing to a nonexistent socket (for error paths) and direct
   `CommandOutcome` construction verification (for happy paths), rather than
-  mocking the full engine connection.
-  Rationale: `api::exec()` ultimately calls `EngineConnector::connect_with_fallback`
-  and `EngineConnector::exec`, which are already thoroughly tested by the
-  existing `bdd_interactive_exec` suite. The new suite validates that the
-  orchestration layer correctly maps results to `CommandOutcome` and that
-  stubs behave as expected.
+  mocking the full engine connection. Rationale: `api::exec()` ultimately calls
+  `EngineConnector::connect_with_fallback` and `EngineConnector::exec`, which
+  are already thoroughly tested by the existing `bdd_interactive_exec` suite.
+  The new suite validates that the orchestration layer correctly maps results
+  to `CommandOutcome` and that stubs behave as expected.
 
 ## Outcomes & retrospective
 
@@ -175,28 +169,27 @@ All acceptance criteria met:
 - Design doc, users guide, and roadmap updated.
 - Execution plan saved to `docs/execplans/5-1-1-public-orchestration-module.md`.
 
-Key deviation from plan: `exec()` uses `ExecParams<'a, E>` struct instead of
-7 positional parameters, due to clippy `too_many_arguments`. This is a
-better API design — the plan's code snippets show the original positional
-form but the implementation uses the struct form.
+Key deviation from plan: `exec()` uses `ExecParams<'a, E>` struct instead of 7
+positional parameters, due to clippy `too_many_arguments`. This is a better API
+design — the plan's code snippets show the original positional form but the
+implementation uses the struct form.
 
 ## Context and orientation
 
-Podbot is a Rust application that runs AI coding agents (Claude Code, Codex)
-in sandboxed containers. It provides two delivery surfaces: a CLI binary and
-a Rust library. The project lives at `/home/user/project`.
+Podbot is a Rust application that runs AI coding agents (Claude Code, Codex) in
+sandboxed containers. It provides two delivery surfaces: a CLI binary and a
+Rust library. The project lives at `/home/user/project`.
 
 Currently, the CLI binary (`src/main.rs`, 207 lines) contains a local
 `CommandOutcome` enum and five handler functions. Only `exec_in_container` has
 real business logic; the other four (`run_agent`, `run_token_daemon`,
 `list_containers`, `stop_container`) are stubs that print placeholder messages.
-The library (`src/lib.rs`, 24 lines) exports three modules: `config`,
-`engine`, `error`.
+The library (`src/lib.rs`, 24 lines) exports three modules: `config`, `engine`,
+`error`.
 
-The design document (`docs/podbot-design.md`) specifies an `api/` directory
-in the module structure for orchestration functions and requires that library
-APIs use semantic errors, accept only library-owned types, and never print
-or exit.
+The design document (`docs/podbot-design.md`) specifies an `api/` directory in
+the module structure for orchestration functions and requires that library APIs
+use semantic errors, accept only library-owned types, and never print or exit.
 
 Key files:
 
@@ -237,9 +230,9 @@ binary to delegate to the library.
 
 #### A.1: Create `src/api/exec.rs`
 
-Create the file containing the extracted exec orchestration logic. The
-function accepts only library types and an `&impl mockable::Env` parameter
-for testability.
+Create the file containing the extracted exec orchestration logic. The function
+accepts only library types and an `&impl mockable::Env` parameter for
+testability.
 
 ```rust
 //! Container command execution orchestration.
@@ -302,8 +295,8 @@ Key design points:
 
 #### A.2: Create `src/api/mod.rs`
 
-Create the orchestration module hub with `CommandOutcome`, stub functions,
-and re-exports.
+Create the orchestration module hub with `CommandOutcome`, stub functions, and
+re-exports.
 
 ```rust
 //! Orchestration API for podbot commands.
@@ -485,7 +478,7 @@ Rewrite as a thin CLI adapter. Key changes:
    detection result.
 4. Replace stub handlers with thin wrappers that call
    `podbot::api::{run_agent, list_containers, stop_container, run_token_daemon}`
-   and add CLI-specific `println!` output.
+    and add CLI-specific `println!` output.
 5. Keep `normalize_process_exit_code` and its tests in `main.rs` (CLI-specific).
 6. Keep `create_runtime` in `main.rs`.
 
@@ -541,8 +534,8 @@ fn run_agent_cli(config: &AppConfig) -> PodbotResult<CommandOutcome> {
 ```
 
 Same pattern for `list_containers_cli`, `stop_container_cli`,
-`run_token_daemon_cli` — each calls the library stub, prints a CLI message,
-and returns the outcome.
+`run_token_daemon_cli` — each calls the library stub, prints a CLI message, and
+returns the outcome.
 
 **Stage A gate**: run `make check-fmt && make lint && make test`. All existing
 tests must pass. New unit tests in `src/api/tests.rs` must pass.
@@ -599,42 +592,41 @@ Feature: Command orchestration
 
 #### B.2: Create `tests/bdd_orchestration_helpers/state.rs`
 
-State struct with `Slot<T>` fields for mode, tty, command, exit code,
-engine availability, and result. Fixture function
-`orchestration_state()` returns a default-initialised state.
+State struct with `Slot<T>` fields for mode, tty, command, exit code, engine
+availability, and result. Fixture function `orchestration_state()` returns a
+default-initialised state.
 
-Use `OrchestrationResult` enum with `Ok(CommandOutcome)` and
-`Err(String)` variants for capturing outcomes.
+Use `OrchestrationResult` enum with `Ok(CommandOutcome)` and `Err(String)`
+variants for capturing outcomes.
 
 #### B.3: Create `tests/bdd_orchestration_helpers/steps.rs`
 
-Given/when/then step functions. The `when exec orchestration is called`
-step exercises the exec code path using a mock engine client (reusing the
+Given/when/then step functions. The `when exec orchestration is called` step
+exercises the exec code path using a mock engine client (reusing the
 `MockExecClient` pattern from `bdd_interactive_exec_helpers/steps.rs`) and
-`MockEnv`. For connection-error scenarios, it calls `podbot::api::exec()`
-with a `MockEnv` configured with a nonexistent socket path. For stub
-scenarios, it calls the library stubs directly.
+`MockEnv`. For connection-error scenarios, it calls `podbot::api::exec()` with
+a `MockEnv` configured with a nonexistent socket path. For stub scenarios, it
+calls the library stubs directly.
 
-All step functions use `StepResult<T> = Result<T, String>` and match
-fixture parameter names exactly (`orchestration_state: &OrchestrationState`).
+All step functions use `StepResult<T> = Result<T, String>` and match fixture
+parameter names exactly (`orchestration_state: &OrchestrationState`).
 
 #### B.4: Create `tests/bdd_orchestration_helpers/assertions.rs`
 
-Assertion helpers for outcome verification following the `StepResult`
-pattern.
+Assertion helpers for outcome verification following the `StepResult` pattern.
 
 #### B.5: Create `tests/bdd_orchestration_helpers/mod.rs`
 
-Re-export hub with `#[expect(unused_imports)]` on step and assertion
-imports (matching the existing pattern from `bdd_interactive_exec_helpers`).
+Re-export hub with `#[expect(unused_imports)]` on step and assertion imports
+(matching the existing pattern from `bdd_interactive_exec_helpers`).
 
 #### B.6: Create `tests/bdd_orchestration.rs`
 
-Scenario bindings using `#[scenario]` macros, one function per scenario,
-each accepting `orchestration_state: OrchestrationState`.
+Scenario bindings using `#[scenario]` macros, one function per scenario, each
+accepting `orchestration_state: OrchestrationState`.
 
-**Stage B gate**: run `make check-fmt && make lint && make test`. All
-existing and new tests must pass.
+**Stage B gate**: run `make check-fmt && make lint && make test`. All existing
+and new tests must pass.
 
 ### Stage C: Documentation updates
 
@@ -657,8 +649,8 @@ In the "Library API boundary requirements" section, add a bullet:
 
 #### C.2: Update `docs/users-guide.md`
 
-Add a "Library API" section documenting the available orchestration
-functions for library embedders. No user-facing CLI behaviour changes.
+Add a "Library API" section documenting the available orchestration functions
+for library embedders. No user-facing CLI behaviour changes.
 
 #### C.3: Update `docs/podbot-roadmap.md`
 
@@ -688,8 +680,8 @@ make lint 2>&1 | tee /tmp/lint-5-1-1.log
 make test 2>&1 | tee /tmp/test-5-1-1.log
 ```
 
-Verify all pre-existing BDD tests pass unchanged. Verify new tests pass.
-Commit with descriptive message.
+Verify all pre-existing BDD tests pass unchanged. Verify new tests pass. Commit
+with descriptive message.
 
 ## Interfaces and dependencies
 
@@ -744,28 +736,28 @@ No new external crate dependencies are required.
 
 ## Files to create
 
-| File | Purpose |
-| ---- | ------- |
-| `src/api/mod.rs` | `CommandOutcome`, stub functions, re-exports |
-| `src/api/exec.rs` | Exec orchestration extracted from `main.rs` |
-| `src/api/tests.rs` | Unit tests for `CommandOutcome` and stubs |
-| `tests/features/orchestration.feature` | BDD scenarios |
-| `tests/bdd_orchestration.rs` | Scenario bindings |
-| `tests/bdd_orchestration_helpers/mod.rs` | Re-exports |
-| `tests/bdd_orchestration_helpers/state.rs` | State + fixture |
-| `tests/bdd_orchestration_helpers/steps.rs` | Given/when/then |
-| `tests/bdd_orchestration_helpers/assertions.rs` | Assertion helpers |
-| `docs/execplans/5-1-1-public-orchestration-module.md` | This plan |
+| File                                                  | Purpose                                      |
+| ----------------------------------------------------- | -------------------------------------------- |
+| `src/api/mod.rs`                                      | `CommandOutcome`, stub functions, re-exports |
+| `src/api/exec.rs`                                     | Exec orchestration extracted from `main.rs`  |
+| `src/api/tests.rs`                                    | Unit tests for `CommandOutcome` and stubs    |
+| `tests/features/orchestration.feature`                | BDD scenarios                                |
+| `tests/bdd_orchestration.rs`                          | Scenario bindings                            |
+| `tests/bdd_orchestration_helpers/mod.rs`              | Re-exports                                   |
+| `tests/bdd_orchestration_helpers/state.rs`            | State + fixture                              |
+| `tests/bdd_orchestration_helpers/steps.rs`            | Given/when/then                              |
+| `tests/bdd_orchestration_helpers/assertions.rs`       | Assertion helpers                            |
+| `docs/execplans/5-1-1-public-orchestration-module.md` | This plan                                    |
 
 ## Files to modify
 
-| File | Change |
-| ---- | ------ |
-| `src/lib.rs` | Add `pub mod api;` and update module doc |
-| `src/main.rs` | Remove `CommandOutcome`, replace handlers with thin calls to `podbot::api::*` |
-| `docs/podbot-design.md` | Add `api/` module detail |
-| `docs/users-guide.md` | Add Library API section |
-| `docs/podbot-roadmap.md` | Mark Step 5.1 first task done |
+| File                     | Change                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| `src/lib.rs`             | Add `pub mod api;` and update module doc                                      |
+| `src/main.rs`            | Remove `CommandOutcome`, replace handlers with thin calls to `podbot::api::*` |
+| `docs/podbot-design.md`  | Add `api/` module detail                                                      |
+| `docs/users-guide.md`    | Add Library API section                                                       |
+| `docs/podbot-roadmap.md` | Mark Step 5.1 first task done                                                 |
 
 ## Validation and acceptance
 
@@ -798,9 +790,9 @@ make test 2>&1 | tee /tmp/test-5-1-1.log
 
 All stages are additive and can be rerun safely. If partial edits leave the
 tree failing, revert only incomplete hunks and replay the current stage.
-`cargo clean -p podbot` may be needed after modifying feature files
-(rstest-bdd reads them at compile time). Gate logs stored under `/tmp` with
-unique names per run.
+`cargo clean -p podbot` may be needed after modifying feature files (rstest-bdd
+reads them at compile time). Gate logs stored under `/tmp` with unique names
+per run.
 
 ## Implementation order
 

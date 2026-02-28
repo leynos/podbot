@@ -12,7 +12,7 @@
 
 mod exec;
 
-pub use exec::{ExecParams, exec};
+pub use exec::{ExecParams, ExecWithClientParams, exec, exec_with_client};
 
 use crate::config::AppConfig;
 use crate::error::Result as PodbotResult;
