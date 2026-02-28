@@ -72,7 +72,7 @@ errors. ✓
 ## Phase 2: Container engine integration
 
 Implement the Bollard wrapper that manages container lifecycle, credential
-injection, and interactive execution.
+injection, and both interactive and protocol-safe execution.
 
 ### Step 2.1: Engine connection ✓
 
@@ -134,6 +134,23 @@ Attach a terminal to the agent process for interactive sessions.
 
 **Completion criteria:** Interactive sessions work with proper terminal
 handling. Resize events propagate correctly. Exit codes return accurately.
+
+### Step 2.5: Protocol-safe execution (stdio proxy)
+
+Provide non-TTY execution for app-server hosting protocols.
+
+**Tasks:**
+
+- [ ] Implement exec attachment with `tty = false` enforced.
+- [ ] Implement byte-stream proxy loops: stdin -> container stdin, container
+  stdout -> host stdout, and container stderr -> host stderr.
+- [ ] Keep proxy buffering bounded so hosted protocols can apply backpressure.
+- [ ] Ensure the CLI emits no non-protocol bytes to stdout while proxying.
+- [ ] Add a regression test asserting zero stdout bytes before the first proxied
+  protocol byte.
+
+**Completion criteria:** Hosting sessions run without TTY framing, preserve
+protocol byte streams, and keep stdout free from Podbot diagnostics.
 
 ## Phase 3: GitHub App integration
 
@@ -236,22 +253,54 @@ Clone the target repository into the container workspace.
 out. Authentication uses the token mechanism without exposing credentials in
 process arguments.
 
-### Step 4.3: Agent startup
+### Step 4.3a: Interactive agent startup
 
 Launch the agent in permissive mode and attach the terminal.
 
 **Tasks:**
 
-- [ ] Implement the orchestration of steps one through seven from the design
-  document.
-- [ ] Start Claude Code with --dangerously-skip-permissions flag.
-- [ ] Start Codex with --dangerously-bypass-approvals-and-sandbox
-  flag.
+- [ ] Implement orchestration for interactive mode (`agent.mode = "podbot"`).
+- [ ] Start Claude Code with `--dangerously-skip-permissions`.
+- [ ] Start Codex with `--dangerously-bypass-approvals-and-sandbox`.
 - [ ] Attach the terminal to the agent process.
 - [ ] Handle agent exit and cleanup.
 
-**Completion criteria:** Agents start successfully in permissive mode. Terminal
-interaction works correctly. Container cleanup occurs on agent exit.
+**Completion criteria:** Interactive agents start in permissive mode, terminal
+interaction works correctly, and cleanup occurs on agent exit.
+
+### Step 4.3b: App server startup
+
+Launch long-lived app servers for IDE and protocol clients.
+
+**Tasks:**
+
+- [ ] Add Codex App Server startup support
+  (`codex app-server --listen stdio://`).
+- [ ] Add ACP startup support through generic command execution
+  (`agent.command` + `agent.args`).
+- [ ] Route hosting sessions through the Step 2.5 non-TTY stdio proxy.
+- [ ] Add config validation for legal `(agent.kind, agent.mode)` pairs.
+- [ ] Ensure clean shutdown semantics when the client closes stdin or sends a
+  termination signal.
+
+**Completion criteria:** App server modes start reliably, run through protocol-
+safe proxying, and shut down cleanly when the hosting client ends the session.
+
+### Step 4.4: Workspace strategies
+
+Support both cloned and host-mounted workspace models.
+
+**Tasks:**
+
+- [ ] Implement `workspace.source = "host_mount"` bind mounts.
+- [ ] Retain `workspace.source = "github_clone"` for token-backed clone flows.
+- [ ] Define path mapping policy (default mount target `/workspace`).
+- [ ] Ensure container user write permissions are documented and validated for
+  rootless engines.
+- [ ] Update threat-model documentation for host-mounted workspace boundaries.
+
+**Completion criteria:** Operators can choose clone or host-mount workspace
+strategies explicitly, with documented security and permission behaviour.
 
 ## Phase 5: Library API and embedding support
 
@@ -338,7 +387,8 @@ Implement the primary workflow for launching agent sessions.
 
 - [ ] Accept --repo owner/name as a required argument.
 - [ ] Accept --branch as a required argument.
-- [ ] Accept --agent with values codex or claude.
+- [ ] Accept --agent with values `codex`, `claude`, or `custom`.
+- [ ] Accept --mode with values `podbot`, `codex_app_server`, or `acp`.
 - [ ] Orchestrate the full execution flow from the run_flow module.
 - [ ] Return appropriate exit codes on success and failure.
 
@@ -392,19 +442,25 @@ Define the Containerfile for the sandbox environment.
 **Completion criteria:** The image builds successfully. Inner Podman executes
 within the container. Git operations function correctly.
 
-### Step 7.2: Agent binaries
+### Step 7.2: Agent runtimes and binaries
 
-Add the AI agent binaries to the image.
+Add required runtimes and agent binaries to the image.
 
 **Tasks:**
 
 - [ ] Add Claude Code binary or installation method.
 - [ ] Add Codex CLI binary or installation method.
-- [ ] Verify binaries execute correctly within the container.
-- [ ] Document binary update procedures.
+- [ ] Add Node.js runtime for OpenCode and Droid ACP tooling.
+- [ ] Add Python 3.10+ runtime for Claude Agent SDK wrappers.
+- [ ] Add OpenCode installation method and document Droid ACP dependency
+  requirements.
+- [ ] Add Goose installation method and ACP-mode invocation documentation.
+- [ ] Verify each installed runtime and agent command executes correctly within
+  the container.
+- [ ] Document versioning and upgrade procedures for runtimes and agents.
 
-**Completion criteria:** Both agent binaries execute within the container.
-Version information displays correctly.
+**Completion criteria:** Required runtimes and hosted agent commands execute
+within the container, with documented and repeatable upgrade paths.
 
 ### Step 7.3: GIT_ASKPASS helper
 
@@ -434,6 +490,44 @@ Automate image building and distribution.
 
 **Completion criteria:** Images build automatically in CI. Registry pushes
 succeed. Version tags follow a documented convention.
+
+## Phase 8: Protocol conformance and hosting tests
+
+Validate protocol correctness for app server hosting integrations.
+
+### Step 8.1: Codex App Server integration test
+
+Verify Podbot can host Codex App Server end-to-end.
+
+**Tasks:**
+
+- [ ] Add integration coverage that launches Podbot-hosted
+  `codex app-server --listen stdio://`.
+- [ ] Drive `initialize -> new thread -> prompt` through the Codex app-server
+  test client flow.
+- [ ] Assert no Podbot diagnostics are emitted on stdout during protocol
+  traffic.
+
+**Completion criteria:** Codex client test flow succeeds against Podbot hosting
+without stdout protocol contamination.
+
+### Step 8.2: ACP transport conformance harness
+
+Verify Podbot preserves ACP framing and stream purity.
+
+**Tasks:**
+
+- [ ] Build a minimal ACP harness that exchanges newline-delimited JSON-RPC
+  messages through Podbot hosting.
+- [ ] Assert newline framing is preserved exactly with no embedded newline
+  corruption.
+- [ ] Assert Podbot emits no stray stdout bytes outside proxied ACP protocol
+  traffic.
+- [ ] Add tests for ACP capability masking of `terminal/*` and `fs/*` in the
+  initialization handshake.
+
+**Completion criteria:** ACP sessions remain protocol-correct under Podbot
+hosting, with default sandbox-preserving capability masking enforced.
 
 ## Future enhancements
 

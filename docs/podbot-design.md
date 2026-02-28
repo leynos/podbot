@@ -1,11 +1,12 @@
 # Sandboxed agent runner design
 
 This document describes a sandboxed execution environment for running AI coding
-agents (Claude Code, Codex) with repository access. The design prioritizes
-security by treating the host container engine as high-trust infrastructure,
-while the agent container operates in a low-trust playpen with no access to the
-host socket. Podbot must be usable both as a Command-Line Interface (CLI) tool
-and as an embeddable Rust library for larger agent-hosting systems.
+agents and app servers (Claude Code, Codex, Codex App Server, ACP agents) with
+repository access. The design prioritizes security by treating the host
+container engine as high-trust infrastructure, while the agent container
+operates in a low-trust playpen with no access to the host socket. Podbot must
+be usable both as a Command-Line Interface (CLI) tool and as an embeddable Rust
+library for larger agent-hosting systems.
 
 ## Overview
 
@@ -32,9 +33,9 @@ flowchart TB
     end
 
     subgraph Sandbox["Agent container (low trust)"]
-        Agent["Claude Code / Codex"]
+        Agent["Interactive agent or app server"]
         InnerPodman["Inner Podman service"]
-        Repo["Cloned repository"]
+        Repo["Workspace<br/>(cloned or host-mounted)"]
         Agent --> InnerPodman
         Agent --> Repo
     end
@@ -69,8 +70,8 @@ own logging, retries, scheduling, and policy controls.
 ## Execution flow
 
 The host process (CLI or embedding application) initiates orchestration by
-calling the Podbot library. The library then performs container creation and
-agent execution through seven steps.
+calling the Podbot library. The library then performs container creation,
+workspace preparation, and agent execution through seven steps.
 
 <!-- markdownlint-disable MD029 -->
 
@@ -79,36 +80,80 @@ agent execution through seven steps.
    - `podman`, `fuse-overlayfs`, and `slirp4netns` for the inner engine
    - `git`
    - `claude` and `codex` binaries
+   - Node.js runtime for JavaScript-based ACP agents
+   - Python 3.10+ for Claude Agent SDK wrappers
    - A helper script for Git authentication via token file
 
-2. **Inject agent credentials** from `~/.claude` and `~/.codex` by copying into
-   the container filesystem using Bollard's `upload_to_container` method.[^1]
-   Bind-mounting the home directory would expose unnecessary host state.
+2. **Inject agent credentials and selected environment secrets** into the
+   container. Credential families such as `~/.claude` and `~/.codex` are copied
+   via Bollard's `upload_to_container` method,[^1] while host environment
+   values are passed through an explicit allowlist (`agent.env_allowlist`).
+   Bind mounts of home directories are avoided to prevent exposing unrelated
+   host state.
 
 3. **Configure Git identity** by reading `user.name` and `user.email` from the
    host and executing `git config --global` within the container.
 
-4. **Create a GitHub App installation access token** using Octocrab.[^2]
-   Installation tokens expire after one hour.[^3]
+4. **If `workspace.source = "github_clone"`**, create a GitHub App installation
+   access token using Octocrab.[^2] Installation tokens expire after one
+   hour.[^3]
 
-5. **Start a token renewal daemon** that refreshes the installation token before
-   expiry. Rather than repeatedly executing commands or copying files into the
-   container, this daemon writes the token to a host-side file and relies on a
-   read-only bind mount for the container to observe updates.
+5. **If `workspace.source = "github_clone"`**, start a token renewal daemon that
+   refreshes the installation token before expiry. Rather than repeatedly
+   executing commands or copying files into the container, this daemon writes
+   the token to a host-side file and relies on a read-only bind mount for the
+   container to observe updates.
 
-6. **Clone the repository** specified by the operator. GitHub supports
-   Hypertext Transfer Protocol (HTTP) access using the installation token in
-   the form `x-access-token:TOKEN@github.com/owner/repo`.[^3] However,
-   embedding tokens in Uniform Resource Locators (URLs) risks leaking
-   credentials into process arguments and shell history. A safer approach uses
-   `GIT_ASKPASS` with a script that reads from `/run/secrets/ghapp_token`.
+6. **Prepare the workspace** according to `workspace.source`:
 
-7. **Start the agent in permissive mode**, attached to the terminal:
+   - `github_clone`: clone the repository specified by the operator. GitHub
+     supports Hypertext Transfer Protocol (HTTP) access using the installation
+     token in the form `x-access-token:TOKEN@github.com/owner/repo`.[^3]
+     However, embedding tokens in Uniform Resource Locators (URLs) risks
+     leaking credentials into process arguments and shell history. A safer
+     approach uses `GIT_ASKPASS` with a script that reads from
+     `/run/secrets/ghapp_token`.
+   - `host_mount`: bind-mount a host directory (`workspace.host_path`) into the
+     container at `workspace.container_path` and set the agent working
+     directory to that mounted path. GitHub token acquisition and clone steps
+     are skipped unless explicitly requested by the operator.
 
-   - Claude Code: `claude --dangerously-skip-permissions`[^4]
-   - Codex CLI: `codex --dangerously-bypass-approvals-and-sandbox`[^5]
+7. **Start the selected agent mode**:
+
+   - **7a. Interactive mode (`agent.mode = "podbot"`):** start the agent in
+     permissive mode with terminal attachment:
+
+     - Claude Code: `claude --dangerously-skip-permissions`[^4]
+     - Codex CLI: `codex --dangerously-bypass-approvals-and-sandbox`[^5]
+   - **7b. App server hosting mode (`agent.mode = "codex_app_server"` or
+     `"acp"`):** start a long-lived non-TTY server command in the container and
+     proxy protocol streams:
+
+     - Codex App Server (stdio): `codex app-server --listen stdio://`[^7]
+     - OpenCode ACP bridge: `opencode acp`[^8]
+     - Droid ACP bridge: `droid-acp`[^8]
+     - Goose ACP mode (as documented by Goose)[^9]
+     - Optional future transport: WebSocket for Codex App Server[^7]
 
 <!-- markdownlint-enable MD029 -->
+
+In app server hosting mode, Podbot's stream contract is strict:
+
+- TTY allocation is disabled (`tty = false`) for protocol exec sessions.
+- Podbot stdout is a pure bridge of protocol bytes from container stdout.
+- Podbot diagnostics and lifecycle logs are written to stderr only.
+- Proxy logic preserves framing without adding prefixes or newline
+  transformations, and uses bounded buffering so backpressure remains visible
+  to the hosted server.[^7] [^10]
+
+ACP hosting defaults to sandbox-preserving capability masking:
+
+- Podbot rewrites the ACP `initialize` exchange to remove client capabilities
+  that would execute on the IDE host (`terminal/*` and `fs/*`).
+- Podbot can reject those ACP method calls defensively if an agent still emits
+  them.
+- An explicit operator override may allow ACP delegation when host-executed
+  tools are intentionally desired.
 
 ## Credential injection contract
 
@@ -133,6 +178,16 @@ Credential injection is implemented by
 Host-side credential selection and archive construction failures are mapped to
 `FilesystemError::IoError`, while Bollard `upload_to_container` failures are
 mapped to `ContainerError::UploadFailed` with the target `container_id`.
+
+For app server hosting, environment secret passthrough follows a separate
+contract:
+
+- `agent.env_allowlist` names host environment variables that are copied into
+  the container process environment.
+- Missing allowlisted variables are skipped by default unless marked as
+  required by a future validation policy.
+- Secret values are never emitted on stdout, and stderr logging must redact
+  configured sensitive keys.
 
 ## Security model
 
@@ -224,7 +279,8 @@ Key methods include:
 
 - `create_container` and `start_container` for lifecycle management
 - `upload_to_container` for injecting credentials as tar archives
-- `exec` with TTY attachment for interactive agent sessions
+- `exec` with TTY attachment for interactive sessions and `tty = false` for
+  protocol hosting sessions
 
 ### Octocrab
 
@@ -357,7 +413,10 @@ installation_id = 67890
 private_key_path = "/home/user/.config/podbot/github-app.pem"
 
 [workspace]
-base_dir = "/work"
+source = "host_mount" # "github_clone" or "host_mount"
+base_dir = "/work" # github_clone only
+host_path = "/abs/path/to/project" # host_mount only
+container_path = "/workspace/project" # defaults to "/workspace"
 
 [creds]
 copy_claude = true
@@ -369,13 +428,32 @@ mount_dev_fuse = true
 
 [agent]
 kind = "codex"
-mode = "podbot"
+mode = "codex_app_server" # "podbot", "codex_app_server", or "acp"
+command = "opencode" # required when kind = "custom"
+args = ["acp"] # required when kind = "custom"
+env_allowlist = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FACTORY_API_KEY"]
 ```
 
-The `agent.mode` setting defines the execution mode for the agent. The current
-implementation accepts only `podbot`, which indicates the default
-Podbot-managed execution path. This value is reserved for future expansion when
-additional execution modes are introduced.
+The `agent.mode` setting defines the execution mode for the agent:
+
+- `podbot`: interactive terminal-attached execution.
+- `codex_app_server`: non-TTY server hosting for Codex App Server protocol.
+- `acp`: non-TTY server hosting for newline-delimited ACP JSON-RPC.
+
+The `agent.kind` setting supports built-ins (`claude`, `codex`) and `custom`.
+Custom mode uses `agent.command` and `agent.args` so new hosted agents can be
+introduced without Rust refactors. The configuration validator must enforce
+legal `(kind, mode)` combinations.
+
+The `workspace.source` setting controls where the agent sees source code:
+
+- `github_clone`: Podbot clones into `workspace.base_dir` inside the container.
+- `host_mount`: Podbot bind-mounts `workspace.host_path` at
+  `workspace.container_path`, and the mounted host workspace becomes the active
+  working directory for the agent.
+
+In `host_mount` mode, GitHub token and clone operations are optional and should
+run only when explicitly requested.
 
 The `sandbox.privileged` setting controls the trade-off between compatibility
 and isolation. Privileged mode enables more Podman-in-Podman configurations but
@@ -595,7 +673,8 @@ _Figure 2: Engine connection error hierarchy and classification flow._
 The CLI exposes a minimal surface area.
 
 ```plaintext
-podbot run --repo owner/name --agent codex|claude
+podbot run --repo owner/name --agent codex|claude|custom \
+  --mode podbot|codex_app_server|acp
 podbot token-daemon
 podbot ps
 podbot stop <container>
@@ -605,6 +684,9 @@ podbot exec <container> [--detach] -- <command...>
 The `run` subcommand orchestrates the full execution flow. The `token-daemon`
 subcommand can run standalone, potentially as a user systemd service, to manage
 token refresh independently of active sessions.
+
+When `--mode` selects app server hosting, `run` becomes a protocol bridge and
+must keep stdout protocol-clean while sending all diagnostics to stderr.
 
 ### Interactive exec semantics
 
@@ -687,21 +769,34 @@ The sandbox image must support nested Podman execution. Required components:
 - Appropriate capabilities or security options depending on Security-Enhanced
   Linux (SELinux) policy
 
-The image should pre-install Git, the agent binaries, and a `GIT_ASKPASS`
-helper script that reads `/run/secrets/ghapp_token`.
+The image should pre-install:
+
+- Git and a `GIT_ASKPASS` helper script that reads `/run/secrets/ghapp_token`
+- Claude Code and Codex CLI binaries
+- Node.js runtime for OpenCode and Droid ACP bridge processes[^8]
+- Python 3.10+ for Claude Agent SDK-based wrappers[^11]
+- Optional pre-installed extra agents (`opencode`, `droid-acp`, `goose`) or a
+  documented installation mechanism with version pinning
 
 ## Threat model summary
 
-The design accepts that the agent can damage the cloned repository and make
+The design accepts that the agent can damage the designated workspace and make
 network requests from within the sandbox. The design prevents the agent from:
 
 - Accessing the host container socket
 - Mounting arbitrary host paths via nested containers
 - Observing or modifying credentials beyond the scoped installation token
-- Persisting changes outside the container filesystem
+- Persisting changes outside the designated workspace (container filesystem by
+  default, or an explicitly mounted host workspace in `host_mount` mode)
 
 The residual risk is kernel-level container escape. Operators requiring
 stronger guarantees should consider VM-based isolation.
+
+In `host_mount` mode, the mounted host workspace is explicitly within the
+agent's write boundary by operator choice. The containment goal shifts from
+"cannot touch host files" to "cannot touch anything outside the designated
+workspace and cannot access the host container engine socket". ACP capability
+masking is required to preserve this boundary when hosting ACP agents.[^10]
 
 ______________________________________________________________________
 
@@ -722,3 +817,20 @@ ______________________________________________________________________
 
 [^6]: OrthoConfig repository:
 <https://github.com/leynos/ortho-config>
+
+[^7]: Codex App Server protocol and transport contract:
+<https://raw.githubusercontent.com/openai/codex/main/codex-rs/app-server/README.md>
+
+[^8]: OpenCode ACP support, including `opencode acp` and `droid-acp`:
+<https://opencode.ai/docs/acp/>
+
+[^9]: Goose ACP clients guide:
+<https://block.github.io/goose/docs/guides/acp-clients/>
+
+[^10]: Agent Client Protocol transport and capability contracts:
+<https://agentclientprotocol.com/protocol/transports>
+<https://agentclientprotocol.com/protocol/file-system>
+<https://agentclientprotocol.com/protocol/terminals>
+
+[^11]: Claude Agent SDK for Python:
+<https://github.com/anthropics/claude-agent-sdk-python>
