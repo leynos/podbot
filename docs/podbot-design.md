@@ -1,12 +1,12 @@
 # Sandboxed agent runner design
 
 This document describes a sandboxed execution environment for running AI coding
-agents and app servers (Claude Code, Codex, Codex App Server, ACP agents) with
-repository access. The design prioritizes security by treating the host
-container engine as high-trust infrastructure, while the agent container
-operates in a low-trust playpen with no access to the host socket. Podbot must
-be usable both as a Command-Line Interface (CLI) tool and as an embeddable Rust
-library for larger agent-hosting systems.
+agents and app servers (Claude Code, Codex, Codex App Server, Agent Client
+Protocol (ACP) agents) with repository access. The design prioritizes security
+by treating the host container engine as high-trust infrastructure, while the
+agent container operates in a low-trust playpen with no access to the host
+socket. Podbot must be usable both as a Command-Line Interface (CLI) tool and
+as an embeddable Rust library for larger agent-hosting systems.
 
 ## Overview
 
@@ -674,7 +674,7 @@ The CLI exposes a minimal surface area.
 
 ```plaintext
 podbot run --repo owner/name --agent codex|claude|custom \
-  --mode podbot|codex_app_server|acp
+  --agent-mode podbot|codex_app_server|acp
 podbot token-daemon
 podbot ps
 podbot stop <container>
@@ -685,8 +685,8 @@ The `run` subcommand orchestrates the full execution flow. The `token-daemon`
 subcommand can run standalone, potentially as a user systemd service, to manage
 token refresh independently of active sessions.
 
-When `--mode` selects app server hosting, `run` becomes a protocol bridge and
-must keep stdout protocol-clean while sending all diagnostics to stderr.
+When `--agent-mode` selects app server hosting, `run` becomes a protocol bridge
+and must keep stdout protocol-clean while sending all diagnostics to stderr.
 
 ### Interactive exec semantics
 

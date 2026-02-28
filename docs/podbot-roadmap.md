@@ -388,7 +388,7 @@ Implement the primary workflow for launching agent sessions.
 - [ ] Accept --repo owner/name as a required argument.
 - [ ] Accept --branch as a required argument.
 - [ ] Accept --agent with values `codex`, `claude`, or `custom`.
-- [ ] Accept --mode with values `podbot`, `codex_app_server`, or `acp`.
+- [ ] Accept --agent-mode with values `podbot`, `codex_app_server`, or `acp`.
 - [ ] Orchestrate the full execution flow from the run_flow module.
 - [ ] Return appropriate exit codes on success and failure.
 
