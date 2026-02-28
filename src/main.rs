@@ -18,7 +18,7 @@ use podbot::api::{CommandOutcome, ExecParams};
 use podbot::config::{
     AppConfig, Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs, load_config,
 };
-use podbot::engine::ExecMode;
+use podbot::engine::{EngineConnector, ExecMode, SocketResolver};
 use podbot::error::{ContainerError, Result as PodbotResult};
 
 /// Application entry point.
@@ -111,8 +111,8 @@ fn stop_container_cli(args: &StopArgs) -> PodbotResult<CommandOutcome> {
 
 /// CLI adapter for executing a command in a running container.
 ///
-/// Performs terminal detection (a CLI concern) before delegating to the
-/// library orchestration function.
+/// Performs terminal detection (a CLI concern) and engine connection
+/// before delegating to the library orchestration function.
 fn exec_in_container_cli(
     config: &AppConfig,
     args: &ExecArgs,
@@ -125,15 +125,17 @@ fn exec_in_container_cli(
     };
     let tty = !args.detach && std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
     let env = mockable::DefaultEnv::new();
+    let resolver = SocketResolver::new(&env);
+    let docker =
+        EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;
 
     podbot::api::exec(ExecParams {
-        config,
+        connector: &docker,
         container: &args.container,
         command: args.command.clone(),
         mode,
         tty,
         runtime_handle,
-        env: &env,
     })
 }
 

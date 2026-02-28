@@ -4,8 +4,7 @@ use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
 use podbot::api::{
-    CommandOutcome, ExecWithClientParams, exec_with_client, list_containers, run_agent,
-    run_token_daemon, stop_container,
+    CommandOutcome, ExecParams, exec, list_containers, run_agent, run_token_daemon, stop_container,
 };
 use podbot::config::AppConfig;
 use podbot::engine::{
@@ -105,8 +104,8 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
 
     invoke_orchestration(orchestration_state, || {
-        exec_with_client(ExecWithClientParams {
-            client: &client,
+        exec(ExecParams {
+            connector: &client,
             container: "orc-sandbox",
             command: command.clone(),
             mode,
