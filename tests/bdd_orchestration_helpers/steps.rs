@@ -17,12 +17,8 @@ use super::state::{OrchestrationResult, OrchestrationState};
 
 pub(crate) type StepResult<T> = Result<T, String>;
 
-/// Helper to invoke an orchestration operation and capture its outcome in state.
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "returns StepResult for consistency with rstest-bdd step callers"
-)]
-fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F) -> StepResult<()>
+/// Invoke an orchestration operation and capture its outcome in state.
+fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F)
 where
     F: FnOnce() -> podbot::error::Result<CommandOutcome>,
 {
@@ -34,7 +30,6 @@ where
             .result
             .set(OrchestrationResult::Err(e.to_string())),
     }
-    Ok(())
 }
 
 mock! {
@@ -112,34 +107,55 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
             tty,
             runtime_handle: runtime.handle(),
         })
-    })
+    });
+    Ok(())
 }
 
 #[when("run orchestration is invoked")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd step functions must return StepResult"
+)]
 fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
     let config = AppConfig::default();
-    invoke_orchestration(orchestration_state, || run_agent(&config))
+    invoke_orchestration(orchestration_state, || run_agent(&config));
+    Ok(())
 }
 
 #[when("stop orchestration is invoked with container {container}")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd step functions must return StepResult"
+)]
 fn when_stop_invoked(
     orchestration_state: &OrchestrationState,
     container: String,
 ) -> StepResult<()> {
-    invoke_orchestration(orchestration_state, || stop_container(&container))
+    invoke_orchestration(orchestration_state, || stop_container(&container));
+    Ok(())
 }
 
 #[when("list containers orchestration is invoked")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd step functions must return StepResult"
+)]
 fn when_list_containers_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
-    invoke_orchestration(orchestration_state, list_containers)
+    invoke_orchestration(orchestration_state, list_containers);
+    Ok(())
 }
 
 #[when("token daemon orchestration is invoked with container {container}")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd step functions must return StepResult"
+)]
 fn when_token_daemon_invoked(
     orchestration_state: &OrchestrationState,
     container: String,
 ) -> StepResult<()> {
-    invoke_orchestration(orchestration_state, || run_token_daemon(&container))
+    invoke_orchestration(orchestration_state, || run_token_daemon(&container));
+    Ok(())
 }
 
 fn configure_create_exec(client: &mut MockOrcExecClient) {

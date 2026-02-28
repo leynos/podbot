@@ -522,19 +522,19 @@ All orchestration functions return `podbot::error::Result<CommandOutcome>`:
 
 ```rust,no_run
 use podbot::api::{CommandOutcome, ExecParams, exec};
-use podbot::config::AppConfig;
-use podbot::engine::ExecMode;
+use podbot::engine::{ContainerExecClient, ExecMode};
 
-fn run_command(config: &AppConfig, runtime_handle: &tokio::runtime::Handle) {
-    let env = mockable::DefaultEnv::new();
+fn run_command(
+    connector: &impl ContainerExecClient,
+    runtime_handle: &tokio::runtime::Handle,
+) {
     let result = exec(ExecParams {
-        config,
+        connector,
         container: "my-container",
         command: vec!["echo".into(), "hello".into()],
         mode: ExecMode::Attached,
         tty: false,
         runtime_handle,
-        env: &env,
     });
 
     match result {

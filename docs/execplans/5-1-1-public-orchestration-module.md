@@ -80,15 +80,13 @@ escalation, not workarounds.
   suppression stays in CLI; `unnecessary_wraps` moves to library stubs with
   FIXME issue link.
 
-- Risk: `api::exec()` testability — the function creates its own
-  `DefaultEnv` and `EngineConnector` internally, making mock injection
-  difficult for end-to-end BDD tests. Severity: medium Likelihood: high
-  Mitigation: accept `env: &impl mockable::Env` as a parameter following the
-  project's DI convention
-  (`docs/reliable-testing-in-rust-via-dependency-injection.md`). This makes the
-  function testable with `MockEnv`. Engine connection is already tested by
-  `bdd_interactive_exec`; the new BDD suite focuses on outcome mapping and stub
-  behaviour.
+- Risk: `api::exec()` testability — if the function creates its own
+  `EngineConnector` internally, mock injection is difficult for end-to-end BDD
+  tests. Severity: medium Likelihood: high Mitigation: accept `connector: &C`
+  where `C: ContainerExecClient` via `ExecParams`, following the project's DI
+  convention (`docs/reliable-testing-in-rust-via-dependency-injection.md`). The
+  CLI adapter resolves the engine socket and injects the connected client;
+  tests supply a mock implementation.
 
 ## Progress
 
@@ -105,8 +103,9 @@ escalation, not workarounds.
 ## Surprises & discoveries
 
 - Surprise: clippy `too_many_arguments` triggered on the initial `exec()`
-  function with 7 parameters. Resolution: introduced `ExecParams<'a, E>` struct
-  to group parameters, following the pattern from `bollard`.
+  function with 7 parameters. Resolution: introduced `ExecParams<'a, C>` struct
+  (where `C: ContainerExecClient`) to group parameters, following the pattern
+  from `bollard`.
 
 - Surprise: clippy `missing_const_for_fn` triggered on stub functions instead
   of `unnecessary_wraps`. The stubs were trivial enough to be const-eligible.
@@ -136,24 +135,24 @@ escalation, not workarounds.
   Library embedders may not have a terminal at all. Pushing terminal detection
   to the caller follows the design doc requirement.
 
-- Decision: `api::exec()` accepts `env: &impl mockable::Env` rather than
-  creating `DefaultEnv` internally. Rationale: follows the project's DI
-  convention documented in
+- Decision: `api::exec()` accepts `connector: &C` where
+  `C: ContainerExecClient` rather than creating an engine connection
+  internally. Rationale: follows the project's DI convention documented in
   `docs/reliable-testing-in-rust-via-dependency-injection.md`. Makes the
-  function testable with `MockEnv` without requiring a live engine socket.
+  function testable with a mock `ContainerExecClient` without requiring a live
+  engine socket. The CLI adapter handles socket resolution and connection.
 
 - Decision: stub functions do not print to stdout/stderr.
   Rationale: the design doc says library APIs must not print directly. CLI
   output for stubs moves to the CLI adapter layer in `main.rs`.
 
-- Decision: BDD exec-orchestration tests exercise outcome mapping via
-  `MockEnv` pointing to a nonexistent socket (for error paths) and direct
-  `CommandOutcome` construction verification (for happy paths), rather than
-  mocking the full engine connection. Rationale: `api::exec()` ultimately calls
-  `EngineConnector::connect_with_fallback` and `EngineConnector::exec`, which
-  are already thoroughly tested by the existing `bdd_interactive_exec` suite.
-  The new suite validates that the orchestration layer correctly maps results
-  to `CommandOutcome` and that stubs behave as expected.
+- Decision: BDD exec-orchestration tests inject a mock
+  `ContainerExecClient` via `ExecParams { connector: &client, ... }` to
+  exercise the full `api::exec()` code path with controlled exit codes.
+  Rationale: since `api::exec()` accepts a pre-connected client, tests can
+  supply a `MockOrcExecClient` that returns configured exit codes. This
+  validates the exit-code-to-`CommandOutcome` mapping through the public API
+  without requiring a live engine socket.
 
 ## Outcomes & retrospective
 
@@ -169,10 +168,11 @@ All acceptance criteria met:
 - Design doc, users guide, and roadmap updated.
 - Execution plan saved to `docs/execplans/5-1-1-public-orchestration-module.md`.
 
-Key deviation from plan: `exec()` uses `ExecParams<'a, E>` struct instead of 7
-positional parameters, due to clippy `too_many_arguments`. This is a better API
-design — the plan's code snippets show the original positional form but the
-implementation uses the struct form.
+Key deviation from plan: `exec()` uses `ExecParams<'a, C>` struct (where
+`C: ContainerExecClient`) instead of 7 positional parameters, due to clippy
+`too_many_arguments`. The struct accepts a pre-connected `connector` rather
+than `config`/`env` fields, pushing socket resolution to the caller (CLI
+adapter) and enabling direct mock injection in tests.
 
 ## Context and orientation
 
@@ -211,8 +211,9 @@ Existing patterns to follow:
 
 - Module structure: `src/engine/mod.rs` re-exports from submodules. The `api/`
   module should follow this pattern.
-- Dependency injection: functions accept `&impl mockable::Env` for
-  environment variable access (see `SocketResolver` and
+- Dependency injection: `exec()` accepts a pre-connected
+  `&impl ContainerExecClient` for engine access; other functions use
+  `&impl mockable::Env` for environment variable access (see
   `docs/reliable-testing-in-rust-via-dependency-injection.md`).
 - BDD tests: each suite has `tests/bdd_<name>.rs` (scenario bindings),
   `tests/bdd_<name>_helpers/` (mod.rs, state.rs, steps.rs, assertions.rs),
@@ -231,49 +232,52 @@ binary to delegate to the library.
 #### A.1: Create `src/api/exec.rs`
 
 Create the file containing the extracted exec orchestration logic. The function
-accepts only library types and an `&impl mockable::Env` parameter for
+accepts only library types and a pre-connected `ContainerExecClient` for
 testability.
 
 ```rust
 //! Container command execution orchestration.
 //!
 //! This module provides the library-facing exec orchestration function that
-//! connects to the container engine, builds an exec request, and returns
+//! builds an exec request, runs it via an injected
+//! [`ContainerExecClient`](crate::engine::ContainerExecClient), and returns
 //! the command outcome. Terminal detection (whether stdin/stdout are TTYs)
-//! is the caller's responsibility.
+//! and engine connection are the caller's responsibility.
 
-use crate::config::AppConfig;
-use crate::engine::{EngineConnector, ExecMode, ExecRequest, SocketResolver};
+use crate::engine::{ContainerExecClient, EngineConnector, ExecMode, ExecRequest};
 use crate::error::Result as PodbotResult;
 
 use super::CommandOutcome;
 
+/// Parameters for executing a command in a running container.
+pub struct ExecParams<'a, C: ContainerExecClient> {
+    pub connector: &'a C,
+    pub container: &'a str,
+    pub command: Vec<String>,
+    pub mode: ExecMode,
+    pub tty: bool,
+    pub runtime_handle: &'a tokio::runtime::Handle,
+}
+
 /// Execute a command in a running container.
 ///
-/// Resolves the engine socket, connects, builds an exec request, and
-/// returns the command outcome. The `tty` parameter controls
-/// pseudo-terminal allocation; the caller is responsible for determining
-/// whether the local terminal supports TTY.
+/// Builds an exec request, runs it via the supplied `connector`, and
+/// maps the exit code to a [`CommandOutcome`].
 ///
 /// # Errors
 ///
-/// Returns `PodbotError` variants for connection failures, exec
-/// failures, or missing required fields.
-pub fn exec<E: mockable::Env>(
-    config: &AppConfig,
-    container: &str,
-    command: Vec<String>,
-    mode: ExecMode,
-    tty: bool,
-    runtime_handle: &tokio::runtime::Handle,
-    env: &E,
+/// Returns `PodbotError` variants:
+/// - `ContainerError::ExecFailed` if command execution fails.
+/// - `ConfigError::MissingRequired` if required fields are empty.
+pub fn exec<C: ContainerExecClient>(
+    params: ExecParams<'_, C>,
 ) -> PodbotResult<CommandOutcome> {
-    let resolver = SocketResolver::new(env);
-    let docker =
-        EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;
+    let ExecParams {
+        connector, container, command, mode, tty, runtime_handle,
+    } = params;
 
     let request = ExecRequest::new(container, command, mode)?.with_tty(tty);
-    let exec_result = EngineConnector::exec(runtime_handle, &docker, &request)?;
+    let exec_result = EngineConnector::exec(runtime_handle, connector, &request)?;
 
     if exec_result.exit_code() == 0 {
         Ok(CommandOutcome::Success)
@@ -287,11 +291,13 @@ pub fn exec<E: mockable::Env>(
 
 Key design points:
 
-- Accepts `env: &E` where `E: mockable::Env` — injectable environment
-  (production passes `DefaultEnv`, tests pass `MockEnv`).
+- Accepts `connector: &C` where `C: ContainerExecClient` — the CLI adapter
+  connects via `EngineConnector::connect_with_fallback` and passes the
+  resulting `Docker` client; tests supply a mock implementation.
 - Accepts `tty: bool` — caller decides, not the library.
 - Returns `PodbotResult<CommandOutcome>` — typed outcome, no printing.
 - No clap types in the signature.
+- Socket resolution is the caller's responsibility, not the library's.
 
 #### A.2: Create `src/api/mod.rs`
 
@@ -473,9 +479,9 @@ Rewrite as a thin CLI adapter. Key changes:
 
 1. Remove the local `CommandOutcome` enum (lines 66–69).
 2. Import `podbot::api::CommandOutcome` instead.
-3. Replace `exec_in_container` with a thin wrapper calling
-   `podbot::api::exec()`, passing `mockable::DefaultEnv::new()` and the TTY
-   detection result.
+3. Replace `exec_in_container` with a thin wrapper that resolves the engine
+   socket, connects via `EngineConnector::connect_with_fallback`, and calls
+   `podbot::api::exec()` with the connected client and TTY detection result.
 4. Replace stub handlers with thin wrappers that call
    `podbot::api::{run_agent, list_containers, stop_container, run_token_daemon}`
     and add CLI-specific `println!` output.
@@ -500,7 +506,8 @@ fn run(
 }
 ```
 
-The exec CLI handler:
+The exec CLI handler performs terminal detection, connects to the engine, and
+delegates to the library:
 
 ```rust
 fn exec_in_container_cli(
@@ -517,8 +524,19 @@ fn exec_in_container_cli(
         && std::io::stdin().is_terminal()
         && std::io::stdout().is_terminal();
     let env = mockable::DefaultEnv::new();
+    let resolver = SocketResolver::new(&env);
+    let docker = EngineConnector::connect_with_fallback(
+        config.engine_socket.as_deref(), &resolver,
+    )?;
 
-    podbot::api::exec(config, &args.container, args.command.clone(), mode, tty, runtime_handle, &env)
+    podbot::api::exec(ExecParams {
+        connector: &docker,
+        container: &args.container,
+        command: args.command.clone(),
+        mode,
+        tty,
+        runtime_handle,
+    })
 }
 ```
 
@@ -602,11 +620,11 @@ variants for capturing outcomes.
 #### B.3: Create `tests/bdd_orchestration_helpers/steps.rs`
 
 Given/when/then step functions. The `when exec orchestration is called` step
-exercises the exec code path using a mock engine client (reusing the
-`MockExecClient` pattern from `bdd_interactive_exec_helpers/steps.rs`) and
-`MockEnv`. For connection-error scenarios, it calls `podbot::api::exec()` with
-a `MockEnv` configured with a nonexistent socket path. For stub scenarios, it
-calls the library stubs directly.
+exercises the exec code path by injecting a `MockOrcExecClient` via
+`ExecParams { connector: &client, ... }`, reusing the mock pattern from
+`bdd_interactive_exec_helpers/steps.rs`. The mock client is configured with the
+expected exit code, and the step calls `podbot::api::exec()` through the public
+API. For stub scenarios, it calls the library stubs directly.
 
 All step functions use `StepResult<T> = Result<T, String>` and match fixture
 parameter names exactly (`orchestration_state: &OrchestrationState`).
@@ -712,25 +730,27 @@ pub fn run_token_daemon(container_id: &str) -> PodbotResult<CommandOutcome>;
 In `src/api/exec.rs`:
 
 ```rust
-pub fn exec<E: mockable::Env>(
-    config: &AppConfig,
-    container: &str,
-    command: Vec<String>,
-    mode: ExecMode,
-    tty: bool,
-    runtime_handle: &tokio::runtime::Handle,
-    env: &E,
+pub struct ExecParams<'a, C: ContainerExecClient> {
+    pub connector: &'a C,
+    pub container: &'a str,
+    pub command: Vec<String>,
+    pub mode: ExecMode,
+    pub tty: bool,
+    pub runtime_handle: &'a tokio::runtime::Handle,
+}
+
+pub fn exec<C: ContainerExecClient>(
+    params: ExecParams<'_, C>,
 ) -> PodbotResult<CommandOutcome>;
 ```
 
 ### Consumed (not modified) dependencies
 
-- `podbot::config::AppConfig` — read-only access to `engine_socket`
+- `podbot::engine::ContainerExecClient` — trait for engine operations
 - `podbot::engine::EngineConnector` — `connect_with_fallback()`, `exec()`
-- `podbot::engine::SocketResolver` — env var resolution
+- `podbot::engine::SocketResolver` — env var resolution (used by CLI adapter)
 - `podbot::engine::ExecRequest`, `ExecMode`, `ExecResult` — request/response
 - `podbot::error::PodbotError`, `podbot::error::Result` — error handling
-- `mockable::Env` trait — environment variable abstraction
 
 No new external crate dependencies are required.
 
