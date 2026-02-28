@@ -1,8 +1,8 @@
-//! Unit tests for GitHub App private key loading.
+//! Unit tests for GitHub App private key loading and client construction.
 //!
 //! Covers happy paths (valid RSA key), unhappy paths (missing, empty, invalid),
-//! key type rejection (ECDSA, Ed25519, public keys, certificates), and
-//! encrypted key detection.
+//! key type rejection (ECDSA, Ed25519, public keys, certificates), encrypted
+//! key detection, and Octocrab App client building.
 
 use super::*;
 use cap_std::fs_utf8::Dir as Utf8Dir;
@@ -232,5 +232,79 @@ fn load_invalid_key_types_return_clear_error(
     assert!(
         message.contains(expected_keyword),
         "error for {file_name} should mention '{expected_keyword}': {message}"
+    );
+}
+
+#[rstest]
+fn build_app_client_with_valid_key_succeeds(
+    valid_rsa_pem: String,
+    temp_key_dir: (TempDir, Utf8Dir),
+) {
+    let (_tmp, dir) = temp_key_dir;
+    dir.write("key.pem", &valid_rsa_pem)
+        .expect("should write key");
+    let path = Utf8Path::new("/display/key.pem");
+    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
+    // Octocrab's build() spawns a Tower buffer task requiring a Tokio runtime.
+    let rt = tokio::runtime::Runtime::new().expect("should create tokio runtime");
+    let _guard = rt.enter();
+    let result = build_app_client(12345, key);
+    assert!(result.is_ok(), "expected Ok, got: {result:?}");
+}
+
+#[rstest]
+fn build_app_client_with_zero_app_id_succeeds(
+    valid_rsa_pem: String,
+    temp_key_dir: (TempDir, Utf8Dir),
+) {
+    let (_tmp, dir) = temp_key_dir;
+    dir.write("key.pem", &valid_rsa_pem)
+        .expect("should write key");
+    let path = Utf8Path::new("/display/key.pem");
+    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
+    // Builder does not validate app_id; GitHub validates at token time.
+    // Octocrab's build() spawns a Tower buffer task requiring a Tokio runtime.
+    let rt = tokio::runtime::Runtime::new().expect("should create tokio runtime");
+    let _guard = rt.enter();
+    let result = build_app_client(0, key);
+    assert!(
+        result.is_ok(),
+        "expected Ok even with zero app_id, got: {result:?}"
+    );
+}
+
+#[rstest]
+fn build_app_client_without_runtime_returns_error(
+    valid_rsa_pem: String,
+    temp_key_dir: (TempDir, Utf8Dir),
+) {
+    let (_tmp, dir) = temp_key_dir;
+    dir.write("key.pem", &valid_rsa_pem)
+        .expect("should write key");
+    let path = Utf8Path::new("/display/key.pem");
+    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
+    // Call without entering a Tokio runtime — should return Err, not panic.
+    let result = build_app_client(42, key);
+    assert!(result.is_err(), "expected Err without runtime, got Ok");
+    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(
+        message.contains("no Tokio runtime context"),
+        "error should mention missing runtime: {message}"
+    );
+}
+
+#[rstest]
+fn authentication_failed_error_includes_context() {
+    let error = GitHubError::AuthenticationFailed {
+        message: String::from("failed to build GitHub App client: test error"),
+    };
+    let display = error.to_string();
+    assert!(
+        display.contains("failed to build GitHub App client"),
+        "error should include builder context: {display}"
+    );
+    assert!(
+        display.contains("test error"),
+        "error should include cause: {display}"
     );
 }
