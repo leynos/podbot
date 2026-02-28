@@ -1,10 +1,11 @@
 //! GitHub App authentication and token management.
 //!
-//! This module handles loading GitHub App credentials for JWT signing
-//! and constructing an authenticated Octocrab client for App operations.
-//! It validates that private key files contain PEM-encoded RSA keys,
-//! rejecting Ed25519 and ECDSA keys at load time because GitHub App
-//! authentication requires RS256.
+//! This module handles loading GitHub App credentials for JWT signing,
+//! constructing an authenticated Octocrab client for App operations,
+//! and validating credentials against the GitHub API. It validates that
+//! private key files contain PEM-encoded RSA keys, rejecting Ed25519 and
+//! ECDSA keys at load time because GitHub App authentication requires
+//! RS256.
 //!
 //! **Stability:** This module is internal to the library and subject to
 //! change as the GitHub integration stabilizes.
@@ -109,6 +110,94 @@ pub fn build_app_client(app_id: u64, private_key: EncodingKey) -> Result<Octocra
         .map_err(|error| GitHubError::AuthenticationFailed {
             message: format!("failed to build GitHub App client: {error}"),
         })
+}
+
+/// Trait for GitHub App client operations.
+///
+/// This trait abstracts the Octocrab client to enable testing without
+/// network calls. Production code uses [`OctocrabAppClient`], while tests
+/// inject mock implementations via `mockall`.
+#[cfg_attr(test, mockall::automock)]
+pub trait GitHubAppClient: Send + Sync {
+    /// Validates that the App credentials are accepted by GitHub.
+    ///
+    /// Calls `GET /app` and verifies the response indicates a valid
+    /// authenticated App.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API call fails or returns an error response.
+    fn validate_credentials(
+        &self,
+    ) -> impl std::future::Future<Output = Result<(), GitHubError>> + Send;
+}
+
+/// Production implementation of [`GitHubAppClient`] using Octocrab.
+pub struct OctocrabAppClient {
+    client: Octocrab,
+}
+
+impl OctocrabAppClient {
+    /// Creates a new `OctocrabAppClient` from an authenticated Octocrab
+    /// instance.
+    #[must_use]
+    pub const fn new(client: Octocrab) -> Self {
+        Self { client }
+    }
+}
+
+impl GitHubAppClient for OctocrabAppClient {
+    async fn validate_credentials(&self) -> Result<(), GitHubError> {
+        self.client
+            .get::<serde_json::Value, _, ()>("/app", None)
+            .await
+            .map_err(|error| GitHubError::AuthenticationFailed {
+                message: format!("failed to validate GitHub App credentials: {error}"),
+            })?;
+        Ok(())
+    }
+}
+
+/// Validates GitHub App credentials by loading the private key, building
+/// the App client, and verifying credentials are accepted by GitHub.
+///
+/// This function performs a network call to GitHub's `/app` endpoint to
+/// verify that the configured `app_id` and private key produce a valid JWT
+/// that GitHub accepts.
+///
+/// # Arguments
+///
+/// * `app_id` - The GitHub App ID
+/// * `private_key_path` - Path to the PEM-encoded RSA private key
+///
+/// # Errors
+///
+/// Returns [`GitHubError::PrivateKeyLoadFailed`] if the key cannot be loaded.
+/// Returns [`GitHubError::AuthenticationFailed`] if the client cannot be
+/// built or if GitHub rejects the credentials.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use podbot::github::validate_app_credentials;
+/// use camino::Utf8Path;
+///
+/// # async fn example() -> Result<(), podbot::error::GitHubError> {
+/// let app_id = 12345;
+/// let key_path = Utf8Path::new("/path/to/private-key.pem");
+/// validate_app_credentials(app_id, key_path).await?;
+/// println!("Credentials are valid!");
+/// # Ok(())
+/// # }
+/// ```
+pub async fn validate_app_credentials(
+    app_id: u64,
+    private_key_path: &Utf8Path,
+) -> Result<(), GitHubError> {
+    let private_key = load_private_key(private_key_path)?;
+    let octocrab = build_app_client(app_id, private_key)?;
+    let client = OctocrabAppClient::new(octocrab);
+    client.validate_credentials().await
 }
 
 /// Load a private key from an already-opened directory capability.
