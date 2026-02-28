@@ -34,28 +34,25 @@ fn command_outcome_is_copy() {
 #[rstest]
 fn run_agent_stub_returns_success() {
     let config = AppConfig::default();
-    let result = run_agent(&config);
-    assert!(result.is_ok());
-    assert_eq!(result.ok(), Some(CommandOutcome::Success));
+    let outcome = run_agent(&config).expect("run_agent stub should succeed");
+    assert_eq!(outcome, CommandOutcome::Success);
 }
 
 #[rstest]
 fn list_containers_stub_returns_success() {
-    let result = list_containers();
-    assert!(result.is_ok());
-    assert_eq!(result.ok(), Some(CommandOutcome::Success));
+    let outcome = list_containers().expect("list_containers stub should succeed");
+    assert_eq!(outcome, CommandOutcome::Success);
 }
 
 #[rstest]
 fn stop_container_stub_returns_success() {
-    let result = stop_container("test-container");
-    assert!(result.is_ok());
-    assert_eq!(result.ok(), Some(CommandOutcome::Success));
+    let outcome = stop_container("test-container").expect("stop_container stub should succeed");
+    assert_eq!(outcome, CommandOutcome::Success);
 }
 
 #[rstest]
 fn run_token_daemon_stub_returns_success() {
-    let result = run_token_daemon("test-container-id");
-    assert!(result.is_ok());
-    assert_eq!(result.ok(), Some(CommandOutcome::Success));
+    let outcome =
+        run_token_daemon("test-container-id").expect("run_token_daemon stub should succeed");
+    assert_eq!(outcome, CommandOutcome::Success);
 }

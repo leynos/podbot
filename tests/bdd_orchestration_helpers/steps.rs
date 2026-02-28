@@ -98,7 +98,7 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
 
     let mut client = MockOrcExecClient::new();
     configure_create_exec(&mut client);
-    configure_start_exec(&mut client, mode, tty);
+    configure_start_exec(&mut client, mode);
     configure_resize(&mut client, mode);
     configure_inspect(&mut client, exit_code);
 
@@ -167,7 +167,7 @@ fn configure_create_exec(client: &mut MockOrcExecClient) {
     });
 }
 
-fn configure_start_exec(client: &mut MockOrcExecClient, mode: ExecMode, _tty: bool) {
+fn configure_start_exec(client: &mut MockOrcExecClient, mode: ExecMode) {
     match mode {
         ExecMode::Attached => {
             client.expect_start_exec().times(1).returning(move |_, _| {

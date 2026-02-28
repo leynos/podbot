@@ -47,13 +47,22 @@ pub struct ExecParams<'a, E: mockable::Env> {
 /// - `ContainerError::ExecFailed` if command execution fails.
 /// - `ConfigError::MissingRequired` if required fields are empty.
 pub fn exec<E: mockable::Env>(params: ExecParams<'_, E>) -> PodbotResult<CommandOutcome> {
-    let resolver = SocketResolver::new(params.env);
-    let docker =
-        EngineConnector::connect_with_fallback(params.config.engine_socket.as_deref(), &resolver)?;
+    let ExecParams {
+        config,
+        container,
+        command,
+        mode,
+        tty,
+        runtime_handle,
+        env,
+    } = params;
 
-    let request =
-        ExecRequest::new(params.container, params.command, params.mode)?.with_tty(params.tty);
-    let exec_result = EngineConnector::exec(params.runtime_handle, &docker, &request)?;
+    let resolver = SocketResolver::new(env);
+    let docker =
+        EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;
+
+    let request = ExecRequest::new(container, command, mode)?.with_tty(tty);
+    let exec_result = EngineConnector::exec(runtime_handle, &docker, &request)?;
 
     if exec_result.exit_code() == 0 {
         Ok(CommandOutcome::Success)

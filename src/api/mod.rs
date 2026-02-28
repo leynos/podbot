@@ -43,7 +43,7 @@ pub enum CommandOutcome {
 /// Will return errors when container orchestration is implemented.
 #[expect(
     clippy::missing_const_for_fn,
-    reason = "FIXME(#6): stub is const-eligible but will gain runtime logic"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub is const-eligible but will gain runtime logic"
 )]
 pub fn run_agent(_config: &AppConfig) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
@@ -56,7 +56,7 @@ pub fn run_agent(_config: &AppConfig) -> PodbotResult<CommandOutcome> {
 /// Will return errors when container listing is implemented.
 #[expect(
     clippy::missing_const_for_fn,
-    reason = "FIXME(#6): stub is const-eligible but will gain runtime logic"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub is const-eligible but will gain runtime logic"
 )]
 pub fn list_containers() -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
@@ -69,7 +69,7 @@ pub fn list_containers() -> PodbotResult<CommandOutcome> {
 /// Will return errors when container stop is implemented.
 #[expect(
     clippy::missing_const_for_fn,
-    reason = "FIXME(#6): stub is const-eligible but will gain runtime logic"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub is const-eligible but will gain runtime logic"
 )]
 pub fn stop_container(_container: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
@@ -82,7 +82,7 @@ pub fn stop_container(_container: &str) -> PodbotResult<CommandOutcome> {
 /// Will return errors when the token daemon is implemented.
 #[expect(
     clippy::missing_const_for_fn,
-    reason = "FIXME(#6): stub is const-eligible but will gain runtime logic"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub is const-eligible but will gain runtime logic"
 )]
 pub fn run_token_daemon(_container_id: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
