@@ -262,15 +262,16 @@ and makes no network calls; credential validation against GitHub occurs later
 when the client acquires an installation token (Step 3.2).
 
 Construction requires a Tokio runtime context because Octocrab's builder
-internally spawns a Tower `Buffer` background task. Callers must ensure a
-runtime is available (production code runs inside `#[tokio::main]`; tests
-create a runtime explicitly).
+internally spawns a Tower `Buffer` background task. The function checks for an
+active runtime via `Handle::try_current()` and returns a descriptive error
+rather than panicking if none is found. Production code runs inside
+`#[tokio::main]`; tests create a runtime explicitly.
 
-Errors are reported via `GitHubError::AuthenticationFailed { message }`. In
-practice, construction only fails if the underlying HTTP client (powered by
-`reqwest`) cannot initialise — for example, due to TLS backend failure. The App
-ID is not validated at construction time; GitHub validates it when the client
-attempts to acquire a token.
+Errors are reported via `GitHubError::AuthenticationFailed { message }` for
+three cases: missing Tokio runtime, HTTP client initialization failure (for
+example, TLS backend failure), or other builder errors. The App ID is not
+validated at construction time; GitHub validates it when the client attempts to
+acquire a token.
 
 ### OrthoConfig
 

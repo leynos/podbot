@@ -274,6 +274,26 @@ fn build_app_client_with_zero_app_id_succeeds(
 }
 
 #[rstest]
+fn build_app_client_without_runtime_returns_error(
+    valid_rsa_pem: String,
+    temp_key_dir: (TempDir, Utf8Dir),
+) {
+    let (_tmp, dir) = temp_key_dir;
+    dir.write("key.pem", &valid_rsa_pem)
+        .expect("should write key");
+    let path = Utf8Path::new("/display/key.pem");
+    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
+    // Call without entering a Tokio runtime — should return Err, not panic.
+    let result = build_app_client(42, key);
+    assert!(result.is_err(), "expected Err without runtime, got Ok");
+    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(
+        message.contains("no Tokio runtime context"),
+        "error should mention missing runtime: {message}"
+    );
+}
+
+#[rstest]
 fn authentication_failed_error_includes_context() {
     let error = GitHubError::AuthenticationFailed {
         message: String::from("failed to build GitHub App client: test error"),

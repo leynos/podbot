@@ -77,12 +77,32 @@ pub fn load_private_key(key_path: &Utf8Path) -> Result<EncodingKey, GitHubError>
 /// calls. Credential validation against GitHub occurs later, when the
 /// client is used to acquire an installation token (Step 3.2).
 ///
+/// # Tokio runtime
+///
+/// A Tokio runtime context must be active when this function is called
+/// because Octocrab's builder spawns a Tower `Buffer` background task.
+/// If no runtime is available the function returns an error instead of
+/// panicking.
+///
 /// # Errors
 ///
-/// Returns [`GitHubError::AuthenticationFailed`] if the Octocrab
-/// builder fails to construct the HTTP client (for example, due to TLS
-/// initialisation failure).
+/// Returns [`GitHubError::AuthenticationFailed`] if:
+/// - No Tokio runtime context is active.
+/// - The Octocrab builder fails to construct the HTTP client (for
+///   example, due to TLS initialization failure).
 pub fn build_app_client(app_id: u64, private_key: EncodingKey) -> Result<Octocrab, GitHubError> {
+    // Guard: Octocrab's build() internally spawns a Tower Buffer task
+    // via tokio::spawn. Without an active runtime the call panics.
+    // Check up front and return a descriptive error instead.
+    let _handle =
+        tokio::runtime::Handle::try_current().map_err(|_| GitHubError::AuthenticationFailed {
+            message: String::from(
+                "failed to build GitHub App client: \
+                 no Tokio runtime context is active \
+                 (Octocrab requires one for its Tower buffer task)",
+            ),
+        })?;
+
     Octocrab::builder()
         .app(AppId(app_id), private_key)
         .build()

@@ -12,18 +12,19 @@ Status: COMPLETE
 Enable podbot to construct an authenticated Octocrab client from a GitHub App
 ID and an RSA private key. After this change, calling
 `podbot::github::build_app_client(app_id, private_key)` returns an
-`octocrab::Octocrab` instance configured for GitHub App authentication via JWT
-signing. This client is the prerequisite for Step 3.2 (installation token
-acquisition), where it will be used to call
+`octocrab::Octocrab` instance configured for GitHub App authentication via JSON
+Web Token (JWT) signing. This client is the prerequisite for Step 3.2
+(installation token acquisition), where it will be used to call
 `octocrab.installation(installation_id).installation_token_with_buffer(...)`.
 
 Observable outcome: running `make test` passes and the following new tests
 exist: three unit tests in `src/github/tests.rs` exercise the happy path (valid
-App ID and key), a zero App ID edge case, and error message formatting. Two BDD
-scenarios in `tests/features/github_app_client.feature` verify end-to-end
-behaviour from "given a valid RSA key and an App ID" through "when the App
-client is built" to "then the client is ready for use". The function is not yet
-wired into the orchestration flow (that is Steps 3.1.3 and 3.1.4).
+App ID and key), a zero App ID edge case, and error message formatting. Two
+behaviour-driven development (BDD) scenarios in
+`tests/features/github_app_client.feature` verify end-to-end behaviour from
+"given a valid RSA key and an App ID" through "when the App client is built" to
+"then the client is ready for use". The function is not yet wired into the
+orchestration flow (that is Steps 3.1.3 and 3.1.4).
 
 ## Constraints
 
@@ -58,7 +59,7 @@ wired into the orchestration flow (that is Steps 3.1.3 and 3.1.4).
   classification.
 - Line budget: if adding the new function and its tests would push either
   `src/github/mod.rs` above 350 lines or `src/github/tests.rs` above 350 lines,
-  stop and consider extracting a sub-module before proceeding.
+  stop and consider extracting a submodule before proceeding.
 
 ## Risks
 
@@ -80,7 +81,7 @@ wired into the orchestration flow (that is Steps 3.1.3 and 3.1.4).
   (Step 3.2), not at client construction time.
 
 - Risk: `octocrab::models::AppId` is a newtype `pub struct AppId(pub u64)` with
-  `From<u64>`. Our function must decide whether to accept `u64` or `AppId`.
+  `From<u64>`. The function must decide whether to accept `u64` or `AppId`.
   Severity: low. Likelihood: certain. Mitigation: accept `u64` in the public
   signature and convert to `AppId` internally via `AppId(app_id)`. This keeps
   the public API free from octocrab coupling.
@@ -111,7 +112,7 @@ wired into the orchestration flow (that is Steps 3.1.3 and 3.1.4).
 - [x] (2026-02-27) Update `docs/podbot-roadmap.md` to mark task complete.
 - [x] (2026-02-27) Run documentation gates (`markdownlint`, `fmt`, `nixie`).
 - [x] (2026-02-27) Commit documentation updates.
-- [x] (2026-02-27) Finalise outcomes and retrospective.
+- [x] (2026-02-27) Finalize outcomes and retrospective.
 
 ## Surprises and discoveries
 
@@ -165,11 +166,12 @@ wired into the orchestration flow (that is Steps 3.1.3 and 3.1.4).
 - Decision: do not attempt to test the builder error path with a real
   `octocrab::Error`. Rationale: `Octocrab::builder().app().build()` is
   difficult to make fail in a test environment. The builder failure paths
-  involve TLS connector initialisation (`with_native_roots()`), which depends
+  involve TLS connector initialization (`with_native_roots()`), which depends
   on the operating system certificate store. Artificially breaking the
-  certificate store in tests would be fragile and non-portable. Instead, we
-  test the error format directly and rely on the type system to guarantee that
-  `map_err` produces the correct variant. Date/Author: 2026-02-27 / DevBoxer.
+  certificate store in tests would be fragile and non-portable. Instead, the
+  error format is tested directly and the type system is relied on to guarantee
+  that `map_err` produces the correct variant. Date/Author: 2026-02-27 /
+  DevBoxer.
 
 ## Outcomes and retrospective
 
@@ -284,15 +286,32 @@ constructs an `OctocrabBuilder`, sets App authentication, and builds the client:
 /// calls. Credential validation against GitHub occurs later, when the
 /// client is used to acquire an installation token (Step 3.2).
 ///
+/// # Tokio runtime
+///
+/// A Tokio runtime context must be active when this function is called
+/// because Octocrab's builder spawns a Tower `Buffer` background task.
+/// If no runtime is available the function returns an error instead of
+/// panicking.
+///
 /// # Errors
 ///
-/// Returns [`GitHubError::AuthenticationFailed`] if the Octocrab
-/// builder fails to construct the HTTP client (for example, due to TLS
-/// initialisation failure).
+/// Returns [`GitHubError::AuthenticationFailed`] if:
+/// - No Tokio runtime context is active.
+/// - The Octocrab builder fails to construct the HTTP client (for
+///   example, due to TLS initialization failure).
 pub fn build_app_client(
     app_id: u64,
     private_key: EncodingKey,
 ) -> Result<Octocrab, GitHubError> {
+    let _handle = tokio::runtime::Handle::try_current()
+        .map_err(|_| GitHubError::AuthenticationFailed {
+            message: String::from(
+                "failed to build GitHub App client: \
+                 no Tokio runtime context is active \
+                 (Octocrab requires one for its Tower buffer task)",
+            ),
+        })?;
+
     Octocrab::builder()
         .app(AppId(app_id), private_key)
         .build()
