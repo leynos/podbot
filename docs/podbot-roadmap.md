@@ -406,7 +406,7 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
 gated pipeline. The default test suite remains unchanged in speed and scope,
 and e2e execution occurs via local on-demand runs and explicitly triggered CI
 jobs. Preflight failures provide clear remediation guidance instead of generic
-setup errors. Parallel e2e runs do not collide and preflight output remains
+setup errors. Parallel e2e runs do not collide, and preflight output remains
 schema-stable across surfaces.
 
 ## Phase 5: Library API and embedding support
