@@ -368,7 +368,7 @@ flows.
 **Completion criteria:** Launch behaviour is defined once in library code and
 is consistent across CLI commands.
 
-### Step 4.4: Gated e2e orchestration suite
+### Step 4.6: Gated e2e orchestration suite
 
 Create a dedicated end-to-end suite for full runtime orchestration validation.
 
@@ -384,7 +384,8 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
   binary availability, nested-container prerequisites, and Vidai Mock endpoint
   reachability for Codex scenarios.
 - [ ] Define and enforce a versioned machine-parseable preflight output format
-  (JSON Lines) shared by CLI runs, library call paths, and CI jobs.
+  (JSON Lines) shared by CLI runs, library call paths, and Continuous
+  Integration (CI) jobs.
 - [ ] Emit assistive remediation messages for each preflight failure that
   include failed check name, observed state, and concrete remedy commands.
 - [ ] Enforce run-scoped test isolation for concurrent execution via unique

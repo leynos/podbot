@@ -826,6 +826,7 @@ contract at the library boundary:
 
 This model keeps `(agent.kind, agent.mode, workspace.source)` handling in one
 place and avoids behavioural drift between CLI entry points.
+
 ## Gated e2e validation design
 
 Podbot requires a dedicated end-to-end (e2e) validation suite that exercises
