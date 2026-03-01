@@ -71,7 +71,8 @@ errors. ✓
 
 ### Step 1.4: Hosting schema migration and compatibility matrix
 
-Extend configuration types for hosting mode without breaking existing installs.
+Extend configuration types for hosting mode without breaking existing
+installations.
 
 **Tasks:**
 
