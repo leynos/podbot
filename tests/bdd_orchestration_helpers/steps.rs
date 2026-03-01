@@ -13,9 +13,8 @@ use podbot::engine::{
 };
 use rstest_bdd_macros::{given, when};
 
+use super::StepResult;
 use super::state::{OrchestrationResult, OrchestrationState};
-
-pub(crate) type StepResult<T> = Result<T, String>;
 
 /// Invoke an orchestration operation and capture its outcome in state.
 fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F)

@@ -3,9 +3,8 @@
 use podbot::api::CommandOutcome;
 use rstest_bdd_macros::then;
 
+use super::StepResult;
 use super::state::{OrchestrationResult, OrchestrationState};
-
-pub(crate) type StepResult<T> = Result<T, String>;
 
 #[then("the outcome is success")]
 fn outcome_is_success(orchestration_state: &OrchestrationState) -> StepResult<()> {

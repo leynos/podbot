@@ -96,7 +96,7 @@ escalation, not workarounds.
 - [x] Stage A: Gate check (`make check-fmt`, `make lint`, `make test`).
 - [x] Stage B: Create BDD feature file, test scaffolding, steps, assertions.
 - [x] Stage B: Gate check (`make check-fmt`, `make lint`, `make test`).
-- [x] Stage C: Update design doc, users guide, roadmap; save execution plan.
+- [x] Stage C: Update design doc, users' guide, roadmap; save execution plan.
 - [x] Stage C: Gate check (full stack including markdownlint).
 - [x] Stage D: Final verification and commit.
 
@@ -165,7 +165,7 @@ All acceptance criteria met:
 - `podbot::api::CommandOutcome` is importable from library consumers.
 - `podbot::api::exec()` accepts only library types via `ExecParams`.
 - `src/main.rs` no longer defines `CommandOutcome` locally.
-- Design doc, users guide, and roadmap updated.
+- Design doc, users' guide, and roadmap updated.
 - Execution plan saved to `docs/execplans/5-1-1-public-orchestration-module.md`.
 
 Key deviation from plan: `exec()` uses `ExecParams<'a, C>` struct (where
@@ -349,8 +349,8 @@ pub enum CommandOutcome {
 ///
 /// Will return errors when container orchestration is implemented.
 #[expect(
-    clippy::unnecessary_wraps,
-    reason = "FIXME(#6): stub returns Ok; errors when orchestration is implemented"
+    clippy::missing_const_for_fn,
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub is const-eligible but will gain runtime logic"
 )]
 pub fn run_agent(_config: &AppConfig) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
@@ -362,8 +362,8 @@ pub fn run_agent(_config: &AppConfig) -> PodbotResult<CommandOutcome> {
 ///
 /// Will return errors when container listing is implemented.
 #[expect(
-    clippy::unnecessary_wraps,
-    reason = "FIXME(#6): stub returns Ok; errors when listing is implemented"
+    clippy::missing_const_for_fn,
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub is const-eligible but will gain runtime logic"
 )]
 pub fn list_containers() -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
@@ -375,8 +375,8 @@ pub fn list_containers() -> PodbotResult<CommandOutcome> {
 ///
 /// Will return errors when container stop is implemented.
 #[expect(
-    clippy::unnecessary_wraps,
-    reason = "FIXME(#6): stub returns Ok; errors when stop is implemented"
+    clippy::missing_const_for_fn,
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub is const-eligible but will gain runtime logic"
 )]
 pub fn stop_container(_container: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
@@ -388,8 +388,8 @@ pub fn stop_container(_container: &str) -> PodbotResult<CommandOutcome> {
 ///
 /// Will return errors when the token daemon is implemented.
 #[expect(
-    clippy::unnecessary_wraps,
-    reason = "FIXME(#6): stub returns Ok; errors when daemon is implemented"
+    clippy::missing_const_for_fn,
+    reason = "FIXME(https://github.com/leynos/podbot/issues/6): stub is const-eligible but will gain runtime logic"
 )]
 pub fn run_token_daemon(_container_id: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
