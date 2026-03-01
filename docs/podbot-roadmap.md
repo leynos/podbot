@@ -422,13 +422,13 @@ functions.
 
 **Tasks:**
 
-- [ ] Introduce a public orchestration module for run, exec, stop, ps, and
+- [x] Introduce a public orchestration module for run, exec, stop, ps, and
   token daemon operations.
-- [ ] Replace binary-local orchestration logic with calls into library
+- [x] Replace binary-local orchestration logic with calls into library
   orchestration functions.
-- [ ] Ensure orchestration returns typed outcomes rather than printing
+- [x] Ensure orchestration returns typed outcomes rather than printing
   directly.
-- [ ] Keep side-effecting process control (`std::process::exit`) in the CLI
+- [x] Keep side-effecting process control (`std::process::exit`) in the CLI
   adapter only.
 
 **Completion criteria:** All command flows are invocable through library APIs.

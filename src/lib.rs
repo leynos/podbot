@@ -14,11 +14,13 @@
 //!
 //! # Modules
 //!
+//! - [`api`]: Orchestration API for run, exec, stop, ps, and token daemon commands
 //! - [`config`]: Configuration system with layered precedence (CLI > env > file > defaults)
 //! - [`engine`]: Container engine connection and management
 //! - [`error`]: Semantic error types for the application
 //! - [`github`]: GitHub App authentication (internal, subject to change)
 
+pub mod api;
 pub mod config;
 pub mod engine;
 pub mod error;
