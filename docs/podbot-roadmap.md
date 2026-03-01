@@ -368,6 +368,48 @@ flows.
 **Completion criteria:** Launch behaviour is defined once in library code and
 is consistent across CLI commands.
 
+### Step 4.6: Gated e2e orchestration suite
+
+Create a dedicated end-to-end suite for full runtime orchestration validation.
+
+**Tasks:**
+
+- [ ] Create a distinct e2e test suite separate from the main test suite (for
+  example, dedicated test modules and fixtures under an e2e path).
+- [ ] Add a dedicated on-demand execution target (for example, `make test-e2e`)
+  and ensure `make test` does not invoke e2e tests by default.
+- [ ] Implement an e2e preflight phase that validates required components
+  before any scenario begins.
+- [ ] Include preflight checks for engine/socket readiness, sandbox image and
+  binary availability, nested-container prerequisites, and Vidai Mock endpoint
+  reachability for Codex scenarios.
+- [ ] Define and enforce a versioned machine-parseable preflight output format
+  (JSON Lines) shared by CLI runs, library call paths, and Continuous
+  Integration (CI) jobs.
+- [ ] Emit assistive remediation messages for each preflight failure that
+  include failed check name, observed state, and concrete remedy commands.
+- [ ] Enforce run-scoped test isolation for concurrent execution via unique
+  `run_id` naming, required container labels, and run-scoped runtime paths.
+- [ ] Implement e2e scenario: create and start a running sandbox container
+  using a mock agent shell script stub.
+- [ ] Implement e2e scenario: create and start a running sandbox container, and
+  then start a nested container inside it using the inner Podman runtime with a
+  mock agent shell script stub.
+- [ ] Implement e2e scenario: start Codex configured for an OpenAI-compatible
+  mock inference provider implemented with Vidai Mock.
+- [ ] Add CI workflow wiring so the e2e suite runs in CI only when explicitly
+  triggered (manual dispatch or explicit workflow call), while remaining
+  available through local on-demand execution (`make test-e2e`).
+- [ ] Persist e2e logs and runtime diagnostics as CI artefacts for failed and
+  successful runs.
+
+**Completion criteria:** All three e2e scenarios pass reliably in the dedicated
+gated pipeline. The default test suite remains unchanged in speed and scope,
+and e2e execution occurs via local on-demand runs and explicitly triggered CI
+jobs. Preflight failures provide clear remediation guidance instead of generic
+setup errors. Parallel e2e runs do not collide, and preflight output remains
+schema-stable across surfaces.
+
 ## Phase 5: Library API and embedding support
 
 Expose Podbot orchestration as a stable library API that can be called by

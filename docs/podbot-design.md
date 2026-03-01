@@ -827,6 +827,139 @@ contract at the library boundary:
 This model keeps `(agent.kind, agent.mode, workspace.source)` handling in one
 place and avoids behavioural drift between CLI entry points.
 
+## Gated e2e validation design
+
+Podbot requires a dedicated end-to-end (e2e) validation suite that exercises
+real container lifecycle and agent startup behaviour with minimal mocks. This
+suite is distinct from the main unit and behavioural test suite:
+
+- Main suite (`make test`) remains fast and deterministic, with no hard
+  dependency on a running container daemon or model provider.
+- E2E suite runs only when explicitly requested (`make test-e2e`) and in
+  Continuous Integration (CI) workflows designed for e2e execution.
+- E2E tests live in a separate test module tree and use dedicated fixtures,
+  artefact directories, and log capture so failures can be debugged without
+  affecting standard test ergonomics.
+
+### Execution model
+
+The e2e harness should drive Podbot through public orchestration entry points,
+not internal helper functions, so both CLI and library integration paths can be
+validated against the same runtime contracts.
+
+Each e2e scenario provisions disposable runtime paths and uses deterministic
+cleanup, with container names or labels scoped to the test run identifier.
+Assertions should verify observable outcomes (container running state, process
+exit status, and recorded logs) rather than internal implementation details.
+
+### Isolation and concurrency contract
+
+To avoid collisions across concurrent local and CI runs, every e2e invocation
+must mint a unique `run_id` and scope all mutable artefacts to that value.
+
+The suite should enforce:
+
+- Container naming format:
+  `podbot-e2e-<run_id>-<scenario_slug>-<sequence>`.
+- Required container labels:
+  `podbot.e2e=true`, `podbot.e2e.run_id=<run_id>`,
+  `podbot.e2e.scenario=<scenario_slug>`.
+- Runtime path scoping:
+  `<runtime_root>/<run_id>/<scenario_slug>/...`.
+- Cleanup by run-scoped labels and paths only, never by broad global patterns.
+
+This contract lets multiple runs execute safely in parallel while preserving
+deterministic cleanup and post-failure diagnostics.
+
+### Preflight contract and assistive remediation
+
+Before running any e2e scenario, the suite should run a preflight phase that
+verifies required runtime capabilities and reports actionable remediation when
+a check fails.
+
+Preflight checks should include at least:
+
+- Host container engine reachability and permissions.
+- Availability of the configured sandbox image and required binaries in that
+  image for the selected scenario.
+- Nested-container prerequisites (`/dev/fuse`, security profile, and inner
+  Podman availability) for nested-container scenarios.
+- Vidai Mock availability and endpoint reachability for Codex mock-provider
+  scenarios.
+
+Failures should not return opaque "environment not ready" messages. Each
+failure must include:
+
+- The failed check name.
+- Observed state (for example, missing binary, socket path, or unreachable
+  endpoint).
+- A concrete remedy list with command-oriented guidance.
+
+Preflight output should use a consistent, machine-parseable format so CI logs
+and local runs can surface the same remediation hints.
+
+Use a versioned JSON Lines contract (`application/x-ndjson`), one object per
+check:
+
+```json
+{
+  "schema_version": "1",
+  "event": "preflight_check",
+  "run_id": "20260301T120102Z-ab12cd",
+  "check": "engine_socket_reachable",
+  "status": "fail",
+  "observed": "permission denied: unix:///var/run/docker.sock",
+  "remedies": [
+    "sudo usermod -aG docker $USER",
+    "newgrp docker",
+    "systemctl --user start podman.socket"
+  ]
+}
+```
+
+Required fields are `schema_version`, `event`, `run_id`, `check`, `status`,
+`observed`, and `remedies`. `status` must be one of `pass`, `warn`, or `fail`.
+Checks that cannot be resolved in-process should fail fast before container
+creation starts.
+
+### Required scenarios
+
+1. **Outer container startup with mock agent stub**
+
+   - Start a sandbox container using a mock agent implemented as a shell
+     script stub.
+   - Assert that the outer container reaches a running state and the agent stub
+     process executes as expected.
+
+2. **Nested container startup inside sandbox with mock agent stub**
+
+   - Start the same outer sandbox container shape.
+   - Execute a nested container operation from inside the sandbox via the inner
+     Podman service (for example, `podman run --rm ...`).
+   - Assert nested container creation succeeds and remains isolated from the
+     host socket boundary.
+
+3. **Codex startup with Vidai Mock provider**
+
+   - Start Vidai Mock as an OpenAI-compatible local inference endpoint.[^12]
+   - Configure Codex in the sandbox to target that mock endpoint and use a
+     non-production API key value.
+   - Assert Codex startup, request/response exchange, and exit handling work
+     against the mock provider without reaching external inference services.
+
+### Trigger and CI policy
+
+E2E execution is intentionally gated:
+
+- Not part of default `make test`.
+- Available through a dedicated on-demand target (for example,
+  `make test-e2e`).
+- Executed in CI via a dedicated workflow/job that is triggered explicitly
+  (manual dispatch or explicit workflow call), so regular lint/unit gates stay
+  fast while e2e confidence remains reproducible and auditable.
+- Preflight failures are reported with assistive remediation messages in both
+  local on-demand runs and CI logs.
+
 ## Container image requirements
 
 The sandbox image must support nested Podman execution. Required components:
@@ -901,3 +1034,6 @@ ______________________________________________________________________
 
 [^11]: Claude Agent SDK for Python:
 <https://github.com/anthropics/claude-agent-sdk-python>
+
+[^12]: Vidai Mock documentation for local OpenAI-compatible provider setup:
+<https://vidai.uk/docs/mock/intro/>
