@@ -851,6 +851,34 @@ cleanup, with container names or labels scoped to the test run identifier.
 Assertions should verify observable outcomes (container running state, process
 exit status, and recorded logs) rather than internal implementation details.
 
+### Preflight contract and assistive remediation
+
+Before running any e2e scenario, the suite should run a preflight phase that
+verifies required runtime capabilities and reports actionable remediation when
+a check fails.
+
+Preflight checks should include at least:
+
+- Host container engine reachability and permissions.
+- Availability of the configured sandbox image and required binaries in that
+  image for the selected scenario.
+- Nested-container prerequisites (`/dev/fuse`, security profile, and inner
+  Podman availability) for nested-container scenarios.
+- Vidai Mock availability and endpoint reachability for Codex mock-provider
+  scenarios.
+
+Failures should not return opaque "environment not ready" messages. Each
+failure must include:
+
+- The failed check name.
+- Observed state (for example, missing binary, socket path, or unreachable
+  endpoint).
+- A concrete remedy list with command-oriented guidance.
+
+Preflight output should use a consistent, machine-parseable format so CI logs
+and local runs can surface the same remediation hints. Checks that cannot be
+resolved in-process should fail fast before container creation starts.
+
 ### Required scenarios
 
 1. **Outer container startup with mock agent stub**
@@ -886,6 +914,8 @@ E2E execution is intentionally gated:
 - Executed in CI via a dedicated workflow/job that is triggered explicitly
   (manual dispatch or explicit workflow call), so regular lint/unit gates stay
   fast while e2e confidence remains reproducible and auditable.
+- Preflight failures are reported with assistive remediation messages in both
+  local on-demand runs and CI logs.
 
 ## Container image requirements
 

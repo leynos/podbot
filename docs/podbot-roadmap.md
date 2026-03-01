@@ -378,6 +378,13 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
   example, dedicated test modules and fixtures under an e2e path).
 - [ ] Add a dedicated on-demand execution target (for example, `make test-e2e`)
   and ensure `make test` does not invoke e2e tests by default.
+- [ ] Implement an e2e preflight phase that validates required components
+  before any scenario begins.
+- [ ] Include preflight checks for engine/socket readiness, sandbox image and
+  binary availability, nested-container prerequisites, and Vidai Mock endpoint
+  reachability for Codex scenarios.
+- [ ] Emit assistive remediation messages for each preflight failure that
+  include failed check name, observed state, and concrete remedy commands.
 - [ ] Implement e2e scenario: create and start a running sandbox container
   using a mock agent shell-script stub.
 - [ ] Implement e2e scenario: create and start a running sandbox container, and
@@ -393,7 +400,8 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
 
 **Completion criteria:** All three e2e scenarios pass reliably in the dedicated
 gated pipeline. The default test suite remains unchanged in speed and scope,
-and e2e execution occurs only on-demand and in CI.
+and e2e execution occurs only on-demand and in CI. Preflight failures provide
+clear remediation guidance instead of generic setup errors.
 
 ## Phase 5: Library API and embedding support
 
