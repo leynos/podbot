@@ -396,17 +396,18 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
   mock agent shell script stub.
 - [ ] Implement e2e scenario: start Codex configured for an OpenAI-compatible
   mock inference provider implemented with Vidai Mock.
-- [ ] Add CI workflow wiring so the e2e suite runs only in CI and only when
-  explicitly triggered (manual dispatch or explicit workflow call), not as part
-  of the default fast gates.
+- [ ] Add CI workflow wiring so the e2e suite runs in CI only when explicitly
+  triggered (manual dispatch or explicit workflow call), while remaining
+  available through local on-demand execution (`make test-e2e`).
 - [ ] Persist e2e logs and runtime diagnostics as CI artefacts for failed and
   successful runs.
 
 **Completion criteria:** All three e2e scenarios pass reliably in the dedicated
 gated pipeline. The default test suite remains unchanged in speed and scope,
-and e2e execution occurs only on-demand and in CI. Preflight failures provide
-clear remediation guidance instead of generic setup errors. Parallel e2e runs
-do not collide and preflight output remains schema-stable across surfaces.
+and e2e execution occurs via local on-demand runs and explicitly triggered CI
+jobs. Preflight failures provide clear remediation guidance instead of generic
+setup errors. Parallel e2e runs do not collide and preflight output remains
+schema-stable across surfaces.
 
 ## Phase 5: Library API and embedding support
 
