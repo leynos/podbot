@@ -1,0 +1,363 @@
+# Decouple configuration loading from Clap for library embedders
+
+This ExecPlan (execution plan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
+
+Status: DRAFT
+
+## Purpose / big picture
+
+Podbot must remain usable both as a CLI tool and as an embeddable Rust library.
+Today, configuration loading (`podbot::config::load_config`) requires a Clap
+parse struct (`podbot::config::Cli`). That coupling forces library embedders to
+depend on CLI argument parsing types and (in practice) on Clap conventions,
+which contradicts the dual-delivery model in `docs/podbot-design.md`.
+
+After this change, library consumers can load `podbot::config::AppConfig`
+without constructing any Clap parse types. The CLI binary keeps all
+Clap-dependent parsing structures and performs a conversion step into
+library-owned load options.
+
+Observable success:
+
+1. A library consumer can call a new API such as
+   `podbot::config::load_config_with_options(..)` and receive an `AppConfig`
+   using explicit load options and overrides, without importing any Clap parse
+   structs.
+2. `podbot` CLI behaviour does not regress (interactive exec sessions still
+   handle terminal resize and exit-code mapping correctly).
+3. `make check-fmt && make lint && make test` all pass.
+4. New tests exist:
+   - Unit tests (using `rstest`) for library configuration loading.
+   - Behavioural tests (using `rstest-bdd` v0.5.0) for happy/unhappy paths and
+     edge cases, exercising library configuration loading without CLI parsing.
+5. Documentation is updated:
+   - Design decisions recorded in `docs/podbot-design.md`.
+   - User-visible CLI/config behaviour updated in `docs/users-guide.md` (only
+     if behaviour changes).
+   - Roadmap entry Step 5.2 marked as done in `docs/podbot-roadmap.md`.
+
+## Agent team (planning + implementation)
+
+This plan assumes an "agent team" with explicit responsibilities. A single
+implementer can execute all roles, but each role has a distinct checklist to
+prevent missed requirements.
+
+1. **Coordinator (lead)**
+   - Owns milestone sequencing and tolerance enforcement.
+   - Ensures all quality gates run before the end of the turn.
+2. **Library API steward**
+   - Designs the library-facing loader API (types, invariants, errors).
+   - Ensures no Clap parse types leak into the library surface.
+3. **CLI adapter owner**
+   - Moves/contains Clap-dependent parsing types in the binary adapter layer.
+   - Implements conversion helpers from parsed CLI flags into library options.
+4. **Testing lead**
+   - Adds `rstest` unit tests for library loader logic (no CLI parsing).
+   - Adds `rstest-bdd` behavioural coverage for library loader scenarios.
+   - Ensures tests remain deterministic and parallel-safe.
+5. **Documentation owner**
+   - Updates design doc and users' guide as required.
+   - Marks the roadmap item as done on completion.
+
+## Constraints
+
+Hard invariants that must hold throughout implementation. Violation requires
+escalation, not workarounds.
+
+- The dual-delivery model in `docs/podbot-design.md` must remain true:
+  - Library APIs do not depend on Clap parse structs.
+  - The CLI remains an adapter that parses, converts, and prints/exits.
+- No `unwrap()` or `expect()` in production code (clippy denies `unwrap_used`,
+  `expect_used`).
+- No `println!` / `eprintln!` in library code (clippy denies `print_stdout`,
+  `print_stderr`).
+- Every Rust module begins with a `//!` module-level doc comment.
+- No single Rust source file exceeds 400 lines.
+- No new external crate dependencies may be added.
+- Tests:
+  - Unit tests use `rstest`.
+  - Behavioural tests use `rstest-bdd` v0.5.0 and follow repository patterns:
+    - Step function parameter names match fixture names exactly.
+    - `{param}` captures in feature files are unquoted.
+    - Integration test step code uses `StepResult<T> = Result<T, String>`
+      (avoid panics/`expect` to satisfy strict clippy lints).
+- The required quality gates must pass before completion:
+  - `make check-fmt`
+  - `make lint`
+  - `make test`
+
+## Tolerances (exception triggers)
+
+- **Scope:** if the implementation requires changes to more than 20 files or
+  more than 1,000 net lines of code, stop and escalate.
+- **Interface:** if an existing public library API must change in a breaking
+  way (beyond the intended config loader API changes), stop and escalate.
+- **Dependencies:** if a new external crate dependency is required, stop and
+  escalate.
+- **Iterations:** if tests still fail after 3 focused fix attempts on a single
+  issue, stop and escalate.
+- **Ambiguity:** if multiple valid interpretations exist for config precedence
+  or error handling, stop and present options with trade-offs.
+
+## Risks
+
+- Risk: moving Clap parse types out of `podbot::config` may require touching
+  more call sites than expected (e.g., tests importing `podbot::config::Cli`).
+  Severity: medium
+  Likelihood: medium
+  Mitigation: use `rg "podbot::config::Cli"` to enumerate call sites up-front,
+  then update them in one focused pass.
+
+- Risk: configuration discovery semantics may subtly change when introducing
+  explicit load options (especially behaviour for a missing explicit config
+  path).
+  Severity: medium
+  Likelihood: medium
+  Mitigation: keep discovery order identical unless explicitly changed, and
+  add tests for any changed behaviour. If behaviour changes, update
+  `docs/users-guide.md`.
+
+- Risk: behavioural tests for config loading may be tempted to mutate process
+  environment variables.
+  Severity: low
+  Likelihood: medium
+  Mitigation: prefer a library loader API that accepts explicit environment
+  values or an injected environment abstraction (`mockable::Env`), so tests do
+  not require process-global environment mutation.
+
+## Progress
+
+- [ ] (2026-03-01) Draft and review this ExecPlan.
+- [ ] Implement library-facing config loader API and refactor internals.
+- [ ] Move Clap parse types into a CLI adapter layer and add conversion helpers.
+- [ ] Add unit + behavioural tests for library config loading.
+- [ ] Update design doc, users' guide, and roadmap entry.
+- [ ] Run gates: `make check-fmt`, `make lint`, `make test`.
+
+## Surprises & discoveries
+
+None yet (DRAFT).
+
+## Decision log
+
+None yet (DRAFT).
+
+## Outcomes & retrospective
+
+Not started (DRAFT).
+
+## Context and orientation
+
+Key current state (as of 2026-03-01):
+
+1. The library config module is `src/config/`.
+2. Clap parse structs live in `src/config/cli.rs` and are exported publicly via
+   `src/config/mod.rs` (e.g., `pub use cli::Cli`).
+3. Configuration loading is implemented in `src/config/loader.rs`:
+   - `pub fn load_config(cli: &Cli) -> Result<AppConfig>`
+   - This couples loading to Clap via the `Cli` type, because it reads
+     `cli.config`, `cli.engine_socket`, and `cli.image` to decide both discovery
+     and overrides.
+4. The CLI binary (`src/main.rs`) parses `podbot::config::Cli` and calls
+   `podbot::config::load_config(&cli)`.
+
+The roadmap target is Phase 5, Step 5.2 in `docs/podbot-roadmap.md`:
+"Decouple configuration APIs from Clap".
+
+## Plan of work
+
+### Stage A: Confirm existing behaviour and constraints (no code changes)
+
+1. Read:
+   - `docs/podbot-design.md` for the dual-delivery model constraints.
+   - `docs/users-guide.md` for documented configuration discovery order.
+   - `src/config/loader.rs` for the current precedence and discovery logic.
+2. Establish the exact current precedence contract to preserve:
+   defaults < config file < environment variables < CLI overrides.
+
+Go/no-go: proceed only if the intended precedence and discovery order are clear
+and testable.
+
+### Stage B: Introduce library-facing load options and overrides
+
+Implement a library-facing API that does not mention Clap parse structs. The
+API must be explicit about:
+
+1. Load options (what sources are considered, and how discovery is performed).
+2. Overrides (explicit high-precedence values supplied by the host application,
+   including the CLI adapter).
+
+Proposed library interfaces (exact names may change during implementation, but
+the final API must satisfy the intent):
+
+```rust
+pub struct ConfigLoadOptions {
+    pub config_path: Option<camino::Utf8PathBuf>,
+    pub use_discovery: bool,
+    pub overrides: ConfigOverrides,
+}
+
+pub struct ConfigOverrides {
+    pub engine_socket: Option<String>,
+    pub image: Option<String>,
+}
+
+pub fn load_config_with_options(
+    options: &ConfigLoadOptions,
+) -> crate::error::Result<crate::config::AppConfig>;
+```
+
+If deterministic testing would be improved by dependency injection, prefer a
+signature that accepts an injected environment abstraction:
+
+```rust
+pub fn load_config_with_options<E: mockable::Env>(
+    env: &E,
+    options: &ConfigLoadOptions,
+) -> crate::error::Result<crate::config::AppConfig>;
+```
+
+Constraints to enforce in this stage:
+
+1. `src/config/mod.rs` no longer exports Clap parse structs.
+2. `src/config/loader.rs` no longer imports or references `Cli`.
+3. The library loader remains capability-friendly (use `cap_std` for file
+   reads).
+
+Validation at end of Stage B:
+
+1. `cargo test -p podbot config::tests` (or the closest available filter) runs
+   successfully.
+2. The binary still compiles (it will be updated in Stage C).
+
+### Stage C: Keep Clap-dependent structures in the CLI adapter layer
+
+1. Move Clap parse structs (`Cli`, `Commands`, `ExecArgs`, etc.) into a
+   binary-only module (for example `src/cli.rs` or `src/cli/mod.rs`) that is
+   referenced from `src/main.rs`, not from `src/lib.rs`.
+2. Add conversion helpers that map parsed CLI flags to
+   `podbot::config::ConfigLoadOptions` and `podbot::config::ConfigOverrides`.
+3. Update `src/main.rs`:
+   - Parse the binary-local `Cli`.
+   - Convert to library load options.
+   - Call the library loader.
+
+Validation at end of Stage C:
+
+1. `cargo build` succeeds.
+2. `cargo test` (unit suite) succeeds.
+
+### Stage D: Add unit and behavioural tests (no CLI parsing)
+
+Unit tests (`rstest`):
+
+1. Add focused unit tests for `load_config_with_options` verifying:
+   - Happy path: overrides are applied (engine socket, image).
+   - Unhappy path: invalid typed environment values produce a semantic
+     `ConfigError::InvalidValue`.
+   - Edge cases: explicit config path missing yields a semantic
+     `ConfigError::FileNotFound` (if that is the chosen behaviour).
+   - Precedence: defaults < file < env < overrides.
+
+Behavioural tests (`rstest-bdd` v0.5.0):
+
+1. Add a new `.feature` file under `tests/features/` describing scenarios in
+   operator-friendly terms, but implemented by calling the library loader
+   directly (no Clap parsing).
+2. Add `tests/bdd_config_loader.rs` and helper modules under
+   `tests/bdd_config_loader_helpers/` following repository conventions.
+
+Validation at end of Stage D:
+
+1. `cargo test --test bdd_config_loader` passes.
+2. The new BDD scenarios cover both happy and unhappy paths.
+
+### Stage E: Documentation and roadmap updates
+
+1. Update `docs/podbot-design.md` to record the final decisions:
+   - What the stable library configuration loading entrypoint is.
+   - Where Clap parsing lives (binary adapter layer).
+2. Update `docs/users-guide.md` if user-visible behaviour changed (for example
+   erroring on a missing `--config` path instead of silently ignoring it).
+3. Mark Step 5.2 as done in `docs/podbot-roadmap.md`.
+
+Validation at end of Stage E:
+
+1. `make markdownlint` passes (if used in this repo).
+2. `make fmt` (if required for documentation formatting) has been run after
+   doc changes.
+
+### Stage F: Full quality gates
+
+Run the required gates from the repository root:
+
+```bash
+set -o pipefail
+make check-fmt 2>&1 | tee /tmp/podbot-check-fmt.log
+make lint 2>&1 | tee /tmp/podbot-lint.log
+make test 2>&1 | tee /tmp/podbot-test.log
+```
+
+If any gate fails, fix the underlying issue (do not silence lints unless a
+last resort, tightly scoped, with a clear reason).
+
+## Concrete steps
+
+The implementer should follow the stages above and keep this section updated
+with any command transcripts needed to reproduce failures.
+
+Initial repository navigation commands:
+
+```bash
+rg -n "pub use cli::" src/config/mod.rs
+rg -n "load_config\\(" -S src tests
+rg -n "podbot::config::Cli" -S .
+```
+
+## Validation and acceptance
+
+Done means:
+
+1. Library configuration loading no longer requires Clap parse structs.
+2. The CLI uses a conversion helper to produce library load options.
+3. Unit tests (`rstest`) and behavioural tests (`rstest-bdd` v0.5.0) cover:
+   - Happy path(s).
+   - Unhappy path(s).
+   - Relevant edge cases.
+4. Documentation is updated:
+   - `docs/podbot-design.md`
+   - `docs/users-guide.md` (if behaviour changes)
+   - `docs/podbot-roadmap.md` Step 5.2 marked done
+5. Gates pass: `make check-fmt`, `make lint`, `make test`.
+
+## Idempotence and recovery
+
+- Changes should be staged as small commits (even though this environment
+  auto-commits per turn). Each stage should leave the repo in a buildable,
+  testable state.
+- If behavioural tests add new `.feature` files, remember that `rstest-bdd`
+  reads feature files at compile time; if changes appear to be ignored, run a
+  targeted `cargo clean -p podbot` before re-running the affected test.
+
+## Artifacts and notes
+
+Not started (DRAFT).
+
+## Interfaces and dependencies
+
+The intended end state is:
+
+1. Library:
+   - `podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config_with_options}`
+2. CLI adapter:
+   - Defines Clap parse types and converts them into `ConfigLoadOptions`.
+
+No new external dependencies are allowed.
+
+## Revision note
+
+Initial draft created on 2026-03-01.
+
