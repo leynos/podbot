@@ -67,6 +67,12 @@ process termination. Library functions return typed request and response values
 plus semantic errors (`PodbotError`) so host applications can integrate their
 own logging, retries, scheduling, and policy controls.
 
+Within the Podbot binary, execution is intentionally split into two operating
+paths:
+
+- `podbot run`: interactive human-operated sessions.
+- `podbot host`: protocol-only app server hosting with strict stdout purity.
+
 ## Execution flow
 
 The host process (CLI or embedding application) initiates orchestration by
@@ -118,16 +124,17 @@ workspace preparation, and agent execution through seven steps.
      directory to that mounted path. GitHub token acquisition and clone steps
      are skipped unless explicitly requested by the operator.
 
-7. **Start the selected agent mode**:
+7. **Start the selected execution path**:
 
-   - **7a. Interactive mode (`agent.mode = "podbot"`):** start the agent in
-     permissive mode with terminal attachment:
+   - **7a. Interactive path (invoked by `podbot run`,
+     `agent.mode = "podbot"`):** start the agent in permissive mode with
+     terminal attachment:
 
      - Claude Code: `claude --dangerously-skip-permissions`[^4]
      - Codex CLI: `codex --dangerously-bypass-approvals-and-sandbox`[^5]
-   - **7b. App server hosting mode (`agent.mode = "codex_app_server"` or
-     `"acp"`):** start a long-lived non-TTY server command in the container and
-     proxy protocol streams:
+   - **7b. Protocol hosting path (invoked by `podbot host`,
+     `agent.mode = "codex_app_server"` or `"acp"`):** start a long-lived
+     non-TTY server command in the container and proxy protocol streams:
 
      - Codex App Server (stdio): `codex app-server --listen stdio://`[^7]
      - OpenCode ACP bridge: `opencode acp`[^8]
@@ -146,6 +153,11 @@ In app server hosting mode, Podbot's stream contract is strict:
   transformations, and uses bounded buffering so backpressure remains visible
   to the hosted server.[^7] [^10]
 
+The dedicated `podbot host` command is protocol-only. Unlike interactive
+operator commands, it must not emit banners, progress lines, or lifecycle
+status text to stdout at startup, steady-state, shutdown, or error boundaries.
+All such diagnostics must be routed to stderr.
+
 ACP hosting defaults to sandbox-preserving capability masking:
 
 - Podbot rewrites the ACP `initialize` exchange to remove client capabilities
@@ -154,6 +166,26 @@ ACP hosting defaults to sandbox-preserving capability masking:
   them.
 - An explicit operator override may allow ACP delegation when host-executed
   tools are intentionally desired.
+
+ACP masking is an implementation requirement, not a documentation preference:
+
+- Podbot must parse the ACP initialization handshake and remove blocked
+  capability families before forwarding capability data to the hosted agent.
+- Podbot must maintain a runtime denylist for blocked ACP methods and return a
+  protocol error if those methods are attempted later in the session.
+- The delegation override must be explicit, disabled by default, and surfaced
+  in logs as a trust-boundary change.
+
+### Host-mount path safety policy
+
+`workspace.source = "host_mount"` requires explicit mount-boundary checks:
+
+- Canonicalize `workspace.host_path` before mount creation.
+- Reject host paths outside configured allowlisted roots.
+- Reject symlink-derived escapes that resolve outside allowed roots.
+- Require absolute container target paths for `workspace.container_path`.
+- Record resolved mount source and target paths in stderr diagnostics so
+  operators can audit effective boundaries.
 
 ## Credential injection contract
 
@@ -455,6 +487,22 @@ The `workspace.source` setting controls where the agent sees source code:
 In `host_mount` mode, GitHub token and clone operations are optional and should
 run only when explicitly requested.
 
+### Configuration migration and compatibility
+
+The hosting-mode schema expands historical configuration. Migration behaviour
+must remain explicit and testable:
+
+- Existing configurations with only `workspace.base_dir` and
+  `agent.mode = "podbot"` must remain valid without edits.
+- New fields (`workspace.source`, `workspace.host_path`,
+  `workspace.container_path`, `agent.command`, `agent.args`,
+  `agent.env_allowlist`) require deterministic defaults.
+- Validation must check cross-field combinations (subcommand, `agent.kind`,
+  `agent.mode`, and `workspace.source`) and produce semantic errors with
+  actionable field names.
+- Compatibility tests must cover both legacy configuration files and
+  hosting-mode configuration files.
+
 The `sandbox.privileged` setting controls the trade-off between compatibility
 and isolation. Privileged mode enables more Podman-in-Podman configurations but
 expands the attack surface. The minimal mode mounts only `/dev/fuse` and avoids
@@ -673,20 +721,20 @@ _Figure 2: Engine connection error hierarchy and classification flow._
 The CLI exposes a minimal surface area.
 
 ```plaintext
-podbot run --repo owner/name --agent codex|claude|custom \
-  --agent-mode podbot|codex_app_server|acp
+podbot run --repo owner/name --branch branch-name \
+  --agent codex|claude|custom [--agent-mode podbot]
+podbot host --agent codex|claude|custom \
+  --agent-mode codex_app_server|acp
 podbot token-daemon
 podbot ps
 podbot stop <container>
 podbot exec <container> [--detach] -- <command...>
 ```
 
-The `run` subcommand orchestrates the full execution flow. The `token-daemon`
-subcommand can run standalone, potentially as a user systemd service, to manage
-token refresh independently of active sessions.
-
-When `--agent-mode` selects app server hosting, `run` becomes a protocol bridge
-and must keep stdout protocol-clean while sending all diagnostics to stderr.
+The `run` subcommand is reserved for interactive sessions. The `host`
+subcommand is the dedicated protocol bridge for app server hosting. The
+`token-daemon` subcommand can run standalone, potentially as a user systemd
+service, to manage token refresh independently of active sessions.
 
 ### Interactive exec semantics
 
@@ -720,7 +768,7 @@ src/
 ├── lib.rs              # Public library entry points and re-exports
 ├── main.rs             # Thin CLI adapter over library APIs
 ├── error.rs            # Error types and conversions
-├── api/                # Orchestration API: run, exec, stop, ps, token daemon
+├── api/                # Orchestration API: run, host, exec, stop, ps, token daemon
 ├── config/             # Configuration module (types + loader + CLI adapter)
 │   ├── mod.rs          # Module docs and re-exports
 │   ├── cli.rs          # Clap argument definitions (CLI-only adapter layer)
@@ -729,7 +777,9 @@ src/
 ├── engine/             # Bollard wrapper: connect, create, upload, exec
 ├── github.rs           # Octocrab App authentication, token acquisition
 ├── token_daemon.rs     # Token refresh loop, atomic file writes
-└── run_flow.rs         # Shared orchestration internals used by api and CLI
+├── launch_plan.rs      # LaunchRequest/LaunchPlan normalization and validation
+├── run_flow.rs         # Interactive orchestration internals
+└── host_flow.rs        # Protocol-hosting orchestration internals
 ```
 
 The `engine/` module directory (exposed as `podbot::engine`) encapsulates all
@@ -742,7 +792,8 @@ Public versus internal intent:
 - Public library modules: `api/`, `config/` (types and loader surfaces),
   `engine/`, and `error`.
 - Internal library modules (subject to refactor): `run_flow.rs`,
-  `token_daemon.rs`, and `github.rs` until the external API is stabilized.
+  `host_flow.rs`, `launch_plan.rs`, `token_daemon.rs`, and `github.rs` until
+  the external API is stabilized.
 
 ### Library API boundary requirements
 
@@ -759,6 +810,22 @@ The stable library boundary should follow these constraints:
   outcomes into terminal output and process exits.
 - Configuration loaders exposed to library consumers must not require `Cli`
   structs or Clap traits.
+
+### Normalized launch contract
+
+To keep mode growth coherent, orchestration should use a normalized launch
+contract at the library boundary:
+
+- `LaunchRequest`: requested command family (`interactive` or `hosting`),
+  agent metadata, workspace strategy, and credential policy.
+- `LaunchPlan`: fully validated and normalized execution plan, including
+  resolved command, arguments, environment allowlist, mount plan, and stream
+  policy.
+- CLI adapters (`run` and `host`) should only map user input into
+  `LaunchRequest`; normalization and validation live in the library.
+
+This model keeps `(agent.kind, agent.mode, workspace.source)` handling in one
+place and avoids behavioural drift between CLI entry points.
 
 ## Container image requirements
 

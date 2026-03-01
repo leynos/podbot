@@ -69,6 +69,27 @@ defaults.
 flags with correct precedence. Unit tests cover each layer and validation
 errors. ✓
 
+### Step 1.4: Hosting schema migration and compatibility matrix
+
+Extend configuration types for hosting mode without breaking existing installs.
+
+**Tasks:**
+
+- [ ] Add schema fields for hosting: `workspace.source`, `workspace.host_path`,
+  `workspace.container_path`, `agent.command`, `agent.args`, and
+  `agent.env_allowlist`.
+- [ ] Add execution-mode values required for hosting mode while preserving
+  `podbot` defaults for existing configurations.
+- [ ] Define migration rules so legacy config files load deterministically
+  without manual edits.
+- [ ] Implement validation for legal combinations of subcommand, `agent.kind`,
+  `agent.mode`, and `workspace.source`.
+- [ ] Add a compatibility test matrix covering legacy and hosting-era
+  configuration variants.
+
+**Completion criteria:** Legacy configurations continue to load as expected,
+and hosting-mode configurations validate with actionable semantic errors.
+
 ## Phase 2: Container engine integration
 
 Implement the Bollard wrapper that manages container lifecycle, credential
@@ -145,12 +166,32 @@ Provide non-TTY execution for app-server hosting protocols.
 - [ ] Implement byte-stream proxy loops: stdin -> container stdin, container
   stdout -> host stdout, and container stderr -> host stderr.
 - [ ] Keep proxy buffering bounded so hosted protocols can apply backpressure.
-- [ ] Ensure the CLI emits no non-protocol bytes to stdout while proxying.
+- [ ] Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
+- [ ] Add lifecycle stream-purity tests for startup, steady-state, shutdown, and
+  error paths.
 - [ ] Add a regression test asserting zero stdout bytes before the first proxied
-  protocol byte.
+  protocol byte and after the final proxied byte.
 
 **Completion criteria:** Hosting sessions run without TTY framing, preserve
 protocol byte streams, and keep stdout free from Podbot diagnostics.
+
+### Step 2.6: ACP capability masking enforcement
+
+Prevent ACP client-side delegation from bypassing container sandbox boundaries.
+
+**Tasks:**
+
+- [ ] Intercept ACP initialization and mask `terminal/*` and `fs/*` capabilities
+  by default before forwarding capability metadata.
+- [ ] Enforce a runtime denylist for blocked ACP methods after initialization.
+- [ ] Return protocol errors for blocked methods and record denials on stderr.
+- [ ] Add explicit configuration to opt in to ACP delegation when operators
+  intentionally accept host-side execution.
+- [ ] Add tests for handshake rewriting, blocked-method denial, and override
+  behaviour.
+
+**Completion criteria:** ACP hosting defaults to sandbox-preserving behaviour,
+with deterministic and test-backed enforcement.
 
 ## Phase 3: GitHub App integration
 
@@ -279,6 +320,7 @@ Launch long-lived app servers for IDE and protocol clients.
 - [ ] Add ACP startup support through generic command execution
   (`agent.command` + `agent.args`).
 - [ ] Route hosting sessions through the Step 2.5 non-TTY stdio proxy.
+- [ ] Route protocol hosting through the dedicated `host` command path.
 - [ ] Add config validation for legal `(agent.kind, agent.mode)` pairs.
 - [ ] Ensure clean shutdown semantics when the client closes stdin or sends a
   termination signal.
@@ -295,12 +337,35 @@ Support both cloned and host-mounted workspace models.
 - [ ] Implement `workspace.source = "host_mount"` bind mounts.
 - [ ] Retain `workspace.source = "github_clone"` for token-backed clone flows.
 - [ ] Define path mapping policy (default mount target `/workspace`).
+- [ ] Canonicalize host paths before mounting and reject unresolved symlink
+  escapes.
+- [ ] Enforce allowlisted host mount roots.
 - [ ] Ensure container user write permissions are documented and validated for
   rootless engines.
 - [ ] Update threat-model documentation for host-mounted workspace boundaries.
+- [ ] Add negative tests for forbidden mount paths and boundary violations.
 
 **Completion criteria:** Operators can choose clone or host-mount workspace
 strategies explicitly, with documented security and permission behaviour.
+
+### Step 4.5: Normalized launch contract
+
+Centralize launch validation and normalization across interactive and hosting
+flows.
+
+**Tasks:**
+
+- [ ] Define a library-level `LaunchRequest` model for agent kind, mode,
+  workspace source, and credential policy.
+- [ ] Define a normalized `LaunchPlan` that resolves command, args, env policy,
+  mount policy, and stream policy.
+- [ ] Update orchestration internals so `run` and `host` both use the same
+  normalization path.
+- [ ] Add tests that assert consistent normalization outcomes across command
+  entry points.
+
+**Completion criteria:** Launch behaviour is defined once in library code and
+is consistent across CLI commands.
 
 ## Phase 5: Library API and embedding support
 
@@ -370,6 +435,7 @@ Implement the argument parsing and subcommand routing.
 **Tasks:**
 
 - [ ] Define the run subcommand for launching agent sessions.
+- [ ] Define the host subcommand for protocol-only app server hosting.
 - [ ] Add the token-daemon subcommand for standalone token management.
 - [ ] Create the ps subcommand for listing containers.
 - [ ] Implement the stop subcommand for terminating containers.
@@ -381,19 +447,21 @@ each command and its arguments. Invalid arguments produce clear errors.
 
 ### Step 6.2: Run subcommand
 
-Implement the primary workflow for launching agent sessions.
+Implement the interactive workflow for launching terminal-attached sessions.
 
 **Tasks:**
 
 - [ ] Accept --repo owner/name as a required argument.
 - [ ] Accept --branch as a required argument.
 - [ ] Accept --agent with values `codex`, `claude`, or `custom`.
-- [ ] Accept --agent-mode with values `podbot`, `codex_app_server`, or `acp`.
-- [ ] Orchestrate the full execution flow from the run_flow module.
+- [ ] Accept `--agent-mode podbot` only for this command.
+- [ ] Reject hosting modes (`codex_app_server` and `acp`) with a clear message
+  directing operators to `podbot host`.
+- [ ] Orchestrate the interactive execution flow from the run module.
 - [ ] Return appropriate exit codes on success and failure.
 
-**Completion criteria:** The run command launches complete agent sessions.
-Required arguments enforce presence. The full orchestration executes correctly.
+**Completion criteria:** The run command launches interactive sessions only.
+Hosting-mode requests are rejected with actionable guidance.
 
 ### Step 6.3: Management subcommands
 
@@ -422,6 +490,21 @@ Support standalone token daemon execution.
 
 **Completion criteria:** The daemon runs independently of agent sessions.
 Systemd integration works correctly. Shutdown handles cleanly.
+
+### Step 6.5: Host subcommand
+
+Implement the dedicated protocol-only bridge command.
+
+**Tasks:**
+
+- [ ] Add `podbot host` for `agent-mode` values `codex_app_server` and `acp`.
+- [ ] Wire the command to non-TTY proxy orchestration with strict stdout purity.
+- [ ] Ensure all lifecycle diagnostics for `podbot host` are emitted on stderr.
+- [ ] Handle client disconnect and signal-driven shutdown cleanly.
+- [ ] Return explicit non-zero exit codes when protocol setup fails.
+
+**Completion criteria:** `podbot host` behaves as a protocol-clean transport
+adapter and does not share interactive `run` output concerns.
 
 ## Phase 7: Container image
 
@@ -501,7 +584,7 @@ Verify Podbot can host Codex App Server end-to-end.
 
 **Tasks:**
 
-- [ ] Add integration coverage that launches Podbot-hosted
+- [ ] Add integration coverage that launches `podbot host` with
   `codex app-server --listen stdio://`.
 - [ ] Drive `initialize -> new thread -> prompt` through the Codex app-server
   test client flow.
@@ -525,9 +608,27 @@ Verify Podbot preserves ACP framing and stream purity.
   traffic.
 - [ ] Add tests for ACP capability masking of `terminal/*` and `fs/*` in the
   initialization handshake.
+- [ ] Add tests for runtime denial of blocked ACP methods after initialization.
 
 **Completion criteria:** ACP sessions remain protocol-correct under Podbot
 hosting, with default sandbox-preserving capability masking enforced.
+
+### Step 8.3: Host lifecycle and output-purity tests
+
+Validate protocol cleanliness across full process lifecycle transitions.
+
+**Tasks:**
+
+- [ ] Assert `podbot host` emits no stdout bytes before the first proxied
+  protocol byte.
+- [ ] Assert `podbot host` emits no stdout bytes after client disconnect and
+  shutdown.
+- [ ] Exercise signal-driven termination paths and assert stderr-only
+  diagnostics.
+- [ ] Verify partial-frame and backpressure scenarios do not corrupt framing.
+
+**Completion criteria:** Protocol sessions remain stream-clean and framing-safe
+across startup, steady-state, and shutdown paths.
 
 ## Future enhancements
 
