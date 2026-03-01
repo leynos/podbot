@@ -834,8 +834,8 @@ suite is distinct from the main unit and behavioural test suite:
 
 - Main suite (`make test`) remains fast and deterministic, with no hard
   dependency on a running container daemon or model provider.
-- E2E suite runs only when explicitly requested (`make test-e2e`) and in CI
-  workflows designed for e2e execution.
+- E2E suite runs only when explicitly requested (`make test-e2e`) and in
+  Continuous Integration (CI) workflows designed for e2e execution.
 - E2E tests live in a separate test module tree and use dedicated fixtures,
   artefact directories, and log capture so failures can be debugged without
   affecting standard test ergonomics.
