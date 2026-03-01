@@ -1034,5 +1034,5 @@ ______________________________________________________________________
 [^11]: Claude Agent SDK for Python:
 <https://github.com/anthropics/claude-agent-sdk-python>
 
-[^12]: Vidai Mock skill reference used for local OpenAI-compatible provider
-configuration: `../../vidai-mock-skill/vidai-mock/SKILL.md`
+[^12]: Vidai Mock documentation for local OpenAI-compatible provider setup:
+<https://vidai.uk/docs/mock/intro/>
