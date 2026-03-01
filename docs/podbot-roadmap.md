@@ -383,13 +383,17 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
 - [ ] Include preflight checks for engine/socket readiness, sandbox image and
   binary availability, nested-container prerequisites, and Vidai Mock endpoint
   reachability for Codex scenarios.
+- [ ] Define and enforce a versioned machine-parseable preflight output format
+  (JSON Lines) shared by CLI runs, library call paths, and CI jobs.
 - [ ] Emit assistive remediation messages for each preflight failure that
   include failed check name, observed state, and concrete remedy commands.
+- [ ] Enforce run-scoped test isolation for concurrent execution via unique
+  `run_id` naming, required container labels, and run-scoped runtime paths.
 - [ ] Implement e2e scenario: create and start a running sandbox container
-  using a mock agent shell-script stub.
+  using a mock agent shell script stub.
 - [ ] Implement e2e scenario: create and start a running sandbox container, and
   then start a nested container inside it using the inner Podman runtime with a
-  mock agent shell-script stub.
+  mock agent shell script stub.
 - [ ] Implement e2e scenario: start Codex configured for an OpenAI-compatible
   mock inference provider implemented with Vidai Mock.
 - [ ] Add CI workflow wiring so the e2e suite runs only in CI and only when
@@ -401,7 +405,8 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
 **Completion criteria:** All three e2e scenarios pass reliably in the dedicated
 gated pipeline. The default test suite remains unchanged in speed and scope,
 and e2e execution occurs only on-demand and in CI. Preflight failures provide
-clear remediation guidance instead of generic setup errors.
+clear remediation guidance instead of generic setup errors. Parallel e2e runs
+do not collide and preflight output remains schema-stable across surfaces.
 
 ## Phase 5: Library API and embedding support
 

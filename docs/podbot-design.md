@@ -851,6 +851,25 @@ cleanup, with container names or labels scoped to the test run identifier.
 Assertions should verify observable outcomes (container running state, process
 exit status, and recorded logs) rather than internal implementation details.
 
+### Isolation and concurrency contract
+
+To avoid collisions across concurrent local and CI runs, every e2e invocation
+must mint a unique `run_id` and scope all mutable artefacts to that value.
+
+The suite should enforce:
+
+- Container naming format:
+  `podbot-e2e-<run_id>-<scenario_slug>-<sequence>`.
+- Required container labels:
+  `podbot.e2e=true`, `podbot.e2e.run_id=<run_id>`,
+  `podbot.e2e.scenario=<scenario_slug>`.
+- Runtime path scoping:
+  `<runtime_root>/<run_id>/<scenario_slug>/...`.
+- Cleanup by run-scoped labels and paths only, never by broad global patterns.
+
+This contract lets multiple runs execute safely in parallel while preserving
+deterministic cleanup and post-failure diagnostics.
+
 ### Preflight contract and assistive remediation
 
 Before running any e2e scenario, the suite should run a preflight phase that
@@ -876,8 +895,31 @@ failure must include:
 - A concrete remedy list with command-oriented guidance.
 
 Preflight output should use a consistent, machine-parseable format so CI logs
-and local runs can surface the same remediation hints. Checks that cannot be
-resolved in-process should fail fast before container creation starts.
+and local runs can surface the same remediation hints.
+
+Use a versioned JSON Lines contract (`application/x-ndjson`), one object per
+check:
+
+```json
+{
+  "schema_version": "1",
+  "event": "preflight_check",
+  "run_id": "20260301T120102Z-ab12cd",
+  "check": "engine_socket_reachable",
+  "status": "fail",
+  "observed": "permission denied: unix:///var/run/docker.sock",
+  "remedies": [
+    "sudo usermod -aG docker $USER",
+    "newgrp docker",
+    "systemctl --user start podman.socket"
+  ]
+}
+```
+
+Required fields are `schema_version`, `event`, `run_id`, `check`, `status`,
+`observed`, and `remedies`. `status` must be one of `pass`, `warn`, or `fail`.
+Checks that cannot be resolved in-process should fail fast before container
+creation starts.
 
 ### Required scenarios
 
