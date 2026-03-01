@@ -294,14 +294,25 @@ fn build_app_client_without_runtime_returns_error(
 }
 
 #[rstest]
-fn authentication_failed_error_includes_context() {
+#[case::builder_context(
+    "failed to build GitHub App client: test error",
+    "failed to build GitHub App client"
+)]
+#[case::validation_context(
+    "failed to validate GitHub App credentials: test error",
+    "failed to validate GitHub App credentials"
+)]
+fn authentication_failed_error_includes_context(
+    #[case] message: &str,
+    #[case] expected_context: &str,
+) {
     let error = GitHubError::AuthenticationFailed {
-        message: String::from("failed to build GitHub App client: test error"),
+        message: String::from(message),
     };
     let display = error.to_string();
     assert!(
-        display.contains("failed to build GitHub App client"),
-        "error should include builder context: {display}"
+        display.contains(expected_context),
+        "error should include context: {display}"
     );
     assert!(
         display.contains("test error"),
@@ -326,20 +337,4 @@ fn octocrab_app_client_new_creates_instance(
     // Verify the client was created (we can't test async methods easily here
     // without hitting the network)
     let _ = client;
-}
-
-#[rstest]
-fn validation_error_includes_context() {
-    let error = GitHubError::AuthenticationFailed {
-        message: String::from("failed to validate GitHub App credentials: test error"),
-    };
-    let display = error.to_string();
-    assert!(
-        display.contains("failed to validate GitHub App credentials"),
-        "error should include validation context: {display}"
-    );
-    assert!(
-        display.contains("test error"),
-        "error should include cause: {display}"
-    );
 }
