@@ -81,7 +81,7 @@ installations.
   `agent.env_allowlist`.
 - [ ] Add execution-mode values required for hosting mode while preserving
   `podbot` defaults for existing configurations.
-- [ ] Define migration rules so legacy config files load deterministically
+- [ ] Define migration rules, so legacy config files load deterministically
   without manual edits.
 - [ ] Implement validation for legal combinations of subcommand, `agent.kind`,
   `agent.mode`, and `workspace.source`.
@@ -166,7 +166,7 @@ Provide non-TTY execution for app-server hosting protocols.
 - [ ] Implement exec attachment with `tty = false` enforced.
 - [ ] Implement byte-stream proxy loops: stdin -> container stdin, container
   stdout -> host stdout, and container stderr -> host stderr.
-- [ ] Keep proxy buffering bounded so hosted protocols can apply backpressure.
+- [ ] Keep proxy buffering bounded, so hosted protocols can apply backpressure.
 - [ ] Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
 - [ ] Add lifecycle stream-purity tests for startup, steady-state, shutdown, and
   error paths.
@@ -360,7 +360,7 @@ flows.
   workspace source, and credential policy.
 - [ ] Define a normalized `LaunchPlan` that resolves command, args, env policy,
   mount policy, and stream policy.
-- [ ] Update orchestration internals so `run` and `host` both use the same
+- [ ] Update orchestration internals, so `run` and `host` both use the same
   normalization path.
 - [ ] Add tests that assert consistent normalization outcomes across command
   entry points.
