@@ -368,6 +368,33 @@ flows.
 **Completion criteria:** Launch behaviour is defined once in library code and
 is consistent across CLI commands.
 
+### Step 4.4: Gated e2e orchestration suite
+
+Create a dedicated end-to-end suite for full runtime orchestration validation.
+
+**Tasks:**
+
+- [ ] Create a distinct e2e test suite separate from the main test suite (for
+  example, dedicated test modules and fixtures under an e2e path).
+- [ ] Add a dedicated on-demand execution target (for example, `make test-e2e`)
+  and ensure `make test` does not invoke e2e tests by default.
+- [ ] Implement e2e scenario: create and start a running sandbox container
+  using a mock agent shell-script stub.
+- [ ] Implement e2e scenario: create and start a running sandbox container, and
+  then start a nested container inside it using the inner Podman runtime with a
+  mock agent shell-script stub.
+- [ ] Implement e2e scenario: start Codex configured for an OpenAI-compatible
+  mock inference provider implemented with Vidai Mock.
+- [ ] Add CI workflow wiring so the e2e suite runs only in CI and only when
+  explicitly triggered (manual dispatch or explicit workflow call), not as part
+  of the default fast gates.
+- [ ] Persist e2e logs and runtime diagnostics as CI artefacts for failed and
+  successful runs.
+
+**Completion criteria:** All three e2e scenarios pass reliably in the dedicated
+gated pipeline. The default test suite remains unchanged in speed and scope,
+and e2e execution occurs only on-demand and in CI.
+
 ## Phase 5: Library API and embedding support
 
 Expose Podbot orchestration as a stable library API that can be called by

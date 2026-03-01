@@ -826,6 +826,66 @@ contract at the library boundary:
 
 This model keeps `(agent.kind, agent.mode, workspace.source)` handling in one
 place and avoids behavioural drift between CLI entry points.
+## Gated e2e validation design
+
+Podbot requires a dedicated end-to-end (e2e) validation suite that exercises
+real container lifecycle and agent startup behaviour with minimal mocks. This
+suite is distinct from the main unit and behavioural test suite:
+
+- Main suite (`make test`) remains fast and deterministic, with no hard
+  dependency on a running container daemon or model provider.
+- E2E suite runs only when explicitly requested (`make test-e2e`) and in CI
+  workflows designed for e2e execution.
+- E2E tests live in a separate test module tree and use dedicated fixtures,
+  artefact directories, and log capture so failures can be debugged without
+  affecting standard test ergonomics.
+
+### Execution model
+
+The e2e harness should drive Podbot through public orchestration entry points,
+not internal helper functions, so both CLI and library integration paths can be
+validated against the same runtime contracts.
+
+Each e2e scenario provisions disposable runtime paths and uses deterministic
+cleanup, with container names or labels scoped to the test run identifier.
+Assertions should verify observable outcomes (container running state, process
+exit status, and recorded logs) rather than internal implementation details.
+
+### Required scenarios
+
+1. **Outer container startup with mock agent stub**
+
+   - Start a sandbox container using a mock agent implemented as a shell
+     script stub.
+   - Assert that the outer container reaches a running state and the agent stub
+     process executes as expected.
+
+2. **Nested container startup inside sandbox with mock agent stub**
+
+   - Start the same outer sandbox container shape.
+   - Execute a nested container operation from inside the sandbox via the inner
+     Podman service (for example, `podman run --rm ...`).
+   - Assert nested container creation succeeds and remains isolated from the
+     host socket boundary.
+
+3. **Codex startup with Vidai Mock provider**
+
+   - Start Vidai Mock as an OpenAI-compatible local inference endpoint.[^12]
+   - Configure Codex in the sandbox to target that mock endpoint and use a
+     non-production API key value.
+   - Assert Codex startup, request/response exchange, and exit handling work
+     against the mock provider without reaching external inference services.
+
+### Trigger and CI policy
+
+E2E execution is intentionally gated:
+
+- Not part of default `make test`.
+- Available through a dedicated on-demand target (for example,
+  `make test-e2e`).
+- Executed in CI via a dedicated workflow/job that is triggered explicitly
+  (manual dispatch or explicit workflow call), so regular lint/unit gates stay
+  fast while e2e confidence remains reproducible and auditable.
 
 ## Container image requirements
 
@@ -901,3 +961,6 @@ ______________________________________________________________________
 
 [^11]: Claude Agent SDK for Python:
 <https://github.com/anthropics/claude-agent-sdk-python>
+
+[^12]: Vidai Mock skill reference used for local OpenAI-compatible provider
+configuration: `../../vidai-mock-skill/vidai-mock/SKILL.md`
