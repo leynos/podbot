@@ -230,7 +230,7 @@ where
 {
     let private_key = load_private_key(private_key_path)?;
     let client = factory(app_id, private_key)?;
-    client.validate_credentials().await
+    validate_with_client(&client).await
 }
 
 /// Load a private key from an already-opened directory capability.

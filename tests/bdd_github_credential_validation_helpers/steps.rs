@@ -25,6 +25,115 @@ mockall::mock! {
     }
 }
 
+/// Input values extracted from scenario state for validation.
+struct ValidationInputs {
+    key_path: Utf8PathBuf,
+    app_id: u64,
+    mock_response: MockApiResponse,
+}
+
+/// Extract validation inputs from scenario state.
+fn read_inputs(state: &GitHubCredentialValidationState) -> StepResult<ValidationInputs> {
+    let key_path = state
+        .key_path
+        .get()
+        .ok_or_else(|| String::from("key_path should be set"))?;
+    let app_id = state
+        .app_id
+        .get()
+        .ok_or_else(|| String::from("app_id should be set"))?;
+    let mock_response = state
+        .mock_response
+        .get()
+        .ok_or_else(|| String::from("mock_response should be set"))?;
+    Ok(ValidationInputs {
+        key_path,
+        app_id,
+        mock_response,
+    })
+}
+
+/// Configure mock client expectations based on the expected API response.
+fn configure_mock(mock_client: &mut MockGitHubAppClient, response: MockApiResponse) {
+    match response {
+        MockApiResponse::Success => {
+            mock_client
+                .expect_validate_credentials()
+                .times(1)
+                .returning(|| Box::pin(async { Ok(()) }));
+        }
+        MockApiResponse::InvalidCredentials => {
+            mock_client
+                .expect_validate_credentials()
+                .times(1)
+                .returning(|| {
+                    Box::pin(async {
+                        Err(GitHubError::AuthenticationFailed {
+                            message: String::from(
+                                "failed to validate GitHub App credentials: \
+                                 401 Unauthorized - invalid credentials",
+                            ),
+                        })
+                    })
+                });
+        }
+        MockApiResponse::ServerError => {
+            mock_client
+                .expect_validate_credentials()
+                .times(1)
+                .returning(|| {
+                    Box::pin(async {
+                        Err(GitHubError::AuthenticationFailed {
+                            message: String::from(
+                                "failed to validate GitHub App credentials: \
+                                 500 Internal Server Error",
+                            ),
+                        })
+                    })
+                });
+        }
+    }
+}
+
+/// Build a factory closure that creates a mock client for the given response type.
+fn build_factory(
+    expected_app_id: u64,
+    mock_response: MockApiResponse,
+) -> impl FnOnce(u64, EncodingKey) -> Result<MockGitHubAppClient, GitHubError> {
+    move |received_app_id: u64, _key: EncodingKey| {
+        // Verify the app_id is correctly passed through the orchestration
+        if received_app_id != expected_app_id {
+            return Err(GitHubError::AuthenticationFailed {
+                message: format!(
+                    "app_id mismatch: expected {expected_app_id}, received {received_app_id}"
+                ),
+            });
+        }
+        let mut mock_client = MockGitHubAppClient::new();
+        configure_mock(&mut mock_client, mock_response);
+        Ok(mock_client)
+    }
+}
+
+/// Run validation and convert the result to a `ValidationOutcome`.
+fn run_validation(
+    app_id: u64,
+    key_path: &Utf8Path,
+    factory: impl FnOnce(u64, EncodingKey) -> Result<MockGitHubAppClient, GitHubError>,
+) -> StepResult<ValidationOutcome> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("failed to create tokio runtime: {e}"))?;
+
+    let result = rt.block_on(async { validate_with_factory(app_id, key_path, factory).await });
+
+    Ok(match result {
+        Ok(()) => ValidationOutcome::Success,
+        Err(error) => ValidationOutcome::Failed {
+            message: error.to_string(),
+        },
+    })
+}
+
 /// Open a temporary directory as a `cap_std` capability handle and return
 /// both the `TempDir` guard and a UTF-8 path to it.
 fn open_temp_dir() -> StepResult<(tempfile::TempDir, Dir, Utf8PathBuf)> {
@@ -113,89 +222,9 @@ fn set_app_id(
 fn validate_credentials_step(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
-    let key_path = github_credential_validation_state
-        .key_path
-        .get()
-        .ok_or_else(|| String::from("key_path should be set"))?;
-    let app_id = github_credential_validation_state
-        .app_id
-        .get()
-        .ok_or_else(|| String::from("app_id should be set"))?;
-    let mock_response = github_credential_validation_state
-        .mock_response
-        .get()
-        .ok_or_else(|| String::from("mock_response should be set"))?;
-
-    // Create a factory that returns a mock client configured for the expected response.
-    // This exercises the full orchestration path: key loading -> factory call -> validation.
-    let factory = move |received_app_id: u64,
-                        _key: EncodingKey|
-          -> Result<MockGitHubAppClient, GitHubError> {
-        // Verify the app_id is correctly passed through the orchestration
-        if received_app_id != app_id {
-            return Err(GitHubError::AuthenticationFailed {
-                message: format!("app_id mismatch: expected {app_id}, received {received_app_id}"),
-            });
-        }
-
-        let mut mock_client = MockGitHubAppClient::new();
-        match mock_response {
-            MockApiResponse::Success => {
-                mock_client
-                    .expect_validate_credentials()
-                    .times(1)
-                    .returning(|| Box::pin(async { Ok(()) }));
-            }
-            MockApiResponse::InvalidCredentials => {
-                mock_client
-                    .expect_validate_credentials()
-                    .times(1)
-                    .returning(|| {
-                        Box::pin(async {
-                            Err(GitHubError::AuthenticationFailed {
-                                message: String::from(
-                                    "failed to validate GitHub App credentials: \
-                                     401 Unauthorized - invalid credentials",
-                                ),
-                            })
-                        })
-                    });
-            }
-            MockApiResponse::ServerError => {
-                mock_client
-                    .expect_validate_credentials()
-                    .times(1)
-                    .returning(|| {
-                        Box::pin(async {
-                            Err(GitHubError::AuthenticationFailed {
-                                message: String::from(
-                                    "failed to validate GitHub App credentials: \
-                                     500 Internal Server Error",
-                                ),
-                            })
-                        })
-                    });
-            }
-        }
-        Ok(mock_client)
-    };
-
-    // Run validation using validate_with_factory (full orchestration path)
-    let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| format!("failed to create tokio runtime: {e}"))?;
-
-    let result = rt.block_on(async { validate_with_factory(app_id, &key_path, factory).await });
-
-    match result {
-        Ok(()) => github_credential_validation_state
-            .outcome
-            .set(ValidationOutcome::Success),
-        Err(error) => github_credential_validation_state
-            .outcome
-            .set(ValidationOutcome::Failed {
-                message: error.to_string(),
-            }),
-    }
-
+    let inputs = read_inputs(github_credential_validation_state)?;
+    let factory = build_factory(inputs.app_id, inputs.mock_response);
+    let outcome = run_validation(inputs.app_id, &inputs.key_path, factory)?;
+    github_credential_validation_state.outcome.set(outcome);
     Ok(())
 }

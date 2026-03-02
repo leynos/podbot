@@ -321,24 +321,6 @@ fn authentication_failed_error_includes_context(
 }
 
 #[rstest]
-fn octocrab_app_client_new_creates_instance(
-    valid_rsa_pem: String,
-    temp_key_dir: (TempDir, Utf8Dir),
-) {
-    let (_tmp, dir) = temp_key_dir;
-    dir.write("key.pem", &valid_rsa_pem)
-        .expect("should write key");
-    let path = Utf8Path::new("/display/key.pem");
-    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
-    let rt = tokio::runtime::Runtime::new().expect("should create tokio runtime");
-    let _guard = rt.enter();
-    let octocrab = build_app_client(12345, key).expect("should build client");
-    let client = OctocrabAppClient::new(octocrab);
-    // Verify the client was created (async validation requires network calls)
-    let _ = client;
-}
-
-#[rstest]
 #[tokio::test]
 async fn validate_app_credentials_with_missing_key_returns_error() {
     let key_path = Utf8Path::new("/nonexistent/directory/key.pem");

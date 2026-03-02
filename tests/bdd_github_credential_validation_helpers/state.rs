@@ -11,7 +11,7 @@ use tempfile::TempDir;
 pub type StepResult<T> = Result<T, String>;
 
 /// Type of mock API response to simulate.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum MockApiResponse {
     /// The API accepts the credentials.
     #[default]

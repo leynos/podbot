@@ -1,8 +1,11 @@
 //! PEM format validation for GitHub App private keys.
 //!
 //! This module validates PEM-encoded private key files, rejecting unsupported
-//! key types (ECDSA, Ed25519, public keys, certificates) and encrypted keys
-//! with clear error messages.
+//! key types with error messages. ECDSA (SEC 1 format), public keys,
+//! certificates, and encrypted keys are detected by their PEM headers and
+//! produce specific error messages. Ed25519 and other PKCS#8-wrapped keys
+//! that are not RSA fall through to the `jsonwebtoken` parser, which returns
+//! a generic "invalid RSA private key" error.
 
 use std::path::PathBuf;
 
