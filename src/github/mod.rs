@@ -10,7 +10,9 @@
 //! **Stability:** This module is internal to the library and subject to
 //! change as the GitHub integration stabilizes.
 
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 
 use camino::Utf8Path;
 use cap_std::ambient_authority;
@@ -21,6 +23,12 @@ use octocrab::Octocrab;
 use octocrab::models::AppId;
 
 use crate::error::GitHubError;
+
+/// A boxed future for async trait methods.
+///
+/// This type alias enables `mockall::automock` compatibility and trait object
+/// usage for async methods in [`GitHubAppClient`].
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// PEM tag for ECDSA private keys (SEC 1 / RFC 5915 format).
 const EC_PRIVATE_KEY_TAG: &str = "-----BEGIN EC PRIVATE KEY-----";
@@ -127,9 +135,7 @@ pub trait GitHubAppClient: Send + Sync {
     /// # Errors
     ///
     /// Returns an error if the API call fails or returns an error response.
-    fn validate_credentials(
-        &self,
-    ) -> impl std::future::Future<Output = Result<(), GitHubError>> + Send;
+    fn validate_credentials(&self) -> BoxFuture<'_, Result<(), GitHubError>>;
 }
 
 /// Production implementation of [`GitHubAppClient`] using Octocrab.
@@ -147,14 +153,16 @@ impl OctocrabAppClient {
 }
 
 impl GitHubAppClient for OctocrabAppClient {
-    async fn validate_credentials(&self) -> Result<(), GitHubError> {
-        self.client
-            .get::<serde_json::Value, _, ()>("/app", None)
-            .await
-            .map_err(|error| GitHubError::AuthenticationFailed {
-                message: format!("failed to validate GitHub App credentials: {error}"),
-            })?;
-        Ok(())
+    fn validate_credentials(&self) -> BoxFuture<'_, Result<(), GitHubError>> {
+        Box::pin(async move {
+            self.client
+                .get::<(), _, ()>("/app", None)
+                .await
+                .map_err(|error| GitHubError::AuthenticationFailed {
+                    message: format!("failed to validate GitHub App credentials: {error}"),
+                })?;
+            Ok(())
+        })
     }
 }
 
@@ -197,6 +205,20 @@ pub async fn validate_app_credentials(
     let private_key = load_private_key(private_key_path)?;
     let octocrab = build_app_client(app_id, private_key)?;
     let client = OctocrabAppClient::new(octocrab);
+    validate_with_client(&client).await
+}
+
+/// Validates credentials using the provided client.
+///
+/// This is a testable helper that separates orchestration from client
+/// construction. Tests can inject a mock [`GitHubAppClient`] to verify
+/// behaviour without network calls.
+///
+/// # Errors
+///
+/// Returns [`GitHubError::AuthenticationFailed`] if the client rejects the
+/// credentials or the API call fails.
+pub async fn validate_with_client(client: &dyn GitHubAppClient) -> Result<(), GitHubError> {
     client.validate_credentials().await
 }
 
