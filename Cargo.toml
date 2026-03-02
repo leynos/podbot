@@ -13,7 +13,7 @@ tokio = { version = "1.49.0", features = ["full"] }
 futures-util = "0.3.31"
 
 # Container management
-bollard = "0.20.0"
+bollard = "0.20.1"
 tar = "0.4.44"
 
 # GitHub integration
