@@ -109,7 +109,7 @@ incorrect or the private key may not match` with suggestions for resolution.
 - [x] Update `docs/podbot-roadmap.md` to mark task complete.
 - [x] Update `docs/users-guide.md` if applicable (no changes needed).
 - [x] Run documentation gates (`markdownlint`, `fmt`, `nixie`).
-- [x] Finalise outcomes and retrospective.
+- [x] Finalize outcomes and retrospective.
 
 ## Surprises and discoveries
 
@@ -117,8 +117,9 @@ incorrect or the private key may not match` with suggestions for resolution.
   `MockGitHubAppClient` but only within the main crate's test configuration.
   External test binaries (BDD tests) cannot access this mock, so a separate
   `mockall::mock!` declaration was needed in the test helpers.
-- `serde_json` was already a transitive dependency via `octocrab` but needed to
-  be added as a direct dependency in `Cargo.toml` for use in `mod.rs`.
+- The initial implementation used `serde_json::Value` to parse the `/app`
+  response, but subsequent refactoring switched to `()` since the response body
+  is not inspected; `serde_json` is no longer a direct dependency.
 - The `OctocrabAppClient::new` constructor was flagged by `missing_const_for_fn`
   and required `const fn` annotation.
 
@@ -324,8 +325,7 @@ tests focus on:
 2. Testing error message formatting.
 3. Testing the `OctocrabAppClient::new` constructor.
 
-For full async testing with mocks, we rely on the BDD tests using the mock
-trait.
+For full async testing with mocks, the BDD tests use the mock trait.
 
 ```rust
 #[rstest]
@@ -568,9 +568,9 @@ stores only a `String` (24 bytes on 64-bit). This should be under the clippy
 threshold.
 
 `async_fn_in_trait`: Rust 1.75+ supports async functions in traits directly.
-Since podbot uses Rust 1.88+, this should work without the `async-trait` crate.
-However, if `mockall::automock` requires specific signatures, we may need to
-adjust the trait definition.
+Since podbot uses Rust 1.88+, this works without the `async-trait` crate.
+However, `mockall::automock` requires specific signatures, so the trait
+definition uses `BoxFuture` instead of `async fn`.
 
 ## Outcomes and retrospective
 
@@ -578,7 +578,7 @@ Implementation completed successfully. All quality gates pass.
 
 **Files modified:**
 
-- `Cargo.toml` — added `serde_json` as direct dependency
+- `Cargo.toml` — no changes (response parsing uses `()` instead of JSON)
 - `src/github/mod.rs` — added `GitHubAppClient` trait, `OctocrabAppClient`
   struct, and `validate_app_credentials` function (~80 lines)
 - `src/github/tests.rs` — added 2 unit tests (~25 lines)

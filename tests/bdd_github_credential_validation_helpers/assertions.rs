@@ -4,15 +4,19 @@ use rstest_bdd_macros::then;
 
 use super::state::{GitHubCredentialValidationState, StepResult, ValidationOutcome};
 
+/// Extract the validation outcome from state, returning an error if not set.
+fn get_outcome(state: &GitHubCredentialValidationState) -> StepResult<ValidationOutcome> {
+    state
+        .outcome
+        .get()
+        .ok_or_else(|| String::from("outcome should be set"))
+}
+
 #[then("validation succeeds")]
 fn validation_succeeds(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
-    let outcome = github_credential_validation_state
-        .outcome
-        .get()
-        .ok_or_else(|| String::from("outcome should be set"))?;
-    match outcome {
+    match get_outcome(github_credential_validation_state)? {
         ValidationOutcome::Success => Ok(()),
         ValidationOutcome::Failed { message } => {
             Err(format!("expected validation to succeed, got: {message}"))
@@ -24,11 +28,7 @@ fn validation_succeeds(
 fn validation_fails(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
-    let outcome = github_credential_validation_state
-        .outcome
-        .get()
-        .ok_or_else(|| String::from("outcome should be set"))?;
-    match outcome {
+    match get_outcome(github_credential_validation_state)? {
         ValidationOutcome::Success => Err(String::from("expected validation to fail")),
         ValidationOutcome::Failed { .. } => Ok(()),
     }
@@ -38,11 +38,7 @@ fn validation_fails(
 fn error_mentions_invalid_credentials(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
-    let outcome = github_credential_validation_state
-        .outcome
-        .get()
-        .ok_or_else(|| String::from("outcome should be set"))?;
-    match outcome {
+    match get_outcome(github_credential_validation_state)? {
         ValidationOutcome::Success => Err(String::from("expected validation to fail")),
         ValidationOutcome::Failed { message } => {
             if message.contains("invalid credentials") {
@@ -60,11 +56,7 @@ fn error_mentions_invalid_credentials(
 fn error_mentions_failed_to_validate(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
-    let outcome = github_credential_validation_state
-        .outcome
-        .get()
-        .ok_or_else(|| String::from("outcome should be set"))?;
-    match outcome {
+    match get_outcome(github_credential_validation_state)? {
         ValidationOutcome::Success => Err(String::from("expected validation to fail")),
         ValidationOutcome::Failed { message } => {
             if message.contains("failed to validate") {
