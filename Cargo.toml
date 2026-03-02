@@ -47,7 +47,7 @@ rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["compile-time-validation"] }
 serde_json = "1.0.149"
 serial_test = "3.2.0"
-tempfile = "3.24.0"
+tempfile = "3.25.0"
 toml = "0.8.23"
 
 [lints.clippy]
