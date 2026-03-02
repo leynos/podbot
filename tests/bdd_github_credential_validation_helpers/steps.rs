@@ -8,7 +8,7 @@ use cap_std::fs_utf8::Dir;
 use rstest_bdd_macros::{given, when};
 
 use podbot::error::GitHubError;
-use podbot::github::GitHubAppClient;
+use podbot::github::{BoxFuture, GitHubAppClient, load_private_key, validate_with_client};
 
 use super::state::{
     GitHubCredentialValidationState, MockApiResponse, StepResult, ValidationOutcome,
@@ -20,9 +20,7 @@ mockall::mock! {
     pub GitHubAppClient {}
 
     impl GitHubAppClient for GitHubAppClient {
-        fn validate_credentials(
-            &self,
-        ) -> impl std::future::Future<Output = Result<(), GitHubError>> + Send;
+        fn validate_credentials(&self) -> BoxFuture<'_, Result<(), GitHubError>>;
     }
 }
 
@@ -111,15 +109,30 @@ fn set_app_id(
 }
 
 #[when("credentials are validated")]
-fn validate_credentials(
+fn validate_credentials_step(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
+    let key_path = github_credential_validation_state
+        .key_path
+        .get()
+        .ok_or_else(|| String::from("key_path should be set"))?;
     let mock_response = github_credential_validation_state
         .mock_response
         .get()
         .ok_or_else(|| String::from("mock_response should be set"))?;
 
-    // Create a mock client based on the expected response type
+    // First, verify the key can be loaded (exercises the real key loading code)
+    let key_result = load_private_key(&key_path);
+    if let Err(error) = key_result {
+        github_credential_validation_state
+            .outcome
+            .set(ValidationOutcome::Failed {
+                message: error.to_string(),
+            });
+        return Ok(());
+    }
+
+    // Create a mock client based on the expected API response
     let mut mock_client = MockGitHubAppClient::new();
 
     match mock_response {
@@ -161,11 +174,11 @@ fn validate_credentials(
         }
     }
 
-    // Run the validation using the mock client
+    // Run the validation using validate_with_client (the real orchestration helper)
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("failed to create tokio runtime: {e}"))?;
 
-    let result = rt.block_on(async { mock_client.validate_credentials().await });
+    let result = rt.block_on(async { validate_with_client(&mock_client).await });
 
     match result {
         Ok(()) => github_credential_validation_state

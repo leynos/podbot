@@ -19,12 +19,12 @@ repository cloning.
 
 Observable outcome: running `make test` passes and the following new tests
 exist: unit tests in `src/github/tests.rs` covering token generation and API
-call mocking, and BDD scenarios in
+call mocking, and behaviour-driven development (BDD) scenarios in
 `tests/features/github_credential_validation.feature` verifying happy and
-unhappy paths (valid credentials succeed, invalid App ID fails, invalid private
-key fails, expired token fails). The validation function is not yet wired into
-the orchestration flow; that integration will be part of the `run` subcommand
-implementation in Phase 4.
+unhappy paths (valid credentials succeed, API rejection fails, server error
+fails). The validation function is not yet wired into the orchestration flow;
+that integration will be part of the `run` subcommand implementation in
+Phase 4.
 
 User-visible behaviour: when GitHub credentials are configured, podbot will
 validate them during startup. If validation fails, the user sees an error like
@@ -125,7 +125,7 @@ incorrect or the private key may not match` with suggestions for resolution.
 ## Decision log
 
 - **Mock strategy for BDD tests**: Rather than restructuring the crate to export
-  the automock-generated type, we defined a local `mockall::mock!` in the BDD
+  the automock-generated type, a local `mockall::mock!` was defined in the BDD
   helpers. This keeps the production code clean and follows the existing pattern
   used by other BDD tests in the codebase.
 
@@ -189,8 +189,8 @@ Implementation uses a two-agent team:
 ### Stage A: Design trait abstraction for testability
 
 The core challenge is testing async network calls without hitting the real
-GitHub API. We introduce a trait that wraps the Octocrab client operations we
-need, allowing mock implementations in tests.
+GitHub API. A trait is introduced to wrap the Octocrab client operations
+needed, allowing mock implementations in tests.
 
 Add a trait definition to `src/github/mod.rs` after the existing functions:
 
@@ -316,8 +316,8 @@ Validation: `make check-fmt && make lint` pass.
 
 ### Stage C: Unit tests
 
-Add unit tests to `src/github/tests.rs`. Since we cannot easily mock the
-Octocrab HTTP layer in unit tests without significant refactoring, the unit
+Add unit tests to `src/github/tests.rs`. The Octocrab HTTP layer cannot
+easily be mocked in unit tests without significant refactoring, so the unit
 tests focus on:
 
 1. Testing the trait implementation exists and compiles.

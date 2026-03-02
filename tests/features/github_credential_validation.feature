@@ -1,8 +1,8 @@
 Feature: GitHub App credential validation
 
-  Podbot validates GitHub App credentials on startup by calling the
-  GitHub API to verify the configured App ID and private key produce
-  a valid JWT that GitHub accepts.
+  Podbot validates GitHub App credentials on startup by loading the
+  private key, building an authenticated client, and calling the
+  GitHub API to verify the credentials produce a valid JWT.
 
   Scenario: Valid credentials pass validation
     Given a mock GitHub API that accepts App credentials
@@ -11,7 +11,7 @@ Feature: GitHub App credential validation
     When credentials are validated
     Then validation succeeds
 
-  Scenario: Invalid App ID fails validation
+  Scenario: GitHub API rejects credentials
     Given a mock GitHub API that rejects invalid App credentials
     And a valid RSA private key file exists at the configured path
     And the GitHub App ID is 99999

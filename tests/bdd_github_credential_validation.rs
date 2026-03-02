@@ -22,9 +22,9 @@ fn valid_credentials_pass_validation(
 
 #[scenario(
     path = "tests/features/github_credential_validation.feature",
-    name = "Invalid App ID fails validation"
+    name = "GitHub API rejects credentials"
 )]
-fn invalid_app_id_fails_validation(
+fn github_api_rejects_credentials(
     github_credential_validation_state: GitHubCredentialValidationState,
 ) {
     let _ = github_credential_validation_state;
