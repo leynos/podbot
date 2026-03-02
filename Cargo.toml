@@ -48,7 +48,7 @@ rstest-bdd-macros = { version = "0.5.0", features = ["compile-time-validation"] 
 serde_json = "1.0.149"
 serial_test = "3.2.0"
 tempfile = "3.25.0"
-toml = "0.8.23"
+toml = "0.9.11"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
