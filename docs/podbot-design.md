@@ -361,6 +361,24 @@ example, TLS backend failure), or other builder errors. The App ID is not
 validated at construction time; GitHub validates it when the client attempts to
 acquire a token.
 
+### Credential validation contract
+
+The `validate_app_credentials(app_id, private_key_path)` function performs a
+network call to GitHub's `GET /app` endpoint to verify that the configured App
+ID and private key produce a valid JWT that GitHub accepts. This validation
+happens once at startup for commands requiring GitHub access.
+
+The function orchestrates three steps internally: loading the private key,
+building the App client, and calling `validate_credentials()` on a
+`GitHubAppClient` trait implementation. The trait abstraction enables unit
+testing via mock clients without network calls.
+
+On success the function returns `Ok(())`. On failure it returns
+`GitHubError::PrivateKeyLoadFailed` if the key cannot be loaded, or
+`GitHubError::AuthenticationFailed` if the client cannot be built or GitHub
+rejects the credentials. Error messages include context such as "failed to
+validate GitHub App credentials: 401 Unauthorized".
+
 ### OrthoConfig
 
 OrthoConfig provides layered configuration with predictable precedence: CLI

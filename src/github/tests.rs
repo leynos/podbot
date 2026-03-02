@@ -294,17 +294,102 @@ fn build_app_client_without_runtime_returns_error(
 }
 
 #[rstest]
-fn authentication_failed_error_includes_context() {
+#[case::builder_context(
+    "failed to build GitHub App client: test error",
+    "failed to build GitHub App client"
+)]
+#[case::validation_context(
+    "failed to validate GitHub App credentials: test error",
+    "failed to validate GitHub App credentials"
+)]
+fn authentication_failed_error_includes_context(
+    #[case] message: &str,
+    #[case] expected_context: &str,
+) {
     let error = GitHubError::AuthenticationFailed {
-        message: String::from("failed to build GitHub App client: test error"),
+        message: String::from(message),
     };
     let display = error.to_string();
     assert!(
-        display.contains("failed to build GitHub App client"),
-        "error should include builder context: {display}"
+        display.contains(expected_context),
+        "error should include context: {display}"
     );
     assert!(
         display.contains("test error"),
         "error should include cause: {display}"
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn validate_app_credentials_with_missing_key_returns_error() {
+    let key_path = Utf8Path::new("/nonexistent/directory/key.pem");
+    let result = validate_app_credentials(12345, key_path).await;
+    assert!(result.is_err(), "expected Err for missing key file");
+    match result {
+        Err(GitHubError::PrivateKeyLoadFailed { ref path, .. }) => {
+            assert!(
+                path.to_string_lossy().contains("nonexistent"),
+                "error path should reference the missing file"
+            );
+        }
+        other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
+    }
+}
+
+#[rstest]
+#[tokio::test]
+async fn validate_app_credentials_with_invalid_pem_returns_error(
+    ec_pem: String,
+    temp_key_dir: (TempDir, Utf8Dir),
+) {
+    let (tmp, dir) = temp_key_dir;
+    dir.write("ec.pem", &ec_pem).expect("should write EC key");
+    let full_path = tmp.path().join("ec.pem");
+    let utf8_path = Utf8Path::from_path(&full_path).expect("temp path should be UTF-8");
+
+    let result = validate_app_credentials(12345, utf8_path).await;
+    assert!(result.is_err(), "expected Err for ECDSA key");
+    match result {
+        Err(GitHubError::PrivateKeyLoadFailed { message, .. }) => {
+            assert!(
+                message.contains("ECDSA"),
+                "error should mention ECDSA: {message}"
+            );
+        }
+        other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
+    }
+}
+
+#[rstest]
+#[tokio::test]
+async fn validate_with_client_propagates_mock_success() {
+    let mut mock = MockGitHubAppClient::new();
+    mock.expect_validate_credentials()
+        .times(1)
+        .returning(|| Box::pin(async { Ok(()) }));
+
+    let result = validate_with_client(&mock).await;
+    assert!(result.is_ok(), "expected Ok from mock client");
+}
+
+#[rstest]
+#[tokio::test]
+async fn validate_with_client_propagates_mock_error() {
+    let mut mock = MockGitHubAppClient::new();
+    mock.expect_validate_credentials().times(1).returning(|| {
+        Box::pin(async {
+            Err(GitHubError::AuthenticationFailed {
+                message: String::from("mock authentication failure"),
+            })
+        })
+    });
+
+    let result = validate_with_client(&mock).await;
+    assert!(result.is_err(), "expected Err from mock client");
+    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(
+        message.contains("mock authentication failure"),
+        "error should propagate mock message: {message}"
     );
 }
