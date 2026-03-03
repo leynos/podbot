@@ -62,7 +62,7 @@ incorrect or the private key may not match` with suggestions for resolution.
   in `Cargo.toml`), stop and escalate. The existing `octocrab`, `tokio`, and
   `mockall` dependencies should suffice.
 - Iterations: if `make lint` or `make test` still fails after three fix passes,
-  stop and record blocker evidence.
+  stop, and record blocker evidence.
 - Mocking: if mocking Octocrab's API calls proves infeasible with the current
   architecture, stop and assess whether a trait abstraction is needed. This
   would represent a larger architectural change.
