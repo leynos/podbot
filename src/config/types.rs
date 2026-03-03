@@ -1,7 +1,6 @@
 //! Configuration data types for podbot.
 
 use camino::Utf8PathBuf;
-use clap::ValueEnum;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
@@ -12,9 +11,8 @@ use smart_default::SmartDefault;
 /// is preserved or explicitly disabled. Disabling labels is required for
 /// rootless nested `Podman` workflows that fail under strict `SELinux`
 /// labelling.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[value(rename_all = "snake_case")]
 pub enum SelinuxLabelMode {
     /// Keep engine defaults for `SELinux` labels.
     KeepDefault,
@@ -25,7 +23,7 @@ pub enum SelinuxLabelMode {
 }
 
 /// The kind of AI agent to run.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentKind {
     /// Claude Code agent.
@@ -36,7 +34,7 @@ pub enum AgentKind {
 }
 
 /// The execution mode for the agent.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentMode {
     /// Run the agent in podbot-managed mode.

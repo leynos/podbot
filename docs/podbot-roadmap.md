@@ -440,12 +440,12 @@ Ensure embedders can configure Podbot without constructing CLI parse types.
 
 **Tasks:**
 
-- [ ] Add a library-facing configuration loader that accepts explicit load
+- [x] Add a library-facing configuration loader that accepts explicit load
   options and overrides.
-- [ ] Keep Clap-dependent structures in a CLI adapter layer.
-- [ ] Provide conversion helpers from parsed CLI flags into library load
+- [x] Keep Clap-dependent structures in a CLI adapter layer.
+- [x] Provide conversion helpers from parsed CLI flags into library load
   options.
-- [ ] Add tests for library configuration loading independent of CLI parsing.
+- [x] Add tests for library configuration loading independent of CLI parsing.
 
 **Completion criteria:** Library consumers can resolve `AppConfig` without
 using `clap::Parser` or `Cli` structs.

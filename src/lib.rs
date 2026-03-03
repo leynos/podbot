@@ -15,12 +15,14 @@
 //! # Modules
 //!
 //! - [`api`]: Orchestration API for run, exec, stop, ps, and token daemon commands
+//! - [`cli`]: Clap parse types for the `podbot` binary (CLI adapter layer)
 //! - [`config`]: Configuration system with layered precedence (CLI > env > file > defaults)
 //! - [`engine`]: Container engine connection and management
 //! - [`error`]: Semantic error types for the application
 //! - [`github`]: GitHub App authentication (internal, subject to change)
 
 pub mod api;
+pub mod cli;
 pub mod config;
 pub mod engine;
 pub mod error;
