@@ -74,77 +74,49 @@ fn load_config_loads_from_config_file() {
 }
 
 #[rstest]
-fn load_config_uses_podbot_config_path_when_discovery_enabled() {
-    let toml_content = r#"
-        engine_socket = "unix:///from/podbot_config_path.sock"
-    "#;
+#[case(
+    "unix:///from/podbot_config_path.sock",
+    None,
+    true,
+    Some("unix:///from/podbot_config_path.sock")
+)]
+#[case(
+    "unix:///from/podbot_config_path_no_discovery.sock",
+    None,
+    false,
+    Some("unix:///from/podbot_config_path_no_discovery.sock")
+)]
+#[case(
+    "unix:///should_not_be_used.sock",
+    Some("/nonexistent/config.toml"),
+    false,
+    None
+)]
+fn load_config_podbot_config_path_behaviour(
+    #[case] socket_in_env_config: &str,
+    #[case] hint: Option<&str>,
+    #[case] discover_config: bool,
+    #[case] expected_socket: Option<&str>,
+) {
+    let toml_content = format!(r#"engine_socket = "{socket_in_env_config}""#);
     let config_file =
-        temp_config_file(toml_content).expect("temp config file creation should succeed");
+        temp_config_file(&toml_content).expect("temp config file creation should succeed");
     let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
         .expect("path should be valid UTF-8");
     let env_values = [("PODBOT_CONFIG_PATH", config_path.as_str())];
     let env = env_with(&env_values);
 
     let options = ConfigLoadOptions {
-        config_path_hint: None,
-        discover_config: true,
+        config_path_hint: hint.map(Utf8PathBuf::from),
+        discover_config,
         ..ConfigLoadOptions::default()
     };
     let config = load_config_with_env(&env, &options).expect("load_config should succeed");
 
     assert_eq!(
         config.engine_socket.as_deref(),
-        Some("unix:///from/podbot_config_path.sock")
-    );
-}
-
-#[rstest]
-fn load_config_uses_podbot_config_path_when_discovery_disabled() {
-    let toml_content = r#"
-        engine_socket = "unix:///from/podbot_config_path_no_discovery.sock"
-    "#;
-    let config_file =
-        temp_config_file(toml_content).expect("temp config file creation should succeed");
-    let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
-        .expect("path should be valid UTF-8");
-    let env_values = [("PODBOT_CONFIG_PATH", config_path.as_str())];
-    let env = env_with(&env_values);
-
-    let options = ConfigLoadOptions {
-        config_path_hint: None,
-        discover_config: false,
-        ..ConfigLoadOptions::default()
-    };
-    let config = load_config_with_env(&env, &options).expect("load_config should succeed");
-
-    assert_eq!(
-        config.engine_socket.as_deref(),
-        Some("unix:///from/podbot_config_path_no_discovery.sock")
-    );
-}
-
-#[rstest]
-fn load_config_ignores_podbot_config_path_when_hint_is_provided() {
-    let toml_content = r#"
-        engine_socket = "unix:///should_not_be_used.sock"
-    "#;
-    let config_file =
-        temp_config_file(toml_content).expect("temp config file creation should succeed");
-    let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
-        .expect("path should be valid UTF-8");
-    let env_values = [("PODBOT_CONFIG_PATH", config_path.as_str())];
-    let env = env_with(&env_values);
-
-    let options = ConfigLoadOptions {
-        config_path_hint: Some(Utf8PathBuf::from("/nonexistent/config.toml")),
-        discover_config: false,
-        ..ConfigLoadOptions::default()
-    };
-    let config = load_config_with_env(&env, &options).expect("load_config should succeed");
-
-    assert!(
-        config.engine_socket.is_none(),
-        "engine_socket should fall back to defaults when hint is missing"
+        expected_socket,
+        "unexpected engine_socket for hint={hint:?}, discover_config={discover_config}"
     );
 }
 
