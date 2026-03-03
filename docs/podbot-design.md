@@ -465,6 +465,18 @@ The implemented library configuration API is:
 The CLI adapter uses `podbot::cli::Cli::config_load_options()` to convert
 parsed flags into the library `ConfigLoadOptions`.
 
+Configuration file resolution uses the following order (first match wins):
+
+1. `ConfigLoadOptions.config_path_hint` (for example `--config`), if it exists.
+2. `PODBOT_CONFIG_PATH`, unless a config-path hint was supplied.
+3. Standard discovery candidates (for example
+   `$XDG_CONFIG_HOME/podbot/config.toml` and `~/.podbot.toml`) when discovery
+   is enabled.
+
+If a config-path hint is supplied but missing, podbot falls back to discovery
+and ignores `PODBOT_CONFIG_PATH` to avoid silently loading an unrelated
+configuration via the process environment.
+
 Library configuration enums (for example `AgentKind`) do not derive Clap
 traits. The CLI layer defines Clap-facing `*Arg` enums and converts them into
 the library model types.

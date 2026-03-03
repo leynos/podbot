@@ -180,19 +180,25 @@ impl Default for CredsConfig {
 /// Root application configuration.
 ///
 /// This structure is loaded from configuration files, environment variables,
-/// and command-line arguments with layered precedence. The precedence order
-/// (lowest to highest) is: defaults, configuration file, environment variables,
-/// command-line arguments.
+/// and host overrides with layered precedence. The precedence order (lowest to
+/// highest) is: defaults, configuration file, environment variables, host
+/// overrides (for example CLI flags).
 ///
 /// Configuration files are discovered in this order (see `loader.rs`):
-/// 1. Path specified via `--config` CLI argument (if it exists)
-/// 2. Path specified via `PODBOT_CONFIG_PATH` environment variable
+/// 1. Host-provided config-path hint (for example `--config`), if it exists
+/// 2. Path specified via `PODBOT_CONFIG_PATH` environment variable, if present
 /// 3. `~/.config/podbot/config.toml` (XDG default)
 /// 4. `~/.podbot.toml` (dotfile in home directory)
 ///
+/// When a host provides a config-path hint, `PODBOT_CONFIG_PATH` is ignored
+/// even if the hint is missing. This avoids surprising behaviour where a
+/// missing explicit path would silently pick up a different configuration via
+/// the process environment.
+///
 /// Note: Discovery is implemented in `loader.rs` using `ConfigDiscovery` rather
 /// than via `OrthoConfig`'s `discovery(...)` attribute, because we need to
-/// integrate with the existing clap-based `Cli` struct for subcommand dispatch.
+/// expose a Clap-free library API that still supports CLI-provided config
+/// paths and fail-fast environment validation.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "PODBOT", post_merge_hook)]
 pub struct AppConfig {
