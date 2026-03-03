@@ -211,9 +211,7 @@ pub trait GitHubAppClient: Send + Sync {
     /// # Errors
     ///
     /// Returns an error if the API call fails or returns an error response.
-    fn validate_credentials(
-        &self,
-    ) -> impl std::future::Future<Output = Result<(), GitHubError>> + Send;
+    fn validate_credentials(&self) -> BoxFuture<'_, Result<(), GitHubError>>;
 }
 ```
 
@@ -491,9 +489,7 @@ New public interfaces added to `podbot::github`:
 ```rust
 /// Trait for GitHub App client operations.
 pub trait GitHubAppClient: Send + Sync {
-    fn validate_credentials(
-        &self,
-    ) -> impl std::future::Future<Output = Result<(), GitHubError>> + Send;
+    fn validate_credentials(&self) -> BoxFuture<'_, Result<(), GitHubError>>;
 }
 
 /// Production implementation using Octocrab.
