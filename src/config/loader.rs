@@ -42,7 +42,7 @@ use ortho_config::discovery::ConfigDiscovery;
 use ortho_config::serde_json::{self, Map, Value};
 use ortho_config::{MergeComposer, toml};
 
-use crate::config::{AppConfig, Cli};
+use crate::config::{AppConfig, ConfigLoadOptions, ConfigOverrides};
 use crate::error::{ConfigError, Result};
 
 // ============================================================================
@@ -197,7 +197,7 @@ fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<
 /// 1. Application defaults defined in the struct
 /// 2. Configuration file (discovered via XDG paths or `PODBOT_CONFIG_PATH`)
 /// 3. Environment variables prefixed with `PODBOT_`
-/// 4. Command-line arguments (from the provided `Cli`)
+/// 4. Host-supplied overrides (for example CLI flags)
 ///
 /// Later sources override earlier ones.
 ///
@@ -208,7 +208,27 @@ fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<
 /// - Invalid typed environment variable values (e.g., non-boolean for
 ///   `PODBOT_SANDBOX_PRIVILEGED`)
 /// - Missing required fields after merge
-pub fn load_config(cli: &Cli) -> Result<AppConfig> {
+pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig> {
+    let env = mockable::DefaultEnv::new();
+    load_config_with_env(&env, options)
+}
+
+/// Load configuration with full layer precedence using an injected environment.
+///
+/// This function enables deterministic unit and behavioural testing without
+/// mutating the process environment.
+///
+/// # Errors
+///
+/// Returns `ConfigError` if configuration loading fails due to:
+/// - Malformed configuration files
+/// - Invalid typed environment variable values (e.g., non-boolean for
+///   `PODBOT_SANDBOX_PRIVILEGED`)
+/// - `OrthoConfig` merge failures after layer composition
+pub fn load_config_with_env<E: mockable::Env>(
+    env: &E,
+    options: &ConfigLoadOptions,
+) -> Result<AppConfig> {
     let mut composer = MergeComposer::new();
 
     // Layer 1: Defaults (serialised from AppConfig::default()).
@@ -219,12 +239,24 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
     composer.push_defaults(defaults);
 
     // Layer 2: Configuration file.
-    // Use the CLI-provided path (if it exists), or discover via XDG paths.
-    let config_path: Option<Utf8PathBuf> =
-        cli.config.clone().filter(|p| p.exists()).or_else(|| {
-            // Discover config files using ortho_config's ConfigDiscovery builder.
+    // Use the host-provided path hint (if it exists), then PODBOT_CONFIG_PATH,
+    // then discover via XDG paths.
+    let config_path: Option<Utf8PathBuf> = options
+        .config_path_hint
+        .clone()
+        .filter(|p| p.exists())
+        .or_else(|| {
+            env.string("PODBOT_CONFIG_PATH").and_then(|raw| {
+                let path = Utf8PathBuf::from(raw);
+                path.exists().then_some(path)
+            })
+        })
+        .or_else(|| {
+            if !options.discover_config {
+                return None;
+            }
+
             let discovery = ConfigDiscovery::builder("podbot")
-                .env_var("PODBOT_CONFIG_PATH")
                 .config_file_name("config.toml")
                 .dotfile_name(".podbot.toml")
                 .build();
@@ -240,15 +272,15 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
     }
 
     // Layer 3: Environment variables.
-    let env_values = collect_env_vars()?;
+    let env_values = collect_env_vars(env)?;
     if !env_values.is_null() {
         composer.push_environment(env_values);
     }
 
-    // Layer 4: CLI overrides.
-    let cli_overrides = build_cli_overrides(cli);
-    if !cli_overrides.is_null() {
-        composer.push_cli(cli_overrides);
+    // Layer 4: host overrides.
+    let overrides = build_overrides(&options.overrides);
+    if !overrides.is_null() {
+        composer.push_cli(overrides);
     }
 
     // Merge all layers into the final configuration.
@@ -269,11 +301,11 @@ pub fn load_config(cli: &Cli) -> Result<AppConfig> {
 /// Returns `ConfigError::InvalidValue` if a typed environment variable (bool, u64)
 /// has an unparseable value. This fail-fast approach ensures misconfigurations are
 /// visible to users.
-fn collect_env_vars() -> Result<Value> {
+fn collect_env_vars<E: mockable::Env>(env: &E) -> Result<Value> {
     let mut root = Map::new();
 
     for spec in ENV_VAR_SPECS {
-        let Ok(raw_value) = std::env::var(spec.env_var) else {
+        let Some(raw_value) = env.string(spec.env_var) else {
             continue;
         };
 
@@ -341,24 +373,24 @@ fn insert_at_path(root: &mut Map<String, Value>, path: &[&str], value: Value) {
     current.insert(field.to_owned(), value);
 }
 
-/// Build a JSON value containing CLI overrides.
-fn build_cli_overrides(cli: &Cli) -> serde_json::Value {
-    let mut overrides = serde_json::Map::new();
+/// Build a JSON value containing host overrides.
+fn build_overrides(overrides: &ConfigOverrides) -> serde_json::Value {
+    let mut json_overrides = serde_json::Map::new();
 
-    if let Some(ref socket) = cli.engine_socket {
-        overrides.insert(
+    if let Some(ref socket) = overrides.engine_socket {
+        json_overrides.insert(
             "engine_socket".to_owned(),
             serde_json::Value::String(socket.clone()),
         );
     }
 
-    if let Some(ref image) = cli.image {
-        overrides.insert("image".to_owned(), serde_json::Value::String(image.clone()));
+    if let Some(ref image) = overrides.image {
+        json_overrides.insert("image".to_owned(), serde_json::Value::String(image.clone()));
     }
 
-    if overrides.is_empty() {
+    if json_overrides.is_empty() {
         serde_json::Value::Null
     } else {
-        serde_json::Value::Object(overrides)
+        serde_json::Value::Object(json_overrides)
     }
 }

@@ -15,9 +15,8 @@ use std::io::IsTerminal;
 use clap::Parser;
 use eyre::{Report, Result as EyreResult};
 use podbot::api::{CommandOutcome, ExecParams};
-use podbot::config::{
-    AppConfig, Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs, load_config,
-};
+use podbot::cli::{Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs};
+use podbot::config::{AppConfig, load_config};
 use podbot::engine::{EngineConnector, ExecMode, SocketResolver};
 use podbot::error::{ContainerError, Result as PodbotResult};
 
@@ -34,7 +33,8 @@ fn main() -> EyreResult<()> {
 
     // Load configuration with layered precedence: defaults < file < env < CLI.
     // The CLI is passed to extract --config, --engine-socket, and --image.
-    let config = load_config(&cli).map_err(Report::from)?;
+    let options = cli.config_load_options();
+    let config = load_config(&options).map_err(Report::from)?;
     let runtime = create_runtime().map_err(Report::from)?;
 
     match run(&cli, &config, runtime.handle()) {

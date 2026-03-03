@@ -113,10 +113,14 @@ escalation, not workarounds.
   `missing_const_for_fn` with `FIXME(#51)` annotation.
 
 - Discovery: BDD step functions that don't use `?` trigger
-  `unnecessary_wraps`. The existing test suites solve this with
-  `#[expect(clippy::unnecessary_wraps,
-  reason = "rstest-bdd step functions must return StepResult
-  for consistency")]`.
+  `unnecessary_wraps`. The existing test suites solve this with:
+
+  ```rust
+  #[expect(
+      clippy::unnecessary_wraps,
+      reason = "rstest-bdd step functions must return StepResult for consistency"
+  )]
+  ```
 
 ## Decision log
 

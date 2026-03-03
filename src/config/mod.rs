@@ -1,9 +1,10 @@
 //! Configuration system for podbot.
 //!
-//! This module provides the configuration structures and CLI definitions for the
-//! podbot application. Configuration loading and precedence merging is handled by
-//! the `ortho_config` crate. Intended precedence: CLI flags override environment
-//! variables, which override configuration files, which override defaults.
+//! This module provides the configuration structures and library-facing loading
+//! API for the podbot application. Configuration loading and precedence merging
+//! is handled by the `ortho_config` crate. Intended precedence: host overrides
+//! (for example CLI flags) override environment variables, which override
+//! configuration files, which override defaults.
 //!
 //! The configuration file is expected at `~/.config/podbot/config.toml` by default.
 //!
@@ -31,15 +32,15 @@
 //! mode = "podbot"
 //! ```
 
-mod cli;
+mod load_options;
 mod loader;
 mod types;
 
 #[cfg(test)]
 mod tests;
 
-pub use cli::{Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs};
-pub use loader::{env_var_names, load_config};
+pub use load_options::{ConfigLoadOptions, ConfigOverrides};
+pub use loader::{env_var_names, load_config, load_config_with_env};
 pub use types::{
     AgentConfig, AgentKind, AgentMode, AppConfig, CredsConfig, GitHubConfig, SandboxConfig,
     SelinuxLabelMode, WorkspaceConfig,
