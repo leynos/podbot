@@ -70,10 +70,10 @@ fn configure_mock_client(mock_response: MockApiResponse) -> MockGitHubAppClient 
                 .returning(|| {
                     Box::pin(async {
                         Err(GitHubError::AuthenticationFailed {
-                            message: String::from(
-                                "failed to validate GitHub App credentials: \
-                                 401 Unauthorized - invalid credentials",
-                            ),
+                            message: String::from(concat!(
+                                "failed to validate GitHub App credentials: ",
+                                "401 Unauthorized - invalid credentials",
+                            )),
                         })
                     })
                 });
@@ -85,10 +85,10 @@ fn configure_mock_client(mock_response: MockApiResponse) -> MockGitHubAppClient 
                 .returning(|| {
                     Box::pin(async {
                         Err(GitHubError::AuthenticationFailed {
-                            message: String::from(
-                                "failed to validate GitHub App credentials: \
-                                 500 Internal Server Error",
-                            ),
+                            message: String::from(concat!(
+                                "failed to validate GitHub App credentials: ",
+                                "500 Internal Server Error",
+                            )),
                         })
                     })
                 });
