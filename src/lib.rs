@@ -15,7 +15,7 @@
 //! # Modules
 //!
 //! - [`api`]: Orchestration API for run, exec, stop, ps, and token daemon commands
-//! - [`cli`]: Clap parse types for the `podbot` binary (CLI adapter layer)
+//! - [`cli`]: `Clap` parse types for the `podbot` binary (CLI adapter layer)
 //! - [`config`]: Configuration system with layered precedence (defaults < file < env < host overrides)
 //! - [`engine`]: Container engine connection and management
 //! - [`error`]: Semantic error types for the application

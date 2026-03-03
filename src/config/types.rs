@@ -197,7 +197,7 @@ impl Default for CredsConfig {
 ///
 /// Note: Discovery is implemented in `loader.rs` using `ConfigDiscovery` rather
 /// than via `OrthoConfig`'s `discovery(...)` attribute, because we need to
-/// expose a Clap-free library API that still supports CLI-provided config
+/// expose a `Clap`-free library API that still supports CLI-provided config
 /// paths and fail-fast environment validation.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "PODBOT", post_merge_hook)]

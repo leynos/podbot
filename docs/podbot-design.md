@@ -441,8 +441,8 @@ The implemented library configuration API is:
   configuration loading.
 - `podbot::config::load_config(&ConfigLoadOptions)`: loads configuration using
   the real process environment.
-- `podbot::config::load_config_with_env(&impl mockable::Env, &ConfigLoadOptions)`:
-  a deterministic test seam that avoids mutating the process environment.
+- Deterministic test seam that avoids mutating the process environment via:
+`podbot::config::load_config_with_env(&impl mockable::Env, &ConfigLoadOptions)`
 
 The CLI adapter uses `podbot::cli::Cli::config_load_options()` to convert
 parsed flags into the library `ConfigLoadOptions`.
