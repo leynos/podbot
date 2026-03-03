@@ -35,6 +35,11 @@ pub struct ConfigLoadOptions {
     ///
     /// If the path is present but does not exist, the loader ignores it and can
     /// fall back to discovery, matching the existing `podbot` CLI behaviour.
+    ///
+    /// Note: when `config_path_hint` is `Some`, `PODBOT_CONFIG_PATH` is ignored
+    /// (even if the hinted path is missing). This avoids surprising behaviour
+    /// where a missing explicit path would silently load an unrelated
+    /// configuration via the process environment.
     pub config_path_hint: Option<Utf8PathBuf>,
 
     /// Whether to search standard discovery locations when no explicit config

@@ -3,8 +3,11 @@
 //! These tests verify that layered configuration resolves `AppConfig.image`
 //! correctly and that `CreateContainerRequest` consumes that resolved value.
 
+mod test_support;
+
 use std::io::Write;
 
+use crate::test_support::env_with;
 use camino::Utf8PathBuf;
 use mockable::MockEnv;
 use podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config_with_env};
@@ -12,19 +15,6 @@ use podbot::engine::CreateContainerRequest;
 use podbot::error::{ConfigError, PodbotError};
 use rstest::rstest;
 use tempfile::NamedTempFile;
-
-/// Helper: Creates a `MockEnv` that returns the provided values.
-fn env_with(values: &[(&str, &str)]) -> MockEnv {
-    let map: std::collections::HashMap<String, String> = values
-        .iter()
-        .map(|(key, value)| (String::from(*key), String::from(*value)))
-        .collect();
-
-    let mut env = MockEnv::new();
-    env.expect_string()
-        .returning(move |key| map.get(key).cloned());
-    env
-}
 
 fn temp_config_file(content: &str) -> std::io::Result<NamedTempFile> {
     let mut file = NamedTempFile::new()?;

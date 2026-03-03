@@ -2,7 +2,7 @@
 //!
 //! This module provides functions to load configuration with the precedence order
 //! (lowest to highest): application defaults, configuration file, environment
-//! variables, command-line arguments.
+//! variables, host overrides.
 //!
 //! # Architecture Note: Why Manual Layer Composition?
 //!
@@ -18,8 +18,9 @@
 //!    Figment, which silently ignores unparseable values. This loader implements
 //!    fail-fast validation that returns errors for invalid typed values.
 //!
-//! 3. **Custom discovery integration**: The `Cli` struct already accepts `--config`
-//!    via clap, so discovery must honour that path before falling back to XDG paths.
+//! 3. **Custom discovery integration**: Hosts (including the `podbot` CLI) can
+//!    provide an explicit config-path hint, which must be honoured before falling
+//!    back to discovery candidates.
 //!
 //! The trade-off is more code in this module, but better error messages and
 //! integration with the existing CLI structure.
@@ -239,33 +240,40 @@ pub fn load_config_with_env<E: mockable::Env>(
     composer.push_defaults(defaults);
 
     // Layer 2: Configuration file.
-    // Use the host-provided path hint (if it exists), then PODBOT_CONFIG_PATH,
-    // then discover via XDG paths.
-    let config_path: Option<Utf8PathBuf> = options
-        .config_path_hint
-        .clone()
-        .filter(|p| p.exists())
-        .or_else(|| {
-            env.string("PODBOT_CONFIG_PATH").and_then(|raw| {
-                let path = Utf8PathBuf::from(raw);
-                path.exists().then_some(path)
-            })
-        })
-        .or_else(|| {
-            if !options.discover_config {
-                return None;
-            }
+    //
+    // Resolution order:
+    // - If the host provides `config_path_hint`, it is authoritative (even if it
+    //   is missing) and `PODBOT_CONFIG_PATH` is ignored. This avoids surprising
+    //   behaviour where a missing explicit path would silently pick up a
+    //   different configuration via the process environment.
+    // - Otherwise, consult `PODBOT_CONFIG_PATH` and then (optionally) discovery.
+    let discover = || {
+        if !options.discover_config {
+            return None;
+        }
 
-            let discovery = ConfigDiscovery::builder("podbot")
-                .config_file_name("config.toml")
-                .dotfile_name(".podbot.toml")
-                .build();
-            discovery
-                .candidates()
-                .into_iter()
-                .filter(|p| p.exists())
-                .find_map(|p| Utf8PathBuf::try_from(p).ok())
-        });
+        let discovery = ConfigDiscovery::builder("podbot")
+            .config_file_name("config.toml")
+            .dotfile_name(".podbot.toml")
+            .build();
+        discovery
+            .candidates()
+            .into_iter()
+            .filter(|p| p.exists())
+            .find_map(|p| Utf8PathBuf::try_from(p).ok())
+    };
+
+    let config_path = options.config_path_hint.clone().map_or_else(
+        || {
+            env.string("PODBOT_CONFIG_PATH")
+                .and_then(|raw| {
+                    let path = Utf8PathBuf::from(raw);
+                    path.exists().then_some(path)
+                })
+                .or_else(discover)
+        },
+        |hint| hint.exists().then_some(hint).or_else(discover),
+    );
 
     if let Some(ref path) = config_path {
         load_config_file(path, &mut composer)?;
@@ -375,6 +383,10 @@ fn insert_at_path(root: &mut Map<String, Value>, path: &[&str], value: Value) {
 
 /// Build a JSON value containing host overrides.
 fn build_overrides(overrides: &ConfigOverrides) -> serde_json::Value {
+    if overrides.is_empty() {
+        return serde_json::Value::Null;
+    }
+
     let mut json_overrides = serde_json::Map::new();
 
     if let Some(ref socket) = overrides.engine_socket {
@@ -388,9 +400,5 @@ fn build_overrides(overrides: &ConfigOverrides) -> serde_json::Value {
         json_overrides.insert("image".to_owned(), serde_json::Value::String(image.clone()));
     }
 
-    if json_overrides.is_empty() {
-        serde_json::Value::Null
-    } else {
-        serde_json::Value::Object(json_overrides)
-    }
+    serde_json::Value::Object(json_overrides)
 }
