@@ -32,6 +32,7 @@
 //! mode = "podbot"
 //! ```
 
+mod env_vars;
 mod load_options;
 mod loader;
 mod types;
@@ -39,8 +40,9 @@ mod types;
 #[cfg(test)]
 mod tests;
 
+pub use env_vars::env_var_names;
 pub use load_options::{ConfigLoadOptions, ConfigOverrides};
-pub use loader::{env_var_names, load_config, load_config_with_env};
+pub use loader::{load_config, load_config_with_env};
 pub use types::{
     AgentConfig, AgentKind, AgentMode, AppConfig, CredsConfig, GitHubConfig, SandboxConfig,
     SelinuxLabelMode, WorkspaceConfig,
