@@ -53,9 +53,10 @@ fn read_inputs(state: &GitHubCredentialValidationState) -> StepResult<Validation
     })
 }
 
-/// Configure mock client expectations based on the expected API response.
-fn configure_mock(mock_client: &mut MockGitHubAppClient, response: MockApiResponse) {
-    match response {
+/// Create and configure a mock client based on the expected API response.
+fn configure_mock_client(mock_response: MockApiResponse) -> MockGitHubAppClient {
+    let mut mock_client = MockGitHubAppClient::new();
+    match mock_response {
         MockApiResponse::Success => {
             mock_client
                 .expect_validate_credentials()
@@ -93,6 +94,7 @@ fn configure_mock(mock_client: &mut MockGitHubAppClient, response: MockApiRespon
                 });
         }
     }
+    mock_client
 }
 
 /// Build a factory closure that creates a mock client for the given response type.
@@ -109,9 +111,7 @@ fn build_factory(
                 ),
             });
         }
-        let mut mock_client = MockGitHubAppClient::new();
-        configure_mock(&mut mock_client, mock_response);
-        Ok(mock_client)
+        Ok(configure_mock_client(mock_response))
     }
 }
 
