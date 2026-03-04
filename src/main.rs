@@ -73,9 +73,10 @@ fn run_agent_cli(
     runtime_handle: &tokio::runtime::Handle,
 ) -> PodbotResult<CommandOutcome> {
     // Validate GitHub credentials if configured
-    if let (Some(app_id), Some(private_key_path)) =
-        (config.github.app_id, config.github.private_key_path.as_ref())
-    {
+    if let (Some(app_id), Some(private_key_path)) = (
+        config.github.app_id,
+        config.github.private_key_path.as_ref(),
+    ) {
         if app_id != 0 {
             runtime_handle.block_on(validate_app_credentials(app_id, private_key_path))?;
         }

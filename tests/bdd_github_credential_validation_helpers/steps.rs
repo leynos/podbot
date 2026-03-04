@@ -146,6 +146,11 @@ fn open_temp_dir() -> StepResult<(tempfile::TempDir, Dir, Utf8PathBuf)> {
     Ok((tmp, dir, tmp_path))
 }
 
+/// Set the mock API response in the scenario state.
+fn set_mock_response(state: &GitHubCredentialValidationState, response: MockApiResponse) {
+    state.mock_response.set(response);
+}
+
 #[given("a mock GitHub API that accepts App credentials")]
 #[expect(
     clippy::unnecessary_wraps,
@@ -154,9 +159,7 @@ fn open_temp_dir() -> StepResult<(tempfile::TempDir, Dir, Utf8PathBuf)> {
 fn mock_api_accepts(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
-    github_credential_validation_state
-        .mock_response
-        .set(MockApiResponse::Success);
+    set_mock_response(github_credential_validation_state, MockApiResponse::Success);
     Ok(())
 }
 
@@ -168,9 +171,10 @@ fn mock_api_accepts(
 fn mock_api_rejects(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
-    github_credential_validation_state
-        .mock_response
-        .set(MockApiResponse::InvalidCredentials);
+    set_mock_response(
+        github_credential_validation_state,
+        MockApiResponse::InvalidCredentials,
+    );
     Ok(())
 }
 
@@ -182,9 +186,10 @@ fn mock_api_rejects(
 fn mock_api_server_error(
     github_credential_validation_state: &GitHubCredentialValidationState,
 ) -> StepResult<()> {
-    github_credential_validation_state
-        .mock_response
-        .set(MockApiResponse::ServerError);
+    set_mock_response(
+        github_credential_validation_state,
+        MockApiResponse::ServerError,
+    );
     Ok(())
 }
 

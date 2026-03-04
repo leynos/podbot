@@ -237,7 +237,7 @@ impl OctocrabAppClient {
 impl GitHubAppClient for OctocrabAppClient {
     async fn validate_credentials(&self) -> Result<(), GitHubError> {
         self.client
-            .get::<serde_json::Value, _, ()>("/app", None)
+            .get::<(), _, ()>("/app", None)
             .await
             .map_err(|error| GitHubError::AuthenticationFailed {
                 message: format!(
