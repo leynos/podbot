@@ -22,9 +22,9 @@ exist: unit tests in `src/github/tests.rs` covering token generation and API
 call mocking, and behaviour-driven development (BDD) scenarios in
 `tests/features/github_credential_validation.feature` verifying happy and
 unhappy paths (valid credentials succeed, API rejection fails, server error
-fails). The validation function is not yet wired into the orchestration flow;
-that integration will be part of the `run` subcommand implementation in
-Phase 4.
+fails). The `validate_app_credentials` function is executed during the `run`
+subcommand orchestration path in `main.rs`, validating credentials at startup
+when GitHub configuration is present.
 
 User-visible behaviour: when GitHub credentials are configured, podbot will
 validate them during startup. If validation fails, the user sees an error like

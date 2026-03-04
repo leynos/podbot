@@ -323,13 +323,16 @@ fn authentication_failed_error_includes_context(
 #[rstest]
 #[tokio::test]
 async fn validate_app_credentials_with_missing_key_returns_error() {
-    let key_path = Utf8Path::new("/nonexistent/directory/key.pem");
-    let result = validate_app_credentials(12345, key_path).await;
+    let temp_dir = tempfile::tempdir().expect("should create temp dir");
+    let key_path = Utf8Path::from_path(temp_dir.path())
+        .expect("temp dir path should be UTF-8")
+        .join("key.pem");
+    let result = validate_app_credentials(12345, &key_path).await;
     assert!(result.is_err(), "expected Err for missing key file");
     match result {
         Err(GitHubError::PrivateKeyLoadFailed { ref path, .. }) => {
             assert!(
-                path.to_string_lossy().contains("nonexistent"),
+                path.to_string_lossy().contains("key.pem"),
                 "error path should reference the missing file"
             );
         }
