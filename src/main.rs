@@ -20,6 +20,7 @@ use podbot::config::{
 };
 use podbot::engine::{EngineConnector, ExecMode, SocketResolver};
 use podbot::error::{ContainerError, Result as PodbotResult};
+use podbot::github::validate_app_credentials;
 
 /// Application entry point.
 ///
@@ -56,7 +57,7 @@ fn run(
     runtime_handle: &tokio::runtime::Handle,
 ) -> PodbotResult<CommandOutcome> {
     match &cli.command {
-        Commands::Run(args) => run_agent_cli(config, args),
+        Commands::Run(args) => run_agent_cli(config, args, runtime_handle),
         Commands::TokenDaemon(args) => run_token_daemon_cli(args),
         Commands::Ps => list_containers_cli(),
         Commands::Stop(args) => stop_container_cli(args),
@@ -66,7 +67,21 @@ fn run(
 
 /// CLI adapter for running an AI agent in a sandboxed container.
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutcome> {
+fn run_agent_cli(
+    config: &AppConfig,
+    args: &RunArgs,
+    runtime_handle: &tokio::runtime::Handle,
+) -> PodbotResult<CommandOutcome> {
+    // Validate GitHub credentials if configured
+    if let (Some(app_id), Some(private_key_path)) = (
+        config.github.app_id,
+        config.github.private_key_path.as_ref(),
+    ) {
+        if app_id != 0 {
+            runtime_handle.block_on(validate_app_credentials(app_id, private_key_path))?;
+        }
+    }
+
     println!(
         "Running {:?} agent for repository {} on branch {}",
         args.agent, args.repo, args.branch
