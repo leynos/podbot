@@ -322,8 +322,8 @@ fn authentication_failed_error_includes_context(
 
 #[rstest]
 #[tokio::test]
-async fn validate_app_credentials_with_missing_key_returns_error() {
-    let temp_dir = tempfile::tempdir().expect("should create temp dir");
+async fn validate_app_credentials_with_missing_key_returns_error(temp_key_dir: (TempDir, Utf8Dir)) {
+    let (temp_dir, _dir) = temp_key_dir;
     let key_path = Utf8Path::from_path(temp_dir.path())
         .expect("temp dir path should be UTF-8")
         .join("key.pem");
