@@ -453,6 +453,34 @@ split into:
 - A library-facing loader that accepts explicit load options and overrides.
 - A CLI adapter that maps parsed flags to those library load options.
 
+The implemented library configuration API is:
+
+- `podbot::config::{ConfigLoadOptions, ConfigOverrides}`: explicit inputs for
+  configuration loading.
+- `podbot::config::load_config(&ConfigLoadOptions)`: loads configuration using
+  the real process environment.
+- Deterministic test seam that avoids mutating the process environment via:
+`podbot::config::load_config_with_env(&impl mockable::Env, &ConfigLoadOptions)`
+
+The CLI adapter uses `podbot::cli::Cli::config_load_options()` to convert
+parsed flags into the library `ConfigLoadOptions`.
+
+Configuration file resolution uses the following order (first match wins):
+
+1. `ConfigLoadOptions.config_path_hint` (for example `--config`), if it exists.
+2. `PODBOT_CONFIG_PATH`, unless a config-path hint was supplied.
+3. Standard discovery candidates (for example
+   `$XDG_CONFIG_HOME/podbot/config.toml` and `~/.podbot.toml`) when discovery
+   is enabled.
+
+If a config-path hint is supplied but missing, podbot falls back to discovery
+and ignores `PODBOT_CONFIG_PATH` to avoid silently loading an unrelated
+configuration via the process environment.
+
+Library configuration enums (for example `AgentKind`) do not derive Clap
+traits. The CLI layer defines Clap-facing `*Arg` enums and converts them into
+the library model types.
+
 ```toml
 engine_socket = "unix:///run/user/1000/podman/podman.sock"
 image = "ghcr.io/example/podbot-sandbox:latest"
@@ -784,16 +812,20 @@ A suggested organisation for maintainability:
 ```plaintext
 src/
 ├── lib.rs              # Public library entry points and re-exports
+├── cli/                # Clap argument definitions (CLI-only adapter layer)
+│   ├── mod.rs          # Parse structs, value enums, conversion helpers
+│   └── tests.rs        # Unit tests for CLI adapter
 ├── main.rs             # Thin CLI adapter over library APIs
 ├── error.rs            # Error types and conversions
 ├── api/                # Orchestration API: run, host, exec, stop, ps, token daemon
 │   ├── mod.rs          # CommandOutcome type, stub functions, re-exports
 │   ├── exec.rs         # Exec orchestration (extracted from main.rs)
 │   └── tests.rs        # Unit tests for API module
-├── config/             # Configuration module (types + loader + CLI adapter)
+├── config/             # Configuration module (types + loader)
 │   ├── mod.rs          # Module docs and re-exports
-│   ├── cli.rs          # Clap argument definitions (CLI-only adapter layer)
+│   ├── load_options.rs # Library-facing loader options and overrides
 │   ├── types.rs        # AppConfig, GitHubConfig, SandboxConfig, AgentConfig
+│   ├── loader.rs       # Layered loader implementation
 │   └── tests.rs        # Unit tests for configuration types and loading
 ├── engine/             # Bollard wrapper: connect, create, upload, exec
 ├── github.rs           # Octocrab App authentication, token acquisition

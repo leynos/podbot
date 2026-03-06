@@ -3,7 +3,7 @@
 //! These tests validate the command-line interface behaviour using rstest-bdd.
 
 use clap::{CommandFactory, Parser};
-use podbot::config::Cli;
+use podbot::cli::Cli;
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then};
