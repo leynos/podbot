@@ -28,8 +28,8 @@ when GitHub configuration is present.
 
 User-visible behaviour: when GitHub credentials are configured, podbot will
 validate them during startup. If validation fails, the user sees an error like
-`GitHub App authentication failed: invalid credentials - the App ID may be
-incorrect or the private key may not match` with suggestions for resolution.
+`GitHub App authentication failed: invalid credentials - the App ID may be`
+`incorrect or the private key may not match` with suggestions for resolution.
 
 ## Constraints
 
@@ -127,8 +127,8 @@ incorrect or the private key may not match` with suggestions for resolution.
 
 - **Mock strategy for BDD tests**: Rather than restructuring the crate to export
   the automock-generated type, a local `mockall::mock!` was defined in the BDD
-  helpers. This keeps the production code clean and follows the existing pattern
-  used by other BDD tests in the codebase.
+  helpers. This keeps the production code clean and follows the existing
+  pattern used by other BDD tests in the codebase.
 
 ## Context and orientation
 
@@ -315,9 +315,9 @@ Validation: `make check-fmt && make lint` pass.
 
 ### Stage C: Unit tests
 
-Add unit tests to `src/github/tests.rs`. The Octocrab HTTP layer cannot
-easily be mocked in unit tests without significant refactoring, so the unit
-tests focus on:
+Add unit tests to `src/github/tests.rs`. The Octocrab HTTP layer cannot easily
+be mocked in unit tests without significant refactoring, so the unit tests
+focus on:
 
 1. Testing the trait implementation exists and compiles.
 2. Testing error message formatting.
