@@ -27,9 +27,13 @@ subcommand orchestration path in `main.rs`, validating credentials at startup
 when GitHub configuration is present.
 
 User-visible behaviour: when GitHub credentials are configured, podbot will
-validate them during startup. If validation fails, the user sees an error like
-`GitHub App authentication failed: invalid credentials - the App ID may be`
-`incorrect or the private key may not match` with suggestions for resolution.
+validate them during startup. If validation fails, the user sees an error like:
+
+```plaintext
+GitHub App authentication failed: invalid credentials - the App ID may be incorrect or the private key may not match
+```
+
+The output includes suggestions for resolution.
 
 ## Constraints
 
