@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT (2026-03-07 UTC)
+Status: COMPLETE (2026-03-07 UTC)
 
 ## Purpose / big picture
 
@@ -261,11 +261,16 @@ can verify success with these observations:
   covers YAML 1.2 and re-export concepts, but still contains `0.7.0` install
   snippets and raw `figment::` examples that should be reviewed during the
   upgrade.
-- [ ] Update `Cargo.toml` and `Cargo.lock` to `ortho_config 0.8.0`.
-- [ ] Repair any compile-time breakages in config code and tests.
-- [ ] Update repository documentation that still reflects pre-`0.8.0`
-  guidance.
-- [ ] Run the full quality gates and record the outcomes.
+- [x] (2026-03-07 UTC) Updated `Cargo.toml` and `Cargo.lock` so
+  `ortho_config` and `ortho_config_macros` both resolve to `0.8.0`.
+- [x] (2026-03-07 UTC) Ran `cargo check --all-targets --all-features` against
+  `ortho_config 0.8.0`; the repository compiled without any Rust source changes.
+- [x] (2026-03-07 UTC) Updated `docs/ortho-config-users-guide.md` to use
+  `0.8.0` dependency snippets, `ortho_config::figment` re-export examples, and
+  `0.8.0` migration guidance.
+- [x] (2026-03-07 UTC) Ran the full applicable quality gates:
+  `make fmt`, `make check-fmt`, `make lint`, `make test`,
+  `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`, and `make nixie`.
 
 ## Surprises & Discoveries
 
@@ -282,6 +287,14 @@ can verify success with these observations:
   `OrthoConfigDocs`, or `[package.metadata.ortho_config]`. The documentation
   artefact migration step is therefore currently non-applicable unless later
   evidence contradicts this.
+- (2026-03-07 UTC) `cargo check --all-targets --all-features` succeeded
+  immediately after the dependency bump. For podbot, this upgrade is a
+  dependency and documentation alignment task rather than a code-compatibility
+  repair.
+- (2026-03-07 UTC) `make typecheck` is not present in the current Makefile
+  even though an older project-memory note claimed it had been added. The real
+  repository gates remain `check-fmt`, `lint`, `test`, `markdownlint`, and
+  `nixie`.
 
 ## Decision Log
 
@@ -306,13 +319,45 @@ can verify success with these observations:
   artefacts, so adding that metadata would broaden scope beyond the observed
   upgrade need. Date/author: 2026-03-07 / Codex.
 
+- Decision: do not change `src/config/types.rs` or `src/config/loader.rs` after
+  the `0.8.0` bump compiled cleanly. Rationale: the current manual
+  `MergeComposer` architecture remains compatible, so any further Rust edits
+  would be churn rather than migration work. Date/author: 2026-03-07 / Codex.
+
 ## Outcomes & Retrospective
 
-This section is intentionally incomplete because implementation has not started
-yet. When the upgrade is executed, replace this text with:
+The implementation changed three areas:
 
-- the files actually changed,
-- the final validation results,
-- any migration notes that turned out to be non-applicable,
-- any user-visible behaviour changes, and
-- any follow-up work that should be split into a separate ExecPlan.
+- `Cargo.toml` now pins `ortho_config = "0.8.0"`.
+- `Cargo.lock` now resolves both `ortho_config` and `ortho_config_macros` to
+  `0.8.0`.
+- `docs/ortho-config-users-guide.md` now uses `0.8.0` dependency snippets,
+  explains the `0.7.x` to `0.8.0` migration points relevant to this repository,
+  and updates `figment` examples to use `ortho_config` re-exports.
+
+The final validation results were:
+
+- `cargo check --all-targets --all-features`: passed.
+- `make fmt`: passed.
+- `make check-fmt`: passed.
+- `make lint`: passed. A pre-existing rustdoc warning about
+  `missing_crate_level_docs` being renamed to
+  `rustdoc::missing_crate_level_docs` still appears, but it does not fail the
+  gate and was not introduced by this upgrade.
+- `make test`: passed.
+- `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`: passed.
+- `make nixie`: passed.
+
+Migration notes that turned out to be non-applicable in podbot:
+
+- No crate alias is used, so `#[ortho_config(crate = "...")]` was not needed.
+- Podbot does not use `cli_default_as_absent` in application code, so no clap
+  default migration was needed in Rust sources.
+- Podbot still loads TOML rather than YAML in `src/config/loader.rs`, so the
+  YAML 1.2 behaviour change is documentation-only context here.
+- The repository does not generate `OrthoConfigDocs` artefacts, so
+  `[package.metadata.ortho_config]` and `cargo orthohelp` remain out of scope.
+
+No user-visible runtime behaviour changed. Configuration precedence remains
+defaults < file < environment < CLI, and the upgrade completed without Rust
+source changes.
