@@ -114,8 +114,14 @@ escalation, not workarounds.
 
 - Discovery: BDD step functions that don't use `?` trigger
   `unnecessary_wraps`. The existing test suites solve this with a scoped
-  `#[expect(clippy::unnecessary_wraps, reason = "...")]` attribute using the
-  standard rstest-bdd justification text.
+  `#[expect(clippy::unnecessary_wraps, reason = "...")]` attribute:
+
+  ```rust
+  #[expect(
+      clippy::unnecessary_wraps,
+      reason = "rstest-bdd step functions must return StepResult for consistency"
+  )]
+  ```
 
 ## Decision log
 
