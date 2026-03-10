@@ -106,15 +106,22 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
     },
 ];
 
-/// Returns the list of environment variable names recognised by the config loader.
+/// Returns the list of environment variable names recognised by the config
+/// loader.
 ///
-/// This is primarily useful for tests that need to clear all `PODBOT_*`
-/// environment variables to ensure isolation. Using this function instead of a
-/// hard-coded list ensures the test stays in sync with the loader's actual
-/// environment variable mappings.
+/// This includes the variables mapped in this module plus
+/// `PODBOT_CONFIG_PATH`, which is consumed by config-path discovery.
+///
+/// This is primarily useful for tests that need to clear all recognised
+/// `PODBOT_*` environment variables to ensure isolation. Using this function
+/// instead of a hard-coded list keeps tests in sync with loader behaviour.
 #[must_use]
 pub fn env_var_names() -> Vec<&'static str> {
-    ENV_VAR_SPECS.iter().map(|spec| spec.env_var).collect()
+    ENV_VAR_SPECS
+        .iter()
+        .map(|spec| spec.env_var)
+        .chain(std::iter::once("PODBOT_CONFIG_PATH"))
+        .collect()
 }
 
 /// Collect environment variables with the `PODBOT_` prefix into a JSON value.

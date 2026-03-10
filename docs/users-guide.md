@@ -131,8 +131,9 @@ Configuration files are discovered in the following order (first match wins):
 4. `~/.podbot.toml` (dotfile in home directory)
 
 If `--config` is provided, `PODBOT_CONFIG_PATH` is ignored. If the `--config`
-path does not exist, podbot falls back to discovery rather than silently
-loading a different configuration via the process environment.
+path does not exist, podbot falls back only to the remaining file-based
+discovery locations (`$XDG_CONFIG_HOME/podbot/config.toml` and
+`~/.podbot.toml`) and does not consult `PODBOT_CONFIG_PATH`.
 
 **Note:** GitHub App credentials (`app_id`, `installation_id`,
 `private_key_path`) are validated only when GitHub operations are performed.
