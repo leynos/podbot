@@ -105,6 +105,12 @@ That keeps the agent image simple, but it also means Podbot has to manage bind
 addresses, per-wire authentication, and cleanup instead of assuming the
 networking model is safe by default.
 
+Primary repositories inside the Podbot agent container should live on a volume
+rather than in the container's ephemeral writable layer. That gives Podbot a
+stable mount target for the agent's main working tree and provides a controlled
+mechanism for sharing the same repository contents with auxiliary MCP
+containers when a server definition explicitly requests that access.
+
 ## 4. Responsibilities and boundaries
 
 Corbusier and Podbot should split ownership along existing architectural
@@ -176,6 +182,7 @@ Podbot should present Streamable HTTP to the agent container by default.[^1]
 That default works whether the original source is:
 
 - a stdio-only MCP server that Podbot launches and proxies, or
+- a stdio MCP server that Podbot runs in a dedicated helper container, or
 - a remote HTTP-capable MCP server that Podbot forwards directly or through a
   thin reverse proxy.
 
@@ -184,9 +191,9 @@ URL, protocol version expectations, and authentication material.
 
 ### 6.2 Stdio source handling
 
-Some MCP servers are only available as local subprocesses speaking `stdio`.
-Podbot should support those servers by supervising the subprocess on the host
-and bridging the MCP stream to an HTTP endpoint.
+Some MCP servers are only available as `stdio` producers. Podbot should support
+those servers whether they run as local subprocesses or in dedicated helper
+containers, and it should bridge the MCP stream to an HTTP endpoint.
 
 That bridge must:
 
@@ -195,7 +202,23 @@ That bridge must:
 - log bridge diagnostics to stderr,
 - bound buffers so slow readers surface backpressure instead of causing
   unbounded memory growth, and
-- tear down the subprocess when the workspace or wire is destroyed.
+- tear down the underlying subprocess or helper container when the workspace
+  or wire is destroyed.
+
+When Podbot launches a stdio MCP server in a helper container, the primary
+repository volume should remain mounted into the agent container as the source
+of truth for the task workspace. Podbot may additionally mount that same volume
+into the MCP container only when the server definition requests repo access
+explicitly. The access modes should be:
+
+- `none`: do not mount the repository volume into the MCP container.
+- `read_only`: mount the repository volume read-only into the MCP container.
+- `read_write`: mount the repository volume read-write into the MCP container.
+
+The default should be `none`. Repo sharing is a trust-boundary decision, so it
+should never happen implicitly. If an operator wants a stdio MCP container to
+inspect or mutate the task repository, that intent should be visible in the
+server definition through an explicit repo-access field.
 
 ### 6.3 Remote HTTP source handling
 
@@ -210,11 +233,12 @@ of two strategies:
 The reverse proxy path costs more complexity, but it keeps the operational
 model consistent with bridged stdio servers.
 
-| Source type                                   | Agent-facing transport            | Recommendation                                       | Rationale                                                              |
-| --------------------------------------------- | --------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
-| stdio subprocess                              | Streamable HTTP via Podbot bridge | Required                                             | Keeps binaries out of the container while preserving interoperability  |
-| Remote Streamable HTTP server                 | Direct URL or Podbot proxy        | Preferred when the source is already standards-based | Avoids unnecessary translation when no extra control is required       |
-| Custom transport such as a Unix domain socket | Not exposed directly to the agent | Avoid as the default                                 | Too much client-specific integration work for a shared hosting surface |
+| Source type                                   | Agent-facing transport            | Recommendation                                            | Rationale                                                              |
+| --------------------------------------------- | --------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| stdio subprocess                              | Streamable HTTP via Podbot bridge | Required                                                  | Keeps binaries out of the container while preserving interoperability  |
+| stdio helper container                        | Streamable HTTP via Podbot bridge | Supported when isolation or extra dependencies justify it | Allows containerized stdio tools while keeping repo sharing explicit   |
+| Remote Streamable HTTP server                 | Direct URL or Podbot proxy        | Preferred when the source is already standards-based      | Avoids unnecessary translation when no extra control is required       |
+| Custom transport such as a Unix domain socket | Not exposed directly to the agent | Avoid as the default                                      | Too much client-specific integration work for a shared hosting surface |
 
 Table 2: Recommended transport decisions by MCP source type.
 
@@ -272,6 +296,11 @@ subcommand model:
 These commands should support a structured JSON mode so Corbusier can consume
 them without scraping human-oriented output.
 
+When the command surface defines a stdio MCP helper container, it should also
+accept an explicit repo-access setting with the same semantics as the library
+API: no mount by default, read-only volume sharing when requested, and
+read-write volume sharing only when requested.
+
 ### 8.2 Library shape
 
 The library should expose a typed request and response boundary rather than
@@ -286,10 +315,22 @@ pub enum McpSource {
         env: Vec<(String, String)>,
         cwd: Option<String>,
     },
+    StdioContainer {
+        image: String,
+        command: Vec<String>,
+        env: Vec<(String, String)>,
+        repo_access: RepoAccess,
+    },
     StreamableHttp {
         url: String,
         headers: Vec<(String, String)>,
     },
+}
+
+pub enum RepoAccess {
+    None,
+    ReadOnly,
+    ReadWrite,
 }
 
 pub struct CreateMcpWireRequest {
@@ -309,6 +350,10 @@ This keeps the boundary narrow:
 - Corbusier says what should be wired.
 - Podbot returns how the container should reach it.
 - Podbot keeps lifecycle and transport details private behind its own types.
+
+`RepoAccess` should govern only whether Podbot mounts the primary repository
+volume into a stdio MCP helper container. It should not change the agent
+container's own access to the primary task repository.
 
 ### 8.3 Configuration shape
 
