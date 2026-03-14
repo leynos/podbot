@@ -512,8 +512,8 @@ The design can be delivered incrementally.
 ### 9.4 Phase 4: optional remote-server proxying
 
 - Support direct pass-through for remote Streamable HTTP servers.
-- Add a Podbot-managed reverse proxy only when policy or observability needs
-  justify the extra moving parts.
+- Add a Podbot-managed reverse proxy only when policy or observability need
+  to justify the extra moving parts.
 
 ## 10. Risks, trade-offs, and open questions
 
