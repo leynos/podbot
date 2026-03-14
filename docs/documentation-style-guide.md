@@ -175,10 +175,10 @@ decision, and an RFC to propose a change.
 ### Design document
 
 Use a dedicated design document, conventionally named
-`docs/<product-or-topic>-design.md`, when you need to explain the architecture,
-constraints, rationale, and intended evolution of a system or subsystem. This
-document is the appropriate home for design intent; avoid burying that material
-in the user's guide or developer guide.
+`docs/<product-or-topic>-design.md`, to explain the architecture, constraints,
+rationale, and intended evolution of a system or subsystem. This document is
+the appropriate home for design intent; avoid burying that material in the
+user's guide or developer guide.
 
 - Start with a concise front matter section that states status, scope, primary
   audience, and the decision records or other documents that take precedence.

@@ -286,7 +286,7 @@ repository mount or access level. The risk is unintended cross-container data
 exposure or mutation if helper-container repo sharing becomes implicit. The
 mitigations are explicit enum-based configuration, per-wire reviewable server
 definitions, and keeping the agent container's repository mount policy
-independent from helper-container settings.
+independent of helper-container settings.
 
 ### 7.3 Logging and protocol purity
 
