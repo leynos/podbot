@@ -177,8 +177,8 @@ decision, and an RFC to propose a change.
 Use a dedicated design document, conventionally named
 `docs/<product-or-topic>-design.md`, when you need to explain the architecture,
 constraints, rationale, and intended evolution of a system or subsystem. This
-document is the right home for design intent; do not bury that material in the
-user's guide or developer's guide.
+document is the appropriate home for design intent; avoid burying that material
+in the user's guide or developer guide.
 
 - Start with a concise front matter section that states status, scope, primary
   audience, and the decision records or other documents that take precedence.
@@ -212,7 +212,7 @@ user's guide or developer's guide.
 Use RFCs for proposed changes that need technical review before they become
 binding. Store them under `docs/rfcs/`.
 
-### ADR naming convention
+### RFC naming convention
 
 Name RFC files using the pattern `0001-short-topic.md`, where `0001` is a
 zero-padded sequence number. Place RFCs in the `docs/rfcs/` directory.
@@ -221,7 +221,7 @@ zero-padded sequence number. Place RFCs in the `docs/rfcs/` directory.
 - Do not renumber existing RFCs after publication. Gaps are acceptable when
   numbers are reserved, drafted on another branch, or intentionally skipped.
 
-### ADR required sections
+### RFC required sections
 
 Every RFC must include the following sections in order:
 
@@ -236,7 +236,7 @@ Every RFC must include the following sections in order:
   `## Summary`, `## Executive summary`, or `## Problem` are all acceptable if
   used consistently within the document.
 
-### ADR conditional sections
+### RFC conditional sections
 
 Include these sections as appropriate to the scope and complexity of the
 proposal:
@@ -260,7 +260,7 @@ proposal:
 - **Recommendation:** End with a clear statement of the preferred direction
   when the preceding analysis presents multiple viable choices.
 
-### ADR formatting guidance
+### RFC formatting guidance
 
 - Use second-level headings (`##`) for major sections.
 - Use third-level headings (`###`) for subsections such as phases, options,
@@ -605,7 +605,8 @@ navigability:
 - Tasks (execution units) – Small, measurable pieces of work with clear
   acceptance criteria. How it gets done.
 
-This hierarchy should align with the GIST framework:
+This hierarchy should align with the GIST (Goals, Ideas, Steps, Tasks)
+framework:
 
 - Phases correspond to strategic themes or milestones.
 - Steps correspond to GIST-style workstreams. A step must describe a coherent
@@ -622,7 +623,7 @@ This hierarchy should align with the GIST framework:
   - Phases: 1, 2, 3, …
   - Steps: 1.1, 1.2, 1.3, …
   - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
-- **Checkboxes:** Precede task and sub-task items with a GitHub Flavored
+- **Checkboxes:** Precede task and sub-task items with a GitHub Flavoured
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency

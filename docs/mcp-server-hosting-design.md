@@ -8,11 +8,10 @@
   consume that surface.
 - Primary audience: Podbot and Corbusier maintainers working on hosting mode.
 - Precedence:
-  [docs/podbot-design.md](docs/podbot-design.md) remains the primary design
-  document for Podbot itself, and
-  [docs/podbot-roadmap.md](docs/podbot-roadmap.md) remains the source of truth
-  for delivery sequencing. This document refines the MCP-specific hosting shape
-  that those documents imply.
+  [podbot-design.md](podbot-design.md) remains the primary design document for
+  Podbot itself, and [podbot-roadmap.md](podbot-roadmap.md) remains the source
+  of truth for delivery sequencing. This document refines the MCP-specific
+  hosting shape that those documents imply.
 
 ## 1. Problem statement
 
@@ -139,6 +138,14 @@ The recommended architecture is:
 3. Podbot starts or registers the necessary host-side MCP bridge endpoints.
 4. Podbot injects the resulting endpoint details into the container.
 5. The agent talks to those endpoints over Streamable HTTP.
+
+Screen reader summary: Corbusier in the Host control plane sends wire requests
+to Podbot. Podbot updates the MCP wire registry and lifecycle state, can spawn
+or attach to the stdio MCP server or remote HTTP target, and can serve
+Streamable HTTP from the Podbot MCP bridge into the Host execution plane. The
+Agent runtime and MCP client in the Agent container receive injected URL and
+auth details, then issue HTTP requests to the Podbot MCP bridge, which proxies
+to the stdio MCP server or remote HTTP target.
 
 ```mermaid
 flowchart LR
@@ -269,6 +276,18 @@ When Podbot exposes an MCP endpoint for the container to consume, it should:
 - reject unauthenticated traffic even when the bind address is accidentally
   broader than intended.
 
+Podbot should treat the host-mounted workspace as a separate trust boundary
+from the helper-container transport boundary. The primary repository volume is
+mounted for the agent container so the task can run. A stdio MCP helper
+container should only receive that same mount when the source definition sets
+`RepoAccess` to `ReadOnly` or `ReadWrite`. `RepoAccess::None` must remain the
+default, and changing `RepoAccess` must never alter the agent container's own
+repository mount or access level. The risk is unintended cross-container data
+exposure or mutation if helper-container repo sharing becomes implicit. The
+mitigations are explicit enum-based configuration, per-wire reviewable server
+definitions, and keeping the agent container's repository mount policy
+independent from helper-container settings.
+
 ### 7.3 Logging and protocol purity
 
 The host process must continue to treat stdout as owned by the hosted protocol.
@@ -283,6 +302,35 @@ Operationally, that means:
   stream, and
 - bridge failures should surface as semantic errors in the library API and as
   actionable diagnostics in the CLI.
+
+The same discipline applies to credential handling. Podbot should source
+operator-provided tokens from file-backed secrets or environment variables,
+consume them without echoing values into logs, and pass only the minimum
+derived auth material needed for a wire. Token presence may be logged, but
+token values, request headers, and secret-file contents must not appear in
+stdout, stderr, or structured logs.
+
+### 7.4 GitHub App token helper script
+
+The operational helper responsible for minting GitHub App installation tokens
+should read its app token from `/run/secrets/ghapp_token` rather than from a
+shell argument. Invocation should follow a narrow contract such as:
+
+```sh
+scripts/mint-ghapp-installation-token \
+  --app-id "$GITHUB_APP_ID" \
+  --installation-id "$GITHUB_INSTALLATION_ID"
+```
+
+The environment is expected to provide non-secret identifiers such as
+`GITHUB_APP_ID` and `GITHUB_INSTALLATION_ID`, while the GitHub App private key
+or bearer token material stays in `/run/secrets/ghapp_token`. The script should
+open the secret file directly, trim trailing newlines only if the upstream
+secret store adds them, avoid exporting the secret back into the environment,
+and write only the minted token or structured error output required by the
+caller. This keeps secret handling compatible with container secret mounts,
+reduces accidental shell history leakage, and preserves the stdout-purity rules
+described in Sections 7.2 and 7.3.
 
 ## 8. Proposed Podbot surface
 
@@ -357,7 +405,37 @@ This keeps the boundary narrow:
 volume into a stdio MCP helper container. It should not change the agent
 container's own access to the primary task repository.
 
-### 8.3 Configuration shape
+### 8.3 Supported public modules and types
+
+The first public library cut should keep the exported surface intentionally
+small and stable. At minimum, the supported public modules and types should be:
+
+- `podbot::mcp::McpSource`
+- `podbot::mcp::RepoAccess`
+- `podbot::mcp::CreateMcpWireRequest`
+- `podbot::mcp::CreateMcpWireResponse`
+
+The valid shapes for those public types should match the wire-hosting contract
+defined in Section 8.2:
+
+- `McpSource::Stdio`: launches a host-side stdio command with command, args,
+  env, and optional working directory fields.
+- `McpSource::StdioContainer`: launches a helper container with image,
+  command, env, and explicit `RepoAccess`.
+- `McpSource::StreamableHttp`: targets an existing Streamable HTTP endpoint
+  with a URL and optional injected headers.
+- `RepoAccess`: only `None`, `ReadOnly`, and `ReadWrite` are valid values.
+- `CreateMcpWireRequest`: supplies `workspace_id`, wire `name`, and one
+  `McpSource`.
+- `CreateMcpWireResponse`: returns the injected `url` plus any required
+  request headers.
+
+No other module should be treated as stable for external callers until the
+crate documents it explicitly. Lifecycle internals, registry state, and bridge
+implementation details remain private so Podbot can change them without
+breaking host orchestrators.
+
+### 8.4 Configuration shape
 
 Podbot should add an `mcp` section to `AppConfig` for defaults that affect all
 hosting wires. Expected settings include:
@@ -371,6 +449,43 @@ hosting wires. Expected settings include:
 Those settings belong in Podbot because they are part of how Podbot safely
 hosts and exposes wires, not part of how Corbusier chooses which wires should
 exist.
+
+The authoritative companion references for these settings should live in the
+main Podbot design and roadmap documents, especially
+[podbot-design.md](podbot-design.md) and
+[podbot-roadmap.md](podbot-roadmap.md), so operators have one place to confirm
+runtime assumptions before changing hosting defaults.
+
+### 8.5 Runtime and agent container image versioning and upgrades
+
+Podbot should version the runtime image and the agent container image with
+explicit, reviewable tags rather than floating labels. A practical baseline is:
+
+- release tags for supported images, such as semantic-versioned Podbot images,
+- an immutable digest pin in deployment configuration, and
+- optional compatibility aliases only for operator convenience, not as the
+  source of truth.
+
+Compatibility policy should be conservative. A Podbot release must continue to
+support the documented `CreateMcpWireRequest` and `CreateMcpWireResponse`
+contract for the current minor series, and image upgrades must not silently
+change the injected MCP transport shape or helper-container repo-access
+behaviour. If a release requires a configuration migration or changes the
+expected bridge semantics, the upgrade notes should call that out explicitly in
+the companion documents referenced from Section 8.4.
+
+Upgrade steps should be:
+
+1. Read the authoritative design and roadmap notes linked from Section 8.4 and
+   confirm whether the target release changes hosting defaults or public wire
+   types.
+2. Update the configured Podbot runtime image tag and digest together.
+3. Update any agent container image references that depend on the same MCP
+   bridge compatibility window.
+4. Recreate or roll the affected workloads so new wires use the upgraded
+   bridge implementation.
+5. Verify that existing wire creation calls still receive the expected URL,
+   headers, and repo-access behaviour before broad rollout.
 
 ## 9. Delivery phases
 
