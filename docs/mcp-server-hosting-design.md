@@ -73,12 +73,13 @@ mode:
 - Long-lived hosted sessions should run without TTY framing.
 - Lifecycle diagnostics should be preserved on stderr.
 
-Those rules are already useful for ACP hosting, and they map cleanly onto MCP
-hosting as well.
+Those rules are already useful for Agent Client Protocol (ACP) hosting, and
+they map cleanly onto MCP hosting as well.
 
 ### 3.2 MCP constraints
 
-MCP standardizes `stdio` and Streamable HTTP transports.[^1] JSON-RPC defines
+MCP standardizes `stdio` and Streamable HTTP, the transport built on Hypertext
+Transfer Protocol (HTTP).[^1] JSON Remote Procedure Call (JSON-RPC) defines
 message structure, but it does not define framing on its own.[^2] That means
 Podbot cannot treat "JSON-RPC" as the whole transport design; it has to honour
 the framing and protocol-purity rules imposed by the chosen MCP transport.
@@ -187,7 +188,8 @@ That default works whether the original source is:
   thin reverse proxy.
 
 This gives Podbot a single data-plane contract to inject into the container:
-URL, protocol version expectations, and authentication material.
+Uniform Resource Locator (URL), protocol version expectations and
+authentication material.
 
 ### 6.2 Stdio source handling
 
@@ -298,14 +300,14 @@ them without scraping human-oriented output.
 
 When the command surface defines a stdio MCP helper container, it should also
 accept an explicit repo-access setting with the same semantics as the library
-API: no mount by default, read-only volume sharing when requested, and
-read-write volume sharing only when requested.
+application programming interface (API): no mount by default, read-only volume
+sharing when requested, and read-write volume sharing only when requested.
 
 ### 8.2 Library shape
 
-The library should expose a typed request and response boundary rather than
-stringly typed shell output. The exact type names can change, but the shape
-should be close to the following:
+The library should expose a typed application programming interface (API)
+boundary rather than stringly typed shell output. The exact type names can
+change, but the shape should be close to the following:
 
 ```rust
 pub enum McpSource {
