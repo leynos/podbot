@@ -106,6 +106,40 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
     },
 ];
 
+/// Validate that no path in [`ENV_VAR_SPECS`] is a prefix of another.
+///
+/// This prevents silent overwrites where inserting at a longer path would
+/// encounter a scalar value at a parent path (or vice versa).
+///
+/// # Panics
+///
+/// Panics if any two [`EnvVarSpec`] entries have paths where one is a prefix of
+/// the other, or if they are identical.
+fn validate_no_path_conflicts() {
+    for (i, spec_a) in ENV_VAR_SPECS.iter().enumerate() {
+        for spec_b in ENV_VAR_SPECS.iter().skip(i + 1) {
+            // Check if spec_a.path is a prefix of spec_b.path
+            assert!(
+                !spec_b.path.starts_with(spec_a.path),
+                "ENV_VAR_SPECS path conflict: {} at {:?} is a prefix of {} at {:?}",
+                spec_a.env_var,
+                spec_a.path,
+                spec_b.env_var,
+                spec_b.path
+            );
+            // Check if spec_b.path is a prefix of spec_a.path
+            assert!(
+                !spec_a.path.starts_with(spec_b.path),
+                "ENV_VAR_SPECS path conflict: {} at {:?} is a prefix of {} at {:?}",
+                spec_b.env_var,
+                spec_b.path,
+                spec_a.env_var,
+                spec_a.path
+            );
+        }
+    }
+}
+
 /// Returns the list of environment variable names recognised by the config
 /// loader.
 ///
@@ -124,18 +158,34 @@ pub fn env_var_names() -> Vec<&'static str> {
         .collect()
 }
 
-/// Collect environment variables with the `PODBOT_` prefix into a JSON value.
+/// Collect environment variables enumerated in [`ENV_VAR_SPECS`] into a JSON
+/// value.
 ///
 /// This function uses a data-driven approach: all environment variable mappings
 /// are defined in [`ENV_VAR_SPECS`]. Adding or changing mappings requires only a
 /// single-line change in that table.
+///
+/// Note that `PODBOT_CONFIG_PATH` is intentionally handled outside this function
+/// (in the config-path discovery logic) and is not included in the returned JSON
+/// payload.
 ///
 /// # Errors
 ///
 /// Returns `ConfigError::InvalidValue` if a typed environment variable (bool,
 /// u64) has an unparseable value. This fail-fast approach ensures
 /// misconfigurations are visible to users.
+///
+/// # Panics
+///
+/// Panics if [`ENV_VAR_SPECS`] contains overlapping paths (one path is a prefix
+/// of another). This validation happens on first call and prevents silent data
+/// loss during insertion.
 pub(crate) fn collect_env_vars<E: mockable::Env>(env: &E) -> Result<Value> {
+    // Validate ENV_VAR_SPECS on first call to catch configuration errors early.
+    // This is a cheap O(n²) check over a small const table and will be optimized
+    // away in release builds if the validation passes.
+    validate_no_path_conflicts();
+
     let mut root = Map::new();
 
     for spec in ENV_VAR_SPECS {
