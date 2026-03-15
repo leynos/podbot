@@ -8,7 +8,7 @@ consistent, and easy to maintain across projects.
 
 - Use British English based on the
   [Oxford English Dictionary](https://public.oed.com/) locale `en-GB-oxendict`,
-  which   denotes English for the Great Britain market in the Oxford style:
+  which denotes English for the Great Britain market in the Oxford style:
   - suffix -ize in words like _realize_ and _organization_ instead of
      -ise endings,
   - suffix ‑lyse in words not traced to the Greek ‑izo, ‑izein suffixes,
