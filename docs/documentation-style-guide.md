@@ -19,7 +19,7 @@ consistent, and easy to maintain across projects.
   - maintain the "e" in words such as _likeable_, _liveable_ and _rateable_,
   - suffix -ogue in words such as _analogue_ and _catalogue_,
   - and so forth.
-- The word **"outwith"** is acceptable.
+- The words **"outwith"** and **"caveat"** are acceptable.
 - Keep United States (US) spelling when used in an API, for example, `color`.
 - The project uses the filename `LICENSE` for community consistency.
 
@@ -165,7 +165,7 @@ catch-all "design note".
   and status. Use an ADR when the important thing to preserve is the outcome,
   not the full exploratory discussion that led to it.
 - A **Request for Comments (RFC)** proposes a change before acceptance. It is
-  the right format for changes that need review, alternatives analysis,
+  the right format for changes that need reviewing, alternatives analysis,
   migration planning, or cross-team discussion. An RFC may later be accepted,
   rejected, superseded, or distilled into one or more ADRs.
 
@@ -175,10 +175,10 @@ decision, and an RFC to propose a change.
 ### Design document
 
 Use a dedicated design document, conventionally named
-`docs/<product-or-topic>-design.md`, to explain the architecture, constraints,
-rationale, and intended evolution of a system or subsystem. This document is
-the appropriate home for design intent; avoid burying that material in the
-user's guide or developer guide.
+`docs/<product-or-topic>-design.md`, to explain the architecture,
+constraints, rationale, and intended evolution of a system or subsystem. This
+document is the correct location for design intent; that material must not be
+buried in the user's guide or developer's guide.
 
 - Start with a concise front matter section that states status, scope, primary
   audience, and the decision records or other documents that take precedence.
@@ -256,7 +256,7 @@ proposal:
 - **Alternatives Considered:** Record rejected options and the reasons they
   were not chosen.
 - **Open Questions / Outstanding Decisions:** Identify unresolved issues that
-  still need review before the proposal can be treated as settled.
+  still need reviewing before the proposal can be treated as settled.
 - **Recommendation:** End with a clear statement of the preferred direction
   when the preceding analysis presents multiple viable choices.
 
@@ -605,8 +605,7 @@ navigability:
 - Tasks (execution units) – Small, measurable pieces of work with clear
   acceptance criteria. How it gets done.
 
-This hierarchy should align with the GIST (Goals, Ideas, Steps, Tasks)
-framework:
+This hierarchy should align with the GIST framework:
 
 - Phases correspond to strategic themes or milestones.
 - Steps correspond to GIST-style workstreams. A step must describe a coherent
@@ -623,7 +622,7 @@ framework:
   - Phases: 1, 2, 3, …
   - Steps: 1.1, 1.2, 1.3, …
   - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
-- **Checkboxes:** Precede task and sub-task items with a GitHub Flavoured
+- **Checkboxes:** Precede task and sub-task items with a GitHub Flavored
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency

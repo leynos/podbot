@@ -2,3 +2,4 @@ target/
 *:Zone.Identifier
 **/*.rs.bk
 .grepai/
+*~
