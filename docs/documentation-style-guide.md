@@ -605,7 +605,8 @@ navigability:
 - Tasks (execution units) – Small, measurable pieces of work with clear
   acceptance criteria. How it gets done.
 
-This hierarchy should align with the GIST framework:
+This hierarchy should align with the GIST (Goals, Ideas, Steps, Tasks)
+framework:
 
 - Phases correspond to strategic themes or milestones.
 - Steps correspond to GIST-style workstreams. A step must describe a coherent
@@ -622,7 +623,7 @@ This hierarchy should align with the GIST framework:
   - Phases: 1, 2, 3, …
   - Steps: 1.1, 1.2, 1.3, …
   - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
-- **Checkboxes:** Precede task and sub-task items with a GitHub Flavored
+- **Checkboxes:** Precede task and sub-task items with a GitHub Flavoured
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency

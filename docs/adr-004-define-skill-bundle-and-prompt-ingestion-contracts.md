@@ -50,8 +50,9 @@ orchestrator curation and Podbot materialisation.
   orchestrator, not logical catalogue names.
 - Skills conforming to the Agent Skills specification[^1] are staged without
   modification.
-- Podbot defines a bundle manifest format that groups skills, prompts, MCP
-  server definitions, and hook artefacts into a single deployable unit.
+- Podbot defines a bundle manifest format that groups skills, prompts, Model
+  Context Protocol (MCP) server definitions, and hook artefacts into a single
+  deployable unit.
 - Podbot defines a prompt artefact format (`*.prompt.md`) that uses YAML
   frontmatter plus Markdown body (see ADR 005 for frontmatter schema).
 - The orchestrator can supply artefacts as filesystem paths (for host-mounted

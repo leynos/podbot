@@ -11,10 +11,11 @@ Proposed.
 ## Context and problem statement
 
 Podbot's existing design draws crisp trust lines around host socket ownership,
-`agent.env_allowlist`, host-mount safety checks, and MCP helper-container
-repository access.[^1] [^2] The new API surfaces defined in ADRs 003–007
-(hooks, prompts, bundles, validation, session composition) introduce additional
-trust boundaries that must be specified before implementation lands.
+`agent.env_allowlist`, host-mount safety checks, and Model Context Protocol
+(MCP) helper-container repository access.[^1] [^2] The new API surfaces defined
+in ADRs 003–007 (hooks, prompts, bundles, validation, session composition)
+introduce additional trust boundaries that must be specified before
+implementation lands.
 
 Without explicit trust rules, the new surfaces risk poking holes through the
 existing security model: validation might accidentally inspect secrets, hooks
@@ -88,9 +89,9 @@ This ADR answers five questions:
 _Table 1: Validation trust boundary._
 
 Validation operates on artefact metadata and agent configuration, not on
-runtime state. This makes it safe to call from CI pipelines, pre-commit hooks,
-or orchestrator planning stages without risk of data exfiltration or state
-mutation.
+runtime state. This makes it safe to call from continuous integration (CI)
+pipelines, pre-commit hooks, or orchestrator planning stages without risk of
+data exfiltration or state mutation.
 
 **Exception:** If a future use case requires workspace-aware validation (for
 example, checking that referenced files exist), it must be gated behind an

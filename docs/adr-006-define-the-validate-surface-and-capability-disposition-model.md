@@ -25,9 +25,9 @@ runtime.
 
 ## Decision drivers
 
-- Podbot already enforces ACP capability masking (`terminal/*` and `fs/*`)
-  for hosted agents.[^2] Validation must surface this enforcement before
-  launch, not only at runtime.
+- Podbot already enforces Anthropic Computer Use Protocol (ACP) capability
+  masking (`terminal/*` and `fs/*`) for hosted agents.[^2] Validation must
+  surface this enforcement before launch, not only at runtime.
 - The response must not be a binary pass/fail. Capabilities may be natively
   supported, host-enforced by Podbot, translated, silently ignored, or outright
   invalid. Each disposition has different operational implications.

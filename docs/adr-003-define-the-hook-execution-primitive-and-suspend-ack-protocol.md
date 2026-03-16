@@ -25,7 +25,8 @@ implementation lands, this ADR must lock down:
 - Event payloads, timeouts, and exit-code semantics.
 - The suspend-and-acknowledge protocol between Podbot and the orchestrator.
 - stdout/stderr capture rules.
-- Trust boundary separation from MCP helper-container `RepoAccess`.
+- Trust boundary separation from Model Context Protocol (MCP) helper-container
+  `RepoAccess`.
 
 This ADR depends on ADR 002 (hosted session API) because hook events and
 acknowledgements flow through the `SessionEvent` stream and session handle
@@ -81,8 +82,9 @@ continued. The initial model supports two artefact kinds:
   to the session's staged artefact area (see ADR 007). The script runs in the
   hook execution context with `#!/bin/sh` semantics unless the shebang
   specifies otherwise.
-- **Container image:** An OCI image reference (digest-pinned for non-inline
-  hooks; see ADR 008) that Podbot pulls and runs as a short-lived container.
+- **Container image:** An Open Container Initiative (OCI) image reference
+  (digest-pinned for non-inline hooks; see ADR 008) that Podbot pulls and runs
+  as a short-lived container.
 
 Future artefact kinds (tar archives, WASM modules) may be added by extending
 the enum without breaking existing consumers.

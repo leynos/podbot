@@ -37,8 +37,8 @@ to remain stable.
 - The existing module structure (`api`, `config`, `engine`, `error`, `github`)
   already separates orchestration from infrastructure, but nothing marks which
   items are supported under semver.[^3]
-- Future surfaces (hooks, prompts, bundles, validation, MCP wiring) will need
-  a clear graduation path from experimental to stable.
+- Future surfaces (hooks, prompts, bundles, validation, Model Context Protocol
+  (MCP) wiring) will need a clear graduation path from experimental to stable.
 
 ## Requirements
 
