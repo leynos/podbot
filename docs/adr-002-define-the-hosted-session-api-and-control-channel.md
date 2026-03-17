@@ -115,13 +115,13 @@ Podbot opens a Unix domain socket (UDS) alongside the protocol session. Control
 events and commands flow as JSON-RPC messages over this socket.
 
 Consequences: transport-agnostic and language-neutral, but introduces
-serialisation overhead, a second connection to manage, and a filesystem
+serialization overhead, a second connection to manage, and a filesystem
 artefact that needs cleanup. Unnecessary complexity when the primary consumer
 is an in-process Rust embedder.
 
 | Topic                    | Option A (handle)    | Option B (callbacks) | Option C (UDS)         |
 | ------------------------ | -------------------- | -------------------- | ---------------------- |
-| Async Rust ergonomics    | Native streams       | Lifetime friction    | Serialisation overhead |
+| Async Rust ergonomics    | Native streams       | Lifetime friction    | Serialization overhead |
 | Protocol IO separation   | Type-level           | Convention-level     | Transport-level        |
 | Testability              | Mock stream + handle | Mock closures        | Mock socket server     |
 | CLI adapter complexity   | Low (poll + print)   | Low (print in CB)    | Medium (socket client) |

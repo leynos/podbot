@@ -11,7 +11,7 @@ Proposed.
 ## Context and problem statement
 
 The roadmap commits Podbot to a stable library boundary (Step 5.3[^1]) and a
-normalised launch contract (Step 4.5[^1]), but nothing yet defines how an
+normalized launch contract (Step 4.5[^1]), but nothing yet defines how an
 orchestrator or operator validates a prompt against a specific hosted agent
 before launching a session. Without a validation surface, the only way to
 discover that a prompt requires capabilities the agent cannot honour is to
@@ -47,7 +47,7 @@ runtime.
   and frontmatter location.
 - The response includes a capability disposition report for each capability
   the prompt declares (required, preferred, or forbidden).
-- The response optionally includes a canonicalised frontmatter
+- The response optionally includes a canonicalized frontmatter
   representation and a rendered preview of the prompt body.
 - Validation can report missing input variables (from the prompt's `inputs`
   schema) without requiring actual input values.
@@ -82,7 +82,7 @@ The distinction matters because:
 - `HostEnforced` capabilities are provided by Podbot's hosting layer (for
   example, hook execution, ACP masking). The agent does not know about them.
 - `Translated` capabilities require Podbot to bridge between what the prompt
-  requests and what the agent supports (for example, materialising a skill into
+  requests and what the agent supports (for example, materializing a skill into
   a discovery location the agent scans).
 - `Ignored` capabilities are declared but will have no effect. This is a
   warning, not a failure — the prompt can still run, but the author should know
@@ -130,7 +130,7 @@ pub struct ValidatePromptResponse {
     pub valid: bool,
     pub diagnostics: Vec<PromptDiagnostic>,
     pub capability_report: Vec<CapabilityDispositionEntry>,
-    pub canonicalised_frontmatter: Option<CanonicalFrontmatter>,
+    pub canonicalized_frontmatter: Option<CanonicalFrontmatter>,
     pub rendered_preview: Option<String>,
     pub missing_variables: Vec<String>,
 }
@@ -187,7 +187,7 @@ podbot validate-prompt \
 The CLI command is diagnostic only. It does not launch a session, create
 containers, or consume secrets. Output formats:
 
-- `json`: Machine-parseable `ValidatePromptResponse` serialised as JSON.
+- `json`: Machine-parseable `ValidatePromptResponse` serialized as JSON.
 - `text` (default): Human-readable summary with colour-coded severity.
 
 ## Options considered
@@ -195,7 +195,7 @@ containers, or consume secrets. Output formats:
 ### Option A: Typed disposition model with field-level diagnostics
 
 Return a structured response with per-capability dispositions and per-field
-diagnostics. The `valid` field summarises overall status.
+diagnostics. The `valid` field summarizes overall status.
 
 Consequences: maximum precision. Orchestrators can make fine-grained decisions.
 Slightly more complex response type.
@@ -284,7 +284,7 @@ When validating a prompt against an ACP-mode agent:
 - Whether validation should accept a `LaunchRequest` (ADR 007) directly
   instead of decomposed fields, to reduce the chance of validating against a
   configuration that differs from the actual launch.
-- Whether `canonicalised_frontmatter` should normalise field order, fill
+- Whether `canonicalized_frontmatter` should normalize field order, fill
   defaults, and strip unknown keys, or preserve the original structure with
   annotations.
 - Whether the rendered preview should apply `StrictUndefined` or fall back

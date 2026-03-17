@@ -11,7 +11,7 @@ Proposed.
 ## Context and problem statement
 
 Podbot prompt artefacts (`.prompt.md` files, defined in ADR 004) need a
-harmonised frontmatter schema and a rendering model for template interpolation.
+harmonized frontmatter schema and a rendering model for template interpolation.
 Two external conventions inform this design:
 
 - The Agent Skills specification[^1] defines YAML frontmatter for `SKILL.md`
@@ -277,7 +277,7 @@ Working directory: `{{ workspace.container_path }}`
 ## Goals and non-goals
 
 - Goals:
-  - Harmonise prompt frontmatter with Agent Skills core fields.
+  - Harmonize prompt frontmatter with Agent Skills core fields.
   - Adopt Goose/Jinja-style interpolation with a sandboxed subset.
   - Keep structural frontmatter literal and validatable without rendering.
 - Non-goals:

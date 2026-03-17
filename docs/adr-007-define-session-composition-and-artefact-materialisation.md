@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 007: Define session composition and artefact materialisation
+# Architectural decision record (ADR) 007: Define session composition and artefact materialization
 
 ## Status
 
@@ -24,11 +24,11 @@ cleanup, and ambient filesystem state that becomes an accidental API.
 ## Decision drivers
 
 - The roadmap already defines `LaunchRequest` and `LaunchPlan` as the
-  normalised launch contract. This ADR extends rather than replaces that
+  normalized launch contract. This ADR extends rather than replaces that
   model.[^1]
-- Artefact materialisation must be deterministic: the same inputs produce the
+- Artefact materialization must be deterministic: the same inputs produce the
   same filesystem layout in the session staging area.
-- Skills must be materialised into locations that target agents can discover
+- Skills must be materialized into locations that target agents can discover
   (for example, `~/.config/agents/skills/` or `./.agents/skills/` per the Agent
   Skills specification[^3]).
 - Cleanup must be complete. No session artefacts should persist after session
@@ -46,7 +46,7 @@ cleanup, and ambient filesystem state that becomes an accidental API.
   definitions.
 - Podbot resolves, validates, and stages all artefacts before starting the
   agent.
-- Skills are materialised into agent-discoverable locations when the target
+- Skills are materialized into agent-discoverable locations when the target
   agent supports portable skill discovery.
 - Prompts are rendered (ADR 005) after staging and before agent launch.
 - Hook subscriptions are registered with the session event loop (ADR 003)
@@ -61,7 +61,7 @@ cleanup, and ambient filesystem state that becomes an accidental API.
   separate from the workspace volume.
 - Staged artefacts are mounted read-only into the agent container to prevent
   accidental mutation.
-- Materialisation order is fixed and documented.
+- Materialization order is fixed and documented.
 
 ## Extended launch request model
 
@@ -97,11 +97,11 @@ pub enum SkillRef {
 }
 ```
 
-`LaunchPlan` is derived from `LaunchRequest` by the normalisation step and
-includes resolved paths, validated artefacts, and computed materialisation
+`LaunchPlan` is derived from `LaunchRequest` by the normalization step and
+includes resolved paths, validated artefacts, and computed materialization
 targets.
 
-## Composition and materialisation pipeline
+## Composition and materialization pipeline
 
 Podbot processes the launch request through a fixed pipeline with seven stages:
 
@@ -152,14 +152,14 @@ in the staging area.
 Rendering errors are fatal if they result from missing required variables.
 Warnings (for example, unused variables) are logged.
 
-### Stage 5: Materialise
+### Stage 5: Materialize
 
 Mount staged artefacts into the agent container:
 
-- **Skills:** Materialised into `~/.config/agents/skills/<skill-name>/`
+- **Skills:** Materialized into `~/.config/agents/skills/<skill-name>/`
   within the container when the target agent supports portable skill
   discovery.[^3] For agents that do not scan standard skill locations, skills
-  are materialised into the workspace root at `.agents/skills/<skill-name>/` as
+  are materialized into the workspace root at `.agents/skills/<skill-name>/` as
   a fallback.
 - **Prompt:** Made available at a well-known container path (for example,
   `/run/podbot/prompt.md`) for the orchestrator or agent to reference.
@@ -168,11 +168,11 @@ Mount staged artefacts into the agent container:
 - **MCP wires:** Provisioned as Streamable HTTP endpoints injected into the
   agent's environment (MCP server hosting design[^2]).
 
-All materialised paths are mounted read-only.
+All materialized paths are mounted read-only.
 
 ### Stage 6: Launch
 
-Start the agent process with the normalised launch plan. The session event loop
+Start the agent process with the normalized launch plan. The session event loop
 begins, hook subscriptions are active, and protocol IO is connected.
 
 ### Stage 7: Teardown
@@ -182,7 +182,7 @@ On session end (normal exit, abort, or crash):
 1. Stop the agent process.
 2. Tear down MCP wires.
 3. Remove the session staging directory and all its contents.
-4. Remove materialised skill directories from the container (if the
+4. Remove materialized skill directories from the container (if the
    container is still accessible; otherwise, container deletion handles
    cleanup).
 
@@ -194,24 +194,24 @@ Failures are logged as diagnostics.
 ### Option A: Fixed pipeline with session-scoped staging
 
 Define a seven-stage pipeline (resolve → validate → stage → render →
-materialise → launch → teardown) with all artefacts in a session-scoped
+materialize → launch → teardown) with all artefacts in a session-scoped
 directory. Deterministic order, deterministic cleanup.
 
 Consequences: predictable, auditable, testable. Slightly more upfront structure
 than a loose collection of per-artefact handlers.
 
-### Option B: Per-artefact lazy materialisation
+### Option B: Per-artefact lazy materialization
 
 Each artefact type manages its own staging and cleanup independently. No
-central pipeline. Artefacts are materialised on first access.
+central pipeline. Artefacts are materialized on first access.
 
 Consequences: simpler per-artefact code, but no guaranteed order, no single
 cleanup path, and harder to audit session state.
 
-### Option C: Orchestrator-managed materialisation
+### Option C: Orchestrator-managed materialization
 
 The orchestrator stages all artefacts before calling Podbot. Podbot receives
-only pre-staged filesystem paths and does no materialisation itself.
+only pre-staged filesystem paths and does no materialization itself.
 
 Consequences: simplest Podbot implementation, but shifts significant complexity
 to every orchestrator, prevents Podbot from enforcing read-only staging or
@@ -226,7 +226,7 @@ and agent discovery conventions.
 | Podbot complexity       | Medium               | Low                | Low                     |
 | Orchestrator complexity | Low                  | Low                | High                    |
 
-_Table 1: Comparison of materialisation strategies._
+_Table 1: Comparison of materialization strategies._
 
 ## Decision outcome / proposed direction
 
@@ -243,10 +243,10 @@ managing agent-specific filesystem conventions.
   - Extend `LaunchRequest` with prompt, bundle, skill, hook, and MCP wire
     fields.
   - Define the seven-stage composition pipeline and its error handling.
-  - Define skill materialisation into agent-discoverable locations.
+  - Define skill materialization into agent-discoverable locations.
   - Define deterministic teardown.
 - Non-goals:
-  - Define the full `LaunchPlan` normalisation logic (that belongs in design
+  - Define the full `LaunchPlan` normalization logic (that belongs in design
     or implementation documentation).
   - Define artefact curation or selection policy (orchestrator concern).
   - Define MCP wire provisioning protocol (defined in the MCP server hosting
@@ -259,9 +259,9 @@ managing agent-specific filesystem conventions.
   sandbox image already provides a writable `/root` directory.
 - The fixed pipeline may be too rigid for future artefact types that need
   different staging semantics. Mitigation: the pipeline stages are deliberately
-  broad (resolve, validate, stage, render, materialise); new artefact types can
+  broad (resolve, validate, stage, render, materialize); new artefact types can
   be added to existing stages without restructuring the pipeline.
-- Read-only staging prevents the agent from modifying materialised skills.
+- Read-only staging prevents the agent from modifying materialized skills.
   This is intentional: skills should be immutable within a session. Agents that
   need to create or modify tool configurations should write to the workspace,
   not to the skill directory.
@@ -270,7 +270,7 @@ managing agent-specific filesystem conventions.
 
 - Whether the rendered prompt should be injected as the initial agent
   message, written to a file the agent reads, or both.
-- Whether skill materialisation should use bind mounts or filesystem copies.
+- Whether skill materialization should use bind mounts or filesystem copies.
   Recommendation: bind mounts for performance, with copies as a fallback for
   container engines that do not support fine-grained bind mounts.
 - Whether the staging directory should use `$XDG_RUNTIME_DIR` or a

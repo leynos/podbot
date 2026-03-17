@@ -11,7 +11,7 @@ Proposed.
 ## Context and problem statement
 
 Podbot needs to accept skills, bundles, and prompts from the orchestrator and
-materialise them for the hosted agent. Three external standards bear on this
+materialize them for the hosted agent. Three external standards bear on this
 design:
 
 - The Agent Skills specification[^1] defines a portable skill unit: a
@@ -26,7 +26,7 @@ design:
 
 No current Podbot specification defines what artefacts the orchestrator
 provides, what Podbot does with them, or where the boundary sits between
-orchestrator curation and Podbot materialisation.
+orchestrator curation and Podbot materialization.
 
 ## Decision drivers
 
@@ -139,7 +139,7 @@ hooks:
 
 The `apiVersion` field uses a versioned namespace to allow schema evolution.
 The `v1alpha1` version indicates this schema is experimental and may change
-before stabilisation.
+before stabilization.
 
 ## Ingestion contract
 
@@ -153,7 +153,7 @@ The orchestrator provides artefacts to Podbot through the launch request (ADR
    fatal.
 3. **Stage:** Copy or link artefacts into a read-only session staging area.
 4. **Materialise:** Place skills into agent-discoverable locations (see
-   ADR 007 for materialisation rules).
+   ADR 007 for materialization rules).
 5. **Clean up:** Remove the session staging area on session teardown.
 
 Podbot does **not**:
@@ -223,7 +223,7 @@ experimental status. Graduation to `v1` requires a superseding ADR.
   - Provide a versioned bundle manifest format.
 - Non-goals:
   - Define the prompt frontmatter schema (see ADR 005).
-  - Define artefact materialisation order and locations (see ADR 007).
+  - Define artefact materialization order and locations (see ADR 007).
   - Define bundle curation policy or approval workflows (orchestrator
     concern).
   - Define MCP server policy or registry semantics (orchestrator concern,

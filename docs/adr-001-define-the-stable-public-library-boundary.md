@@ -21,7 +21,7 @@ experimental surfaces graduate to stability.
 
 Without an explicit boundary, every `pub` item in `podbot` becomes a de facto
 semver commitment the moment an external consumer depends on the crate. That
-creates two failure modes: premature stabilisation of internal types that need
+creates two failure modes: premature stabilization of internal types that need
 to evolve, and accidental breakage of types that consumers reasonably expected
 to remain stable.
 
@@ -65,7 +65,7 @@ to remain stable.
 
 ### Option A: Re-export a curated public surface from `lib.rs`
 
-Stabilise a small set of modules re-exported from `lib.rs`. Keep implementation
+Stabilize a small set of modules re-exported from `lib.rs`. Keep implementation
 modules `pub(crate)` or behind `#[doc(hidden)]`. Provisional surfaces live
 behind a Cargo feature flag (for example, `experimental`) and are excluded from
 semver guarantees until graduated.
@@ -73,7 +73,7 @@ semver guarantees until graduated.
 Consequences: clear boundary, minimal surface, easy to audit. Requires
 discipline to keep re-exports narrow.
 
-### Option B: Stabilise entire modules wholesale
+### Option B: Stabilize entire modules wholesale
 
 Mark complete modules (`api`, `config`, `error`) as public and commit to their
 full contents under semver.
@@ -138,7 +138,7 @@ Graduation from `experimental` to stable requires:
 
 1. At least one release cycle of use behind the feature flag.
 2. Review confirming the type surface is consistent with the stable API
-   conventions (semantic errors, serialisable request/response types, no CLI
+   conventions (semantic errors, serializable request/response types, no CLI
    coupling).
 3. An update to this ADR or a superseding ADR recording the graduation.
 
@@ -156,7 +156,7 @@ Planned experimental surfaces include:
   - Define which modules and types Podbot supports under semver.
   - Provide a clear graduation path for experimental surfaces.
   - Keep the stable contract deliberately boring: small, typed, and
-    serialisable.
+    serializable.
 - Non-goals:
   - Define the internal architecture of any module (that belongs in the
     design document).
@@ -168,7 +168,7 @@ Planned experimental surfaces include:
 - The initial stable set may prove too narrow if a consumer needs engine-level
   access for a legitimate use case. Mitigation: expose targeted extension
   points (for example, a trait for custom container engines) rather than
-  wholesale module stabilisation.
+  wholesale module stabilization.
 - The `experimental` feature flag adds a small maintenance burden. Mitigation:
   keep the flag singular rather than per-feature (avoiding Option C's
   combinatorial cost) and review quarterly.

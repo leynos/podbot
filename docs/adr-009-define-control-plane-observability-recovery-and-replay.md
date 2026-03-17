@@ -160,7 +160,7 @@ The session state file shows one or more pending hooks with the agent in
 3. If timeout has not elapsed: re-emit `HookTriggered` for each pending
    hook with the same `invocation_id` but a new `event_id`. The orchestrator
    can detect the duplicate `invocation_id` and either re-acknowledge or
-   recognise its previous acknowledgement was lost.
+   recognize its previous acknowledgement was lost.
 
 Re-emitting `HookTriggered` with the original `invocation_id` but a new
 `event_id` ensures:
@@ -310,7 +310,7 @@ give the orchestrator enough information to detect gaps and duplicates.
   truncated state file. Mitigation: atomic rename ensures the state file is
   either the old state or the new state, never a partial write.
 - Re-emitting `HookTriggered` after recovery may cause the orchestrator to
-  re-run its authorisation logic. This is intentional: the orchestrator should
+  re-run its authorization logic. This is intentional: the orchestrator should
   confirm its decision after a disruption rather than assuming the pre-crash
   decision is still valid.
 

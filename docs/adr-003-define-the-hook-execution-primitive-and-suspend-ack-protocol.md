@@ -155,30 +155,14 @@ hook access policy, or vice versa.
 
 The hook lifecycle follows a simple state machine with four states:
 
-```plaintext
-                ┌─────────────┐
-                │   Idle      │
-                └──────┬──────┘
-                       │ trigger fires
-                       ▼
-                ┌─────────────┐
-                │  Triggered  │ → SessionEvent::HookTriggered emitted
-                │  (suspended)│   Agent session suspended
-                └──────┬──────┘
-                       │ orchestrator ack
-               ┌───────┴────────┐
-               │                │
-               ▼                ▼
-        ┌────────────┐   ┌────────────┐
-        │  Executing │   │  Aborted   │ → SessionEvent::HookAborted emitted
-        │            │   │            │   Triggering action rolled back
-        └──────┬─────┘   └────────────┘   Agent resumes (or session ends)
-               │ hook exits
-               ▼
-        ┌────────────┐
-        │ Completed  │ → SessionEvent::HookCompleted emitted
-        │            │   Agent execution resumes
-        └────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Triggered : trigger fires\nSessionEvent::HookTriggered emitted\nAgent session suspended
+    Triggered --> Executing : orchestrator ack (Continue)
+    Triggered --> Aborted : orchestrator ack (Abort)
+    Aborted --> [*] : SessionEvent::HookAborted emitted\nTriggering action rolled back\nAgent resumes or session ends
+    Executing --> Completed : hook exits\nSessionEvent::HookCompleted emitted\nAgent execution resumes
 ```
 
 ### Event types
