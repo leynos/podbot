@@ -3,6 +3,8 @@
 //! This module defines the mapping from `PODBOT_*` environment variables into a
 //! JSON structure compatible with the `ortho_config` merge composer.
 
+use std::sync::OnceLock;
+
 use ortho_config::serde_json::{Map, Value};
 
 use crate::error::{ConfigError, Result};
@@ -106,16 +108,29 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
     },
 ];
 
-/// Validate that no path in [`ENV_VAR_SPECS`] is a prefix of another.
+/// Validate that no path in [`ENV_VAR_SPECS`] is a prefix of another and that
+/// no path is empty.
 ///
 /// This prevents silent overwrites where inserting at a longer path would
-/// encounter a scalar value at a parent path (or vice versa).
+/// encounter a scalar value at a parent path (or vice versa), and prevents
+/// silent drops of entries with empty paths.
 ///
 /// # Panics
 ///
-/// Panics if any two [`EnvVarSpec`] entries have paths where one is a prefix of
-/// the other, or if they are identical.
+/// Panics if any [`EnvVarSpec`] entry has an empty path, or if any two entries
+/// have paths where one is a prefix of the other (including identical paths).
 fn validate_no_path_conflicts() {
+    // First, check for empty paths (which would be silently dropped by
+    // insert_at_path).
+    for spec in ENV_VAR_SPECS {
+        assert!(
+            !spec.path.is_empty(),
+            "ENV_VAR_SPECS entry {} has an empty path",
+            spec.env_var
+        );
+    }
+
+    // Then check for path prefix conflicts.
     for (i, spec_a) in ENV_VAR_SPECS.iter().enumerate() {
         for spec_b in ENV_VAR_SPECS.iter().skip(i + 1) {
             // Check if spec_a.path is a prefix of spec_b.path
@@ -178,13 +193,16 @@ pub fn env_var_names() -> Vec<&'static str> {
 /// # Panics
 ///
 /// Panics if [`ENV_VAR_SPECS`] contains overlapping paths (one path is a prefix
-/// of another). This validation happens on first call and prevents silent data
-/// loss during insertion.
+/// of another) or any empty paths. This validation happens exactly once on first
+/// call and prevents silent data loss during insertion.
 pub(crate) fn collect_env_vars<E: mockable::Env>(env: &E) -> Result<Value> {
-    // Validate ENV_VAR_SPECS on first call to catch configuration errors early.
-    // This is a cheap O(n²) check over a small const table and will be optimized
-    // away in release builds if the validation passes.
-    validate_no_path_conflicts();
+    // Validate ENV_VAR_SPECS exactly once on first call to catch configuration
+    // errors early. OnceLock ensures thread-safe single execution even if
+    // collect_env_vars is called concurrently.
+    static VALIDATION: OnceLock<()> = OnceLock::new();
+    VALIDATION.get_or_init(|| {
+        validate_no_path_conflicts();
+    });
 
     let mut root = Map::new();
 
