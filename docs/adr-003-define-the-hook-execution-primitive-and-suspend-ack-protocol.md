@@ -153,7 +153,8 @@ hook access policy, or vice versa.
 
 ## Suspend-and-acknowledge state machine
 
-The hook lifecycle follows a simple state machine with four states:
+The hook lifecycle follows a simple state machine with five states: Idle,
+Triggered, Executing, Completed, and Aborted.
 
 ```mermaid
 stateDiagram-v2
@@ -164,6 +165,8 @@ stateDiagram-v2
     Aborted --> [*] : SessionEvent::HookAborted emitted\nTriggering action rolled back\nAgent resumes or session ends
     Executing --> Completed : hook exits\nSessionEvent::HookCompleted emitted\nAgent execution resumes
 ```
+
+_Figure 1: Hook lifecycle state machine from trigger to completion or abort._
 
 ### Event types
 

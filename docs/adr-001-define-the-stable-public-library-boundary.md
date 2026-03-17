@@ -184,13 +184,15 @@ Planned experimental surfaces include:
 
 ______________________________________________________________________
 
-[^1]: Podbot design document. See `docs/podbot-design.md`, "Dual delivery
-    model" section.
+[^1]: Podbot design document. See [`docs/podbot-design.md`](podbot-design.md),
+    "Dual delivery model" section.
 
-[^2]: Podbot development roadmap. See `docs/podbot-roadmap.md`, Step 5.3:
-    "Stabilize public library boundaries."
+[^2]: Podbot development roadmap. See
+    [`docs/podbot-roadmap.md`](podbot-roadmap.md), Step 5.3: "Stabilize public
+    library boundaries."
 
 [^3]: Current module structure: `api`, `config`, `engine`, `error`, `github`.
     See `src/lib.rs`.
 
-[^4]: MCP server hosting design. See `docs/mcp-server-hosting-design.md`.
+[^4]: MCP server hosting design. See
+    [`docs/mcp-server-hosting-design.md`](mcp-server-hosting-design.md).

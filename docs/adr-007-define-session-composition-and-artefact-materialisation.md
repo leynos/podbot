@@ -13,9 +13,10 @@ Proposed.
 Phase 4.5 of the roadmap anticipates `LaunchRequest` and `LaunchPlan` models
 scoped to agent kind, mode, workspace source, and credential policy.[^1] With
 the addition of prompts (ADR 004, ADR 005), bundles (ADR 004), hooks (ADR 003),
-MCP wires (MCP server hosting design[^2]), and validation (ADR 006), the launch
-contract must expand to include these artefact references and define the order
-in which Podbot resolves, validates, stages, mounts, and cleans them up.
+Model Context Protocol (MCP) wires (MCP server hosting design[^2]), and
+validation (ADR 006), the launch contract must expand to include these artefact
+references and define the order in which Podbot resolves, validates, stages,
+mounts, and cleans them up.
 
 Without a defined composition model, each artefact type will develop its own
 ad-hoc staging logic, leading to non-deterministic session setup, inconsistent
@@ -254,7 +255,7 @@ managing agent-specific filesystem conventions.
 
 ## Known risks and limitations
 
-- Materialising skills into `~/.config/agents/skills/` assumes the agent
+- Materializing skills into `~/.config/agents/skills/` assumes the agent
   container has a writable home directory at mount time. Mitigation: the
   sandbox image already provides a writable `/root` directory.
 - The fixed pipeline may be too rigid for future artefact types that need

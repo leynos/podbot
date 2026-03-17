@@ -35,9 +35,9 @@ exact Jinja rendering subset that Podbot supports.
   already write `SKILL.md` files.[^1]
 - Adopt Goose/Jinja-style interpolation rather than inventing a home-brew
   templating dialect, to provide a practical compatibility target.
-- Structural frontmatter (capability lists, hook names, MCP wire names) must
-  stay literal. Templating structural metadata turns validation into a two-pass
-  problem and makes static analysis unreliable.
+- Structural frontmatter (capability lists, hook names, Model Context Protocol
+  (MCP) wire names) must stay literal. Templating structural metadata turns
+  validation into a two-pass problem and makes static analysis unreliable.
 - Template evaluation must be sandboxed: no filesystem access, no network
   access, no arbitrary helper functions.
 
@@ -116,7 +116,7 @@ capabilities:
 - `prefer`: capabilities that improve the prompt but are not essential.
   Validation reports `Ignored` if unavailable.
 - `forbid`: capabilities that must not be active. Useful for prompts designed
-  to work without ACP host tools.
+  to work without Anthropic Computer Use Protocol (ACP) host tools.
 
 ### MCP block
 

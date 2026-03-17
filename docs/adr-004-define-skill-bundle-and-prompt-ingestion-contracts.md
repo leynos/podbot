@@ -152,7 +152,7 @@ The orchestrator provides artefacts to Podbot through the launch request (ADR
    via the session event stream (ADR 002) without aborting unless errors are
    fatal.
 3. **Stage:** Copy or link artefacts into a read-only session staging area.
-4. **Materialise:** Place skills into agent-discoverable locations (see
+4. **Materialize:** Place skills into agent-discoverable locations (see
    ADR 007 for materialization rules).
 5. **Clean up:** Remove the session staging area on session teardown.
 

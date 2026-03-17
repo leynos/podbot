@@ -32,7 +32,8 @@ runtime.
   supported, host-enforced by Podbot, translated, silently ignored, or outright
   invalid. Each disposition has different operational implications.
 - Validation must be usable both as a library function (for orchestrator
-  embedding) and optionally as a CLI command (for operators and CI pipelines).
+  embedding) and optionally as a CLI command (for operators and continuous
+  integration (CI) pipelines).
 - Validation must not have side effects: it inspects artefacts and agent
   configuration, but it does not launch containers, modify the workspace, or
   consume secrets.
