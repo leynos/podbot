@@ -58,7 +58,7 @@ to remain stable.
 - Public request and response types are `Clone`, `Debug`, `Serialize`, and
   `Deserialize` where they cross library boundaries.
 - CLI-only dependencies and code paths are gated behind a feature boundary or
-  binary target so library consumers do not pull in `clap` or presentation
+  binary target, so library consumers do not pull in `clap` or presentation
   logic.
 
 ## Options considered

@@ -78,8 +78,8 @@ _Table 1: Capability disposition taxonomy._
 
 The distinction matters because:
 
-- `Native` capabilities work without Podbot intervention (for example, an
-  MCP wire the agent can directly consume).
+- `Native` capabilities work without Podbot intervention (for example, a Model
+  Context Protocol (MCP) wire the agent can directly consume).
 - `HostEnforced` capabilities are provided by Podbot's hosting layer (for
   example, hook execution, ACP masking). The agent does not know about them.
 - `Translated` capabilities require Podbot to bridge between what the prompt
@@ -295,5 +295,5 @@ ______________________________________________________________________
 
 [^1]: Podbot development roadmap. See `docs/podbot-roadmap.md`.
 
-[^2]: Podbot design document. See `docs/podbot-design.md`, "ACP capability
-    masking" section.
+[^2]: Podbot design document. See `docs/podbot-design.md`, "Execution flow"
+    section.
