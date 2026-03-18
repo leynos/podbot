@@ -6,7 +6,7 @@ Proposed.
 
 ## Date
 
-2026-03-16.
+2026-03-16
 
 ## Context and problem statement
 
@@ -95,6 +95,8 @@ The distinction matters because:
 
 ### Library function
 
+Screen reader: Rust async function signature for the validate_prompt API.
+
 ```rust,no_run
 pub async fn validate_prompt(
     request: ValidatePromptRequest,
@@ -102,6 +104,9 @@ pub async fn validate_prompt(
 ```
 
 ### Request type
+
+Screen reader: Rust struct definition for ValidatePromptRequest with agent,
+prompt, and bundle fields.
 
 ```rust,no_run
 pub struct ValidatePromptRequest {
@@ -125,6 +130,9 @@ pub struct ValidatePromptRequest {
   absent, validation reports missing variables without rendering.
 
 ### Response type
+
+Screen reader: Rust struct definitions for ValidatePromptResponse and related
+diagnostic types.
 
 ```rust,no_run
 pub struct ValidatePromptResponse {
@@ -176,6 +184,9 @@ The `valid` field is `true` when no diagnostic has `Error` severity. Warnings
 and info diagnostics do not cause validation failure.
 
 ### CLI exposure
+
+Screen reader: Command-line example showing podbot validate-prompt with agent
+and prompt arguments.
 
 ```plaintext
 podbot validate-prompt \

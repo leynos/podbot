@@ -6,7 +6,7 @@ Proposed.
 
 ## Date
 
-2026-03-16.
+2026-03-16
 
 ## Context and problem statement
 
@@ -192,7 +192,7 @@ ______________________________________________________________________
     library boundaries."
 
 [^3]: Current module structure: `api`, `config`, `engine`, `error`, `github`.
-    See `src/lib.rs`.
+    See [src/lib.rs](../src/lib.rs).
 
 [^4]: MCP server hosting design. See
     [`docs/mcp-server-hosting-design.md`](mcp-server-hosting-design.md).
