@@ -54,9 +54,9 @@ impl EnvGuard<'_> {
 /// must keep the guard alive for the duration of the test to maintain exclusive
 /// environment access.
 ///
-/// Uses [`env_var_names()`] from the loader to stay in sync with the actual
-/// environment variable mappings. Also clears `PODBOT_CONFIG_PATH` which is
-/// handled separately by the config discovery mechanism.
+/// Uses [`env_var_names()`] from the configuration module to stay in sync with
+/// the actual environment variable mappings. Also clears `PODBOT_CONFIG_PATH`
+/// which is handled separately by the config discovery mechanism.
 ///
 /// # Safety
 ///
