@@ -11,6 +11,7 @@ use super::*;
 use crate::error::{ContainerError, PodbotError};
 mod detached_helpers;
 mod lifecycle_helpers;
+mod protocol_helpers;
 mod validation_tests;
 
 mock! {

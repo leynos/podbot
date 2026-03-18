@@ -1,0 +1,182 @@
+//! Protocol-mode exec tests verifying tty enforcement and stream behaviour.
+
+use bollard::container::LogOutput;
+use bollard::errors::Error as BollardError;
+use futures_util::stream;
+use rstest::rstest;
+
+use super::*;
+
+fn make_protocol_exec_request(
+    container_id: &str,
+    command: Vec<String>,
+) -> Result<ExecRequest, PodbotError> {
+    ExecRequest::new(container_id, command, ExecMode::Protocol)
+}
+
+fn default_protocol_command() -> Vec<String> {
+    vec![
+        String::from("codex"),
+        String::from("app-server"),
+        String::from("--listen"),
+        String::from("stdio"),
+    ]
+}
+
+fn setup_start_exec_protocol(client: &mut MockExecClient, output_messages: Vec<&'static [u8]>) {
+    client
+        .expect_start_exec()
+        .times(1)
+        .returning(move |_, options| {
+            assert_eq!(
+                options,
+                Some(StartExecOptions {
+                    detach: false,
+                    tty: false,
+                    output_capacity: None
+                })
+            );
+            let output_chunks = output_messages
+                .iter()
+                .map(|message| {
+                    Ok(LogOutput::StdOut {
+                        message: Vec::from(*message).into(),
+                    })
+                })
+                .collect::<Vec<Result<LogOutput, BollardError>>>();
+            let output_stream = stream::iter(output_chunks);
+            Box::pin(async move {
+                Ok(bollard::exec::StartExecResults::Attached {
+                    output: Box::pin(output_stream),
+                    input: Box::pin(tokio::io::sink()),
+                })
+            })
+        });
+}
+
+fn assert_protocol_request_properties(request: &ExecRequest) {
+    assert!(!request.tty(), "protocol mode must enforce tty = false");
+    assert!(
+        request.mode().is_attached(),
+        "protocol mode should be treated as attached"
+    );
+    assert!(
+        request.mode().is_protocol(),
+        "protocol mode should identify as protocol"
+    );
+}
+
+fn assert_protocol_create_options(options: &CreateExecOptions<String>) {
+    assert_eq!(options.attach_stdin, Some(true), "stdin must be attached");
+    assert_eq!(options.attach_stdout, Some(true), "stdout must be attached");
+    assert_eq!(options.attach_stderr, Some(true), "stderr must be attached");
+    assert_eq!(options.tty, Some(false), "tty must be false");
+}
+
+fn assert_protocol_start_options(options: &StartExecOptions) {
+    assert!(!options.detach, "detach must be false for protocol mode");
+    assert!(!options.tty, "tty must be false for protocol mode");
+}
+
+fn assert_exit_code(result: Result<ExecResult, PodbotError>, expected: i64, context: &str) {
+    let exec_result = result.expect(context);
+    assert_eq!(exec_result.exit_code(), expected, "exit code should match");
+}
+
+#[rstest]
+fn protocol_mode_enforces_tty_false_in_constructor() -> TestResult {
+    let request = make_protocol_exec_request("sandbox", default_protocol_command())?;
+    assert_protocol_request_properties(&request);
+    Ok(())
+}
+
+fn assert_tty_override_rejected(request: &ExecRequest) {
+    assert!(
+        !request.tty(),
+        "with_tty(true) must be rejected for protocol"
+    );
+}
+
+#[rstest]
+fn protocol_mode_rejects_tty_override() -> TestResult {
+    let request = make_protocol_exec_request("sandbox", default_protocol_command())?.with_tty(true);
+    assert_tty_override_rejected(&request);
+    Ok(())
+}
+
+#[rstest]
+fn protocol_mode_create_options_have_correct_flags() -> TestResult {
+    let request = make_protocol_exec_request("sandbox", default_protocol_command())?;
+    let options = build_create_exec_options(&request);
+    assert_protocol_create_options(&options);
+    Ok(())
+}
+
+#[rstest]
+fn protocol_mode_start_options_have_correct_flags() -> TestResult {
+    let request = make_protocol_exec_request("sandbox", default_protocol_command())?;
+    let options = build_start_exec_options(&request);
+    assert_protocol_start_options(&options);
+    Ok(())
+}
+
+#[rstest]
+fn protocol_exec_succeeds_end_to_end(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
+    let mut client = MockExecClient::new();
+    setup_create_exec_expectation(&mut client, "proto-exec-1", false);
+    setup_start_exec_protocol(&mut client, vec![&b"protocol-output"[..]]);
+    client.expect_resize_exec().never();
+    setup_inspect_exec_once(&mut client, Some(0));
+
+    let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
+    let terminal_size_provider = make_terminal_size_provider(80, 24);
+    execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider);
+    Ok(())
+}
+
+#[rstest]
+fn protocol_exec_returns_nonzero_exit_code(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
+    let mut client = MockExecClient::new();
+    setup_create_exec_simple(&mut client, "proto-exec-2");
+    setup_start_exec_protocol(&mut client, vec![]);
+    client.expect_resize_exec().never();
+    setup_inspect_exec_once(&mut client, Some(42));
+
+    let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
+    let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
+    assert_exit_code(result, 42, "protocol exec should succeed");
+    Ok(())
+}
+
+#[rstest]
+fn protocol_mode_rejects_detached_daemon_response(runtime: RuntimeFixture) -> TestResult {
+    let runtime_handle = runtime?;
+    let mut client = MockExecClient::new();
+    setup_create_exec_simple(&mut client, "proto-exec-3");
+    setup_start_exec_protocol_detached_response(&mut client);
+
+    let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
+    let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
+    detached_helpers::assert_exec_failed_with_message(
+        result,
+        "detached start result",
+        "protocol mode should reject detached daemon response",
+    );
+    Ok(())
+}
+
+fn setup_start_exec_protocol_detached_response(client: &mut MockExecClient) {
+    client.expect_start_exec().times(1).returning(|_, options| {
+        assert_eq!(
+            options,
+            Some(StartExecOptions {
+                detach: false,
+                tty: false,
+                output_capacity: None
+            })
+        );
+        Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
+    });
+}

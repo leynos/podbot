@@ -756,14 +756,20 @@ service, to manage token refresh independently of active sessions.
 
 ### Interactive exec semantics
 
-`podbot exec` supports two execution modes:
+`podbot exec` supports three execution modes:
 
 - Attached mode (default) wires local stdin/stdout/stderr to the exec session.
 - Detached mode (`--detach`) starts the exec session without stream
   attachment and waits for completion.
+- Protocol mode (`ExecMode::Protocol`) connects streams like attached mode but
+  permanently disables TTY allocation. This mode is the foundation for
+  `podbot host`, which proxies protocol bytes between an IDE client and a
+  containerised app server. Because `tty` is always false, protocol mode never
+  registers a SIGWINCH listener and never calls `resize_exec`.
 
 Pseudo-terminal (TTY) allocation is enabled only for attached mode when both
-local stdin and stdout are terminals. Detached mode always uses `tty = false`.
+local stdin and stdout are terminals. Detached and protocol modes always use
+`tty = false`.
 
 When TTY is enabled, Podbot sends an initial resize to match the current
 terminal dimensions. On Unix targets, Podbot then subscribes to `SIGWINCH` and

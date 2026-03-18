@@ -36,6 +36,12 @@ fn detached_execution_mode_selected(interactive_exec_state: &InteractiveExecStat
     interactive_exec_state.mode.set(ExecMode::Detached);
 }
 
+#[given("protocol execution mode is selected")]
+fn protocol_execution_mode_selected(interactive_exec_state: &InteractiveExecState) {
+    interactive_exec_state.mode.set(ExecMode::Protocol);
+    interactive_exec_state.tty_enabled.set(false);
+}
+
 #[given("tty allocation is enabled")]
 fn tty_allocation_enabled(interactive_exec_state: &InteractiveExecState) {
     interactive_exec_state.tty_enabled.set(true);
@@ -146,7 +152,7 @@ fn configure_start_exec_expectation(
     tty_enabled: bool,
 ) {
     match mode {
-        ExecMode::Attached => {
+        ExecMode::Attached | ExecMode::Protocol => {
             client
                 .expect_start_exec()
                 .times(1)
@@ -196,7 +202,7 @@ fn configure_resize_expectation(client: &mut MockExecClient, mode: ExecMode) {
                 .times(0..)
                 .returning(|_, _| Box::pin(async { Ok(()) }));
         }
-        ExecMode::Detached => {
+        ExecMode::Detached | ExecMode::Protocol => {
             client.expect_resize_exec().never();
         }
     }

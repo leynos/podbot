@@ -169,7 +169,7 @@ fn configure_create_exec(client: &mut MockOrcExecClient) {
 
 fn configure_start_exec(client: &mut MockOrcExecClient, mode: ExecMode) {
     match mode {
-        ExecMode::Attached => {
+        ExecMode::Attached | ExecMode::Protocol => {
             client.expect_start_exec().times(1).returning(move |_, _| {
                 let output_stream = stream::iter(vec![Ok(LogOutput::StdOut {
                     message: Vec::from(&b"orc output"[..]).into(),
@@ -198,7 +198,7 @@ fn configure_resize(client: &mut MockOrcExecClient, mode: ExecMode) {
                 .times(0..)
                 .returning(|_, _| Box::pin(async { Ok(()) }));
         }
-        ExecMode::Detached => {
+        ExecMode::Detached | ExecMode::Protocol => {
             client.expect_resize_exec().never();
         }
     }

@@ -28,11 +28,11 @@ pub struct ExecParams<'a, C: ContainerExecClient> {
     pub container: &'a str,
     /// Command argv to execute.
     pub command: Vec<String>,
-    /// Attached or detached execution mode.
+    /// Attached, detached, or protocol execution mode.
     pub mode: ExecMode,
     /// Whether to allocate a pseudo-terminal (only effective in attached
-    /// mode). The caller is responsible for determining whether the local
-    /// terminal supports TTY.
+    /// mode; ignored for protocol and detached modes). The caller is
+    /// responsible for determining whether the local terminal supports TTY.
     pub tty: bool,
     /// Tokio runtime handle for blocking execution.
     pub runtime_handle: &'a tokio::runtime::Handle,

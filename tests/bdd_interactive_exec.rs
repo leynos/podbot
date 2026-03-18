@@ -44,3 +44,19 @@ fn execution_fails_when_exit_code_missing(interactive_exec_state: InteractiveExe
 fn attached_execution_with_tty_disabled_succeeds(interactive_exec_state: InteractiveExecState) {
     let _ = interactive_exec_state;
 }
+
+#[scenario(
+    path = "tests/features/interactive_exec.feature",
+    name = "Protocol execution succeeds with tty disabled"
+)]
+fn protocol_execution_succeeds(interactive_exec_state: InteractiveExecState) {
+    let _ = interactive_exec_state;
+}
+
+#[scenario(
+    path = "tests/features/interactive_exec.feature",
+    name = "Protocol execution returns non-zero exit code"
+)]
+fn protocol_execution_returns_non_zero_exit(interactive_exec_state: InteractiveExecState) {
+    let _ = interactive_exec_state;
+}
