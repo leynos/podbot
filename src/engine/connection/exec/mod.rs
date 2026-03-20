@@ -284,7 +284,10 @@ impl EngineConnector {
             ) => {
                 return Err(exec_failed(
                     request.container_id(),
-                    "daemon returned detached start result for attached mode",
+                    format!(
+                        "daemon returned detached start result for {:?} mode",
+                        request.mode()
+                    ),
                 ));
             }
             (ExecMode::Detached, bollard::exec::StartExecResults::Attached { .. }) => {

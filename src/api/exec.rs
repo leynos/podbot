@@ -28,11 +28,18 @@ pub struct ExecParams<'a, C: ContainerExecClient> {
     pub container: &'a str,
     /// Command argv to execute.
     pub command: Vec<String>,
-    /// Attached, detached, or protocol execution mode.
+    /// Execution mode:
+    /// - `Attached`: run with an interactive, user-facing stdio stream.
+    /// - `Detached`: start without attaching to stdio.
+    /// - `Protocol`: run in protocol-safe stream-proxy mode for forwarding raw
+    ///   stdio over a higher-level protocol. This mode is intended for API
+    ///   clients rather than direct terminal use and always disables TTY.
     pub mode: ExecMode,
-    /// Whether to allocate a pseudo-terminal (only effective in attached
-    /// mode; ignored for protocol and detached modes). The caller is
-    /// responsible for determining whether the local terminal supports TTY.
+    /// Whether to allocate a pseudo-terminal.
+    ///
+    /// This flag is only effective in `Attached` mode. `Protocol` and
+    /// `Detached` mode always disable TTY regardless of this value. The caller
+    /// is responsible for determining whether the local terminal supports TTY.
     pub tty: bool,
     /// Tokio runtime handle for blocking execution.
     pub runtime_handle: &'a tokio::runtime::Handle,

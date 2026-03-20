@@ -152,7 +152,7 @@ fn configure_start_exec_expectation(
     tty_enabled: bool,
 ) {
     match mode {
-        ExecMode::Attached | ExecMode::Protocol => {
+        ExecMode::Attached => {
             client
                 .expect_start_exec()
                 .times(1)
@@ -175,6 +175,27 @@ fn configure_start_exec_expectation(
                         })
                     })
                 });
+        }
+        ExecMode::Protocol => {
+            client.expect_start_exec().times(1).returning(|_, options| {
+                assert_eq!(
+                    options,
+                    Some(bollard::exec::StartExecOptions {
+                        detach: false,
+                        tty: false,
+                        output_capacity: None
+                    })
+                );
+                let output_stream = stream::iter(vec![Ok(LogOutput::StdOut {
+                    message: Vec::from(&b"bdd output"[..]).into(),
+                })]);
+                Box::pin(async move {
+                    Ok(bollard::exec::StartExecResults::Attached {
+                        output: Box::pin(output_stream),
+                        input: Box::pin(tokio::io::sink()),
+                    })
+                })
+            });
         }
         ExecMode::Detached => {
             client.expect_start_exec().times(1).returning(|_, options| {

@@ -10,12 +10,13 @@ Status: COMPLETE
 ## Purpose / big picture
 
 Podbot's exec subsystem currently supports two execution modes: Attached
-(streams connected, optional TTY) and Detached (no streams at all). Step 2.5 of
-the roadmap requires protocol-safe execution where an exec session has streams
-connected for proxying protocol bytes between an IDE client and a containerised
-app server, but TTY is permanently disabled. TTY escape sequences and terminal
-framing would corrupt protocol byte streams, so the enforcement must be
-structural, not caller-discipline.
+(streams connected, optional pseudo-terminal (TTY)) and Detached (no streams at
+all). Step 2.5 of the roadmap requires protocol-safe execution where an exec
+session has streams connected for proxying protocol bytes between an integrated
+development environment (IDE) client and a containerised app server, but TTY is
+permanently disabled. TTY escape sequences and terminal framing would corrupt
+protocol byte streams, so the enforcement must be structural, not
+caller-discipline.
 
 After this change, a library consumer can write:
 
@@ -46,7 +47,8 @@ marked done.
   and `expect_used`).
 - Use directory modules (`mod.rs`), not self-named files
   (`clippy::self_named_module_files` is denied).
-- Use `rstest` for unit tests, `rstest-bdd` v0.5.0 for behavioural tests.
+- Use `rstest` for unit tests, `rstest-bdd` v0.5.0 for behaviour-driven
+  development (BDD) tests.
 - BDD step functions must use `StepResult<T> = Result<T, String>` (no
   `expect`/`panic`).
 - Existing public API signatures for `ExecMode::Attached` and

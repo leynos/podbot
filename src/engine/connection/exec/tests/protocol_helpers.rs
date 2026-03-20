@@ -23,6 +23,11 @@ fn default_protocol_command() -> Vec<String> {
     ]
 }
 
+fn assert_non_protocol_modes() {
+    assert!(!ExecMode::Attached.is_protocol());
+    assert!(!ExecMode::Detached.is_protocol());
+}
+
 fn setup_start_exec_protocol(client: &mut MockExecClient, output_messages: Vec<&'static [u8]>) {
     client
         .expect_start_exec()
@@ -88,6 +93,11 @@ fn protocol_mode_enforces_tty_false_in_constructor() -> TestResult {
     let request = make_protocol_exec_request("sandbox", default_protocol_command())?;
     assert_protocol_request_properties(&request);
     Ok(())
+}
+
+#[rstest]
+fn non_protocol_modes_do_not_identify_as_protocol() {
+    assert_non_protocol_modes();
 }
 
 fn assert_tty_override_rejected(request: &ExecRequest) {
