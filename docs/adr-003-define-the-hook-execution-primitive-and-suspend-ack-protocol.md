@@ -159,11 +159,24 @@ Triggered, Executing, Completed, and Aborted.
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Triggered : trigger fires\nSessionEvent::HookTriggered emitted\nAgent session suspended
+    Idle --> Triggered : trigger fires
+    note right of Triggered
+        SessionEvent::HookTriggered emitted
+        Agent session suspended
+    end note
     Triggered --> Executing : orchestrator ack (Continue)
     Triggered --> Aborted : orchestrator ack (Abort)
-    Aborted --> [*] : SessionEvent::HookAborted emitted\nTriggering action rolled back\nAgent resumes or session ends
-    Executing --> Completed : hook exits\nSessionEvent::HookCompleted emitted\nAgent execution resumes
+    Aborted --> [*] : terminal abort path
+    note right of Aborted
+        SessionEvent::HookAborted emitted
+        Triggering action rolled back
+        Agent resumes or session ends
+    end note
+    Executing --> Completed : hook exits
+    note right of Completed
+        SessionEvent::HookCompleted emitted
+        Agent execution resumes
+    end note
 ```
 
 _Figure 1: Hook lifecycle state machine from trigger to completion or abort._
