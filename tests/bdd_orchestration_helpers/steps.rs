@@ -187,6 +187,7 @@ fn configure_start_exec(client: &mut MockOrcExecClient, mode: ExecMode) {
                 Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
             });
         }
+        _ => panic!("unexpected exec mode in orchestration start-exec expectation"),
     }
 }
 
@@ -201,6 +202,7 @@ fn configure_resize(client: &mut MockOrcExecClient, mode: ExecMode) {
         ExecMode::Detached | ExecMode::Protocol => {
             client.expect_resize_exec().never();
         }
+        _ => panic!("unexpected exec mode in orchestration resize expectation"),
     }
 }
 

@@ -87,6 +87,7 @@ impl ContainerExecClient for Docker {
 
 /// Execution mode for container commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ExecMode {
     /// Attach local terminal streams to the exec process.
     Attached,
@@ -284,10 +285,7 @@ impl EngineConnector {
             ) => {
                 return Err(exec_failed(
                     request.container_id(),
-                    format!(
-                        "daemon returned detached start result for {:?} mode",
-                        request.mode()
-                    ),
+                    "daemon returned detached start result for requested exec mode",
                 ));
             }
             (ExecMode::Detached, bollard::exec::StartExecResults::Attached { .. }) => {

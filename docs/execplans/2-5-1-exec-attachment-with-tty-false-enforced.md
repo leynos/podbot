@@ -13,7 +13,7 @@ Podbot's exec subsystem currently supports two execution modes: Attached
 (streams connected, optional pseudo-terminal (TTY)) and Detached (no streams at
 all). Step 2.5 of the roadmap requires protocol-safe execution where an exec
 session has streams connected for proxying protocol bytes between an integrated
-development environment (IDE) client and a containerised app server, but TTY is
+development environment (IDE) client and a containerized app server, but TTY is
 permanently disabled. TTY escape sequences and terminal framing would corrupt
 protocol byte streams, so the enforcement must be structural, not
 caller-discipline.
@@ -101,7 +101,7 @@ marked done.
       `protocol_helpers.rs`.
 - [x] (2026-03-18) Stage E: BDD feature scenarios and step helpers for
       protocol mode.
-- [x] (2026-03-18) Stage F: Documentation updates (design doc, users guide,
+- [x] (2026-03-18) Stage F: Documentation updates (design doc, user's guide,
       roadmap).
 - [x] (2026-03-18) Stage G: Verification gates passed (`make check-fmt`,
       `make lint`, `make test`, `make markdownlint` all exit 0).
@@ -151,7 +151,7 @@ Shipped:
   enforcement, tty override rejection, Bollard options correctness, end-to-end
   success/failure paths.
 - Two new BDD scenarios validating protocol execution with exit codes 0 and 1.
-- Updated design doc, users guide, and roadmap.
+- Updated design doc, user's guide, and roadmap.
 - All four gates pass: `make check-fmt`, `make lint`, `make test`,
   `make markdownlint`.
 
@@ -169,6 +169,10 @@ Follow-up beyond Step 2.5.1:
 
 ## Context and orientation
 
+The following walkthrough captures the pre-change code shape that this step
+built on. It is retained as historical context for the implementation plan
+below; the current shipped interface is described afterwards.
+
 The podbot project is a Rust application that manages sandboxed AI agent
 containers via Bollard (a Docker/Podman API client). The exec subsystem handles
 running commands inside containers.
@@ -176,12 +180,13 @@ running commands inside containers.
 Key types and files:
 
 - `src/engine/connection/exec/mod.rs` (347 lines): defines `ExecMode` (enum
-  with `Attached` and `Detached`), `ExecRequest` (struct holding container_id,
-  command, env, mode, and tty), `ExecResult`, the `ContainerExecClient` trait
-  (abstracting Bollard calls), and the `EngineConnector::exec_async()` method
-  that orchestrates the create/start/inspect lifecycle. Also contains
-  `build_create_exec_options()` and `build_start_exec_options()` which map an
-  `ExecRequest` to Bollard API option structs.
+  with `Attached` and `Detached` before this change), `ExecRequest` (struct
+  holding container_id, command, env, mode, and tty), `ExecResult`, the
+  `ContainerExecClient` trait (abstracting Bollard calls), and the
+  `EngineConnector::exec_async()` method that orchestrates the
+  create/start/inspect lifecycle. Also contains `build_create_exec_options()`
+  and `build_start_exec_options()` which map an `ExecRequest` to Bollard API
+  option structs.
 
 - `src/engine/connection/exec/attached.rs` (317 lines): contains
   `run_attached_session_async()` which wires stdin/stdout/stderr between the
@@ -213,7 +218,7 @@ Key types and files:
 - `tests/bdd_interactive_exec_helpers/` (`mod.rs`, `state.rs`, `steps.rs`,
   `assertions.rs`): BDD helper modules.
 
-How `ExecMode` flows through the system today:
+Pre-change `ExecMode` flow:
 
 1. `ExecMode::Attached` or `ExecMode::Detached` is chosen by the caller.
 2. `ExecRequest::new()` sets `tty = mode.is_attached()` (true for Attached,
@@ -229,22 +234,35 @@ How `ExecMode` flows through the system today:
 7. In the Attached path, `run_attached_session_async` checks `request.tty()`
    to decide whether to register SIGWINCH and call resize.
 
-What Protocol mode needs to do differently from Attached: `is_attached()`
-returns true (streams connected). `tty` is always false (enforced in
-constructor, cannot be overridden). No SIGWINCH listener, no resize calls
-(already handled by `request.tty()` being false). The dispatch match treats
-Protocol the same as Attached for stream handling.
+The shipped implementation differs from that pre-change walkthrough as follows:
+
+1. `ExecMode` now has `Attached`, `Detached`, and `Protocol` variants and is
+   marked `#[non_exhaustive]` to protect downstream callers from exhaustive
+   matches.
+2. `ExecMode::is_attached()` returns true for `Attached` and `Protocol`.
+3. `ExecMode::is_protocol()` is a public query method that returns true only
+   for `Protocol`.
+4. `ExecRequest::new()` defaults `tty` to true only for `ExecMode::Attached`,
+   so `ExecMode::Protocol` starts with `tty = false`.
+5. `ExecRequest::with_tty()` only honours `tty = true` for
+   `ExecMode::Attached`; `Detached` and `Protocol` stay at `tty = false`.
+6. `build_create_exec_options()` and `build_start_exec_options()` still rely
+   on `is_attached()` for stream wiring and `tty()` for terminal allocation, so
+   Protocol gets attached streams with TTY disabled.
+7. The dispatch match treats `Attached` and `Protocol` identically for stream
+   handling, while resize behaviour still keys off `request.tty()`.
 
 ## Plan of work
 
 ### Stage A: Add `ExecMode::Protocol` variant and update `ExecRequest`
 
 In `src/engine/connection/exec/mod.rs`, add a `Protocol` variant to the
-`ExecMode` enum. Update `is_attached()` to return true for both `Attached` and
-`Protocol`. Add an `is_protocol()` query method. Change the tty default in
-`ExecRequest::new()` from `mode.is_attached()` to `mode == ExecMode::Attached`,
-so Protocol starts with `tty = false`. Change `with_tty()` from
-`self.mode.is_attached() && tty` to
+`ExecMode` enum and mark the enum `#[non_exhaustive]` to avoid downstream
+breakage from future variants. Update `is_attached()` to return true for both
+`Attached` and `Protocol`. Add a public `is_protocol()` query method. Change
+the tty default in `ExecRequest::new()` from `mode.is_attached()` to
+`mode == ExecMode::Attached`, so Protocol starts with `tty = false`. Change
+`with_tty()` from `self.mode.is_attached() && tty` to
 `matches!(self.mode, ExecMode::Attached) && tty`, so Protocol cannot have tty
 overridden to true.
 
@@ -384,7 +402,7 @@ impl ExecMode {
     }
 
     #[must_use]
-    const fn is_protocol(self) -> bool {
+    pub const fn is_protocol(self) -> bool {
         matches!(self, Self::Protocol)
     }
 }

@@ -210,6 +210,7 @@ fn configure_start_exec_expectation(
                 Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
             });
         }
+        _ => panic!("unexpected exec mode in BDD start-exec expectation"),
     }
 }
 
@@ -226,6 +227,7 @@ fn configure_resize_expectation(client: &mut MockExecClient, mode: ExecMode) {
         ExecMode::Detached | ExecMode::Protocol => {
             client.expect_resize_exec().never();
         }
+        _ => panic!("unexpected exec mode in BDD resize expectation"),
     }
 }
 
