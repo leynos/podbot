@@ -79,6 +79,8 @@ installations.
 - [ ] Add schema fields for hosting: `workspace.source`, `workspace.host_path`,
   `workspace.container_path`, `agent.command`, `agent.args`, and
   `agent.env_allowlist`.
+- [ ] Add MCP hosting defaults to configuration: bind strategy, idle timeout,
+  maximum message size, auth token policy, and allowed-origin policy.
 - [ ] Add execution-mode values required for hosting mode while preserving
   `podbot` defaults for existing configurations.
 - [ ] Define migration rules, so legacy config files load deterministically
@@ -357,9 +359,11 @@ flows.
 **Tasks:**
 
 - [ ] Define a library-level `LaunchRequest` model for agent kind, mode,
-  workspace source, and credential policy.
+  workspace source, credential policy, prompt references, bundle references,
+  skill selection, hook subscriptions, and MCP wire definitions.
 - [ ] Define a normalized `LaunchPlan` that resolves command, args, env policy,
-  mount policy, and stream policy.
+  mount policy, stream policy, artefact staging targets, and wire injection
+  details.
 - [ ] Update orchestration internals, so `run` and `host` both use the same
   normalization path.
 - [ ] Add tests that assert consistent normalization outcomes across command
@@ -368,7 +372,112 @@ flows.
 **Completion criteria:** Launch behaviour is defined once in library code and
 is consistent across CLI commands.
 
-### Step 4.6: Gated e2e orchestration suite
+### Step 4.6: Hosted session control plane
+
+Expose a typed hosted-session surface that separates protocol IO from
+control-plane events.
+
+**Tasks:**
+
+- [ ] Introduce a `HostedSession` handle that exposes protocol IO separately
+  from a typed event stream.
+- [ ] Emit typed session events for lifecycle transitions, diagnostics, MCP wire
+  status, and hook requests without writing directly to stdout or stderr.
+- [ ] Add typed control methods for session stop and hook acknowledgement.
+- [ ] Render hosted-session events to stderr in the CLI adapter while
+  preserving stdout protocol purity.
+- [ ] Add embedding-focused integration tests that drive the hosted-session
+  surface directly from library code.
+
+**Completion criteria:** Embedders can host agents through a typed session
+handle, and `podbot host` remains protocol-clean while using the same library
+surface.
+
+### Step 4.7: MCP wire provisioning and injection
+
+Provide a first-class Podbot surface for per-workspace MCP wire lifecycle.
+
+**Tasks:**
+
+- [ ] Add typed MCP wire request and response models for `Stdio`,
+  `StdioContainer`, and `StreamableHttp` sources.
+- [ ] Implement create, list, and remove operations for per-workspace MCP
+  wires, returning agent-facing URL and header injection details.
+- [ ] Keep helper-container `RepoAccess` explicit and default it to `None`.
+- [ ] Distinguish wire lifecycle from global server-definition lifecycle and
+  keep per-workspace wire state isolated from registry metadata.
+- [ ] Add integration tests covering stdio, helper-container, and remote HTTP
+  wire sources.
+
+**Completion criteria:** Podbot can provision MCP wires per workspace through a
+typed API and inject only the reachability details required by the agent.
+
+### Step 4.8: Prompt, bundle, and validation surfaces
+
+Define the artefact and validation surfaces needed for prompt-driven hosted
+sessions.
+
+**Tasks:**
+
+- [ ] Define prompt frontmatter and bundle manifest contracts that support
+  prompts, skills, MCP server references, and hook artefacts.
+- [ ] Preserve compatibility with skill-folder discovery while keeping Podbot
+  additions namespaced and reviewable.
+- [ ] Implement a library `validate_prompt` surface that returns diagnostics and
+  capability disposition results for a target agent runtime.
+- [ ] Add an optional `podbot validate-prompt` CLI that emits structured JSON
+  for operator and Continuous Integration (CI) use.
+- [ ] Add tests for prompt rendering, bundle cross-reference validation, ACP
+  capability masking diagnostics, and artefact materialization order.
+
+**Completion criteria:** Podbot can validate prompts and bundle references
+before launch with typed diagnostics, and prompt/bundle artefacts have a
+documented ingestion contract.
+
+### Step 4.9: Hook execution and orchestrator acknowledgement
+
+Implement the hosted hook protocol required for orchestrator-governed sessions.
+
+**Tasks:**
+
+- [ ] Define hook artefact and subscription models, including explicit workspace
+  access and environment allowlist policy.
+- [ ] Emit hook request events over the hosted-session event channel and suspend
+  session progress until the orchestrator acknowledges them.
+- [ ] Enforce deterministic timeout and abort semantics when acknowledgements do
+  not arrive in time.
+- [ ] Capture hook stdout and stderr into structured completion events without
+  contaminating protocol streams.
+- [ ] Add tests for acknowledgement, denial, timeout, and duplicate-delivery
+  idempotency.
+
+**Completion criteria:** Hosted sessions can gate agent progress on explicit
+hook acknowledgements through the typed session surface, with deterministic and
+test-backed semantics.
+
+### Step 4.10: Recovery, replay, and restart safety
+
+Make hosted control-plane behaviour restart-safe for wires and hook-gated
+sessions.
+
+**Tasks:**
+
+- [ ] Add monotonic event identifiers to hosted session events for ordering and
+  duplicate detection.
+- [ ] Persist minimal session state required to recover pending hooks and wire
+  lifecycle after process restart.
+- [ ] Expose a recovery API that resumes or abandons hosted sessions
+  deterministically.
+- [ ] Ensure duplicate hook requests after restart do not cause duplicate
+  acknowledgements or duplicate hook execution.
+- [ ] Add tests covering restart during pending-hook acknowledgement,
+  completion replay, and stale wire cleanup.
+
+**Completion criteria:** Podbot can recover or abandon hosted sessions
+deterministically after restart without violating stdout purity or hook
+idempotency.
+
+### Step 4.11: Gated e2e orchestration suite
 
 Create a dedicated end-to-end suite for full runtime orchestration validation.
 
@@ -397,18 +506,24 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
   mock agent shell script stub.
 - [ ] Implement e2e scenario: start Codex configured for an OpenAI-compatible
   mock inference provider implemented with Vidai Mock.
+- [ ] Implement e2e scenario: create a host-mounted workspace, provision
+  multiple MCP wires, and validate that the agent receives only injected URL
+  and header data.
+- [ ] Implement e2e scenario: trigger a hosted hook, restart the orchestrator
+  or host process mid-acknowledgement, and verify exactly-once acknowledgement
+  effects after recovery.
 - [ ] Add CI workflow wiring so the e2e suite runs in CI only when explicitly
   triggered (manual dispatch or explicit workflow call), while remaining
   available through local on-demand execution (`make test-e2e`).
 - [ ] Persist e2e logs and runtime diagnostics as CI artefacts for failed and
   successful runs.
 
-**Completion criteria:** All three e2e scenarios pass reliably in the dedicated
-gated pipeline. The default test suite remains unchanged in speed and scope,
-and e2e execution occurs via local on-demand runs and explicitly triggered CI
-jobs. Preflight failures provide clear remediation guidance instead of generic
-setup errors. Parallel e2e runs do not collide, and preflight output remains
-schema-stable across surfaces.
+**Completion criteria:** All listed e2e scenarios pass reliably in the
+dedicated gated pipeline. The default test suite remains unchanged in speed and
+scope, and e2e execution occurs via local on-demand runs and explicitly
+triggered CI jobs. Preflight failures provide clear remediation guidance
+instead of generic setup errors. Parallel e2e runs do not collide, and
+preflight output remains schema-stable across surfaces.
 
 ## Phase 5: Library API and embedding support
 
@@ -461,6 +576,8 @@ Define and document the supported long-term API surface.
   `eyre` types.
 - [ ] Gate CLI-only dependencies and code paths behind a binary or feature
   boundary.
+- [ ] Reconcile the public hook and validation schemas with the documented
+  integration contract before stabilizing them.
 - [ ] Add integration tests that embed Podbot as a library from a host-style
   call path.
 
@@ -672,6 +789,26 @@ Validate protocol cleanliness across full process lifecycle transitions.
 
 **Completion criteria:** Protocol sessions remain stream-clean and framing-safe
 across startup, steady-state, and shutdown paths.
+
+### Step 8.4: Wire, hook, and validation conformance tests
+
+Validate the higher-level integration contract used by orchestrators such as
+Corbusier.
+
+**Tasks:**
+
+- [ ] Launch a host-mounted workspace with multiple MCP wires and assert the
+  returned URL and header contract is sufficient for agent startup.
+- [ ] Verify `validate_prompt` reports deterministic diagnostics for ACP-masked
+  capabilities, missing wires, and missing hooks.
+- [ ] Exercise hook acknowledgement across allow, deny, timeout, and restart
+  scenarios, asserting idempotent outcomes.
+- [ ] Assert helper-container `RepoAccess` remains explicit and never alters the
+  agent container's own workspace mount policy.
+
+**Completion criteria:** Podbot's integration contract for wires, prompt
+validation, and hook acknowledgement is validated end to end against the
+documented orchestrator-facing behaviour.
 
 ## Future enhancements
 
