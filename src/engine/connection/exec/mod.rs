@@ -87,17 +87,27 @@ impl ContainerExecClient for Docker {
 
 /// Execution mode for container commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ExecMode {
     /// Attach local terminal streams to the exec process.
     Attached,
     /// Start without stream attachment and wait for exit.
     Detached,
+    /// Attach streams for protocol proxying with tty permanently disabled.
+    Protocol,
 }
 
 impl ExecMode {
     #[must_use]
     const fn is_attached(self) -> bool {
-        matches!(self, Self::Attached)
+        matches!(self, Self::Attached | Self::Protocol)
+    }
+
+    /// Return true when this mode is protocol-safe (streams attached, tty
+    /// permanently disabled).
+    #[must_use]
+    pub const fn is_protocol(self) -> bool {
+        matches!(self, Self::Protocol)
     }
 }
 
@@ -132,7 +142,7 @@ impl ExecRequest {
             command: validated_command,
             env: None,
             mode,
-            tty: mode.is_attached(),
+            tty: mode == ExecMode::Attached,
         })
     }
 
@@ -145,10 +155,10 @@ impl ExecRequest {
 
     /// Control pseudo-terminal allocation for attached mode.
     ///
-    /// Detached mode always forces `tty = false`.
+    /// Detached and protocol modes always force `tty = false`.
     #[must_use]
     pub const fn with_tty(mut self, tty: bool) -> Self {
-        self.tty = self.mode.is_attached() && tty;
+        self.tty = matches!(self.mode, ExecMode::Attached) && tty;
         self
     }
 
@@ -262,14 +272,20 @@ impl EngineConnector {
             })?;
 
         match (request.mode(), start_result) {
-            (ExecMode::Attached, bollard::exec::StartExecResults::Attached { output, input }) => {
+            (
+                ExecMode::Attached | ExecMode::Protocol,
+                bollard::exec::StartExecResults::Attached { output, input },
+            ) => {
                 run_attached_session_async(client, request, &exec_id, output, input, size_provider)
                     .await?;
             }
-            (ExecMode::Attached, bollard::exec::StartExecResults::Detached) => {
+            (
+                ExecMode::Attached | ExecMode::Protocol,
+                bollard::exec::StartExecResults::Detached,
+            ) => {
                 return Err(exec_failed(
                     request.container_id(),
-                    "daemon returned detached start result for attached mode",
+                    "daemon returned detached start result for requested exec mode",
                 ));
             }
             (ExecMode::Detached, bollard::exec::StartExecResults::Attached { .. }) => {

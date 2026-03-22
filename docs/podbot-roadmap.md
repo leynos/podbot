@@ -163,7 +163,7 @@ Provide non-TTY execution for app-server hosting protocols.
 
 **Tasks:**
 
-- [ ] Implement exec attachment with `tty = false` enforced.
+- [x] Implement exec attachment with `tty = false` enforced.
 - [ ] Implement byte-stream proxy loops: stdin -> container stdin, container
   stdout -> host stdout, and container stderr -> host stderr.
 - [ ] Keep proxy buffering bounded, so hosted protocols can apply backpressure.

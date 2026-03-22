@@ -36,6 +36,12 @@ fn detached_execution_mode_selected(interactive_exec_state: &InteractiveExecStat
     interactive_exec_state.mode.set(ExecMode::Detached);
 }
 
+#[given("protocol execution mode is selected")]
+fn protocol_execution_mode_selected(interactive_exec_state: &InteractiveExecState) {
+    interactive_exec_state.mode.set(ExecMode::Protocol);
+    interactive_exec_state.tty_enabled.set(false);
+}
+
 #[given("tty allocation is enabled")]
 fn tty_allocation_enabled(interactive_exec_state: &InteractiveExecState) {
     interactive_exec_state.tty_enabled.set(true);
@@ -170,6 +176,27 @@ fn configure_start_exec_expectation(
                     })
                 });
         }
+        ExecMode::Protocol => {
+            client.expect_start_exec().times(1).returning(|_, options| {
+                assert_eq!(
+                    options,
+                    Some(bollard::exec::StartExecOptions {
+                        detach: false,
+                        tty: false,
+                        output_capacity: None
+                    })
+                );
+                let output_stream = stream::iter(vec![Ok(LogOutput::StdOut {
+                    message: Vec::from(&b"bdd output"[..]).into(),
+                })]);
+                Box::pin(async move {
+                    Ok(bollard::exec::StartExecResults::Attached {
+                        output: Box::pin(output_stream),
+                        input: Box::pin(tokio::io::sink()),
+                    })
+                })
+            });
+        }
         ExecMode::Detached => {
             client.expect_start_exec().times(1).returning(|_, options| {
                 assert_eq!(
@@ -183,6 +210,7 @@ fn configure_start_exec_expectation(
                 Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
             });
         }
+        _ => panic!("unexpected exec mode in BDD start-exec expectation"),
     }
 }
 
@@ -196,9 +224,10 @@ fn configure_resize_expectation(client: &mut MockExecClient, mode: ExecMode) {
                 .times(0..)
                 .returning(|_, _| Box::pin(async { Ok(()) }));
         }
-        ExecMode::Detached => {
+        ExecMode::Detached | ExecMode::Protocol => {
             client.expect_resize_exec().never();
         }
+        _ => panic!("unexpected exec mode in BDD resize expectation"),
     }
 }
 

@@ -42,3 +42,19 @@ Feature: Interactive execution
     When execution is requested
     Then execution succeeds
     And reported exit code is 0
+
+  Scenario: Protocol execution succeeds with tty disabled
+    Given protocol execution mode is selected
+    And command is codex app-server --listen stdio
+    And command exit code is 0
+    When execution is requested
+    Then execution succeeds
+    And reported exit code is 0
+
+  Scenario: Protocol execution returns non-zero exit code
+    Given protocol execution mode is selected
+    And command is codex app-server --listen stdio
+    And command exit code is 1
+    When execution is requested
+    Then execution succeeds
+    And reported exit code is 1
