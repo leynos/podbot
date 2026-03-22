@@ -518,12 +518,12 @@ Create a dedicated end-to-end suite for full runtime orchestration validation.
 - [ ] Persist e2e logs and runtime diagnostics as CI artefacts for failed and
   successful runs.
 
-**Completion criteria:** All three e2e scenarios pass reliably in the dedicated
-gated pipeline. The default test suite remains unchanged in speed and scope,
-and e2e execution occurs via local on-demand runs and explicitly triggered CI
-jobs. Preflight failures provide clear remediation guidance instead of generic
-setup errors. Parallel e2e runs do not collide, and preflight output remains
-schema-stable across surfaces.
+**Completion criteria:** All listed e2e scenarios pass reliably in the
+dedicated gated pipeline. The default test suite remains unchanged in speed and
+scope, and e2e execution occurs via local on-demand runs and explicitly
+triggered CI jobs. Preflight failures provide clear remediation guidance
+instead of generic setup errors. Parallel e2e runs do not collide, and
+preflight output remains schema-stable across surfaces.
 
 ## Phase 5: Library API and embedding support
 
