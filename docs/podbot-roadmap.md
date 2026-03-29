@@ -166,7 +166,7 @@ Provide non-TTY execution for app-server hosting protocols.
 **Tasks:**
 
 - [x] Implement exec attachment with `tty = false` enforced.
-- [ ] Implement byte-stream proxy loops: stdin -> container stdin, container
+- [x] Implement byte-stream proxy loops: stdin -> container stdin, container
   stdout -> host stdout, and container stderr -> host stderr.
 - [ ] Keep proxy buffering bounded, so hosted protocols can apply backpressure.
 - [ ] Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.

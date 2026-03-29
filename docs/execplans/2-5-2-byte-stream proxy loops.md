@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: PLANNED (2026-03-29)
+Status: COMPLETE (2026-03-29)
 
 No `PLANS.md` file exists in this repository as of 2026-03-29, so this ExecPlan
 is the governing implementation document for this task.
@@ -382,13 +382,23 @@ pass.
 
 - [x] (2026-03-29) Reviewed roadmap Step 2.5, design documents, existing exec
   implementation, and adjacent execplans; drafted this execution plan.
-- [ ] Stage A: Split protocol proxying from interactive terminal attachment.
-- [ ] Stage B: Introduce a testable host-IO seam for proxy loops.
-- [ ] Stage C: Implement protocol byte-stream loops and shutdown ordering.
-- [ ] Stage D: Wire protocol-mode exec orchestration and error mapping.
-- [ ] Stage E: Add `rstest` unit coverage for proxy loops.
-- [ ] Stage F: Add `rstest-bdd` behavioural coverage for protocol proxying.
-- [ ] Stage G: Update documentation, roadmap, and replay the gate stack.
+- [x] (2026-03-29) Stage A: split protocol proxying into
+  `src/engine/connection/exec/protocol.rs` and kept interactive attachment in
+  `attached.rs`.
+- [x] (2026-03-29) Stage B: introduced `ProtocolProxyIo` so protocol sessions
+  can run against injected host stdin/stdout/stderr handles in tests.
+- [x] (2026-03-29) Stage C: implemented dedicated stdin/stdout/stderr proxy
+  loops, ignored `LogOutput::StdIn` echo records in protocol mode, and made
+  stdin-task shutdown explicit with a short completion grace period.
+- [x] (2026-03-29) Stage D: wired `ExecMode::Protocol` through the dedicated
+  protocol helper while preserving attached and detached semantics elsewhere.
+- [x] (2026-03-29) Stage E: added `rstest` unit coverage for byte forwarding,
+  stream routing, stdout/stderr write failures, stdin flush failure, daemon
+  stream failure, `StdIn` suppression, and EOF shutdown.
+- [x] (2026-03-29) Stage F: added `rstest-bdd` protocol proxy scenarios and a
+  dedicated `tests/features/protocol_proxy.feature` feature file.
+- [x] (2026-03-29) Stage G: updated design and user documentation, marked the
+  Step 2.5.2 roadmap checkbox done, and replayed the full gate stack to green.
 
 ## Surprises and discoveries
 
@@ -401,6 +411,14 @@ pass.
 - Discovery: there is no `podbot host` CLI entry point yet, so Step 2.5.2 must
   be validated through library seams and tests rather than a user-facing host
   command.
+- Discovery: waiting indefinitely for host stdin shutdown is unsafe in
+  protocol mode because a hosted server may exit while the host side keeps
+  stdin open. A short grace period before aborting the stdin-forwarding task
+  captures EOF and flush failures without hanging shutdown.
+- Discovery: `make fmt` depends on an `fd` executable that is not present on
+  this machine's default `PATH`, so gate execution required a temporary local
+  `fd` shim that delegates to `find`. The repository Make target itself was
+  preserved unchanged.
 
 ## Decision log
 
@@ -417,12 +435,31 @@ pass.
 - Decision: treat `LogOutput::StdIn` as interactive-only and do not forward it
   to host stdout in protocol mode. Rationale: protocol mode must preserve host
   stdout as container protocol output, not local terminal echo.
+- Decision: allow a short timeout while waiting for stdin forwarding to finish
+  before aborting it during session teardown. Rationale: this preserves
+  deterministic EOF and flush-failure reporting without allowing a live host
+  stdin reader to block container-exit handling forever.
 
 ## Outcomes and retrospective
 
-Not started yet. Populate this section after implementation with:
-
-- what shipped;
-- which tests and gates passed;
-- any deviations from the planned module layout;
-- any follow-up required for later Step 2.5 tasks.
+- Shipped: `ExecMode::Protocol` now dispatches through
+  `src/engine/connection/exec/protocol.rs`, which implements dedicated proxy
+  loops for host stdin -> container stdin, container stdout -> host stdout, and
+  container stderr -> host stderr.
+- Shipped: protocol mode now ignores daemon `LogOutput::StdIn` echo records,
+  keeps resize handling out of the session path, and preserves exit-code
+  reporting through the existing inspect loop.
+- Shipped: injected `ProtocolProxyIo` test seams plus `rstest` and
+  `rstest-bdd` coverage for forwarding, stream routing, failure mapping, and
+  EOF shutdown behaviour.
+- Documentation: updated `docs/podbot-design.md`,
+  `docs/users-guide.md`, and `docs/podbot-roadmap.md` to describe the final
+  protocol proxy behaviour and mark Step 2.5.2 complete.
+- Gates passed: `make fmt`, `make markdownlint`, `make nixie`,
+  `make check-fmt`, `make lint`, and `make test`.
+- Deviation: behavioural coverage landed as an internal `rstest-bdd` module
+  plus `tests/features/protocol_proxy.feature`, rather than extending the
+  existing interactive exec BDD helpers with more injected-IO machinery.
+- Follow-up: Step 2.5.3 and later roadmap items still need bounded buffering
+  policy hardening, `podbot host` stdout-purity enforcement, and lifecycle
+  stream-purity regression coverage at the CLI boundary.

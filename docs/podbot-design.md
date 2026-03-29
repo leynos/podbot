@@ -152,6 +152,20 @@ In app server hosting mode, Podbot's stream contract is strict:
 - Proxy logic preserves framing without adding prefixes or newline
   transformations, and uses bounded buffering so backpressure remains visible
   to the hosted server.[^7] [^10]
+- Protocol proxying uses a dedicated byte-stream path rather than reusing the
+  interactive terminal attachment helper. Interactive-only behaviours such as
+  resize propagation and local echo forwarding are therefore kept out of hosted
+  sessions by construction.
+- Daemon `LogOutput::StdIn` records are treated as interactive echo metadata
+  and are not forwarded to protocol stdout. This protects stdout purity for
+  stdio-framed servers that would misinterpret echoed input bytes as protocol
+  output.
+- Proxy shutdown ordering is explicit: host stdin is copied into container
+  stdin until EOF, EOF triggers flush plus stdin shutdown, container stdout and
+  stderr continue forwarding until the daemon stream completes, and only then
+  does Podbot inspect the exec exit code. If the container finishes while host
+  stdin is still open, Podbot cancels the stdin-forwarding task after a short
+  grace period so shutdown does not hang indefinitely on a live host reader.
 
 The dedicated `podbot host` command is protocol-only. Unlike interactive
 operator commands, it must not emit banners, progress lines, or lifecycle
