@@ -14,6 +14,8 @@ use crate::error::{ConfigError, Result};
 enum EnvVarType {
     /// String value (always accepted).
     String,
+    /// Comma-separated list of strings.
+    StringList,
     /// Boolean value (`true`/`false`). Invalid values return an error.
     Bool,
     /// Unsigned 64-bit integer. Invalid values return an error.
@@ -89,10 +91,40 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
         path: &["agent", "mode"],
         var_type: EnvVarType::String,
     },
+    EnvVarSpec {
+        env_var: "PODBOT_AGENT_COMMAND",
+        path: &["agent", "command"],
+        var_type: EnvVarType::String,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_AGENT_ARGS",
+        path: &["agent", "args"],
+        var_type: EnvVarType::StringList,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_AGENT_ENV_ALLOWLIST",
+        path: &["agent", "env_allowlist"],
+        var_type: EnvVarType::StringList,
+    },
     // Workspace fields
+    EnvVarSpec {
+        env_var: "PODBOT_WORKSPACE_SOURCE",
+        path: &["workspace", "source"],
+        var_type: EnvVarType::String,
+    },
     EnvVarSpec {
         env_var: "PODBOT_WORKSPACE_BASE_DIR",
         path: &["workspace", "base_dir"],
+        var_type: EnvVarType::String,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_WORKSPACE_HOST_PATH",
+        path: &["workspace", "host_path"],
+        var_type: EnvVarType::String,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_WORKSPACE_CONTAINER_PATH",
+        path: &["workspace", "container_path"],
         var_type: EnvVarType::String,
     },
     // Creds fields
@@ -105,6 +137,32 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
         env_var: "PODBOT_CREDS_COPY_CODEX",
         path: &["creds", "copy_codex"],
         var_type: EnvVarType::Bool,
+    },
+    // MCP hosting fields
+    EnvVarSpec {
+        env_var: "PODBOT_MCP_BIND_STRATEGY",
+        path: &["mcp", "bind_strategy"],
+        var_type: EnvVarType::String,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_MCP_IDLE_TIMEOUT_SECS",
+        path: &["mcp", "idle_timeout_secs"],
+        var_type: EnvVarType::U64,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_MCP_MAX_MESSAGE_SIZE_BYTES",
+        path: &["mcp", "max_message_size_bytes"],
+        var_type: EnvVarType::U64,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_MCP_AUTH_TOKEN_POLICY",
+        path: &["mcp", "auth_token_policy"],
+        var_type: EnvVarType::String,
+    },
+    EnvVarSpec {
+        env_var: "PODBOT_MCP_ALLOWED_ORIGIN_POLICY",
+        path: &["mcp", "allowed_origin_policy"],
+        var_type: EnvVarType::String,
     },
 ];
 
@@ -215,6 +273,14 @@ pub(crate) fn collect_env_vars<E: mockable::Env>(env: &E) -> Result<Value> {
         // Invalid values return an error immediately (fail-fast).
         let json_value = match spec.var_type {
             EnvVarType::String => Value::String(raw_value),
+            EnvVarType::StringList => Value::Array(
+                raw_value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(|value| Value::String(value.to_owned()))
+                    .collect(),
+            ),
             EnvVarType::Bool => match raw_value.parse::<bool>() {
                 Ok(b) => Value::Bool(b),
                 Err(_) => {

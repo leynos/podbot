@@ -11,7 +11,9 @@ use std::io::Write;
 
 use crate::test_support::env_with;
 use camino::Utf8PathBuf;
-use podbot::config::{ConfigLoadOptions, ConfigOverrides, SelinuxLabelMode, load_config_with_env};
+use podbot::config::{
+    CommandIntent, ConfigLoadOptions, ConfigOverrides, SelinuxLabelMode, load_config_with_env,
+};
 use rstest::rstest;
 use tempfile::NamedTempFile;
 
@@ -138,7 +140,10 @@ fn load_config_overrides_take_precedence_over_config_file() {
         overrides: ConfigOverrides {
             engine_socket: Some(String::from("unix:///from/overrides.sock")),
             image: None,
+            agent_kind: None,
+            agent_mode: None,
         },
+        command_intent: CommandIntent::Any,
     };
     let config = load_config_with_env(&env, &options).expect("load_config should succeed");
 

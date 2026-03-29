@@ -10,7 +10,9 @@ use std::io::Write;
 use crate::test_support::env_with;
 use camino::Utf8PathBuf;
 use mockable::MockEnv;
-use podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config_with_env};
+use podbot::config::{
+    AppConfig, CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config_with_env,
+};
 use podbot::engine::CreateContainerRequest;
 use podbot::error::{ConfigError, PodbotError};
 use rstest::rstest;
@@ -49,7 +51,10 @@ fn load_config_for_image_layers(
         overrides: ConfigOverrides {
             engine_socket: None,
             image: overrides_image.map(str::to_owned),
+            agent_kind: None,
+            agent_mode: None,
         },
+        command_intent: CommandIntent::Any,
     };
 
     load_config_with_env(env, &options).expect("load_config should succeed for image layer test")

@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 PLANS.md is not present in the repository root, so this plan stands alone.
 
@@ -26,10 +26,9 @@ invalid combinations of subcommand, `agent.kind`, `agent.mode`, and
 `workspace.source` fail with semantic errors that tell the operator what is
 wrong and what to do next.
 
-This plan is the draft phase only. It defines the implementation path and
-validation criteria but does not mark Step 1.4 complete. The roadmap entry in
-`docs/podbot-roadmap.md` should be updated only after the implementation,
-tests, documentation, and quality gates have all passed.
+This plan now records the implemented Step 1.4 delivery. The roadmap entry in
+`docs/podbot-roadmap.md` was updated after the implementation, tests,
+documentation, and quality gates passed.
 
 ## Constraints
 
@@ -103,17 +102,21 @@ tests, documentation, and quality gates have all passed.
   config types, loader, CLI, unit tests, and BDD coverage.
 - [x] (2026-03-29 00:00Z) Collected planning input from agent team members for
   design intent and codebase seams.
-- [ ] Draft approved by user.
-- [ ] Extend configuration schema and defaults for hosting-era fields and MCP
+- [x] (2026-03-29 02:00Z) Draft approved by user.
+- [x] (2026-03-29 03:00Z) Extend configuration schema and defaults for
+      hosting-era fields and MCP
   hosting defaults.
-- [ ] Implement deterministic migration rules and centralized semantic
+- [x] (2026-03-29 03:00Z) Implement deterministic migration rules and
+      centralized semantic
   validation.
-- [ ] Add rstest unit coverage and rstest-bdd behavioural coverage for the
+- [x] (2026-03-29 03:00Z) Add rstest unit coverage and rstest-bdd behavioural
+      coverage for the
   compatibility matrix.
-- [ ] Update design and user documentation.
-- [ ] Mark Step 1.4 complete in `docs/podbot-roadmap.md` after all validations
+- [x] (2026-03-29 03:00Z) Update design and user documentation.
+- [x] (2026-03-29 03:00Z) Mark Step 1.4 complete in `docs/podbot-roadmap.md`
+      after all validations
   pass.
-- [ ] Run and capture validation commands.
+- [x] (2026-03-29 03:00Z) Run and capture validation commands.
 
 ## Surprises & Discoveries
 
@@ -135,6 +138,14 @@ tests, documentation, and quality gates have all passed.
   the user prompt but remain part of the authoritative step definition.
 - The repository already pins `rstest-bdd` and `rstest-bdd-macros` at `0.5.0`,
   so no dependency update is needed for the requested behavioural coverage.
+- Adding hosted-era fields pushed the config surface past the existing
+  `src/config/types.rs` shape, so the implementation split config into
+  `agent.rs`, `workspace.rs`, `hosting.rs`, and `validation.rs` to stay below
+  the repository's 400-line limit.
+- Command-specific legality works best as loader input rather than a pure
+  post-merge hook. The implementation added `CommandIntent` to
+  `ConfigLoadOptions` so both the CLI and library embedders can request the
+  same semantic checks.
 
 ## Decision Log
 
@@ -155,12 +166,26 @@ tests, documentation, and quality gates have all passed.
   that Podbot is still in an early build stage, so Step 1.4 should optimize for
   a clean hosted-era schema rather than preserving every pre-release shape.
   Date/Author: 2026-03-29 / Codex.
+- Decision: treat `agent.args` as optional with a deterministic default of
+  `[]`, while still requiring `agent.command` for `agent.kind = "custom"`.
+  Rationale: a launcher command is the essential invariant, but forcing at
+  least one argument would reject valid commands whose protocol mode is implied
+  by the executable itself. Date/Author: 2026-03-29 / Codex.
+- Decision: use a concrete `[mcp]` config section with
+  `bind_strategy`, `idle_timeout_secs`, `max_message_size_bytes`,
+  `auth_token_policy`, and `allowed_origin_policy`. Rationale: the roadmap
+  required explicit defaults now, and these names map directly onto the design
+  document's policy categories. Date/Author: 2026-03-29 / Codex.
 
 ## Outcomes & Retrospective
 
-No implementation has been performed yet. This draft captures the required
-scope, risks, concrete files, and acceptance criteria for Step 1.4 so the
-implementation can proceed milestone by milestone after approval.
+Step 1.4 is now implemented. The configuration model supports hosted-era agent
+and workspace fields, a concrete `[mcp]` defaults section, shared semantic
+validation through `CommandIntent`, a minimal `podbot host` scaffold, and
+compatibility coverage across unit, integration, and BDD tests. Validation
+evidence was captured with `make fmt`, `make markdownlint`, `make nixie`,
+`make check-fmt`, `make lint`, and `make test`, all of which passed on
+2026-03-29.
 
 ## Context and Orientation
 

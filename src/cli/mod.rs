@@ -7,7 +7,7 @@
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 
-use crate::config::{AgentKind, AgentMode, ConfigLoadOptions, ConfigOverrides};
+use crate::config::{AgentKind, AgentMode, CommandIntent, ConfigLoadOptions, ConfigOverrides};
 
 /// CLI-facing agent kind values.
 ///
@@ -21,6 +21,8 @@ pub enum AgentKindArg {
     Claude,
     /// `OpenAI` Codex agent.
     Codex,
+    /// Custom operator-supplied agent launcher.
+    Custom,
 }
 
 impl From<AgentKindArg> for AgentKind {
@@ -28,6 +30,7 @@ impl From<AgentKindArg> for AgentKind {
         match value {
             AgentKindArg::Claude => Self::Claude,
             AgentKindArg::Codex => Self::Codex,
+            AgentKindArg::Custom => Self::Custom,
         }
     }
 }
@@ -39,12 +42,18 @@ pub enum AgentModeArg {
     /// Run the agent in podbot-managed mode.
     #[default]
     Podbot,
+    /// Run the agent as a Codex App Server.
+    CodexAppServer,
+    /// Run the agent as an ACP server.
+    Acp,
 }
 
 impl From<AgentModeArg> for AgentMode {
     fn from(value: AgentModeArg) -> Self {
         match value {
             AgentModeArg::Podbot => Self::Podbot,
+            AgentModeArg::CodexAppServer => Self::CodexAppServer,
+            AgentModeArg::Acp => Self::Acp,
         }
     }
 }
@@ -93,13 +102,32 @@ impl Cli {
     /// Convert parsed CLI flags into library load options.
     #[must_use]
     pub fn config_load_options(&self) -> ConfigLoadOptions {
+        let (command_intent, agent_kind, agent_mode) = match &self.command {
+            Commands::Run(args) => (
+                CommandIntent::Run,
+                args.agent.map(Into::into),
+                args.mode.map(Into::into),
+            ),
+            Commands::Host(args) => (
+                CommandIntent::Host,
+                args.agent.map(Into::into),
+                args.mode.map(Into::into),
+            ),
+            Commands::TokenDaemon(_) | Commands::Ps | Commands::Stop(_) | Commands::Exec(_) => {
+                (CommandIntent::Any, None, None)
+            }
+        };
+
         ConfigLoadOptions {
             config_path_hint: self.config.clone(),
             discover_config: true,
             overrides: ConfigOverrides {
                 engine_socket: self.engine_socket.clone(),
                 image: self.image.clone(),
+                agent_kind,
+                agent_mode,
             },
+            command_intent,
         }
     }
 }
@@ -109,6 +137,9 @@ impl Cli {
 pub enum Commands {
     /// Run an AI agent in a sandboxed container.
     Run(RunArgs),
+
+    /// Host an app-server style agent protocol.
+    Host(HostArgs),
 
     /// Run the token refresh daemon.
     TokenDaemon(TokenDaemonArgs),
@@ -135,12 +166,24 @@ pub struct RunArgs {
     pub branch: String,
 
     /// Agent type to run.
-    #[arg(long, value_enum, default_value_t = AgentKindArg::Claude)]
-    pub agent: AgentKindArg,
+    #[arg(long, value_enum)]
+    pub agent: Option<AgentKindArg>,
 
     /// Agent execution mode.
-    #[arg(long = "agent-mode", value_enum, default_value_t = AgentModeArg::Podbot)]
-    pub mode: AgentModeArg,
+    #[arg(long = "agent-mode", value_enum)]
+    pub mode: Option<AgentModeArg>,
+}
+
+/// Arguments for the `host` subcommand.
+#[derive(Debug, Parser)]
+pub struct HostArgs {
+    /// Agent type to host.
+    #[arg(long, value_enum)]
+    pub agent: Option<AgentKindArg>,
+
+    /// Hosted execution mode.
+    #[arg(long = "agent-mode", value_enum)]
+    pub mode: Option<AgentModeArg>,
 }
 
 /// Arguments for the `token-daemon` subcommand.

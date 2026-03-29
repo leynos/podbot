@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use ortho_config::MergeComposer;
 use ortho_config::serde_json::json;
 use podbot::config::{
-    AgentKind, AgentMode, AppConfig, GitHubConfig, SandboxConfig, WorkspaceConfig,
+    AgentKind, AgentMode, AppConfig, GitHubConfig, SandboxConfig, WorkspaceConfig, WorkspaceSource,
 };
 use podbot::error::{ConfigError, PodbotError};
 use rstest::fixture;
@@ -62,7 +62,10 @@ fn set_sandbox_config(config_state: &ConfigState, privileged: bool, mount_dev_fu
 fn set_workspace_base_dir(config_state: &ConfigState, base_dir: &str) {
     let config = AppConfig {
         workspace: WorkspaceConfig {
+            source: WorkspaceSource::GithubClone,
             base_dir: Utf8PathBuf::from(base_dir),
+            host_path: None,
+            container_path: None,
         },
         ..Default::default()
     };
