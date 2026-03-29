@@ -13,17 +13,18 @@ PLANS.md is not present in the repository root, so this plan stands alone.
 Podbot's current configuration model only supports the legacy interactive
 shape: `agent.mode = "podbot"` and a clone-oriented workspace rooted at
 `workspace.base_dir`. Step 1.4 extends that schema so hosted app-server
-configurations can be represented, loaded, migrated, and validated without
-breaking existing installations.
+configurations can be represented, loaded, normalized, and validated as the
+project moves from the initial interactive-only shape toward the hosted design.
 
-Success is observable in three ways. First, legacy TOML files and
-environment-variable combinations continue to load unchanged, preserving the
-current defaults for `podbot run`. Second, hosting-era configurations load
-deterministically with explicit defaults for new fields such as
+Success is observable in three ways. First, the expanded configuration schema
+loads deterministically with explicit defaults for new fields such as
 `workspace.source`, `agent.command`, `agent.args`, `agent.env_allowlist`, and
-the new MCP hosting defaults. Third, invalid combinations of subcommand,
-`agent.kind`, `agent.mode`, and `workspace.source` fail with semantic errors
-that tell the operator what is wrong and what to do next.
+the new MCP hosting defaults. Second, the current in-repo configuration
+variants continue to parse and validate according to the newly chosen schema
+rules, even if those rules differ from earlier draft assumptions. Third,
+invalid combinations of subcommand, `agent.kind`, `agent.mode`, and
+`workspace.source` fail with semantic errors that tell the operator what is
+wrong and what to do next.
 
 This plan is the draft phase only. It defines the implementation path and
 validation criteria but does not mark Step 1.4 complete. The roadmap entry in
@@ -32,8 +33,9 @@ tests, documentation, and quality gates have all passed.
 
 ## Constraints
 
-- Preserve backward compatibility for existing configuration files,
-  environment variables, and current `podbot run` behaviour.
+- Optimize for a coherent hosted-era schema rather than preserving speculative
+  pre-release compatibility guarantees. Determinism matters; frozen legacy
+  behaviour does not.
 - Keep `AppConfig` library-facing and Clap-free. CLI-specific parsing must stay
   in `src/cli/mod.rs`.
 - Keep semantic validation in library code, not spread across ad hoc CLI
@@ -81,11 +83,11 @@ tests, documentation, and quality gates have all passed.
   added. Severity: medium. Likelihood: high. Mitigation: pre-plan extraction
   into submodules such as `agent.rs`, `workspace.rs`, `hosting.rs`, or
   `validation.rs`.
-- Risk: migration defaults may accidentally change current behaviour for legacy
-  configs, especially around workspace selection or execution mode. Severity:
-  high. Likelihood: medium. Mitigation: add explicit compatibility fixtures for
-  "legacy minimal", "legacy explicit", and "hosting-era" variants before
-  changing defaults.
+- Risk: the schema is still fluid enough that early assumptions from Step 1.3
+  or from draft docs may no longer be the right defaults. Severity: medium.
+  Likelihood: high. Mitigation: record the chosen defaults explicitly in the
+  design doc and update the configuration matrix tests to match the new source
+  of truth rather than preserving earlier draft behaviour.
 - Risk: `rstest-bdd` feature files are compile-time inputs, so changed feature
   text can appear stale under incremental builds. Severity: low. Likelihood:
   medium. Mitigation: document `cargo clean -p podbot` as the recovery step if
@@ -148,6 +150,11 @@ tests, documentation, and quality gates have all passed.
   than a CLI-only concern. Rationale: the design document requires centralized
   legality checks across `run` and `host` flows, and the library should own the
   semantic rules. Date/Author: 2026-03-29 / Codex.
+- Decision: do not treat backward compatibility for unreleased configurations
+  as a hard requirement for this step. Rationale: the user explicitly clarified
+  that Podbot is still in an early build stage, so Step 1.4 should optimize for
+  a clean hosted-era schema rather than preserving every pre-release shape.
+  Date/Author: 2026-03-29 / Codex.
 
 ## Outcomes & Retrospective
 
@@ -214,18 +221,15 @@ hosting-era fields that the roadmap requires: `workspace.source`,
 exposure in a new configuration section or sub-structure consistent with the
 design, covering bind strategy, idle timeout, maximum message size, auth token
 policy, and allowed-origin policy. Expand execution-mode support so `AgentMode`
-includes `codex_app_server` and `acp` while preserving `AgentMode::Podbot` as
-the default for legacy configurations. If needed, add `AgentKind::Custom` to
+includes `codex_app_server` and `acp`, with defaults chosen for the new schema
+rather than for backward compatibility. If needed, add `AgentKind::Custom` to
 match the design examples.
 
-Stage C is to define deterministic migration and validation rules. Use the
+Stage C is to define deterministic normalization and validation rules. Use the
 post-merge phase or a dedicated validation layer owned by `crate::config` to
-normalize missing hosting-era fields into legacy-safe defaults and to reject
-illegal combinations with `ConfigError::InvalidValue` or another semantic
-config error. This stage must make the default legacy interpretation explicit:
-legacy configs without `workspace.source` behave as clone-oriented Podbot runs,
-and they do not require manual edits. Validation should cover at least these
-rules:
+normalize missing hosting-era fields into the newly chosen defaults and to
+reject illegal combinations with `ConfigError::InvalidValue` or another
+semantic config error. Validation should cover at least these rules:
 
 1. `podbot run` allows only `agent.mode = "podbot"`.
 2. `podbot host` allows only hosted modes such as `codex_app_server` and
@@ -246,15 +250,15 @@ can be passed into config validation from the existing CLI and later host
 implementation. Keep the semantic legality checks in shared code so both CLI
 and embedders receive the same rules and error messages.
 
-Stage E is to add the compatibility matrix tests. Unit coverage should use
-`rstest` fixtures and parameterized cases for legacy defaults, hosting-era
-defaults, mixed-layer overrides, invalid enum values, illegal field
-combinations, and migration behaviour. Behavioural coverage should use
+Stage E is to add the configuration matrix tests. Unit coverage should use
+`rstest` fixtures and parameterized cases for interactive-only defaults,
+hosting-era defaults, mixed-layer overrides, invalid enum values, illegal field
+combinations, and normalization behaviour. Behavioural coverage should use
 `rstest-bdd` feature scenarios covering both happy and unhappy paths, including
-at least one scenario proving that a legacy config still loads unchanged and at
-least one scenario proving that an invalid hosting combination emits an
-actionable semantic error. Prefer scenario state and injected mock environment
-patterns over live environment mutation.
+at least one scenario proving that the new interactive default path is still
+valid and at least one scenario proving that an invalid hosting combination
+emits an actionable semantic error. Prefer scenario state and injected mock
+environment patterns over live environment mutation.
 
 Stage F is to update documentation. Record the final migration rules and
 validation decisions in `docs/podbot-design.md`. Update `docs/users-guide.md`
@@ -308,13 +312,14 @@ tests and the new compatibility scenarios.
 
 4. Update defaults and loader serialization.
 
-   Ensure `AppConfig::default()` still models the legacy behaviour:
+   Ensure `AppConfig::default()` models the newly chosen default behaviour:
 
    - `agent.kind = claude`
    - `agent.mode = podbot`
-   - `workspace.source = github_clone` or the equivalent legacy-safe default
+   - `workspace.source = github_clone` or the new explicit default chosen for
+     the hosted-era schema
    - `workspace.base_dir = /work`
-   - hosting defaults present but non-breaking for legacy configs
+   - hosting defaults present and explicit
 
 5. Extend environment-variable mapping in `src/config/env_vars.rs`.
 
@@ -347,12 +352,12 @@ tests and the new compatibility scenarios.
 
    Cover:
 
-   - legacy default config
-   - legacy explicit config file
+   - interactive default config
+   - explicit interactive config file
    - hosting explicit config file
    - env/file/override precedence for hosting fields
    - invalid combination errors
-   - migration from missing `workspace.source`
+   - normalization from omitted hosting-era fields
 
 9. Add rstest-bdd behavioural coverage.
 
@@ -367,7 +372,7 @@ tests and the new compatibility scenarios.
 
    Add scenarios for:
 
-   - legacy config loads with podbot defaults
+   - interactive config loads with podbot defaults
    - hosting config loads with host-mount fields
    - invalid hosted mode under `run`
    - missing host-mount path fields
@@ -431,19 +436,19 @@ tests and the new compatibility scenarios.
 
 The implementation is acceptable only when all of the following are true:
 
-- Legacy configuration files that predate Step 1.4 still load without manual
-  edits and still resolve to Podbot's existing interactive defaults.
 - Hosting-era configuration files can express hosted agent modes, host-mounted
   workspaces, custom agent commands, environment allowlists, and MCP hosting
   defaults.
+- The chosen post-Step-1.4 defaults are deterministic and covered by both unit
+  and behavioural tests, even where they supersede earlier draft assumptions.
 - Illegal combinations of subcommand, `agent.kind`, `agent.mode`, and
   `workspace.source` fail with actionable semantic errors rather than opaque
   parse failures.
 - Unit coverage exists for happy paths, unhappy paths, and edge cases using
   `rstest`.
-- Behavioural coverage exists for happy paths, unhappy paths, and migration
-  scenarios using `rstest-bdd` v0.5.0.
-- `docs/podbot-design.md` records the migration/defaulting decisions and
+- Behavioural coverage exists for happy paths, unhappy paths, and
+  normalization/defaulting scenarios using `rstest-bdd` v0.5.0.
+- `docs/podbot-design.md` records the defaulting/normalization decisions and
   `docs/users-guide.md` reflects the user-visible behaviour.
 - `make check-fmt`, `make lint`, and `make test` pass. Because this step edits
   Markdown, `make fmt`, `make markdownlint`, and `make nixie` must also pass.
@@ -469,12 +474,12 @@ and after the split.
 
 Capture concise evidence in the implementation turn:
 
-- a passing unit test excerpt for the compatibility matrix
-- a passing BDD excerpt for one legacy and one hosting scenario
+- a passing unit test excerpt for the configuration matrix
+- a passing BDD excerpt for one interactive and one hosting scenario
 - the final `make check-fmt`, `make lint`, and `make test` success lines
 - any new semantic error strings that users will see
 
-If the implementation introduces a non-obvious migration rule or validation
+If the implementation introduces a non-obvious normalization rule or validation
 constraint, store a Qdrant project-memory note after the code lands.
 
 ## Interfaces and Dependencies
