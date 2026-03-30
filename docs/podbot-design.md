@@ -523,8 +523,10 @@ The implemented library configuration API is:
 - Deterministic test seam that avoids mutating the process environment via:
 `podbot::config::load_config_with_env(&impl mockable::Env, &ConfigLoadOptions)`
 
-The CLI adapter uses `podbot::cli::Cli::config_load_options()` to convert
-parsed flags into the library `ConfigLoadOptions`.
+When the `cli` feature is enabled, the CLI adapter uses
+`podbot::cli::Cli::config_load_options()` to convert parsed flags into the
+library `ConfigLoadOptions`. Library embedders can disable default features to
+avoid the Clap dependency entirely.
 
 Configuration file resolution uses the following order (first match wins):
 
@@ -925,11 +927,15 @@ acquisition without exposing API details to calling code.
 
 Public versus internal intent:
 
-- Public library modules: `api/`, `config/` (types and loader surfaces),
-  `engine/`, and `error`.
+- Stable public library modules: `api/`, `config/` (types and loader
+  surfaces), and `error`.
+- Optional CLI adapter module: `cli/`, enabled by the `cli` feature for the
+  `podbot` binary.
+- Hidden compatibility modules: `engine/` and `github/`. These remain
+  reachable for tests and short-term compatibility, but they are not part of
+  the documented stable embedding boundary.
 - Internal library modules (subject to refactor): `run_flow.rs`,
-  `host_flow.rs`, `launch_plan.rs`, `token_daemon.rs`, and `github.rs` until
-  the external API is stabilized.
+  `host_flow.rs`, `launch_plan.rs`, and `token_daemon.rs`.
 
 ### Library API boundary requirements
 
@@ -949,6 +955,11 @@ The stable library boundary should follow these constraints:
   code for the CLI to map to a process exit code.
 - Configuration loaders exposed to library consumers must not require `Cli`
   structs or Clap traits.
+- The stable exec surface is `podbot::api::{ExecRequest, ExecMode, exec}`
+  rather than engine-owned traits or runtime handles.
+- Hook, validation, session, and MCP contracts remain experimental until their
+  ADRs and Corbusier-facing integration notes converge on one request/response
+  taxonomy.
 
 ### Public library API reference
 

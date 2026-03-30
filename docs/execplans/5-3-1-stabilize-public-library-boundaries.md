@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: COMPLETE
+Status: IMPLEMENTED
 
 ## Purpose / big picture
 
@@ -23,7 +23,9 @@ can depend on `podbot` as a library with:
 - integration tests that exercise Podbot as a library dependency from a
   host-style call path.
 
-Observable success:
+This is the Step 5.3 plan from `docs/podbot-roadmap.md`. The user approved
+implementation on 2026-03-30, and this document now records the implemented
+boundary and its evidence.
 
 1. `make check-fmt && make lint && make test` all pass.
 2. A new `tests/library_embedding.rs` integration test drives
@@ -162,26 +164,48 @@ escalation, not workarounds.
 
 ## Progress
 
-- [x] Stage A: Audit public API surface and document supported modules.
-- [x] Stage B: Ensure public APIs use semantic errors exclusively.
-- [x] Stage C: Gate CLI-only dependencies behind `cli` feature boundary.
-- [x] Stage D: Reconcile hook and validation schemas with design doc.
-- [x] Stage E: Add integration tests for library embedding.
-- [x] Stage F: Documentation updates and roadmap completion.
-- [x] Stage G: Final quality gate verification.
+- [x] (2026-03-30 00:00 UTC) Gather roadmap, ADR, code, and testing context.
+- [x] (2026-03-30 00:00 UTC) Draft this ExecPlan.
+- [x] (2026-03-30 00:00 UTC) Validate the draft with `make fmt`,
+  `make markdownlint`, `make nixie`, `make check-fmt`, `make lint`, and
+  `make test`.
+- [x] (2026-03-30) Approval gate: obtain explicit user approval for
+  implementation.
+- [x] (2026-03-30) Audit and classify the current public surface.
+- [x] (2026-03-30) Land the feature/binary boundary for CLI-only code and
+  dependencies.
+- [x] (2026-03-30) Refactor stable request/response types so public APIs stop
+  leaking engine internals.
+- [x] (2026-03-30) Reconcile hook and validation contracts, and decide which
+  remain experimental.
+- [x] (2026-03-30) Add unit, behavioural, integration, and Rustdoc coverage
+  for the stable boundary.
+- [x] (2026-03-30) Update design docs, user's guide, and roadmap; then run
+  all gates.
 
 ## Decision log
 
-- Decision: Gate the `cli` module behind a Cargo feature rather than
-  moving it to a separate crate.
-  Rationale: A feature flag is the simplest approach that achieves the
-  goal of hiding CLI adapter types from library consumers.
-  A separate crate would add workspace management complexity without
-  proportional benefit at this stage. The feature can be refined later
-  if multi-crate extraction is warranted. Note: `clap` remains a
-  transitive dependency through `ortho_config` and cannot be made
-  optional at this time; the feature controls module visibility only.
-  Date/Author: 2026-04-07 (agent)
+- `src/lib.rs` currently exports `api`, `cli`, `config`, `engine`, `error`,
+  and `github` publicly. That is far broader than the intended long-term
+  library boundary.
+- `Cargo.toml` currently lists `clap` in `[dependencies]`, so library builds
+  always resolve CLI parsing code even though Step 5.3 requires a boundary.
+- `docs/users-guide.md` already has a "Library API" section, but the example
+  imports `podbot::engine::{ContainerExecClient, ExecMode}`. That means the
+  documentation currently teaches consumers to depend on an unstable layer.
+- Existing orchestration BDD coverage under `tests/bdd_orchestration.rs`
+  validates public functions, but it is not yet a host-style embedding test in
+  the sense required by Step 5.3. It uses internal knowledge of the current API
+  and does not prove the final curated surface from an external consumer's
+  point of view.
+- ADR 001 proposes `podbot::launch`, `podbot::session`, and `podbot::mcp` as
+  the long-term stable shape, but the currently implemented and documented
+  surface is `podbot::api`. Step 5.3 must reconcile that mismatch instead of
+  accidentally enshrining both.
+- Keeping `engine` and `github` physically public but `#[doc(hidden)]` avoids
+  detonating the existing internal test matrix in one step. The documented
+  stable surface is still `api`, `config`, and `error`; the hidden modules are
+  compatibility-only and explicitly unsupported for semver purposes.
 
 - Decision: Use `default = ["cli"]` so the feature is opt-out rather
   than opt-in.
@@ -212,42 +236,45 @@ escalation, not workarounds.
 
 ## Surprises & discoveries
 
-- Discovery: `ortho_config` v0.8.0 unconditionally depends on `clap`
-  (non-optional). The `OrthoConfig` derive macro generates code
-  referencing `clap::Parser`. This means `clap` cannot be made optional
-  in podbot's `Cargo.toml` because the derive macro on `AppConfig`
-  requires it at compile time.
-  Impact: the `cli` feature gates the `pub mod cli` module (visibility
-  of Clap parse types) rather than the `clap` dependency itself. `clap`
-  remains a transitive dependency through `ortho_config`. Library-only
-  consumers still benefit because they don't need to interact with
-  `podbot::cli` types.
-  Mitigation: added `required-features = ["cli"]` to the `[[bin]]`
-  target so `cargo check --no-default-features` compiles the library
-  without the binary.
-  Date: 2026-04-07
+- Decision: keep hooks, validation, session, and MCP surfaces experimental
+  unless the implementation turn can prove their request/response types are
+  consistent across ADRs and user-facing docs. Rationale: their contracts are
+  documented but not yet fully implemented, and Step 5.3 should not create
+  accidental semver promises.
+- Decision: keep `podbot::api` as the stable entry point for this step rather
+  than introducing `podbot::launch` prematurely. Rationale: a stable wrapper
+  around the implemented orchestration surface is lower risk than promising an
+  ADR-only namespace that does not exist yet.
+- Decision: satisfy the CLI boundary by making `clap` optional behind the
+  `cli` feature and requiring that feature for the binary target. Rationale:
+  embedders can use `default-features = false`, while the operator path remains
+  `cargo install --path .`.
 
 ## Outcomes & retrospective
 
-Completed successfully on 2026-04-07. All stages implemented as planned
-with one significant discovery: `ortho_config` v0.8.0 unconditionally
-depends on `clap`, preventing the `clap` crate from being made optional.
-The `cli` feature was implemented to gate module visibility instead.
+Implemented outcome:
 
-Key outcomes:
-
-1. Public API reference section added to `docs/podbot-design.md`.
-2. Planned API surfaces section documents unimplemented schemas.
-3. `cli` Cargo feature gates `pub mod cli` (enabled by default).
-4. `[[bin]]` target declares `required-features = ["cli"]`.
-5. `cargo check --no-default-features --lib` compiles cleanly.
-6. 6 new integration tests in `tests/library_embedding.rs`.
-7. 4 new BDD scenarios in `tests/features/library_boundary.feature`.
-8. 2 new unit tests for error type contracts in `src/error.rs`.
-9. 1 new feature gate test in `src/lib.rs`.
-10. `docs/users-guide.md` updated with library embedding section.
-11. Roadmap Step 5.3 marked done.
-12. All quality gates pass: `make check-fmt`, `make lint`, `make test`.
+- Supported stable modules are `podbot::api`, `podbot::config`, and
+  `podbot::error`.
+- The stable exec surface is `podbot::api::{ExecRequest, ExecMode, exec}`.
+  It no longer requires engine traits, runtime handles, or CLI parse types.
+- `podbot::api` remained the stable namespace for this step. No additive
+  `launch` alias was introduced.
+- CLI packaging now uses an optional `clap` dependency behind the `cli`
+  feature, and the `podbot` binary requires that feature.
+- Hook, validation, session, and MCP contracts remain experimental and are not
+  part of the documented stable boundary.
+- Coverage added or updated:
+  - `src/api/tests.rs` unit coverage for the stable exec request and fast-fail
+    validation paths.
+  - `tests/bdd_orchestration.rs` behavioural coverage updated to use the
+    stable exec request with a hidden compatibility seam for mocked engine IO.
+  - `tests/stable_library_boundary.rs` host-style integration proof using only
+    supported modules.
+  - Public Rustdoc examples for `ExecRequest::new` and `exec`.
+- Final gate results are recorded from the implementation run:
+  `make fmt`, `MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint`,
+  `make nixie`, `make check-fmt`, `make lint`, and `make test`.
 
 ## Context and orientation
 

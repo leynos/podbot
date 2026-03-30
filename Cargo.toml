@@ -10,11 +10,7 @@ repository = "https://github.com/leynos/podbot"
 [features]
 default = ["cli"]
 cli = ["dep:clap"]
-
-[[bin]]
-name = "podbot"
-path = "src/main.rs"
-required-features = ["cli"]
+experimental = []
 
 [dependencies]
 # Async runtime
@@ -125,3 +121,8 @@ result_large_err                    = "deny"
 [lints.rust]
 missing_docs                        = "deny"
 missing_crate_level_docs            = "deny"
+
+[[bin]]
+name = "podbot"
+path = "src/main.rs"
+required-features = ["cli"]

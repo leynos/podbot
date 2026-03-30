@@ -2,8 +2,12 @@
 
 use rstest::rstest;
 
-use super::{CommandOutcome, list_containers, run_agent, run_token_daemon, stop_container};
+use super::{
+    CommandOutcome, ExecMode, ExecRequest, exec, list_containers, run_agent, run_token_daemon,
+    stop_container,
+};
 use crate::config::AppConfig;
+use crate::error::{ConfigError, PodbotError};
 
 #[rstest]
 fn command_outcome_success_equals_itself() {
@@ -29,6 +33,54 @@ fn command_outcome_is_copy() {
     let outcome = CommandOutcome::CommandExit { code: 7 };
     let copied = outcome;
     assert_eq!(outcome, copied);
+}
+
+#[rstest]
+fn exec_request_defaults_to_attached_without_tty() {
+    let request =
+        ExecRequest::new("sandbox", vec![String::from("echo")]).expect("request should be valid");
+
+    assert_eq!(request.mode, ExecMode::Attached);
+    assert!(!request.tty);
+}
+
+#[rstest]
+fn exec_request_rejects_blank_container() {
+    let error = ExecRequest::new("   ", vec![String::from("echo")])
+        .expect_err("blank container should be rejected");
+
+    assert!(matches!(
+        error,
+        PodbotError::Config(ConfigError::MissingRequired { field }) if field == "container"
+    ));
+}
+
+#[rstest]
+fn exec_request_rejects_blank_executable() {
+    let error = ExecRequest::new("sandbox", vec![String::from("  ")])
+        .expect_err("blank executable should be rejected");
+
+    assert!(matches!(
+        error,
+        PodbotError::Config(ConfigError::MissingRequired { field }) if field == "command[0]"
+    ));
+}
+
+#[rstest]
+fn exec_rejects_invalid_request_before_engine_connection() {
+    let config = AppConfig::default();
+    let request = ExecRequest {
+        container: String::from("sandbox"),
+        command: Vec::new(),
+        mode: ExecMode::Attached,
+        tty: false,
+    };
+
+    let error = exec(&config, &request).expect_err("invalid request should fail fast");
+    assert!(matches!(
+        error,
+        PodbotError::Config(ConfigError::MissingRequired { field }) if field == "command"
+    ));
 }
 
 #[rstest]

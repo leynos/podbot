@@ -1,7 +1,6 @@
 //! Scenario state for orchestration behavioural tests.
 
-use podbot::api::CommandOutcome;
-use podbot::engine::ExecMode;
+use podbot::api::{CommandOutcome, ExecMode};
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::ScenarioState;

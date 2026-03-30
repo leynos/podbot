@@ -13,6 +13,12 @@ Build and install from source:
 cargo install --path .
 ```
 
+Embed as a library without the CLI surface:
+
+```toml
+podbot = { version = "0.1.0", default-features = false }
+```
+
 ## Quick start
 
 Run an AI agent against a GitHub repository:
@@ -602,20 +608,31 @@ CLI tool. The `podbot::api` module exposes orchestration functions that accept
 library-owned types and return typed outcomes without printing to stdout/stderr
 or calling `std::process::exit`.
 
+The supported stable embedding boundary is:
+
+- `podbot::api`
+- `podbot::config`
+- `podbot::error`
+
+The `cli` module is optional behind the `cli` feature. Hidden compatibility
+modules such as `engine` and `github` are not part of the supported semver
+contract for embedders.
+
 ### Available functions
 
-| Function                                                | Description                                                     |
-| ------------------------------------------------------- | --------------------------------------------------------------- |
-| `podbot::api::exec(params)`                             | Execute a command in a running container                        |
-| `podbot::api::run_agent(config)`                        | Run an AI agent in a sandboxed container (stub)                 |
-| `podbot::api::stop_container(container)`                | Stop a running container (stub)                                 |
-| `podbot::api::list_containers()`                        | List running podbot containers (stub)                           |
-| `podbot::api::run_token_daemon(container)`              | Run the token refresh daemon (stub)                             |
+| Function                                      | Description                                                     |
+| --------------------------------------------- | --------------------------------------------------------------- |
+| `podbot::api::exec(config, request)`          | Run an AI agent in a sandboxed container (stub)                 |
+| `podbot::api::run_agent(config)`              | Stop a running container (stub)                                 |
+| `podbot::api::stop_container(container)`      | List running podbot containers (stub)                           |
+| `podbot::api::list_containers()`              | Run the token refresh daemon (stub)                             |
+| `podbot::api::run_token_daemon(container_id)` | Configure Git identity from host Git config                     |
 | `podbot::api::configure_container_git_identity(params)` | Configure Git identity from host Git config                     |
+| `podbot::api::ExecContext::connect(…)`        | Reuse a runtime handle and engine connection                    |
 
-### Return types
+### Return type
 
-Most orchestration functions return `podbot::error::Result<CommandOutcome>`:
+All orchestration functions return `podbot::error::Result<CommandOutcome>`:
 
 - `CommandOutcome::Success` indicates a zero exit code.
 - `CommandOutcome::CommandExit { code }` carries the non-zero exit code
@@ -626,32 +643,44 @@ The `configure_container_git_identity` function returns
 information about the Git identity configuration outcome. See the "Git identity
 configuration" section below for details.
 
+For repeated exec calls, embedders can cache engine state:
+
+```rust,no_run
+use podbot::api::{ExecContext, ExecRequest};
+use podbot::config::AppConfig;
+
+fn run_many_commands(runtime: &tokio::runtime::Handle) -> Result<(), podbot::error::PodbotError> {
+    let config = AppConfig::default();
+    let context = ExecContext::connect(&config, runtime)?;
+    let request = ExecRequest::new("my-container", vec![String::from("echo")])?;
+    let _ = context.exec(&request)?;
+    Ok(())
+}
+```
+
 ### Example usage
 
 ```rust,no_run
-use podbot::api::{CommandOutcome, ExecParams, exec};
-use podbot::engine::{ContainerExecClient, ExecMode};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest, exec};
+use podbot::config::AppConfig;
 
-fn run_command(
-    connector: &impl ContainerExecClient,
-    runtime_handle: &tokio::runtime::Handle,
-) {
-    let result = exec(ExecParams {
-        connector,
-        container: "my-container",
-        command: vec!["echo".into(), "hello".into()],
-        mode: ExecMode::Attached,
-        tty: false,
-        runtime_handle,
-    });
+fn run_command() -> Result<(), podbot::error::PodbotError> {
+    let config = AppConfig::default();
+    let request = ExecRequest::new(
+        "my-container",
+        vec![String::from("echo"), String::from("hello")],
+    )?
+    .with_mode(ExecMode::Attached)
+    .with_tty(false);
 
-    match result {
-        Ok(CommandOutcome::Success) => println!("Command succeeded"),
-        Ok(CommandOutcome::CommandExit { code }) => {
+    match exec(&config, &request)? {
+        CommandOutcome::Success => println!("Command succeeded"),
+        CommandOutcome::CommandExit { code } => {
             println!("Command exited with code {code}");
         }
-        Err(e) => eprintln!("Error: {e}"),
     }
+
+    Ok(())
 }
 ```
 
@@ -751,15 +780,16 @@ The following modules are part of the stable public API:
   `configure_container_git_identity`)
 - `podbot::config` — configuration types and loaders (`AppConfig`,
   `ConfigLoadOptions`, `load_config`)
-- `podbot::engine` — container engine types and traits
-  (`ContainerExecClient`, `EngineConnector`, `ExecRequest`)
 - `podbot::error` — semantic error hierarchy (`PodbotError`, `ConfigError`,
   `ContainerError`)
 
 #### Internal modules
 
-The following modules are public but internal and subject to change:
+The following modules are only exported when the crate is built with
+`feature = "internal"` or for podbot's own crate tests. They are not available
+to normal embedders and are not part of the supported semver contract:
 
+- `podbot::engine` — container engine types and traits
 - `podbot::github` — GitHub App authentication types
 
 #### Adapter modules

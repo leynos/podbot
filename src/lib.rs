@@ -14,20 +14,21 @@
 //!
 //! # Modules
 //!
-//! - [`api`]: Orchestration API for run, exec, stop, ps, and token daemon commands
-//! - [`cli`]: `Clap` parse types for the `podbot` binary (CLI adapter layer,
-//!   requires the `cli` feature, enabled by default)
-//! - [`config`]: Configuration system with layered precedence (defaults < file < env < host overrides)
-//! - [`engine`]: Container engine connection and management
-//! - [`error`]: Semantic error types for the application
-//! - [`github`]: GitHub App authentication (internal, subject to change)
+//! - [`api`]: Stable orchestration API for embedding and the CLI adapter
+//! - [`config`]: Stable configuration system with layered precedence
+//! - [`error`]: Stable semantic error types for the application
+//! - `cli` feature: optional `Clap` parse types for the `podbot` binary
+//! - Hidden support modules: internal and compatibility seams that are not part
+//!   of the documented stable boundary
 
 pub mod api;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod config;
+#[doc(hidden)]
 pub mod engine;
 pub mod error;
+#[doc(hidden)]
 pub mod github;
 
 #[cfg(test)]

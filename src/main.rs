@@ -14,12 +14,10 @@ use std::io::IsTerminal;
 
 use clap::Parser;
 use eyre::{Report, Result as EyreResult};
-use podbot::api::{CommandOutcome, ExecParams};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
 use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, RunArgs, StopArgs, TokenDaemonArgs};
 use podbot::config::{AppConfig, load_config};
-use podbot::engine::{EngineConnector, ExecMode, SocketResolver};
-use podbot::error::{ContainerError, Result as PodbotResult};
-use podbot::github::validate_app_credentials;
+use podbot::error::Result as PodbotResult;
 
 /// Application entry point.
 ///
@@ -36,9 +34,7 @@ fn main() -> EyreResult<()> {
     // The CLI is passed to extract --config, --engine-socket, and --image.
     let options = cli.config_load_options();
     let config = load_config(&options).map_err(Report::from)?;
-    let runtime = create_runtime().map_err(Report::from)?;
-
-    match run(&cli, &config, runtime.handle()) {
+    match run(&cli, &config) {
         Ok(CommandOutcome::Success) => Ok(()),
         Ok(CommandOutcome::CommandExit { code }) => {
             std::process::exit(normalize_process_exit_code(code))
@@ -51,38 +47,20 @@ fn main() -> EyreResult<()> {
 ///
 /// Keeps semantic errors inside the run loop so the CLI boundary owns
 /// conversion to `eyre::Report`.
-fn run(
-    cli: &Cli,
-    config: &AppConfig,
-    runtime_handle: &tokio::runtime::Handle,
-) -> PodbotResult<CommandOutcome> {
+fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
     match &cli.command {
-        Commands::Run(args) => run_agent_cli(config, args, runtime_handle),
+        Commands::Run(args) => run_agent_cli(config, args),
         Commands::Host(args) => Ok(host_agent_cli(config, args)),
         Commands::TokenDaemon(args) => run_token_daemon_cli(args),
         Commands::Ps => list_containers_cli(),
         Commands::Stop(args) => stop_container_cli(args),
-        Commands::Exec(args) => exec_in_container_cli(config, args, runtime_handle),
+        Commands::Exec(args) => exec_in_container_cli(config, args),
     }
 }
 
 /// CLI adapter for running an AI agent in a sandboxed container.
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn run_agent_cli(
-    config: &AppConfig,
-    args: &RunArgs,
-    runtime_handle: &tokio::runtime::Handle,
-) -> PodbotResult<CommandOutcome> {
-    // Validate GitHub credentials if configured
-    if let (Some(app_id), Some(private_key_path)) = (
-        config.github.app_id,
-        config.github.private_key_path.as_ref(),
-    ) {
-        if app_id != 0 {
-            runtime_handle.block_on(validate_app_credentials(app_id, private_key_path))?;
-        }
-    }
-
+fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutcome> {
     println!(
         "Running {:?} agent in {:?} mode for repository {} on branch {}",
         config.agent.kind, config.agent.mode, args.repo, args.branch
@@ -140,38 +118,18 @@ fn stop_container_cli(args: &StopArgs) -> PodbotResult<CommandOutcome> {
 ///
 /// Performs terminal detection (a CLI concern) and engine connection
 /// before delegating to the library orchestration function.
-fn exec_in_container_cli(
-    config: &AppConfig,
-    args: &ExecArgs,
-    runtime_handle: &tokio::runtime::Handle,
-) -> PodbotResult<CommandOutcome> {
+fn exec_in_container_cli(config: &AppConfig, args: &ExecArgs) -> PodbotResult<CommandOutcome> {
     let mode = if args.detach {
         ExecMode::Detached
     } else {
         ExecMode::Attached
     };
     let tty = !args.detach && std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
-    let env = mockable::DefaultEnv::new();
-    let resolver = SocketResolver::new(&env);
-    let docker =
-        EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;
+    let request = ExecRequest::new(&args.container, args.command.clone())?
+        .with_mode(mode)
+        .with_tty(tty);
 
-    podbot::api::exec(ExecParams {
-        connector: &docker,
-        container: &args.container,
-        command: args.command.clone(),
-        mode,
-        tty,
-        runtime_handle,
-    })
-}
-
-fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
-    tokio::runtime::Runtime::new().map_err(|error| {
-        podbot::error::PodbotError::from(ContainerError::RuntimeCreationFailed {
-            message: error.to_string(),
-        })
-    })
+    podbot::api::exec(config, &request)
 }
 
 /// Normalize container exit codes to process exit codes.
