@@ -155,6 +155,10 @@ fn assert_exec_failed_message(result: Result<(), PodbotError>, expected_fragment
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "test helper wires protocol sessions with explicit stream handles"
+)]
 fn run_session(
     runtime: RuntimeFixture,
     stdin_bytes: &[u8],
@@ -175,6 +179,29 @@ fn run_session(
         container_input,
         ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
     ))
+}
+
+#[expect(
+    clippy::type_complexity,
+    reason = "test helper returns the paired captured writer buffers"
+)]
+fn run_routing_session(
+    runtime: RuntimeFixture,
+    output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+) -> (Result<(), PodbotError>, Arc<Mutex<Vec<u8>>>, Arc<Mutex<Vec<u8>>>) {
+    let host_stdout = RecordingWriter::new();
+    let host_stderr = RecordingWriter::new();
+    let stdout_bytes = host_stdout.bytes.clone();
+    let stderr_bytes = host_stderr.bytes.clone();
+    let result = run_session(
+        runtime,
+        b"",
+        output,
+        Box::pin(RecordingInputWriter::new()),
+        host_stdout,
+        host_stderr,
+    );
+    (result, stdout_bytes, stderr_bytes)
 }
 
 #[rstest]
@@ -215,10 +242,6 @@ fn protocol_proxy_forwards_stdin_bytes_and_shutdowns_input(runtime: RuntimeFixtu
 
 #[rstest]
 fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixture) {
-    let host_stdout = RecordingWriter::new();
-    let host_stderr = RecordingWriter::new();
-    let stdout_bytes = host_stdout.bytes.clone();
-    let stderr_bytes = host_stderr.bytes.clone();
     let output = make_output_stream(vec![
         Ok(LogOutput::StdOut {
             message: Vec::from(&b"alpha"[..]).into(),
@@ -228,14 +251,7 @@ fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixtu
         }),
     ]);
 
-    let result = run_session(
-        runtime,
-        b"",
-        output,
-        Box::pin(RecordingInputWriter::new()),
-        host_stdout,
-        host_stderr,
-    );
+    let (result, stdout_bytes, stderr_bytes) = run_routing_session(runtime, output);
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
@@ -256,10 +272,6 @@ fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixtu
 
 #[rstest]
 fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
-    let host_stdout = RecordingWriter::new();
-    let host_stderr = RecordingWriter::new();
-    let stdout_bytes = host_stdout.bytes.clone();
-    let stderr_bytes = host_stderr.bytes.clone();
     let output = make_output_stream(vec![
         Ok(LogOutput::StdErr {
             message: Vec::from(&b"warn"[..]).into(),
@@ -269,14 +281,7 @@ fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
         }),
     ]);
 
-    let result = run_session(
-        runtime,
-        b"",
-        output,
-        Box::pin(RecordingInputWriter::new()),
-        host_stdout,
-        host_stderr,
-    );
+    let (result, stdout_bytes, stderr_bytes) = run_routing_session(runtime, output);
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
@@ -297,9 +302,6 @@ fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
 
 #[rstest]
 fn protocol_proxy_ignores_stdin_echo_chunks(runtime: RuntimeFixture) {
-    let host_stdout = RecordingWriter::new();
-    let host_stderr = RecordingWriter::new();
-    let stdout_bytes = host_stdout.bytes.clone();
     let output = make_output_stream(vec![
         Ok(LogOutput::StdIn {
             message: Vec::from(&b"echo"[..]).into(),
@@ -309,14 +311,7 @@ fn protocol_proxy_ignores_stdin_echo_chunks(runtime: RuntimeFixture) {
         }),
     ]);
 
-    let result = run_session(
-        runtime,
-        b"",
-        output,
-        Box::pin(RecordingInputWriter::new()),
-        host_stdout,
-        host_stderr,
-    );
+    let (result, stdout_bytes, _) = run_routing_session(runtime, output);
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(

@@ -247,43 +247,45 @@ fn assert_channel_receives(
     actual: Option<Vec<u8>>,
     channel: &str,
 ) -> StepResult<()> {
-    let actual = actual.ok_or_else(|| format!("{channel} should be recorded"))?;
-    if actual == expected {
+    let recorded = actual.ok_or_else(|| format!("{channel} should be recorded"))?;
+    if recorded == expected {
         Ok(())
     } else {
-        Err(format!("expected {channel} {expected:?}, got {actual:?}"))
+        Err(format!("expected {channel} {expected:?}, got {recorded:?}"))
     }
 }
 
-#[then("host stdout receives {text}")]
-fn host_stdout_receives(protocol_proxy_state: &ProtocolProxyState, text: String) -> StepResult<()> {
-    assert_channel_receives(
-        &normalize_feature_text(&text),
-        protocol_proxy_state.host_stdout.get(),
-        "host stdout",
-    )
+macro_rules! channel_receives_step {
+    ($fn_name:ident, $step_text:literal, $field:ident, $label:literal) => {
+        #[then($step_text)]
+        fn $fn_name(protocol_proxy_state: &ProtocolProxyState, text: String) -> StepResult<()> {
+            assert_channel_receives(
+                &normalize_feature_text(&text),
+                protocol_proxy_state.$field.get(),
+                $label,
+            )
+        }
+    };
 }
 
-#[then("host stderr receives {text}")]
-fn host_stderr_receives(protocol_proxy_state: &ProtocolProxyState, text: String) -> StepResult<()> {
-    assert_channel_receives(
-        &normalize_feature_text(&text),
-        protocol_proxy_state.host_stderr.get(),
-        "host stderr",
-    )
-}
-
-#[then("container stdin receives {text}")]
-fn container_stdin_receives(
-    protocol_proxy_state: &ProtocolProxyState,
-    text: String,
-) -> StepResult<()> {
-    assert_channel_receives(
-        &normalize_feature_text(&text),
-        protocol_proxy_state.container_stdin.get(),
-        "container stdin",
-    )
-}
+channel_receives_step!(
+    host_stdout_receives,
+    "host stdout receives {text}",
+    host_stdout,
+    "host stdout"
+);
+channel_receives_step!(
+    host_stderr_receives,
+    "host stderr receives {text}",
+    host_stderr,
+    "host stderr"
+);
+channel_receives_step!(
+    container_stdin_receives,
+    "container stdin receives {text}",
+    container_stdin,
+    "container stdin"
+);
 
 #[then("the protocol proxy fails with an exec error")]
 fn the_protocol_proxy_fails(protocol_proxy_state: &ProtocolProxyState) -> StepResult<()> {
