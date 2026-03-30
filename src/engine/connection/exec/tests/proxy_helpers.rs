@@ -155,13 +155,30 @@ fn assert_exec_failed_message(result: Result<(), PodbotError>, expected_fragment
     }
 }
 
-#[rstest]
-fn protocol_proxy_forwards_stdin_bytes_and_shutdowns_input(runtime: RuntimeFixture) {
+fn run_session(
+    runtime: RuntimeFixture,
+    stdin_bytes: &[u8],
+    output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    container_input: Pin<Box<dyn AsyncWrite + Send>>,
+    host_stdout: RecordingWriter,
+    host_stderr: RecordingWriter,
+) -> Result<(), PodbotError> {
     let runtime_handle = runtime.expect("runtime fixture should initialize");
     let request = make_protocol_request().expect("protocol request should build");
     let host_stdin = runtime_handle
-        .block_on(make_host_stdin(b"input payload"))
+        .block_on(make_host_stdin(stdin_bytes))
         .expect("host stdin should build");
+
+    runtime_handle.block_on(run_protocol_session_with_io_async(
+        &request,
+        output,
+        container_input,
+        ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
+    ))
+}
+
+#[rstest]
+fn protocol_proxy_forwards_stdin_bytes_and_shutdowns_input(runtime: RuntimeFixture) {
     let host_stdout = RecordingWriter::new();
     let host_stderr = RecordingWriter::new();
     let container_input = RecordingInputWriter::new();
@@ -171,12 +188,14 @@ fn protocol_proxy_forwards_stdin_bytes_and_shutdowns_input(runtime: RuntimeFixtu
         message: Vec::from(&b"stdout"[..]).into(),
     })]);
 
-    let result = runtime_handle.block_on(run_protocol_session_with_io_async(
-        &request,
+    let result = run_session(
+        runtime,
+        b"input payload",
         output,
         Box::pin(container_input),
-        ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
-    ));
+        host_stdout,
+        host_stderr,
+    );
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
@@ -196,11 +215,6 @@ fn protocol_proxy_forwards_stdin_bytes_and_shutdowns_input(runtime: RuntimeFixtu
 
 #[rstest]
 fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("runtime fixture should initialize");
-    let request = make_protocol_request().expect("protocol request should build");
-    let host_stdin = runtime_handle
-        .block_on(make_host_stdin(b""))
-        .expect("host stdin should build");
     let host_stdout = RecordingWriter::new();
     let host_stderr = RecordingWriter::new();
     let stdout_bytes = host_stdout.bytes.clone();
@@ -214,12 +228,14 @@ fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixtu
         }),
     ]);
 
-    let result = runtime_handle.block_on(run_protocol_session_with_io_async(
-        &request,
+    let result = run_session(
+        runtime,
+        b"",
         output,
         Box::pin(RecordingInputWriter::new()),
-        ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
-    ));
+        host_stdout,
+        host_stderr,
+    );
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
@@ -240,11 +256,6 @@ fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixtu
 
 #[rstest]
 fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("runtime fixture should initialize");
-    let request = make_protocol_request().expect("protocol request should build");
-    let host_stdin = runtime_handle
-        .block_on(make_host_stdin(b""))
-        .expect("host stdin should build");
     let host_stdout = RecordingWriter::new();
     let host_stderr = RecordingWriter::new();
     let stdout_bytes = host_stdout.bytes.clone();
@@ -258,12 +269,14 @@ fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
         }),
     ]);
 
-    let result = runtime_handle.block_on(run_protocol_session_with_io_async(
-        &request,
+    let result = run_session(
+        runtime,
+        b"",
         output,
         Box::pin(RecordingInputWriter::new()),
-        ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
-    ));
+        host_stdout,
+        host_stderr,
+    );
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
@@ -284,11 +297,6 @@ fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
 
 #[rstest]
 fn protocol_proxy_ignores_stdin_echo_chunks(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("runtime fixture should initialize");
-    let request = make_protocol_request().expect("protocol request should build");
-    let host_stdin = runtime_handle
-        .block_on(make_host_stdin(b""))
-        .expect("host stdin should build");
     let host_stdout = RecordingWriter::new();
     let host_stderr = RecordingWriter::new();
     let stdout_bytes = host_stdout.bytes.clone();
@@ -301,12 +309,14 @@ fn protocol_proxy_ignores_stdin_echo_chunks(runtime: RuntimeFixture) {
         }),
     ]);
 
-    let result = runtime_handle.block_on(run_protocol_session_with_io_async(
-        &request,
+    let result = run_session(
+        runtime,
+        b"",
         output,
         Box::pin(RecordingInputWriter::new()),
-        ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
-    ));
+        host_stdout,
+        host_stderr,
+    );
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
@@ -326,25 +336,18 @@ fn protocol_proxy_maps_stdout_failures(
     #[case] failure_mode: WriterFailureMode,
     #[case] expected_fragment: &str,
 ) {
-    let runtime_handle = runtime.expect("runtime fixture should initialize");
-    let request = make_protocol_request().expect("protocol request should build");
-    let host_stdin = runtime_handle
-        .block_on(make_host_stdin(b""))
-        .expect("host stdin should build");
     let output = make_output_stream(vec![Ok(LogOutput::StdOut {
         message: Vec::from(&b"broken"[..]).into(),
     })]);
 
-    let result = runtime_handle.block_on(run_protocol_session_with_io_async(
-        &request,
+    let result = run_session(
+        runtime,
+        b"",
         output,
         Box::pin(RecordingInputWriter::new()),
-        ProtocolProxyIo::new(
-            host_stdin,
-            RecordingWriter::with_failure(failure_mode),
-            RecordingWriter::new(),
-        ),
-    ));
+        RecordingWriter::with_failure(failure_mode),
+        RecordingWriter::new(),
+    );
 
     assert_exec_failed_message(result, expected_fragment);
 }
@@ -357,65 +360,52 @@ fn protocol_proxy_maps_stderr_failures(
     #[case] failure_mode: WriterFailureMode,
     #[case] expected_fragment: &str,
 ) {
-    let runtime_handle = runtime.expect("runtime fixture should initialize");
-    let request = make_protocol_request().expect("protocol request should build");
-    let host_stdin = runtime_handle
-        .block_on(make_host_stdin(b""))
-        .expect("host stdin should build");
     let output = make_output_stream(vec![Ok(LogOutput::StdErr {
         message: Vec::from(&b"broken"[..]).into(),
     })]);
 
-    let result = runtime_handle.block_on(run_protocol_session_with_io_async(
-        &request,
+    let result = run_session(
+        runtime,
+        b"",
         output,
         Box::pin(RecordingInputWriter::new()),
-        ProtocolProxyIo::new(
-            host_stdin,
-            RecordingWriter::new(),
-            RecordingWriter::with_failure(failure_mode),
-        ),
-    ));
+        RecordingWriter::new(),
+        RecordingWriter::with_failure(failure_mode),
+    );
 
     assert_exec_failed_message(result, expected_fragment);
 }
 
 #[rstest]
 fn protocol_proxy_maps_container_input_flush_failure(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("runtime fixture should initialize");
-    let request = make_protocol_request().expect("protocol request should build");
-    let host_stdin = runtime_handle
-        .block_on(make_host_stdin(b"stdin"))
-        .expect("host stdin should build");
     let output = make_output_stream(vec![Ok(LogOutput::StdOut {
         message: Vec::from(&b"out"[..]).into(),
     })]);
 
-    let result = runtime_handle.block_on(run_protocol_session_with_io_async(
-        &request,
+    let result = run_session(
+        runtime,
+        b"stdin",
         output,
         Box::pin(RecordingInputWriter::with_flush_failure()),
-        ProtocolProxyIo::new(host_stdin, RecordingWriter::new(), RecordingWriter::new()),
-    ));
+        RecordingWriter::new(),
+        RecordingWriter::new(),
+    );
 
     assert_exec_failed_message(result, "failed forwarding stdin to exec input");
 }
 
 #[rstest]
 fn protocol_proxy_maps_daemon_stream_errors(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("runtime fixture should initialize");
-    let request = make_protocol_request().expect("protocol request should build");
-    let host_stdin = runtime_handle
-        .block_on(make_host_stdin(b""))
-        .expect("host stdin should build");
     let output = make_output_stream(vec![Err(BollardError::RequestTimeoutError)]);
 
-    let result = runtime_handle.block_on(run_protocol_session_with_io_async(
-        &request,
+    let result = run_session(
+        runtime,
+        b"",
         output,
         Box::pin(RecordingInputWriter::new()),
-        ProtocolProxyIo::new(host_stdin, RecordingWriter::new(), RecordingWriter::new()),
-    ));
+        RecordingWriter::new(),
+        RecordingWriter::new(),
+    );
 
     assert_exec_failed_message(result, "exec stream failed");
 }

@@ -242,32 +242,35 @@ fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepRes
     Ok(())
 }
 
-#[then("host stdout receives {text}")]
-fn host_stdout_receives(protocol_proxy_state: &ProtocolProxyState, text: String) -> StepResult<()> {
-    let expected = normalize_feature_text(&text);
-    let actual = protocol_proxy_state
-        .host_stdout
-        .get()
-        .ok_or_else(|| String::from("host stdout should be recorded"))?;
+fn assert_channel_receives(
+    expected: &[u8],
+    actual: Option<Vec<u8>>,
+    channel: &str,
+) -> StepResult<()> {
+    let actual = actual.ok_or_else(|| format!("{channel} should be recorded"))?;
     if actual == expected {
         Ok(())
     } else {
-        Err(format!("expected host stdout {expected:?}, got {actual:?}"))
+        Err(format!("expected {channel} {expected:?}, got {actual:?}"))
     }
+}
+
+#[then("host stdout receives {text}")]
+fn host_stdout_receives(protocol_proxy_state: &ProtocolProxyState, text: String) -> StepResult<()> {
+    assert_channel_receives(
+        &normalize_feature_text(&text),
+        protocol_proxy_state.host_stdout.get(),
+        "host stdout",
+    )
 }
 
 #[then("host stderr receives {text}")]
 fn host_stderr_receives(protocol_proxy_state: &ProtocolProxyState, text: String) -> StepResult<()> {
-    let expected = normalize_feature_text(&text);
-    let actual = protocol_proxy_state
-        .host_stderr
-        .get()
-        .ok_or_else(|| String::from("host stderr should be recorded"))?;
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(format!("expected host stderr {expected:?}, got {actual:?}"))
-    }
+    assert_channel_receives(
+        &normalize_feature_text(&text),
+        protocol_proxy_state.host_stderr.get(),
+        "host stderr",
+    )
 }
 
 #[then("container stdin receives {text}")]
@@ -275,18 +278,11 @@ fn container_stdin_receives(
     protocol_proxy_state: &ProtocolProxyState,
     text: String,
 ) -> StepResult<()> {
-    let expected = normalize_feature_text(&text);
-    let actual = protocol_proxy_state
-        .container_stdin
-        .get()
-        .ok_or_else(|| String::from("container stdin should be recorded"))?;
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected container stdin {expected:?}, got {actual:?}"
-        ))
-    }
+    assert_channel_receives(
+        &normalize_feature_text(&text),
+        protocol_proxy_state.container_stdin.get(),
+        "container stdin",
+    )
 }
 
 #[then("the protocol proxy fails with an exec error")]
