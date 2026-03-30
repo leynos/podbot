@@ -1,23 +1,21 @@
 //! Container command execution orchestration.
 //!
-//! This module provides the stable library-facing exec orchestration function
-//! that accepts Podbot-owned request types and returns a typed command
-//! outcome. Engine connection, runtime creation, and low-level exec plumbing
-//! remain internal details behind this facade.
+//! This module provides the stable library-facing exec orchestration API.
+//! `ExecRequest` is validated at construction time and then treated as a
+//! trusted value object. For simple callers, [`exec`] resolves a connection on
+//! demand. Embedders that need to reuse a runtime handle and engine
+//! connection can create an [`ExecContext`] and call [`ExecContext::exec`].
 
+use bollard::Docker;
 use serde::{Deserialize, Serialize};
 
 use crate::config::AppConfig;
 use crate::engine::{ContainerExecClient, EngineConnector, SocketResolver};
-use crate::error::{ContainerError, PodbotError, Result as PodbotResult};
+use crate::error::{ConfigError, PodbotError, Result as PodbotResult};
 
 use super::CommandOutcome;
 
 /// Stable execution mode for container commands.
-///
-/// The attached and detached modes map directly to the operator-facing CLI
-/// behaviour. Protocol mode keeps streams attached while disabling TTY so
-/// byte-oriented hosted protocols remain unmodified.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum ExecMode {
@@ -40,23 +38,12 @@ impl From<ExecMode> for crate::engine::ExecMode {
 }
 
 /// Stable request type for executing a command in a running container.
-///
-/// `ExecRequest` intentionally contains only Podbot-owned data. Library
-/// embedders do not need to import engine traits, runtime handles, or CLI
-/// adapter types to invoke [`exec`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecRequest {
-    /// Target container identifier or name.
-    pub container: String,
-    /// Command argv to execute.
-    pub command: Vec<String>,
-    /// Requested execution mode.
-    pub mode: ExecMode,
-    /// Whether to allocate a pseudo-terminal.
-    ///
-    /// This flag is honoured only in attached mode. Detached and protocol
-    /// execution always disable TTY allocation.
-    pub tty: bool,
+    container: String,
+    command: Vec<String>,
+    mode: ExecMode,
+    tty: bool,
 }
 
 impl ExecRequest {
@@ -73,7 +60,7 @@ impl ExecRequest {
     /// use podbot::api::ExecRequest;
     ///
     /// let request = ExecRequest::new("sandbox", vec![String::from("echo")])?;
-    /// assert_eq!(request.container, "sandbox");
+    /// assert_eq!(request.container(), "sandbox");
     /// # Ok::<(), podbot::error::PodbotError>(())
     /// ```
     pub fn new(container: impl Into<String>, command: Vec<String>) -> Result<Self, PodbotError> {
@@ -85,6 +72,30 @@ impl ExecRequest {
         };
         request.validate()?;
         Ok(request)
+    }
+
+    /// Return the target container identifier.
+    #[must_use]
+    pub fn container(&self) -> &str {
+        &self.container
+    }
+
+    /// Return the command argv.
+    #[must_use]
+    pub fn command(&self) -> &[String] {
+        &self.command
+    }
+
+    /// Return the requested execution mode.
+    #[must_use]
+    pub const fn mode(&self) -> ExecMode {
+        self.mode
+    }
+
+    /// Return whether TTY allocation was requested.
+    #[must_use]
+    pub const fn tty(&self) -> bool {
+        self.tty
     }
 
     /// Return a copy of the request with a different execution mode.
@@ -102,53 +113,70 @@ impl ExecRequest {
     }
 
     fn validate(&self) -> Result<(), PodbotError> {
-        let container = self.container.trim();
-        if container.is_empty() {
-            return Err(PodbotError::from(
-                crate::error::ConfigError::MissingRequired {
-                    field: String::from("container"),
-                },
-            ));
+        if self.container.trim().is_empty() {
+            return Err(PodbotError::from(ConfigError::MissingRequired {
+                field: String::from("container"),
+            }));
         }
         if self.command.is_empty() {
-            return Err(PodbotError::from(
-                crate::error::ConfigError::MissingRequired {
-                    field: String::from("command"),
-                },
-            ));
+            return Err(PodbotError::from(ConfigError::MissingRequired {
+                field: String::from("command"),
+            }));
         }
         if self
             .command
             .first()
             .is_some_and(|executable| executable.trim().is_empty())
         {
-            return Err(PodbotError::from(
-                crate::error::ConfigError::MissingRequired {
-                    field: String::from("command[0]"),
-                },
-            ));
+            return Err(PodbotError::from(ConfigError::MissingRequired {
+                field: String::from("command[0]"),
+            }));
         }
         Ok(())
     }
 }
 
-/// Hidden compatibility seam for tests and internal callers that already have
-/// a connected engine client.
-#[doc(hidden)]
-pub struct ExecParams<'a, C: ContainerExecClient> {
-    /// Pre-connected container engine client.
-    pub connector: &'a C,
-    /// Stable exec request.
-    pub request: &'a ExecRequest,
-    /// Tokio runtime handle for blocking execution.
-    pub runtime_handle: &'a tokio::runtime::Handle,
+/// Reusable exec context for embedders that want to cache engine state.
+pub struct ExecContext {
+    connector: Docker,
+    runtime_handle: tokio::runtime::Handle,
+}
+
+impl ExecContext {
+    /// Resolve and connect an engine client using the supplied runtime handle.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same connection errors as [`exec`].
+    pub fn connect(
+        config: &AppConfig,
+        runtime_handle: &tokio::runtime::Handle,
+    ) -> PodbotResult<Self> {
+        let env = mockable::DefaultEnv::new();
+        let resolver = SocketResolver::new(&env);
+        let connector =
+            EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;
+
+        Ok(Self {
+            connector,
+            runtime_handle: runtime_handle.clone(),
+        })
+    }
+
+    /// Execute a validated request using the cached connector and runtime.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same engine execution errors as [`exec`].
+    pub fn exec(&self, request: &ExecRequest) -> PodbotResult<CommandOutcome> {
+        exec_with_client(&self.connector, &self.runtime_handle, request)
+    }
 }
 
 /// Execute a command in a running container.
 ///
-/// Builds an engine request from the stable [`ExecRequest`], resolves the
-/// engine socket from `config`, and maps the exit code to a
-/// [`CommandOutcome`].
+/// This convenience API creates a runtime and engine connection per call.
+/// Embedders that need to reuse those resources should prefer [`ExecContext`].
 ///
 /// # Errors
 ///
@@ -169,38 +197,24 @@ pub struct ExecParams<'a, C: ContainerExecClient> {
 /// # Ok::<(), podbot::error::PodbotError>(())
 /// ```
 pub fn exec(config: &AppConfig, request: &ExecRequest) -> PodbotResult<CommandOutcome> {
-    request.validate()?;
-    let runtime = create_runtime()?;
-    let env = mockable::DefaultEnv::new();
-    let resolver = SocketResolver::new(&env);
-    let docker =
-        EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;
-    let params = ExecParams {
-        connector: &docker,
-        request,
-        runtime_handle: runtime.handle(),
-    };
-    exec_with_client(&params)
+    let runtime = super::create_runtime()?;
+    let context = ExecContext::connect(config, runtime.handle())?;
+    context.exec(request)
 }
 
 /// Execute a command using a pre-connected engine client.
 #[doc(hidden)]
 pub fn exec_with_client<C: ContainerExecClient>(
-    params: &ExecParams<'_, C>,
+    connector: &C,
+    runtime_handle: &tokio::runtime::Handle,
+    request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
-    let ExecParams {
-        connector,
-        request,
-        runtime_handle,
-    } = *params;
-
-    request.validate()?;
     let engine_request = crate::engine::ExecRequest::new(
-        &request.container,
-        request.command.clone(),
-        request.mode.into(),
+        request.container(),
+        request.command().to_vec(),
+        request.mode().into(),
     )?
-    .with_tty(request.tty);
+    .with_tty(request.tty());
     let exec_result = EngineConnector::exec(runtime_handle, connector, &engine_request)?;
 
     if exec_result.exit_code() == 0 {
@@ -210,12 +224,4 @@ pub fn exec_with_client<C: ContainerExecClient>(
             code: exec_result.exit_code(),
         })
     }
-}
-
-fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
-    tokio::runtime::Runtime::new().map_err(|error| {
-        PodbotError::from(ContainerError::RuntimeCreationFailed {
-            message: error.to_string(),
-        })
-    })
 }

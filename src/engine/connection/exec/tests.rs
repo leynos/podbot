@@ -5,6 +5,7 @@ use bollard::errors::Error as BollardError;
 use futures_util::stream;
 use mockall::mock;
 use rstest::{fixture, rstest};
+use serial_test::serial;
 
 use super::terminal::TerminalSize;
 use super::*;
@@ -392,6 +393,7 @@ fn exec_async_error_scenarios(
 }
 
 #[rstest]
+#[serial]
 #[case(AttachedResizeCase {
     tty: true,
     exec_id: "exec-4",
@@ -437,6 +439,7 @@ fn exec_async_attached_resize_behaviour(
 }
 
 #[rstest]
+#[serial]
 fn exec_async_attached_propagates_resize_failures(runtime: RuntimeFixture) -> TestResult {
     let runtime_handle = runtime?;
     let mut client = MockExecClient::new();

@@ -1,4 +1,4 @@
-# Stabilize public library boundaries
+# Stabilize public library boundaries for embedding
 
 This ExecPlan (execution plan) is a living document. The sections
 `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
@@ -9,158 +9,128 @@ Status: IMPLEMENTED
 
 ## Purpose / big picture
 
-After this change, Podbot's public library API surface is explicitly
-documented, feature-gated, and integration-tested so that another Rust crate
-can depend on `podbot` as a library with:
+After this work, an external Rust tool can depend on `podbot` as a library and
+use a documented, versioned API surface without importing `clap` types, relying
+on CLI-only modules, or handling opaque `eyre::Report` values. The stable
+surface is intentionally small. It documents what is supported under semver
+now, what remains internal, and what is still experimental until the
+hosted-session, hook, validation, and MCP contracts are fully reconciled.
 
-- documented, versioned public modules and request/response types,
-- semantic errors (`PodbotError`) exclusively (no `eyre` types in public
-  signatures),
-- gated CLI module visibility via the `cli` feature (note: `clap` remains a
-  transitive dependency via `ortho_config` regardless of feature settings),
-- reconciled hook and validation schemas that match the documented
-  integration contract, and
-- integration tests that exercise Podbot as a library dependency from a
-  host-style call path.
+Observable success is not "the crate still compiles". A host-style integration
+test must compile and run using only the supported public modules. Public
+Rustdoc examples must compile from the perspective of an external crate.
+`make check-fmt`, `make lint`, and `make test` must all pass, and the design
+document, user's guide, and roadmap must agree on the supported boundary.
 
 This is the Step 5.3 plan from `docs/podbot-roadmap.md`. The user approved
 implementation on 2026-03-30, and this document now records the implemented
 boundary and its evidence.
 
-1. `make check-fmt && make lint && make test` all pass.
-2. A new `tests/library_embedding.rs` integration test drives
-   `podbot::api`, `podbot::config`, `podbot::engine`, and `podbot::error`
-   from a host-application call path, proving that the library surface is
-   self-contained and usable without CLI types.
-3. `podbot::cli` is gated behind a Cargo feature `cli` (enabled by
-   default) to control module visibility. Note: `ortho_config` maintains
-   an unconditional dependency on `clap`, so the feature gates API surface
-   only.
-4. All public modules have a documented API reference in
-   `docs/podbot-design.md` under a "Public library API reference"
-   section.
-5. Hook and validation schema types referenced in `docs/podbot-design.md`
-   are either already present in the public surface or explicitly marked
-   as future-planned with a tracking reference.
-6. New unit tests (`rstest`) and behavioural tests (`rstest-bdd` v0.5.0)
-   cover the feature-gating boundary, library embedding paths, and error
-   type contract.
-7. `docs/users-guide.md` documents the `cli` feature flag and library
-   embedding instructions.
-8. Roadmap Step 5.3 is marked done in `docs/podbot-roadmap.md`.
+## Agent team
 
-This is Step 5.3 of Phase 5 in the roadmap (`docs/podbot-roadmap.md`).
+This plan assumes a small agent team with explicit ownership. One implementer
+may execute every role, but the responsibilities should remain distinct.
 
-## Agent team (planning + implementation)
-
-1. **Coordinator (lead)**
-   - Owns milestone sequencing and tolerance enforcement.
-   - Ensures all quality gates run before the end of the turn.
-2. **API surface auditor**
-   - Enumerates all `pub` items in library modules.
-   - Verifies no `eyre` types leak into public signatures.
-   - Documents each public module's supported types and functions.
-3. **Feature-gate implementer**
-   - Introduces the `cli` Cargo feature.
-   - Gates `pub mod cli` behind `#[cfg(feature = "cli")]`.
-   - Ensures the binary enables the feature in its build path.
-   - Verifies `cargo check --no-default-features` compiles without
-     `clap`.
-4. **Schema reconciliation steward**
-   - Reviews hook and validation types against `docs/podbot-design.md`.
-   - Adds placeholder types or tracking annotations for unimplemented
-     schema surfaces.
-5. **Testing lead**
-   - Adds `rstest` unit tests for feature-gating and error contracts.
-   - Adds `rstest-bdd` behavioural tests for library embedding paths.
-   - Adds integration tests that exercise the library from a host-style
-     call path.
-6. **Documentation owner**
-   - Updates `docs/podbot-design.md` with the public API reference.
-   - Updates `docs/users-guide.md` with library embedding guidance.
-   - Marks roadmap Step 5.3 as done.
+1. Coordinator. Owns milestone order, tolerance checks, and approval gating.
+   Keeps this document current as discoveries occur.
+2. Boundary steward. Audits current `pub` items, defines the stable versus
+   internal versus experimental split, and drives `lib.rs`/Cargo changes.
+3. CLI boundary owner. Moves `clap` and any CLI-only helper paths behind a
+   binary or feature boundary, and keeps the binary usable.
+4. Contract reconciler. Compares hook and validation schemas across the ADRs,
+   design docs, and Corbusier-facing integration notes, then records the chosen
+   source of truth.
+5. Test lead. Adds `rstest` unit coverage, `rstest-bdd` v0.5.0 behavioural
+   coverage, and host-style integration tests that behave like an external
+   dependent crate.
+6. Documentation owner. Updates `docs/podbot-design.md`,
+   `docs/users-guide.md`, the roadmap entry, and public Rustdoc examples.
 
 ## Constraints
 
-Hard invariants that must hold throughout implementation. Violation requires
-escalation, not workarounds.
+- The dual-delivery model in `docs/podbot-design.md` remains true:
+  library APIs own orchestration and semantic errors; the CLI is only an
+  adapter for parsing, rendering, and process exit conversion.
+- Stable public APIs must return semantic errors rooted in
+  `podbot::error::PodbotError`. `eyre::Report` is allowed only at the
+  application boundary (`src/main.rs`) and must not appear in public library
+  signatures.
+- Stable public types must not require importing `podbot::cli`,
+  `podbot::engine`, or `podbot::github`.
+- CLI-only dependencies and code paths must be gated behind a binary or Cargo
+  feature boundary. A library embedder must be able to avoid the CLI surface.
+- The documented boundary in Architecture Decision Record (ADR) 001 is
+  authoritative for direction: stable surfaces stay deliberately small;
+  experimental surfaces require explicit marking and documentation.
+- Hook and validation schemas must align with ADR 003, ADR 006, ADR 008, ADR
+  002, ADR 007, and the Corbusier integration contract before they are
+  stabilized.
+- Public documentation examples must behave like external-user tests. Follow
+  `docs/rust-doctest-dry-guide.md`: doctests exercise only public APIs and may
+  use hidden setup or `#[cfg(doctest)]` helpers when needed.
+- Unit tests use `rstest`. Behavioural tests use `rstest-bdd` v0.5.0. Follow
+  existing repository rules: fixture names must match parameters, feature-file
+  `{param}` captures stay unquoted, and step code uses `StepResult`-style error
+  returns instead of panics or `expect`.
+- Test seams must use dependency injection rather than mutating global process
+  state. Follow `docs/reliable-testing-in-rust-via-dependency-injection.md` and
+  existing `mockable` patterns.
+- Every Rust module must begin with a `//!` comment, comments/docs use
+  en-GB-oxendict spelling, and no source file may exceed 400 lines.
+- Before the turn ends, run the applicable quality gates with `tee` and
+  `set -o pipefail` so exit codes survive truncation. Because this step updates
+  code and docs, the implementation turn must run `make check-fmt`,
+  `make lint`, `make test`, and the relevant Markdown gates.
 
-- Files must be fewer than 400 lines each.
-- Every module must begin with a `//!` module-level doc comment.
-- en-GB-oxendict spelling ("-ize" / "-yse" / "-our") in all comments and
-  documentation.
-- No `unwrap()` or `expect()` in production code (clippy denies
-  `unwrap_used`, `expect_used`).
-- No `println!` or `eprintln!` in library code (clippy denies
-  `print_stdout`, `print_stderr`).
-- Library public API signatures must not expose `eyre::Report` or
-  `eyre::Result`. Only `podbot::error::Result<T>` and `PodbotError`.
-- `pub mod cli` must be conditionally compiled behind the `cli` Cargo
-  feature (enabled by default).
-- The binary crate must enable the `cli` feature.
-- Note: `cargo check --no-default-features` will still pull in `clap` as a
-  transitive dependency via `ortho_config`. The `cli` feature gates module
-  visibility, not dependency removal.
-- No new external crate dependencies may be added.
-- Existing public API signatures in `podbot::api`, `podbot::config`, and
-  `podbot::engine` must not change in a breaking way.
-- `rstest` for unit tests; `rstest-bdd` v0.5.0 for behavioural tests.
-- BDD step function parameter names must match fixture names exactly.
-- BDD feature files must use unquoted text for `{param}` captures.
-- BDD tests must use `StepResult<T> = Result<T, String>` pattern.
-- `make check-fmt`, `make lint`, `make test` must pass before any commit.
-- Commit messages use imperative mood; atomic commits; one logical unit
-  per commit.
+## Tolerances
 
-## Tolerances (exception triggers)
-
-- **Scope**: if implementation requires changes to more than 25 files or
-  1,500 net lines of code, stop and escalate.
-- **Interface**: if any existing public API signature in `podbot::api`,
-  `podbot::config`, or `podbot::engine` must change in a breaking way,
-  stop and escalate.
-- **Dependencies**: if a new external crate dependency is required, stop
-  and escalate.
-- **Iterations**: if tests still fail after 3 focused fix attempts on a
-  single issue, stop and escalate.
-- **Ambiguity**: if multiple valid interpretations exist for a schema
-  reconciliation decision, stop and present options.
+- Scope: if stabilizing the boundary requires more than 25 files or roughly
+  1,200 net lines of code, stop and split the work into smaller approved
+  milestones.
+- Packaging: if gating `clap` cleanly cannot be done with a feature/binary
+  boundary and instead requires a multi-crate workspace split, stop and ask
+  whether that broader packaging change is desired now.
+- Compatibility: if replacing the current `podbot::api` surface would cause a
+  hard breaking rename without a compatibility shim or deprecation path, stop
+  and present options.
+- Contract mismatch: if ADR 003/006/008 and the Corbusier-facing integration
+  document disagree in a materially incompatible way, stop after documenting
+  the mismatch and request a product decision on the source of truth.
+- Testing: if host-style embedding tests cannot be written without exposing new
+  engine-level internals, stop and re-evaluate the stable request/response
+  shape before exporting more implementation details.
+- Iteration budget: if the same failing gate requires more than three focused
+  repair attempts, stop and document the blocker instead of thrashing.
 
 ## Risks
 
-- Risk: Feature-gating `pub mod cli` may break downstream code that
-  imports `podbot::cli` types without enabling the feature.
-  Severity: low
-  Likelihood: low (the binary enables default features)
-  Mitigation: the `cli` feature is enabled by default, so existing
-  consumers are unaffected. Library-only consumers must opt in by
-  specifying `default-features = false`.
+- Risk: the current public `podbot::api::exec` signature exposes
+  `podbot::engine::{ContainerExecClient, ExecMode}` through `ExecParams`, which
+  conflicts with ADR 001's goal of keeping `engine` internal. Mitigation: treat
+  this as the first boundary bug to fix, not as precedent for stabilizing
+  `engine`.
 
-- Risk: Gating `clap` behind a feature may trigger conditional-compilation
-  issues in `main.rs` or integration tests that use CLI types.
-  Severity: medium
-  Likelihood: medium
-  Mitigation: `main.rs` compiles as a binary target, which always gets
-  default features. Integration tests that import `podbot::cli` will need
-  the `cli` feature; since dev-dependencies inherit default features this
-  should work automatically. If not, add `features = ["cli"]` to the
-  dev-dependency.
+- Risk: `src/main.rs` currently imports
+  `podbot::github::validate_app_credentials` and
+  `podbot::engine::{EngineConnector, SocketResolver, ExecMode}` directly.
+  Hiding those modules without a replacement seam will break the binary.
+  Mitigation: add feature-gated CLI support paths or move the needed behaviour
+  fully behind stable library APIs before shrinking `lib.rs`.
 
-- Risk: Hook and validation schemas referenced in the design doc may not
-  yet exist as Rust types, requiring placeholder stubs.
-  Severity: low
-  Likelihood: high (these are Phase 4.8 and 4.9 features, not yet
-  implemented)
-  Mitigation: document the planned schemas in the design doc with
-  explicit "future-planned" annotations and roadmap references. Do not
-  create stub types that would mislead consumers.
+- Risk: `clap` is currently an unconditional dependency in `Cargo.toml`.
+  Mitigation: prefer an optional dependency plus `cli` feature and document the
+  embedder dependency stanza clearly.
 
-- Risk: `cfg(feature = "cli")` gating on `pub mod cli` might cause
-  `missing_docs` warnings on the conditional module declaration.
-  Severity: low
-  Likelihood: medium
-  Mitigation: ensure the `#[cfg(feature = "cli")]` attribute is placed
-  correctly and the module doc comment satisfies the lint.
+- Risk: the user's guide already documents `podbot::api` and currently tells
+  embedders to import `podbot::engine` types. That example will become wrong as
+  soon as the boundary is narrowed. Mitigation: update `docs/users-guide.md` in
+  the same change, with a stable example that imports only supported modules.
+
+- Risk: hook and validation contracts are still mostly ADR-level designs.
+  Stabilizing them prematurely would create semver commitments for shapes that
+  have not yet survived implementation. Mitigation: keep those surfaces
+  experimental or explicitly out of scope until the contract reconciliation
+  stage is complete.
 
 ## Progress
 
@@ -183,7 +153,7 @@ escalation, not workarounds.
 - [x] (2026-03-30) Update design docs, user's guide, and roadmap; then run
   all gates.
 
-## Decision log
+## Surprises & Discoveries
 
 - `src/lib.rs` currently exports `api`, `cli`, `config`, `engine`, `error`,
   and `github` publicly. That is far broader than the intended long-term
@@ -207,34 +177,22 @@ escalation, not workarounds.
   stable surface is still `api`, `config`, and `error`; the hidden modules are
   compatibility-only and explicitly unsupported for semver purposes.
 
-- Decision: Use `default = ["cli"]` so the feature is opt-out rather
-  than opt-in.
-  Rationale: Existing consumers (the binary, integration tests, and any
-  downstream users) continue working without changes. Only library-only
-  consumers need to set `default-features = false`. This follows the
-  Cargo convention for features that most consumers need.
-  Date/Author: 2026-04-07 (agent)
+## Decision Log
 
-- Decision: Document hook and validation schemas as "future-planned"
-  rather than creating stub types.
-  Rationale: Phase 4.8 (prompt, bundle, and validation surfaces) and
-  Phase 4.9 (hook execution) are not yet implemented. Creating stub
-  Rust types would add dead code that misleads consumers. The design
-  doc already describes these schemas; adding explicit "future-planned"
-  annotations with roadmap references is sufficient for the
-  stabilization contract.
-  Date/Author: 2026-04-07 (agent)
+- Decision: treat the current `podbot::api` surface as the starting point for
+  stabilization, not automatic proof that it is the correct final shape.
+  Rationale: Step 5.1 exported `api`, but Step 5.3 is specifically responsible
+  for deciding what becomes supported long-term.
 
-- Decision: Keep `pub mod github` in the public API surface but mark it
-  as "internal, subject to change" in documentation.
-  Rationale: The GitHub module exposes types like `GitHubAppClient`
-  trait and `validate_app_credentials` that library embedders may need
-  for GitHub App integration. However, the API is not yet stable.
-  Marking it as internal-but-public avoids breaking existing usage
-  while signalling that the surface may change.
-  Date/Author: 2026-04-07 (agent)
+- Decision: do not stabilize `podbot::engine`, `podbot::github`, or
+  `podbot::cli`. Rationale: ADR 001, the design doc, and the roadmap all say
+  embedders should call orchestration APIs, not low-level engine, GitHub, or
+  parsing helpers.
 
-## Surprises & discoveries
+- Decision: prefer a compatibility-preserving path over a rename-only path.
+  Rationale: if `podbot::launch` is introduced now, it should be an additive
+  stable alias or wrapper around the curated surface, not a breaking removal of
+  `podbot::api` without a migration story.
 
 - Decision: keep hooks, validation, session, and MCP surfaces experimental
   unless the implementation turn can prove their request/response types are
@@ -250,14 +208,15 @@ escalation, not workarounds.
   embedders can use `default-features = false`, while the operator path remains
   `cargo install --path .`.
 
-## Outcomes & retrospective
+## Outcomes & Retrospective
 
 Implemented outcome:
 
 - Supported stable modules are `podbot::api`, `podbot::config`, and
   `podbot::error`.
-- The stable exec surface is `podbot::api::{ExecRequest, ExecMode, exec}`.
-  It no longer requires engine traits, runtime handles, or CLI parse types.
+- The stable exec surface is
+  `podbot::api::{ExecRequest, ExecMode, ExecContext, exec}`. It no longer
+  requires engine traits, runtime handles, or CLI parse types.
 - `podbot::api` remained the stable namespace for this step. No additive
   `launch` alias was introduced.
 - CLI packaging now uses an optional `clap` dependency behind the `cli`
@@ -278,575 +237,208 @@ Implemented outcome:
 
 ## Context and orientation
 
-### Current state (as of 2026-04-07)
+The implementer should begin by reading the following files in this order:
 
-Podbot is delivered as both a CLI binary and a Rust library. Steps 5.1
-and 5.2 are complete:
+1. `docs/podbot-roadmap.md`, especially Step 5.3 and the preceding Steps 4.8,
+   4.9, and 4.10.
+2. `docs/podbot-design.md`, especially the dual-delivery model and error
+   handling boundary.
+3. `docs/adr-001-define-the-stable-public-library-boundary.md`.
+4. `docs/adr-002-define-the-hosted-session-api-and-control-channel.md`.
+5. `docs/adr-003-define-the-hook-execution-primitive-and-suspend-ack-protocol.md`.
+6. `docs/adr-006-define-the-validate-surface-and-capability-disposition-model.md`.
+7. `docs/adr-007-define-session-composition-and-artefact-materialisation.md`.
+8. `docs/adr-008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md`.
+9. `docs/mcp-server-hosting-design.md`, especially section 8.3.
+10. `docs/users-guide.md`, especially the current "Library API" section.
 
-- **Step 5.1** extracted command orchestration into `podbot::api` with
-  `CommandOutcome`, `ExecParams`, `exec()`, and stub functions for
-  `run_agent`, `list_containers`, `stop_container`, `run_token_daemon`.
-- **Step 5.2** decoupled configuration loading from Clap by introducing
-  `ConfigLoadOptions`, `ConfigOverrides`, and
-  `load_config`/`load_config_with_env` in `podbot::config`, while
-  keeping Clap parse types in `podbot::cli`.
+Current repository state that matters:
 
-### Current public module structure
+- `src/lib.rs` exports every major module publicly.
+- `src/main.rs` is a thin adapter in principle, but it still depends directly
+  on `engine` and `github` public modules.
+- `src/api/mod.rs` and `src/api/exec.rs` provide the current orchestration
+  surface.
+- `src/error.rs` already defines `PodbotError` correctly, so this step should
+  preserve that pattern rather than invent a new error boundary.
+- `src/cli/mod.rs` carries `clap`-derived parse types and is currently public.
+- `tests/bdd_orchestration.rs` covers the current orchestration API; this is a
+  useful starting point but not the finished embedding proof.
 
-```plaintext
-podbot::
-  api::           CommandOutcome, ExecParams, exec, run_agent,
-                  list_containers, stop_container, run_token_daemon
-  cli::           Cli, Commands, RunArgs, HostArgs, ExecArgs, StopArgs,
-                  TokenDaemonArgs, AgentKindArg, AgentModeArg
-  config::        AppConfig, AgentConfig, AgentKind, AgentMode,
-                  ConfigLoadOptions, ConfigOverrides, CredsConfig,
-                  GitHubConfig, McpConfig, McpAllowedOriginPolicy,
-                  McpAuthTokenPolicy, McpBindStrategy, SandboxConfig,
-                  SelinuxLabelMode, WorkspaceConfig, WorkspaceSource,
-                  CommandIntent, load_config, load_config_with_env,
-                  env_var_names
-  engine::        EngineConnector, SocketResolver, SocketPath,
-                  ContainerExecClient, ContainerCreator,
-                  ContainerUploader, ExecMode, ExecRequest, ExecResult,
-                  CreateContainerRequest, ContainerSecurityOptions,
-                  CredentialUploadRequest, CredentialUploadResult,
-                  SelinuxLabelMode, McpAllowedOriginPolicy,
-                  McpAuthTokenPolicy, McpBindStrategy, McpConfig,
-                  CreateContainerFuture, CreateExecFuture,
-                  InspectExecFuture, ResizeExecFuture,
-                  StartExecFuture, UploadToContainerFuture
-  error::         PodbotError, ConfigError, ContainerError,
-                  GitHubError, FilesystemError, Result<T>
-  github::        load_private_key, build_app_client,
-                  validate_app_credentials, GitHubAppClient,
-                  OctocrabAppClient, BoxFuture
-```
-
-### Key files
-
-- `Cargo.toml` — no features section currently exists
-- `src/lib.rs` — exports `api`, `cli`, `config`, `engine`, `error`,
-  `github`
-- `src/main.rs` — CLI binary adapter
-- `src/cli/mod.rs` — Clap parse types
-- `src/error.rs` — semantic error hierarchy
-- `docs/podbot-design.md` — architecture and module structure
-- `docs/users-guide.md` — operator documentation
-- `docs/podbot-roadmap.md` — roadmap (target: Step 5.3)
-
-### Existing patterns to follow
-
-- Feature gating: Cargo features with `#[cfg(feature = "...")]` on
-  module declarations. The binary target enables default features.
-- Module structure: `src/<module>/mod.rs` re-exports from submodules.
-- Dependency injection: traits like `ContainerExecClient` and
-  `mockable::Env` for testability.
-- BDD tests: `tests/bdd_<name>.rs` with
-  `tests/bdd_<name>_helpers/{mod,state,steps,assertions}.rs` and
-  `tests/features/<name>.feature`.
-- Error handling: library returns `podbot::error::Result<T>`; CLI
-  converts to `eyre::Report` at the boundary.
+The key technical tension is that the current stable-looking surface leaks
+engine implementation details. A genuine stable boundary must let embedders use
+Podbot without importing container-engine plumbing or CLI parse types.
 
 ## Plan of work
 
-### Stage A: Audit and document public API surface
+### Stage A: Build the boundary inventory and write the target classification
 
-**Goal:** Enumerate and document all public modules, types, traits, and
-functions in the library surface.
+Start with a classification document in the implementation branch notes or in
+the updated design document. Enumerate every public module and public type that
+is reachable from `src/lib.rs` or from currently documented examples. Group
+them into four buckets:
 
-#### A.1: Audit public API surface
+1. stable now,
+2. stable later but not yet implemented,
+3. experimental preview, and
+4. internal only.
 
-Enumerate all `pub` items in library modules (`api`, `config`, `engine`,
-`error`, `github`). Verify:
+The expected starting classification is:
 
-1. No `eyre` types appear in public function signatures or public type
-   fields.
-2. All public items have `///` doc comments (enforced by
-   `missing_docs = "deny"`).
-3. All modules have `//!` module-level doc comments.
+- Stable now candidate: `podbot::api`, `podbot::config`, `podbot::error`.
+- Stable later candidate: `podbot::launch`, `podbot::session`, `podbot::mcp`
+  once their request/response types exist and are tested.
+- Experimental preview candidate: `podbot::hooks`, `podbot::validate`,
+  possibly `podbot::session` and `podbot::mcp` if implemented only partially.
+- Internal only: `podbot::cli`, `podbot::engine`, `podbot::github`.
 
-The `cli` module is currently public but will be feature-gated in Stage
-C. It is acceptable for `cli` types to reference `clap` types since the
-module is behind the feature gate.
+Do not skip this audit. The implementation turn should begin by writing one or
+more red tests that describe the intended stable import paths and the modules
+that must no longer be supported by external consumers.
 
-#### A.2: Document public modules in design doc
+### Stage B: Establish the binary or feature boundary for CLI-only code
 
-Add a "Public library API reference" section to `docs/podbot-design.md`
-listing each public module with its supported types and functions. Use a
-table format:
+Change `Cargo.toml` and `src/lib.rs` so CLI-only parsing code is gated behind a
+Cargo feature or binary-only path. The intended result is:
 
-| Module     | Stability | Types and functions                     |
-| ---------- | --------- | --------------------------------------- |
-| `api`      | Stable    | `CommandOutcome`, `ExecParams`, `exec`, |
-|            |           | `run_agent`, `list_containers`,         |
-|            |           | `stop_container`, `run_token_daemon`    |
-| `config`   | Stable    | `AppConfig`, `ConfigLoadOptions`, ...   |
-| `engine`   | Stable    | `EngineConnector`, `ExecRequest`, ...   |
-| `error`    | Stable    | `PodbotError`, `ConfigError`, ...       |
-| `github`   | Internal  | Subject to change; not part of the      |
-|            |           | stable integration contract             |
+- `clap` is no longer an unconditional library dependency.
+- `podbot::cli` is not part of the default stable library boundary.
+- the `podbot` binary still builds and runs in normal operator workflows.
 
-**Stage A gate**: no code changes; documentation-only. Run
-`make markdownlint` if documentation files are modified.
+The preferred implementation is an optional `clap` dependency plus a `cli`
+feature, with the binary target requiring that feature. If that proves too
+disruptive, stop at the tolerance gate and ask whether a package split is
+acceptable.
 
-### Stage B: Ensure semantic errors across public APIs
+This stage must also deal with any helper code the binary currently imports
+from `engine` and `github`. The binary may keep using feature-gated support
+paths, but those paths must not be documented as stable for embedders.
 
-**Goal:** Confirm that all public API functions return
-`podbot::error::Result<T>` with `PodbotError` variants, and that no
-`eyre::Report` or `eyre::Result` appears in public library signatures.
+### Stage C: Refactor public request/response types to remove engine leakage
 
-#### B.1: Audit error return types
+This is the heart of the stabilization work. The current `ExecParams` requires
+`ContainerExecClient` and `ExecMode` from `podbot::engine`. That means the
+public API is not yet truly library-friendly.
 
-Scan all `pub fn` declarations in library modules for return types. The
-audit from context gathering confirms:
+Refactor the supported orchestration entry points so their documented public
+signatures reference only stable request/response types from stable modules.
+Possible acceptable outcomes include:
 
-- `podbot::api::exec()` returns `PodbotResult<CommandOutcome>` (alias
-  for `Result<CommandOutcome, PodbotError>`). Correct.
-- `podbot::api::{run_agent, list_containers, stop_container,
-  run_token_daemon}` return `PodbotResult<CommandOutcome>`. Correct.
-- `podbot::config::{load_config, load_config_with_env}` return
-  `crate::error::Result<AppConfig>`. Correct.
-- `podbot::engine::EngineConnector::connect()` returns
-  `Result<Docker, PodbotError>`. Correct.
-- `podbot::github::{load_private_key, build_app_client}` return
-  `Result<T, GitHubError>`. These use domain-specific errors, not
-  `PodbotError`. This is acceptable: `GitHubError` is a variant of
-  `PodbotError` and callers can convert with `?`.
+1. New stable request types inside `podbot::api` or `podbot::launch`.
+2. An additive stable wrapper over the current low-level orchestration seam.
+3. A feature-gated internal seam kept for tests while the stable surface uses
+   only library-owned types.
 
-No action required if the audit confirms all return types are semantic.
-If any function returns `eyre::Result`, refactor it to use
-`podbot::error::Result` or a domain error enum.
+The wrong outcome is exporting more of `podbot::engine` just because the
+current tests use it.
 
-#### B.2: Add unit test for error type contract
+At the end of this stage, public Rustdoc and integration tests should no longer
+need `podbot::engine` imports to call the supported library API.
 
-Add a compile-time test (or static assertion) in `src/error.rs` tests
-confirming that `PodbotError` implements `std::error::Error + Send +
-Sync + 'static`. This ensures the error type is suitable for use in
-async contexts and across thread boundaries.
+### Stage D: Reconcile hook and validation schemas before promising stability
 
-**Stage B gate**: `make check-fmt && make lint && make test`.
+Compare the hook and validation shapes in:
 
-### Stage C: Gate CLI-only dependencies behind feature boundary
+- `docs/adr-003-define-the-hook-execution-primitive-and-suspend-ack-protocol.md`,
+- `docs/adr-006-define-the-validate-surface-and-capability-disposition-model.md`,
+- `docs/adr-008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md`,
+- `docs/adr-002-define-the-hosted-session-api-and-control-channel.md`,
+- `docs/adr-007-define-session-composition-and-artefact-materialisation.md`, and
+- `docs/corbusier-conformance-design-for-agents-mcp-wires-and-hooks.md`.
 
-**Goal:** Introduce a Cargo feature `cli` (enabled by default) that
-gates `pub mod cli` and the `clap` dependency. Library-only consumers
-can set `default-features = false` to avoid pulling in `clap`.
+Record every mismatch. The most obvious one today is validation taxonomy: ADR
+006 uses `Native`, `HostEnforced`, `Translated`, `Ignored`, and `Invalid`,
+while the Corbusier integration note still shows `Supported`, `Ignored`,
+`Rejected`, and `Unknown`.
 
-#### C.1: Add `[features]` section to `Cargo.toml`
+The implementation turn must choose one of two outcomes and document it
+explicitly:
 
-```toml
-[features]
-default = ["cli"]
-cli = ["dep:clap"]
-```
+1. The contract is reconciled and exported as an experimental preview with the
+   agreed request/response types.
+2. The contract is not yet stable enough, so it remains documented but
+   unexported from the supported default surface.
 
-Change the `clap` dependency from:
+Do not stabilize hook or validation types until this stage has a clear written
+answer.
 
-```toml
-clap = { version = "4.5.60", features = ["derive"] }
-```
+### Stage E: Add host-style tests that exercise the boundary from outside
 
-to:
+Add tests in three layers.
 
-```toml
-clap = { version = "4.5.60", features = ["derive"], optional = true }
-```
+First, add `rstest`-based unit tests for any new stable request/response types,
+feature gating logic, and `PodbotError`-based unhappy paths.
 
-#### C.2: Gate `pub mod cli` in `src/lib.rs`
+Second, add `rstest-bdd` v0.5.0 behavioural scenarios that describe the host
+embedder experience. Suggested scenarios:
 
-Change:
+- importing and calling the supported orchestration entry point without any CLI
+  parse types,
+- receiving `PodbotError` rather than `eyre::Report`,
+- verifying that unsupported CLI-only modules are not part of the documented
+  stable contract, and
+- verifying the chosen experimental-gating behaviour for hook or validation
+  surfaces.
 
-```rust
-pub mod cli;
-```
+Third, add true host-style integration proof. This should compile and execute
+as an external consumer would. Use either a dedicated integration test crate
+under `tests/` or public Rustdoc examples with shared hidden helpers. The test
+must import only supported modules and must not rely on crate-private seams.
 
-to:
+If the stable surface becomes feature-sensitive, add one integration test that
+proves the embedder path with the CLI feature disabled.
 
-```rust
-#[cfg(feature = "cli")]
-pub mod cli;
-```
+### Stage F: Update the design document, user's guide, and roadmap together
 
-Ensure the module-level doc comment for `lib.rs` conditionally lists the
-`cli` module:
+Update `docs/podbot-design.md` to record the stable boundary and any decisions
+taken during implementation. Update ADR 001 if the implemented boundary differs
+materially from the current proposal, or add a superseding decision note in the
+design document if ADR changes are intentionally deferred.
 
-```rust
-//! - [`cli`]: `Clap` parse types for the `podbot` binary (CLI adapter layer)
-//!   (requires the `cli` feature, enabled by default)
-```
+Update `docs/users-guide.md` only for user-visible behaviour and supported
+embedding guidance. Replace the current library example so it uses only stable
+types. If the CLI feature changes installation or build commands, document the
+new operator path clearly.
 
-#### C.3: Verify `main.rs` compiles with default features
+Finally, mark Step 5.3 as done in `docs/podbot-roadmap.md` only after the
+tests, docs, and boundary changes are all complete.
 
-The binary target inherits default features, so `use podbot::cli::*`
-statements in `main.rs` should compile without changes. Verify with:
+## Validation and evidence
+
+During implementation, capture evidence in this order.
+
+1. Run formatting before Markdown linting because Markdown tools can rewrite
+   files:
 
 ```bash
-cargo build
+set -o pipefail && make fmt 2>&1 | tee /tmp/podbot-fmt.log
 ```
 
-#### C.4: Verify library compiles without CLI feature
+1. Run Markdown validation for the updated docs:
 
 ```bash
-cargo check --no-default-features
+set -o pipefail && MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint 2>&1 | tee /tmp/podbot-markdownlint.log
+set -o pipefail && make nixie 2>&1 | tee /tmp/podbot-nixie.log
 ```
 
-This should succeed, proving the library surface is usable without
-`clap`.
-
-#### C.5: Gate integration tests that use CLI types
-
-Any integration test files in `tests/` that import `podbot::cli::*` need
-a `#[cfg(feature = "cli")]` attribute or a feature requirement. Since
-dev-dependencies inherit default features, this should work automatically.
-Verify with `make test`.
-
-#### C.6: Add unit test for feature gate
-
-Add a test in `src/lib.rs` that verifies the `cli` module is available
-when the feature is enabled:
-
-```rust
-#[cfg(test)]
-#[cfg(feature = "cli")]
-mod cli_feature_tests {
-    #[test]
-    fn cli_module_is_available() {
-        // Compile-time proof that podbot::cli is available.
-        let _ = std::any::type_name::<crate::cli::Cli>();
-    }
-}
-```
-
-**Stage C gate**: `make check-fmt && make lint && make test` AND
-`cargo check --no-default-features`.
-
-### Stage D: Reconcile hook and validation schemas
-
-**Goal:** Ensure that the public hook and validation schemas referenced
-in `docs/podbot-design.md` are either present in the library surface or
-explicitly marked as future-planned.
-
-#### D.1: Audit design doc for referenced schema types
-
-The design doc references several schema concepts that are not yet
-implemented as Rust types:
-
-- `LaunchRequest` / `LaunchPlan` (Step 4.5, not implemented)
-- Hook artefact and subscription models (Step 4.9, not implemented)
-- Prompt frontmatter and bundle manifest contracts (Step 4.8, not
-  implemented)
-- `validate_prompt` function (Step 4.8, not implemented)
-- MCP wire request/response models (Step 4.7, not implemented)
-- `HostedSession` handle (Step 4.6, not implemented)
-
-#### D.2: Add explicit "future-planned" annotations
-
-In `docs/podbot-design.md`, add a subsection under the public API
-reference titled "Planned API surfaces" that lists each unimplemented
-schema with its roadmap reference:
-
-```markdown
-### Planned API surfaces
-
-The following API surfaces are documented in the design but not yet
-implemented. They will be introduced in the referenced roadmap steps:
-
-| Surface               | Roadmap step | Description                |
-| --------------------- | ------------ | -------------------------- |
-| `LaunchRequest/Plan`  | Step 4.5     | Normalized launch contract |
-| Hook models           | Step 4.9     | Hook execution protocol    |
-| Prompt/bundle schemas | Step 4.8     | Prompt validation surface  |
-| MCP wire models       | Step 4.7     | MCP wire provisioning      |
-| `HostedSession`       | Step 4.6     | Hosted session handle      |
-
-Library consumers should not depend on these surfaces until their
-roadmap steps are complete.
-```
-
-#### D.3: Verify existing MCP config types are documented
-
-The `McpConfig`, `McpBindStrategy`, `McpAuthTokenPolicy`, and
-`McpAllowedOriginPolicy` types are already public in both
-`podbot::config` and `podbot::engine`. Verify they are included in the
-public API reference table from Stage A.2.
-
-**Stage D gate**: `make markdownlint` (documentation only).
-
-### Stage E: Add integration tests for library embedding
-
-**Goal:** Add integration tests that exercise Podbot as a library from a
-host-style call path, proving the public API surface is self-contained.
-
-#### E.1: Create `tests/library_embedding.rs`
-
-An integration test that demonstrates library embedding without CLI
-types. It should:
-
-1. Construct `ConfigLoadOptions` and `ConfigOverrides` manually.
-2. Call `load_config_with_env` with a mock environment.
-3. Construct an `ExecParams` with a mock `ContainerExecClient`.
-4. Call `podbot::api::exec()` and verify the `CommandOutcome`.
-5. Call stub orchestration functions and verify outcomes.
-6. Verify error types are matchable (`PodbotError` variants).
-
-This test file proves that a host application can use the library
-without importing `podbot::cli` or depending on `clap`.
-
-#### E.2: Create BDD feature file `tests/features/library_boundary.feature`
-
-```gherkin
-Feature: Library boundary stability
-
-  Podbot can be embedded as a Rust library dependency with
-  documented, semantic APIs and no CLI coupling requirements.
-
-  Scenario: Library consumer loads configuration without CLI types
-    Given a mock environment with engine socket set
-    And explicit load options without config discovery
-    When the library configuration loader is called
-    Then a valid AppConfig is returned
-    And the engine socket matches the override
-
-  Scenario: Library consumer executes a command via the API
-    Given a mock container engine client
-    And exec parameters for an attached echo command
-    When the library exec function is called
-    Then the outcome is success
-
-  Scenario: Library consumer receives semantic error for missing
-  config
-    Given a mock environment without required fields
-    And explicit load options requiring a config file
-    When the library configuration loader is called
-    Then the error is a ConfigError variant
-
-  Scenario: Library consumer receives semantic error for exec
-  failure
-    Given a mock container engine client that fails on create exec
-    And exec parameters for an attached echo command
-    When the library exec function is called
-    Then the error is a ContainerError variant
-
-  Scenario: Stub orchestration functions return success
-    When each stub orchestration function is called
-    Then all outcomes are success
-```
-
-#### E.3: Create BDD helpers
-
-Create `tests/bdd_library_boundary.rs` and
-`tests/bdd_library_boundary_helpers/` following the established pattern:
-
-- `mod.rs` — re-exports with `#[expect(unused_imports)]`
-- `state.rs` — `LibraryBoundaryState` with `Slot<T>` fields
-- `steps.rs` — given/when step functions
-- `assertions.rs` — then assertion functions
-
-The steps should exercise:
-
-- `podbot::config::load_config_with_env` with `mockable::MockEnv`
-- `podbot::api::exec` with a `mockall`-generated mock client
-- `podbot::api::{run_agent, list_containers, stop_container,
-  run_token_daemon}` stubs
-- `podbot::error::{PodbotError, ConfigError, ContainerError}` matching
-
-#### E.4: Add unit tests in `src/api/tests.rs`
-
-Add additional unit tests for error contract verification:
-
-- Test that `exec()` with an empty command returns
-  `ConfigError::MissingRequired`.
-- Test that `exec()` with a failing mock client returns a
-  `ContainerError` variant.
-
-#### E.5: Add unit test for `PodbotError` contract
-
-In `src/error.rs` tests, add:
-
-```rust
-#[rstest]
-fn podbot_error_implements_std_error() {
-    fn assert_error<T: std::error::Error + Send + Sync + 'static>() {}
-    assert_error::<PodbotError>();
-}
-```
-
-**Stage E gate**: `make check-fmt && make lint && make test`.
-
-### Stage F: Documentation and roadmap updates
-
-#### F.1: Update `docs/podbot-design.md`
-
-1. Add the "Public library API reference" section (from Stage A.2).
-2. Add the "Planned API surfaces" subsection (from Stage D.2).
-3. Update the module structure diagram to show the `cli` feature gate.
-
-#### F.2: Update `docs/users-guide.md`
-
-1. Add a "Library embedding" section documenting:
-   - The `cli` Cargo feature and how to opt out of it.
-   - Instructions for embedding Podbot as a library dependency.
-   - Which modules are stable and which are internal.
-2. Update the "Library API" section to reference the feature gate.
-
-#### F.3: Update `docs/podbot-roadmap.md`
-
-Mark Step 5.3 tasks as done:
-
-```markdown
-- [x] Document supported public modules and request/response types.
-- [x] Ensure public APIs use semantic errors (`PodbotError`) and avoid
-  opaque `eyre` types.
-- [x] Gate CLI-only dependencies and code paths behind a binary or
-  feature boundary.
-- [x] Reconcile the public hook and validation schemas with the
-  documented integration contract before stabilizing them.
-- [x] Add integration tests that embed Podbot as a library from a
-  host-style call path.
-```
-
-#### F.4: Save execution plan
-
-Update this document's status to COMPLETE.
-
-**Stage F gate**: `make markdownlint` and full quality gates.
-
-### Stage G: Final quality gate verification
-
-Run the full quality gate:
+1. Run the required Rust quality gates:
 
 ```bash
-set -o pipefail
-make check-fmt 2>&1 | tee /tmp/check-fmt-5-3-1.log
-make lint 2>&1 | tee /tmp/lint-5-3-1.log
-make test 2>&1 | tee /tmp/test-5-3-1.log
-cargo check --no-default-features 2>&1 | tee /tmp/no-default-5-3-1.log
+set -o pipefail && make check-fmt 2>&1 | tee /tmp/podbot-check-fmt.log
+set -o pipefail && make lint 2>&1 | tee /tmp/podbot-lint.log
+set -o pipefail && make test 2>&1 | tee /tmp/podbot-test.log
 ```
 
-Verify:
+Expected evidence for completion:
 
-- All pre-existing tests pass unchanged.
-- New unit tests pass.
-- New BDD scenarios pass.
-- New integration tests pass.
-- Library compiles without CLI feature.
+- the stable import examples compile from outside the crate,
+- no public library signature returns `eyre`,
+- the binary still builds through the intended CLI path,
+- the user's guide matches the implemented embedding contract, and
+- Step 5.3 is marked complete in the roadmap.
 
-## Interfaces and dependencies
+## Approval checkpoint
 
-### Modified public API
-
-In `src/lib.rs`:
-
-```rust
-// Before:
-pub mod cli;
-
-// After:
-#[cfg(feature = "cli")]
-pub mod cli;
-```
-
-### New Cargo features
-
-```toml
-[features]
-default = ["cli"]
-cli = ["dep:clap"]
-```
-
-### New test files
-
-| File                                                    | Purpose                            |
-| ------------------------------------------------------- | ---------------------------------- |
-| `tests/library_embedding.rs`                            | Integration test for lib embedding |
-| `tests/features/library_boundary.feature`               | BDD scenarios                      |
-| `tests/bdd_library_boundary.rs`                         | Scenario bindings                  |
-| `tests/bdd_library_boundary_helpers/mod.rs`             | Re-exports                         |
-| `tests/bdd_library_boundary_helpers/state.rs`           | State + fixture                    |
-| `tests/bdd_library_boundary_helpers/steps.rs`           | Given/when steps                   |
-| `tests/bdd_library_boundary_helpers/assertions.rs`      | Then assertions                    |
-
-### Files to modify
-
-| File                      | Change                                    |
-| ------------------------- | ----------------------------------------- |
-| `Cargo.toml`              | Add `[features]`, make `clap` optional    |
-| `src/lib.rs`              | Gate `cli` behind feature; update docs    |
-| `src/error.rs`            | Add error contract tests                  |
-| `src/api/tests.rs`        | Add error path unit tests                 |
-| `docs/podbot-design.md`   | Add public API reference and planned APIs |
-| `docs/users-guide.md`     | Add library embedding section             |
-| `docs/podbot-roadmap.md`  | Mark Step 5.3 tasks as done               |
-
-### Consumed (not modified) dependencies
-
-- `podbot::api` — orchestration functions
-- `podbot::config` — configuration types and loaders
-- `podbot::engine` — container engine types and traits
-- `podbot::error` — semantic error hierarchy
-- `mockable` — environment abstraction for tests
-- `mockall` — mock generation for tests
-- `rstest` / `rstest-bdd` — test frameworks
-
-No new external crate dependencies are required.
-
-## Validation and acceptance
-
-Done means:
-
-1. `make check-fmt`, `make lint`, `make test` all pass.
-2. `cargo check --no-default-features` succeeds.
-3. New integration test `tests/library_embedding.rs` passes, proving
-   host-style library embedding works without CLI types.
-4. New BDD scenarios in `tests/features/library_boundary.feature` pass.
-5. `docs/podbot-design.md` contains a "Public library API reference"
-   section documenting all stable modules.
-6. `docs/podbot-design.md` contains a "Planned API surfaces" subsection
-   documenting unimplemented schema surfaces.
-7. `docs/users-guide.md` documents the `cli` feature flag and library
-   embedding.
-8. `docs/podbot-roadmap.md` Step 5.3 tasks are all marked done.
-9. No `eyre` types appear in any public library function signature.
-10. The `cli` module is gated behind the `cli` Cargo feature.
-
-Quality method:
-
-```bash
-set -o pipefail
-make check-fmt 2>&1 | tee /tmp/check-fmt-5-3-1.log
-make lint 2>&1 | tee /tmp/lint-5-3-1.log
-make test 2>&1 | tee /tmp/test-5-3-1.log
-cargo check --no-default-features 2>&1 | tee /tmp/no-default-5-3-1.log
-```
-
-## Idempotence and recovery
-
-All stages are additive and can be rerun safely. If partial edits leave
-the tree failing, revert only incomplete hunks and replay the current
-stage. `cargo clean -p podbot` may be needed after modifying feature
-files (`rstest-bdd` reads them at compile time). Gate logs stored under
-`/tmp` with unique names per run.
-
-## Implementation order
-
-1. `docs/podbot-design.md` — add public API reference (Stage A.2)
-2. `src/error.rs` — add error contract tests (Stage B.2)
-3. `Cargo.toml` — add features section (Stage C.1)
-4. `src/lib.rs` — gate `cli` module (Stage C.2)
-5. Verify builds (Stage C.3, C.4)
-6. `src/lib.rs` — add feature gate test (Stage C.6)
-7. Gate check (Stage C)
-8. `docs/podbot-design.md` — add planned API surfaces (Stage D.2)
-9. `tests/library_embedding.rs` — integration test (Stage E.1)
-10. `tests/features/library_boundary.feature` — BDD feature (Stage E.2)
-11. `tests/bdd_library_boundary_helpers/state.rs` (Stage E.3)
-12. `tests/bdd_library_boundary_helpers/steps.rs` (Stage E.3)
-13. `tests/bdd_library_boundary_helpers/assertions.rs` (Stage E.3)
-14. `tests/bdd_library_boundary_helpers/mod.rs` (Stage E.3)
-15. `tests/bdd_library_boundary.rs` (Stage E.3)
-16. `src/api/tests.rs` — error path tests (Stage E.4)
-17. Gate check (Stage E)
-18. `docs/users-guide.md` — library embedding section (Stage F.2)
-19. `docs/podbot-roadmap.md` — mark Step 5.3 done (Stage F.3)
-20. Final gate check (Stage G)
+Implementation must not start until the user explicitly approves this plan or
+requests revisions. The first implementation action after approval should be to
+add the red tests for the intended stable boundary, then proceed stage by stage.

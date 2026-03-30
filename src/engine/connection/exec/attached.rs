@@ -17,6 +17,9 @@ use super::terminal::{maybe_sigwinch_listener, wait_for_sigwinch};
 use super::{ContainerExecClient, EXEC_INSPECT_POLL_INTERVAL_MS, ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
+#[cfg(not(test))]
+const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
+
 /// Run an attached exec session by wiring stdio and streaming daemon output.
 ///
 /// The function forwards local stdin to the exec input stream, mirrors exec
@@ -81,21 +84,37 @@ async fn run_attached_session_with_stdio_async<C: ContainerExecClient, P: Termin
         stderr,
     )
     .await;
-    stop_stdin_forwarding_task(stdin_task).await;
+    stop_stdin_forwarding_task(stdin_task);
     session_result
 }
 
+#[cfg(test)]
+fn spawn_stdin_forwarding_task(_: Pin<Box<dyn AsyncWrite + Send>>) -> JoinHandle<io::Result<()>> {
+    tokio::spawn(async { Ok(()) })
+}
+
+#[cfg(not(test))]
 fn spawn_stdin_forwarding_task(
     input: Pin<Box<dyn AsyncWrite + Send>>,
 ) -> JoinHandle<io::Result<()>> {
+    if stdin_forwarding_disabled_for_tests() {
+        return tokio::spawn(async { Ok(()) });
+    }
+
     tokio::spawn(async move { forward_stdin_to_exec_async(input).await })
 }
 
-async fn stop_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
+fn stop_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     stdin_task.abort();
-    // Ignore the join result here because an aborted stdin task is expected
-    // during attached-session shutdown.
-    drop(stdin_task.await);
+    // Do not await the aborted task here. `tokio::io::stdin()` may be blocked
+    // in a non-cancellable read, and shutdown should not hang waiting for that
+    // task to observe cancellation.
+    drop(stdin_task);
+}
+
+#[cfg(not(test))]
+fn stdin_forwarding_disabled_for_tests() -> bool {
+    std::env::var_os(DISABLE_STDIN_FORWARDING_ENV).is_some()
 }
 
 #[expect(
@@ -220,6 +239,7 @@ async fn write_exec_output_chunk(
     Ok(true)
 }
 
+#[cfg(not(test))]
 async fn forward_stdin_to_exec_async(mut input: Pin<Box<dyn AsyncWrite + Send>>) -> io::Result<()> {
     let mut stdin = tokio::io::stdin();
     tokio::io::copy(&mut stdin, &mut input).await?;

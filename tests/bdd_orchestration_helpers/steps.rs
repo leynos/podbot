@@ -4,8 +4,8 @@ use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
 use podbot::api::{
-    CommandOutcome, ExecMode, ExecParams, ExecRequest, exec_with_client, list_containers,
-    run_agent, run_token_daemon, stop_container,
+    CommandOutcome, ExecMode, ExecRequest, exec_with_client, list_containers, run_agent,
+    run_token_daemon, stop_container,
 };
 use podbot::config::AppConfig;
 use podbot::engine::{
@@ -15,6 +15,8 @@ use rstest_bdd_macros::{given, when};
 
 use super::StepResult;
 use super::state::{OrchestrationResult, OrchestrationState};
+
+const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
 
 /// Invoke an orchestration operation and capture its outcome in state.
 fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F)
@@ -94,6 +96,7 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
     configure_resize(&mut client, mode);
     configure_inspect(&mut client, exit_code);
 
+    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
     let runtime =
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
 
@@ -102,15 +105,31 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
             .with_mode(mode)
             .with_tty(tty);
 
-        let params = ExecParams {
-            connector: &client,
-            request: &request,
-            runtime_handle: runtime.handle(),
-        };
-
-        exec_with_client(&params)
+        exec_with_client(&client, runtime.handle(), &request)
     });
     Ok(())
+}
+
+struct TestStdinForwardingGuard;
+
+impl TestStdinForwardingGuard {
+    fn disable() -> Self {
+        // SAFETY: the orchestration scenarios are serialized in their test
+        // binary before this process-wide test knob is mutated.
+        unsafe {
+            std::env::set_var(DISABLE_STDIN_FORWARDING_ENV, "1");
+        }
+        Self
+    }
+}
+
+impl Drop for TestStdinForwardingGuard {
+    fn drop(&mut self) {
+        // SAFETY: see `disable`; removal happens under the same serialization.
+        unsafe {
+            std::env::remove_var(DISABLE_STDIN_FORWARDING_ENV);
+        }
+    }
 }
 
 #[when("run orchestration is invoked")]

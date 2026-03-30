@@ -15,10 +15,9 @@ mod configure_git_identity;
 mod exec;
 
 pub use configure_git_identity::{GitIdentityParams, configure_container_git_identity};
-#[cfg(feature = "internal")]
-#[doc(hidden)]
-pub use exec::exec_with_client_for_tests;
 pub use exec::{ExecContext, ExecMode, ExecRequest, exec};
+#[doc(hidden)]
+pub use exec::exec_with_client;
 
 use crate::config::AppConfig;
 use crate::error::Result as PodbotResult;

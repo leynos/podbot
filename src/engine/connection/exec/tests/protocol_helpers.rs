@@ -4,6 +4,7 @@ use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use futures_util::stream;
 use rstest::rstest;
+use serial_test::serial;
 
 use super::*;
 
@@ -136,6 +137,7 @@ fn protocol_mode_start_options_have_correct_flags() -> TestResult {
 }
 
 #[rstest]
+#[serial]
 fn protocol_exec_succeeds_end_to_end(runtime: RuntimeFixture) -> TestResult {
     let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
@@ -151,6 +153,7 @@ fn protocol_exec_succeeds_end_to_end(runtime: RuntimeFixture) -> TestResult {
 }
 
 #[rstest]
+#[serial]
 fn protocol_exec_returns_nonzero_exit_code(runtime: RuntimeFixture) -> TestResult {
     let runtime_handle = runtime?;
     let mut client = MockExecClient::new();

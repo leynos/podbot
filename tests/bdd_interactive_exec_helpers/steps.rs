@@ -14,6 +14,8 @@ use super::state::{ExecutionOutcome, InteractiveExecState};
 
 pub type StepResult<T> = Result<T, String>;
 
+const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
+
 mock! {
     #[derive(Debug)]
     ExecClient {}
@@ -103,6 +105,7 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
         configure_inspect_expectation(&mut client, omit_exit_code, exit_code);
     }
 
+    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| format!("failed to create runtime: {error}"))?;
     let execution_result = runtime.block_on(EngineConnector::exec_async(&client, &request));
@@ -121,6 +124,29 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
     }
 
     Ok(())
+}
+
+struct TestStdinForwardingGuard;
+
+impl TestStdinForwardingGuard {
+    fn disable() -> Self {
+        // SAFETY: The `execution_is_requested` step is serialized within this
+        // test binary so the process-wide environment mutation cannot race with
+        // another interactive-exec scenario.
+        unsafe {
+            std::env::set_var(DISABLE_STDIN_FORWARDING_ENV, "1");
+        }
+        Self
+    }
+}
+
+impl Drop for TestStdinForwardingGuard {
+    fn drop(&mut self) {
+        // SAFETY: See `disable`; removal happens under the same serialized step.
+        unsafe {
+            std::env::remove_var(DISABLE_STDIN_FORWARDING_ENV);
+        }
+    }
 }
 
 fn configure_create_exec_expectation(client: &mut MockExecClient, should_fail: bool) {

@@ -955,8 +955,9 @@ The stable library boundary should follow these constraints:
   code for the CLI to map to a process exit code.
 - Configuration loaders exposed to library consumers must not require `Cli`
   structs or Clap traits.
-- The stable exec surface is `podbot::api::{ExecRequest, ExecMode, exec}`
-  rather than engine-owned traits or runtime handles.
+- The stable exec surface is
+  `podbot::api::{ExecRequest, ExecMode, ExecContext, exec}` rather than
+  engine-owned traits or runtime handles.
 - Hook, validation, session, and MCP contracts remain experimental until their
   ADRs and Corbusier-facing integration notes converge on one request/response
   taxonomy.

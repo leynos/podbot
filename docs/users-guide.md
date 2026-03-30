@@ -620,15 +620,15 @@ contract for embedders.
 
 ### Available functions
 
-| Function                                      | Description                                                     |
-| --------------------------------------------- | --------------------------------------------------------------- |
-| `podbot::api::exec(config, request)`          | Run an AI agent in a sandboxed container (stub)                 |
-| `podbot::api::run_agent(config)`              | Stop a running container (stub)                                 |
-| `podbot::api::stop_container(container)`      | List running podbot containers (stub)                           |
-| `podbot::api::list_containers()`              | Run the token refresh daemon (stub)                             |
-| `podbot::api::run_token_daemon(container_id)` | Configure Git identity from host Git config                     |
-| `podbot::api::configure_container_git_identity(params)` | Configure Git identity from host Git config                     |
-| `podbot::api::ExecContext::connect(…)`        | Reuse a runtime handle and engine connection                    |
+| Function                                      | Description                                     |
+| --------------------------------------------- | ----------------------------------------------- |
+| `podbot::api::exec(config, request)`          | Execute a command in a running container        |
+| `podbot::api::ExecContext::connect(…)`        | Reuse a runtime handle and engine connection    |
+| `podbot::api::run_agent(config)`              | Run an AI agent in a sandboxed container (stub) |
+| `podbot::api::stop_container(container)`      | Stop a running container (stub)                 |
+| `podbot::api::list_containers()`              | List running podbot containers (stub)           |
+| `podbot::api::run_token_daemon(container_id)` | Run the token refresh daemon (stub)             |
+| `podbot::api::configure_container_git_identity(params)` | Configure Git identity from host Git config |
 
 ### Return type
 
