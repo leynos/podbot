@@ -37,37 +37,38 @@ fn the_default_application_configuration(
     Ok(())
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the helper signature is fixed by the task requirements"
-)]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "the helper returns StepResult to match the step helper contract"
-)]
-fn configure_hosting_state(
-    hosting_config_state: &HostingConfigState,
+#[derive(Default)]
+struct HostingStateOptions {
     workspace_source: Option<WorkspaceSource>,
     workspace_host_path: Option<Utf8PathBuf>,
     agent_kind: Option<AgentKind>,
     agent_mode: Option<AgentMode>,
     agent_command: Option<String>,
+}
+
+fn configure_hosting_state(
+    hosting_config_state: &HostingConfigState,
+    opts: HostingStateOptions,
 ) -> StepResult<()> {
+    if hosting_config_state.config.get().is_some() {
+        return Err(String::from("config should not already be set"));
+    }
+
     let mut config = AppConfig::default();
 
-    if let Some(source) = workspace_source {
+    if let Some(source) = opts.workspace_source {
         config.workspace.source = source;
     }
-    if let Some(host_path) = workspace_host_path {
+    if let Some(host_path) = opts.workspace_host_path {
         config.workspace.host_path = Some(host_path);
     }
-    if let Some(kind) = agent_kind {
+    if let Some(kind) = opts.agent_kind {
         config.agent.kind = kind;
     }
-    if let Some(mode) = agent_mode {
+    if let Some(mode) = opts.agent_mode {
         config.agent.mode = mode;
     }
-    config.agent.command = agent_command;
+    config.agent.command = opts.agent_command;
 
     hosting_config_state.config.set(config);
     Ok(())
@@ -83,13 +84,14 @@ fn a_host_mounted_custom_agent_configuration(
 ) -> StepResult<()> {
     configure_hosting_state(
         hosting_config_state,
-        Some(WorkspaceSource::HostMount),
-        Some(Utf8PathBuf::from("/tmp/project")),
-        Some(AgentKind::Custom),
-        Some(AgentMode::CodexAppServer),
-        Some(String::from("opencode")),
-    )?;
-    Ok(())
+        HostingStateOptions {
+            workspace_source: Some(WorkspaceSource::HostMount),
+            workspace_host_path: Some(Utf8PathBuf::from("/tmp/project")),
+            agent_kind: Some(AgentKind::Custom),
+            agent_mode: Some(AgentMode::CodexAppServer),
+            agent_command: Some(String::from("opencode")),
+        },
+    )
 }
 
 #[given("a hosted custom agent configuration")]
@@ -102,13 +104,13 @@ fn a_hosted_custom_agent_configuration(
 ) -> StepResult<()> {
     configure_hosting_state(
         hosting_config_state,
-        None,
-        None,
-        Some(AgentKind::Custom),
-        Some(AgentMode::Acp),
-        Some(String::from("opencode")),
-    )?;
-    Ok(())
+        HostingStateOptions {
+            agent_kind: Some(AgentKind::Custom),
+            agent_mode: Some(AgentMode::Acp),
+            agent_command: Some(String::from("opencode")),
+            ..Default::default()
+        },
+    )
 }
 
 #[given("a host-mounted workspace without a host path")]
@@ -121,13 +123,14 @@ fn a_host_mounted_workspace_without_a_host_path(
 ) -> StepResult<()> {
     configure_hosting_state(
         hosting_config_state,
-        Some(WorkspaceSource::HostMount),
-        None,
-        Some(AgentKind::Custom),
-        Some(AgentMode::CodexAppServer),
-        Some(String::from("opencode")),
-    )?;
-    Ok(())
+        HostingStateOptions {
+            workspace_source: Some(WorkspaceSource::HostMount),
+            agent_kind: Some(AgentKind::Custom),
+            agent_mode: Some(AgentMode::CodexAppServer),
+            agent_command: Some(String::from("opencode")),
+            ..Default::default()
+        },
+    )
 }
 
 #[given("a custom hosted agent without a command")]
@@ -140,13 +143,12 @@ fn a_custom_hosted_agent_without_a_command(
 ) -> StepResult<()> {
     configure_hosting_state(
         hosting_config_state,
-        None,
-        None,
-        Some(AgentKind::Custom),
-        Some(AgentMode::CodexAppServer),
-        None,
-    )?;
-    Ok(())
+        HostingStateOptions {
+            agent_kind: Some(AgentKind::Custom),
+            agent_mode: Some(AgentMode::CodexAppServer),
+            ..Default::default()
+        },
+    )
 }
 
 #[when("the configuration is normalized for run intent")]
