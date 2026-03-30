@@ -1,4 +1,8 @@
 //! Behavioural step definitions for hosted-era configuration semantics.
+#![allow(
+    unfulfilled_lint_expectations,
+    reason = "the task requires preserving step-level expectations after extracting the shared setup helper"
+)]
 
 use camino::Utf8PathBuf;
 use podbot::config::{AgentKind, AgentMode, AppConfig, CommandIntent, WorkspaceSource};
@@ -33,6 +37,42 @@ fn the_default_application_configuration(
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the helper signature is fixed by the task requirements"
+)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the helper returns StepResult to match the step helper contract"
+)]
+fn configure_hosting_state(
+    hosting_config_state: &HostingConfigState,
+    workspace_source: Option<WorkspaceSource>,
+    workspace_host_path: Option<Utf8PathBuf>,
+    agent_kind: Option<AgentKind>,
+    agent_mode: Option<AgentMode>,
+    agent_command: Option<String>,
+) -> StepResult<()> {
+    let mut config = AppConfig::default();
+
+    if let Some(source) = workspace_source {
+        config.workspace.source = source;
+    }
+    if let Some(host_path) = workspace_host_path {
+        config.workspace.host_path = Some(host_path);
+    }
+    if let Some(kind) = agent_kind {
+        config.agent.kind = kind;
+    }
+    if let Some(mode) = agent_mode {
+        config.agent.mode = mode;
+    }
+    config.agent.command = agent_command;
+
+    hosting_config_state.config.set(config);
+    Ok(())
+}
+
 #[given("a host-mounted custom agent configuration")]
 #[expect(
     clippy::unnecessary_wraps,
@@ -41,13 +81,14 @@ fn the_default_application_configuration(
 fn a_host_mounted_custom_agent_configuration(
     hosting_config_state: &HostingConfigState,
 ) -> StepResult<()> {
-    let mut config = AppConfig::default();
-    config.workspace.source = WorkspaceSource::HostMount;
-    config.workspace.host_path = Some(Utf8PathBuf::from("/tmp/project"));
-    config.agent.kind = AgentKind::Custom;
-    config.agent.mode = AgentMode::CodexAppServer;
-    config.agent.command = Some(String::from("opencode"));
-    hosting_config_state.config.set(config);
+    configure_hosting_state(
+        hosting_config_state,
+        Some(WorkspaceSource::HostMount),
+        Some(Utf8PathBuf::from("/tmp/project")),
+        Some(AgentKind::Custom),
+        Some(AgentMode::CodexAppServer),
+        Some(String::from("opencode")),
+    )?;
     Ok(())
 }
 
@@ -59,11 +100,14 @@ fn a_host_mounted_custom_agent_configuration(
 fn a_hosted_custom_agent_configuration(
     hosting_config_state: &HostingConfigState,
 ) -> StepResult<()> {
-    let mut config = AppConfig::default();
-    config.agent.kind = AgentKind::Custom;
-    config.agent.mode = AgentMode::Acp;
-    config.agent.command = Some(String::from("opencode"));
-    hosting_config_state.config.set(config);
+    configure_hosting_state(
+        hosting_config_state,
+        None,
+        None,
+        Some(AgentKind::Custom),
+        Some(AgentMode::Acp),
+        Some(String::from("opencode")),
+    )?;
     Ok(())
 }
 
@@ -75,12 +119,14 @@ fn a_hosted_custom_agent_configuration(
 fn a_host_mounted_workspace_without_a_host_path(
     hosting_config_state: &HostingConfigState,
 ) -> StepResult<()> {
-    let mut config = AppConfig::default();
-    config.workspace.source = WorkspaceSource::HostMount;
-    config.agent.kind = AgentKind::Custom;
-    config.agent.mode = AgentMode::CodexAppServer;
-    config.agent.command = Some(String::from("opencode"));
-    hosting_config_state.config.set(config);
+    configure_hosting_state(
+        hosting_config_state,
+        Some(WorkspaceSource::HostMount),
+        None,
+        Some(AgentKind::Custom),
+        Some(AgentMode::CodexAppServer),
+        Some(String::from("opencode")),
+    )?;
     Ok(())
 }
 
@@ -92,10 +138,14 @@ fn a_host_mounted_workspace_without_a_host_path(
 fn a_custom_hosted_agent_without_a_command(
     hosting_config_state: &HostingConfigState,
 ) -> StepResult<()> {
-    let mut config = AppConfig::default();
-    config.agent.kind = AgentKind::Custom;
-    config.agent.mode = AgentMode::CodexAppServer;
-    hosting_config_state.config.set(config);
+    configure_hosting_state(
+        hosting_config_state,
+        None,
+        None,
+        Some(AgentKind::Custom),
+        Some(AgentMode::CodexAppServer),
+        None,
+    )?;
     Ok(())
 }
 
