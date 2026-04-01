@@ -74,82 +74,99 @@ fn configure_hosting_state(
     Ok(())
 }
 
-#[given("a host-mounted custom agent configuration")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions return StepResult for consistency"
-)]
-fn a_host_mounted_custom_agent_configuration(
-    hosting_config_state: &HostingConfigState,
-) -> StepResult<()> {
-    configure_hosting_state(
-        hosting_config_state,
-        HostingStateOptions {
-            workspace_source: Some(WorkspaceSource::HostMount),
-            workspace_host_path: Some(Utf8PathBuf::from("/tmp/project")),
-            agent_kind: Some(AgentKind::Custom),
-            agent_mode: Some(AgentMode::CodexAppServer),
-            agent_command: Some(String::from("opencode")),
-        },
-    )
+macro_rules! given_hosting_step {
+    (
+        $fn_name:ident,
+        $given_str:literal,
+        {
+            workspace_source: $workspace_source:expr,
+            workspace_host_path: $workspace_host_path:expr,
+            agent_kind: $agent_kind:expr,
+            agent_mode: $agent_mode:expr,
+            agent_command: $agent_command:expr $(,)?
+        }
+    ) => {
+        #[given($given_str)]
+        #[expect(
+            clippy::unnecessary_wraps,
+            reason = "rstest-bdd step functions return StepResult for consistency"
+        )]
+        fn $fn_name(hosting_config_state: &HostingConfigState) -> StepResult<()> {
+            configure_hosting_state(
+                hosting_config_state,
+                HostingStateOptions {
+                    workspace_source: $workspace_source,
+                    workspace_host_path: $workspace_host_path,
+                    agent_kind: $agent_kind,
+                    agent_mode: $agent_mode,
+                    agent_command: $agent_command,
+                },
+            )
+        }
+    };
+    (
+        $fn_name:ident,
+        $given_str:literal,
+        { $($field:ident: $value:expr),* $(,)? }
+    ) => {
+        #[given($given_str)]
+        #[expect(
+            clippy::unnecessary_wraps,
+            reason = "rstest-bdd step functions return StepResult for consistency"
+        )]
+        fn $fn_name(hosting_config_state: &HostingConfigState) -> StepResult<()> {
+            configure_hosting_state(
+                hosting_config_state,
+                HostingStateOptions {
+                    $($field: $value,)*
+                    ..Default::default()
+                },
+            )
+        }
+    };
 }
 
-#[given("a hosted custom agent configuration")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions return StepResult for consistency"
-)]
-fn a_hosted_custom_agent_configuration(
-    hosting_config_state: &HostingConfigState,
-) -> StepResult<()> {
-    configure_hosting_state(
-        hosting_config_state,
-        HostingStateOptions {
-            agent_kind: Some(AgentKind::Custom),
-            agent_mode: Some(AgentMode::Acp),
-            agent_command: Some(String::from("opencode")),
-            ..Default::default()
-        },
-    )
-}
+given_hosting_step!(
+    a_host_mounted_custom_agent_configuration,
+    "a host-mounted custom agent configuration",
+    {
+        workspace_source: Some(WorkspaceSource::HostMount),
+        workspace_host_path: Some(Utf8PathBuf::from("/tmp/project")),
+        agent_kind: Some(AgentKind::Custom),
+        agent_mode: Some(AgentMode::CodexAppServer),
+        agent_command: Some(String::from("opencode")),
+    }
+);
 
-#[given("a host-mounted workspace without a host path")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions return StepResult for consistency"
-)]
-fn a_host_mounted_workspace_without_a_host_path(
-    hosting_config_state: &HostingConfigState,
-) -> StepResult<()> {
-    configure_hosting_state(
-        hosting_config_state,
-        HostingStateOptions {
-            workspace_source: Some(WorkspaceSource::HostMount),
-            agent_kind: Some(AgentKind::Custom),
-            agent_mode: Some(AgentMode::CodexAppServer),
-            agent_command: Some(String::from("opencode")),
-            ..Default::default()
-        },
-    )
-}
+given_hosting_step!(
+    a_hosted_custom_agent_configuration,
+    "a hosted custom agent configuration",
+    {
+        agent_kind: Some(AgentKind::Custom),
+        agent_mode: Some(AgentMode::Acp),
+        agent_command: Some(String::from("opencode")),
+    }
+);
 
-#[given("a custom hosted agent without a command")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions return StepResult for consistency"
-)]
-fn a_custom_hosted_agent_without_a_command(
-    hosting_config_state: &HostingConfigState,
-) -> StepResult<()> {
-    configure_hosting_state(
-        hosting_config_state,
-        HostingStateOptions {
-            agent_kind: Some(AgentKind::Custom),
-            agent_mode: Some(AgentMode::CodexAppServer),
-            ..Default::default()
-        },
-    )
-}
+given_hosting_step!(
+    a_host_mounted_workspace_without_a_host_path,
+    "a host-mounted workspace without a host path",
+    {
+        workspace_source: Some(WorkspaceSource::HostMount),
+        agent_kind: Some(AgentKind::Custom),
+        agent_mode: Some(AgentMode::CodexAppServer),
+        agent_command: Some(String::from("opencode")),
+    }
+);
+
+given_hosting_step!(
+    a_custom_hosted_agent_without_a_command,
+    "a custom hosted agent without a command",
+    {
+        agent_kind: Some(AgentKind::Custom),
+        agent_mode: Some(AgentMode::CodexAppServer),
+    }
+);
 
 #[when("the configuration is normalized for run intent")]
 fn the_configuration_is_normalized_for_run_intent(
