@@ -86,12 +86,18 @@ impl AppConfig {
             CommandIntent::Run if self.agent.mode == AgentMode::Podbot => Ok(()),
             CommandIntent::Run => invalid_value(
                 "agent.mode",
-                "hosted modes require `podbot host`; use `agent.mode = \"podbot\"` for `podbot run`",
+                format!(
+                    "hosted modes require `podbot host`; use `agent.mode = \"podbot\"` for `podbot run` (current mode: {:?})",
+                    self.agent.mode
+                ),
             ),
             CommandIntent::Host if self.agent.mode != AgentMode::Podbot => Ok(()),
             CommandIntent::Host => invalid_value(
                 "agent.mode",
-                "interactive mode requires `podbot run`; use `codex_app_server` or `acp` with `podbot host`",
+                format!(
+                    "interactive mode requires `podbot run`; use `codex_app_server` or `acp` with `podbot host` (current mode: {:?})",
+                    self.agent.mode
+                ),
             ),
         }
     }
@@ -102,7 +108,7 @@ fn validate_env_allowlist(values: &[String]) -> Result<()> {
         if value.trim().is_empty() {
             return invalid_value(
                 "agent.env_allowlist",
-                "agent.env_allowlist entries must not be empty",
+                "agent.env_allowlist entries must not be empty or whitespace only",
             );
         }
     }
@@ -157,14 +163,12 @@ fn validate_github_clone_workspace(config: &AppConfig) -> Result<()> {
 }
 
 fn validate_host_mount_workspace(config: &AppConfig) -> Result<()> {
-    let host_path = config.workspace.host_path.as_ref().ok_or_else(|| {
-        crate::error::PodbotError::from(ConfigError::InvalidValue {
-            field: String::from("workspace.host_path"),
-            reason: String::from(
-                "`workspace.source = \"host_mount\"` requires `workspace.host_path`",
-            ),
-        })
-    })?;
+    let Some(host_path) = config.workspace.host_path.as_ref() else {
+        return invalid_value(
+            "workspace.host_path",
+            "`workspace.source = \"host_mount\"` requires `workspace.host_path`",
+        );
+    };
 
     if !host_path.is_absolute() {
         return invalid_value(
@@ -173,14 +177,12 @@ fn validate_host_mount_workspace(config: &AppConfig) -> Result<()> {
         );
     }
 
-    let container_path = config.workspace.container_path.as_ref().ok_or_else(|| {
-        crate::error::PodbotError::from(ConfigError::InvalidValue {
-            field: String::from("workspace.container_path"),
-            reason: String::from(
-                "`workspace.source = \"host_mount\"` requires `workspace.container_path`",
-            ),
-        })
-    })?;
+    let Some(container_path) = config.workspace.container_path.as_ref() else {
+        return invalid_value(
+            "workspace.container_path",
+            "`workspace.source = \"host_mount\"` requires `workspace.container_path`",
+        );
+    };
 
     if !container_path.is_absolute() {
         return invalid_value(
@@ -192,10 +194,10 @@ fn validate_host_mount_workspace(config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
-fn invalid_value<T>(field: &str, reason: &str) -> Result<T> {
+fn invalid_value<T>(field: &str, reason: impl Into<String>) -> Result<T> {
     Err(ConfigError::InvalidValue {
         field: field.to_owned(),
-        reason: reason.to_owned(),
+        reason: reason.into(),
     }
     .into())
 }

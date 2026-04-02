@@ -79,6 +79,61 @@ fn github_clone_rejects_host_mount_fields() {
     );
 }
 
+#[rstest]
+fn workspace_base_dir_rejects_relative_path() {
+    let mut config = AppConfig::default();
+    config.workspace.base_dir = Utf8PathBuf::from("relative/path");
+
+    assert_invalid_value(
+        config.normalize_and_validate(CommandIntent::Any),
+        "workspace.base_dir",
+        "must be an absolute container path",
+    );
+}
+
+#[rstest]
+fn host_mount_rejects_relative_host_path() {
+    let mut config = AppConfig::default();
+    config.workspace.source = WorkspaceSource::HostMount;
+    config.workspace.host_path = Some(Utf8PathBuf::from("relative/host"));
+
+    assert_invalid_value(
+        config.normalize_and_validate(CommandIntent::Any),
+        "workspace.host_path",
+        "must be an absolute host path",
+    );
+}
+
+#[rstest]
+fn host_mount_rejects_relative_container_path() {
+    let mut config = AppConfig::default();
+    config.workspace.source = WorkspaceSource::HostMount;
+    config.workspace.host_path = Some(Utf8PathBuf::from("/tmp/project"));
+    config.workspace.container_path = Some(Utf8PathBuf::from("relative/container"));
+
+    assert_invalid_value(
+        config.normalize_and_validate(CommandIntent::Any),
+        "workspace.container_path",
+        "must be an absolute container path",
+    );
+}
+
+#[rstest]
+fn env_allowlist_rejects_empty_or_whitespace_entries() {
+    let mut config = AppConfig::default();
+    config.agent.env_allowlist = vec![
+        String::from("OPENAI_API_KEY"),
+        String::new(),
+        String::from("   "),
+    ];
+
+    assert_invalid_value(
+        config.normalize_and_validate(CommandIntent::Any),
+        "agent.env_allowlist",
+        "must not be empty or whitespace only",
+    );
+}
+
 fn assert_invalid_value(
     result: crate::error::Result<()>,
     expected_field: &str,

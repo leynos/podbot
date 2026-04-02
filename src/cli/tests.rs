@@ -1,6 +1,7 @@
 //! Unit tests for the CLI adapter types.
 
 use camino::Utf8PathBuf;
+use clap::Parser;
 use rstest::rstest;
 
 use super::{AgentKindArg, AgentModeArg, Cli, Commands, HostArgs};
@@ -73,6 +74,27 @@ fn run_config_load_options_include_command_intent_and_agent_overrides() {
 }
 
 #[rstest]
+fn run_config_load_options_leave_agent_overrides_unset_when_flags_are_omitted() {
+    let cli = Cli {
+        command: Commands::Run(super::RunArgs {
+            repo: String::from("owner/name"),
+            branch: String::from("main"),
+            agent: None,
+            mode: None,
+        }),
+        config: None,
+        engine_socket: None,
+        image: None,
+    };
+
+    let options = cli.config_load_options();
+
+    assert_eq!(options.command_intent, CommandIntent::Run);
+    assert!(options.overrides.agent_kind.is_none());
+    assert!(options.overrides.agent_mode.is_none());
+}
+
+#[rstest]
 fn host_config_load_options_include_host_intent() {
     let cli = Cli {
         command: Commands::Host(HostArgs {
@@ -89,4 +111,37 @@ fn host_config_load_options_include_host_intent() {
     assert_eq!(options.command_intent, CommandIntent::Host);
     assert_eq!(options.overrides.agent_kind, Some(AgentKind::Custom));
     assert_eq!(options.overrides.agent_mode, Some(AgentMode::Acp));
+}
+
+#[rstest]
+fn host_config_load_options_leave_agent_overrides_unset_when_flags_are_omitted() {
+    let cli = Cli {
+        command: Commands::Host(HostArgs {
+            agent: None,
+            mode: None,
+        }),
+        config: None,
+        engine_socket: None,
+        image: None,
+    };
+
+    let options = cli.config_load_options();
+
+    assert_eq!(options.command_intent, CommandIntent::Host);
+    assert!(options.overrides.agent_kind.is_none());
+    assert!(options.overrides.agent_mode.is_none());
+}
+
+#[rstest]
+fn cli_parses_snake_case_hosted_agent_mode_values() {
+    let cli = Cli::try_parse_from(["podbot", "host", "--agent-mode", "codex_app_server"])
+        .expect("snake_case hosted mode should parse");
+
+    let options = cli.config_load_options();
+
+    assert_eq!(options.command_intent, CommandIntent::Host);
+    assert_eq!(
+        options.overrides.agent_mode,
+        Some(AgentMode::CodexAppServer)
+    );
 }

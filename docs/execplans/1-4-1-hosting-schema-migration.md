@@ -77,11 +77,11 @@ documentation, and quality gates passed.
   Severity: high. Likelihood: high. Mitigation: treat the missing `host`
   subcommand as an explicit Stage B deliverable or introduce a minimal
   subcommand intent enum shared by CLI and library validation.
-- Risk: `src/config/types.rs`, `src/config/env_vars.rs`, and existing BDD
-  helpers may exceed the 400-line limit once hosting-era fields and cases are
-  added. Severity: medium. Likelihood: high. Mitigation: pre-plan extraction
-  into submodules such as `agent.rs`, `workspace.rs`, `hosting.rs`, or
-  `validation.rs`.
+- Risk: `src/config/types.rs`, `src/config/env_vars.rs`, and existing
+  behaviour-driven development (BDD) helpers may exceed the 400-line limit once
+  hosting-era fields and cases are added. Severity: medium. Likelihood: high.
+  Mitigation: pre-plan extraction into submodules such as `agent.rs`,
+  `workspace.rs`, `hosting.rs`, or `validation.rs`.
 - Risk: the schema is still fluid enough that early assumptions from Step 1.3
   or from draft docs may no longer be the right defaults. Severity: medium.
   Likelihood: high. Mitigation: record the chosen defaults explicitly in the
@@ -259,12 +259,12 @@ semantic config error. Validation should cover at least these rules:
 1. `podbot run` allows only `agent.mode = "podbot"`.
 2. `podbot host` allows only hosted modes such as `codex_app_server` and
    `acp`.
-3. `agent.kind = "custom"` requires `agent.command` and a non-empty
-   `agent.args` policy decision recorded in the design document.
+3. `agent.kind = "custom"` requires `agent.command`, while `agent.args`
+   remains optional and defaults to `[]`.
 4. Built-in agent kinds must reject stray custom-command fields if that policy
    is chosen.
-5. `workspace.source = "host_mount"` requires `workspace.host_path` and
-   `workspace.container_path`.
+5. `workspace.source = "host_mount"` requires `workspace.host_path`;
+   `workspace.container_path` defaults to `"/workspace"` when omitted.
 6. `workspace.source = "github_clone"` must preserve `workspace.base_dir`
    semantics and should reject host-mount-only fields if that policy is chosen.
 

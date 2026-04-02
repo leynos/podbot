@@ -1,11 +1,14 @@
 //! Hosting-era schema defaults and serialization tests.
 
+use std::collections::HashMap;
+
 use camino::Utf8PathBuf;
+use mockable::MockEnv;
 use rstest::rstest;
 
 use crate::config::{
-    AgentKind, AgentMode, AppConfig, CommandIntent, McpAllowedOriginPolicy, McpAuthTokenPolicy,
-    McpBindStrategy, WorkspaceSource,
+    AgentKind, AgentMode, AppConfig, CommandIntent, ConfigLoadOptions, McpAllowedOriginPolicy,
+    McpAuthTokenPolicy, McpBindStrategy, WorkspaceSource, load_config_with_env,
 };
 
 #[rstest]
@@ -28,6 +31,53 @@ fn app_config_hosting_defaults_are_explicit() {
     assert_eq!(
         config.mcp.allowed_origin_policy,
         McpAllowedOriginPolicy::SameOrigin
+    );
+}
+
+#[rstest]
+fn app_config_mcp_env_overrides() {
+    let values = HashMap::from([
+        (
+            String::from("PODBOT_MCP_BIND_STRATEGY"),
+            String::from("loopback"),
+        ),
+        (
+            String::from("PODBOT_MCP_IDLE_TIMEOUT_SECS"),
+            String::from("123"),
+        ),
+        (
+            String::from("PODBOT_MCP_MAX_MESSAGE_SIZE_BYTES"),
+            String::from("4096"),
+        ),
+        (
+            String::from("PODBOT_MCP_AUTH_TOKEN_POLICY"),
+            String::from("per_wire"),
+        ),
+        (
+            String::from("PODBOT_MCP_ALLOWED_ORIGIN_POLICY"),
+            String::from("any"),
+        ),
+    ]);
+    let mut env = MockEnv::new();
+    env.expect_string()
+        .returning(move |key| values.get(key).cloned());
+
+    let config = load_config_with_env(
+        &env,
+        &ConfigLoadOptions {
+            discover_config: false,
+            ..ConfigLoadOptions::default()
+        },
+    )
+    .expect("config should load successfully from MCP env overrides");
+
+    assert_eq!(config.mcp.bind_strategy, McpBindStrategy::Loopback);
+    assert_eq!(config.mcp.idle_timeout_secs, 123);
+    assert_eq!(config.mcp.max_message_size_bytes, 4096);
+    assert_eq!(config.mcp.auth_token_policy, McpAuthTokenPolicy::PerWire);
+    assert_eq!(
+        config.mcp.allowed_origin_policy,
+        McpAllowedOriginPolicy::Any
     );
 }
 

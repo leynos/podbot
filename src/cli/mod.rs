@@ -37,7 +37,7 @@ impl From<AgentKindArg> for AgentKind {
 
 /// CLI-facing agent execution mode values.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
-#[value(rename_all = "lowercase")]
+#[value(rename_all = "snake_case")]
 pub enum AgentModeArg {
     /// Run the agent in podbot-managed mode.
     #[default]
