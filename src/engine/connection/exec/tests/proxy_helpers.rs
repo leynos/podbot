@@ -188,7 +188,11 @@ fn run_session(
 fn run_routing_session(
     runtime: RuntimeFixture,
     output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
-) -> (Result<(), PodbotError>, Arc<Mutex<Vec<u8>>>, Arc<Mutex<Vec<u8>>>) {
+) -> (
+    Result<(), PodbotError>,
+    Arc<Mutex<Vec<u8>>>,
+    Arc<Mutex<Vec<u8>>>,
+) {
     let host_stdout = RecordingWriter::new();
     let host_stderr = RecordingWriter::new();
     let stdout_bytes = host_stdout.bytes.clone();
