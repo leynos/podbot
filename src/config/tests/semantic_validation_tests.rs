@@ -6,6 +6,15 @@ use rstest::rstest;
 use crate::config::{AgentKind, AgentMode, AppConfig, CommandIntent, WorkspaceSource};
 use crate::error::{ConfigError, PodbotError};
 
+struct HostMountCase {
+    host_path: Option<Utf8PathBuf>,
+    container_path: Option<Utf8PathBuf>,
+    agent_mode: Option<AgentMode>,
+    intent: CommandIntent,
+    expected_field: &'static str,
+    expected_reason: &'static str,
+}
+
 #[rstest]
 fn custom_agent_requires_command() {
     let mut config = AppConfig::default();
@@ -32,15 +41,50 @@ fn builtin_agents_reject_custom_command_fields() {
 }
 
 #[rstest]
-fn host_mount_requires_host_path() {
+#[case(HostMountCase {
+    host_path: None,
+    container_path: None,
+    agent_mode: Some(AgentMode::Acp),
+    intent: CommandIntent::Host,
+    expected_field: "workspace.host_path",
+    expected_reason: "requires `workspace.host_path`",
+})]
+#[case(HostMountCase {
+    host_path: Some(Utf8PathBuf::from("relative/host")),
+    container_path: None,
+    agent_mode: None,
+    intent: CommandIntent::Any,
+    expected_field: "workspace.host_path",
+    expected_reason: "must be an absolute host path",
+})]
+#[case(HostMountCase {
+    host_path: Some(Utf8PathBuf::from("/tmp/project")),
+    container_path: Some(Utf8PathBuf::from("relative/container")),
+    agent_mode: None,
+    intent: CommandIntent::Any,
+    expected_field: "workspace.container_path",
+    expected_reason: "must be an absolute container path",
+})]
+fn host_mount_validation(#[case] case: HostMountCase) {
     let mut config = AppConfig::default();
     config.workspace.source = WorkspaceSource::HostMount;
-    config.agent.mode = AgentMode::Acp;
+
+    if let Some(path) = case.host_path {
+        config.workspace.host_path = Some(path);
+    }
+
+    if let Some(path) = case.container_path {
+        config.workspace.container_path = Some(path);
+    }
+
+    if let Some(agent_mode) = case.agent_mode {
+        config.agent.mode = agent_mode;
+    }
 
     assert_invalid_value(
-        config.normalize_and_validate(CommandIntent::Host),
-        "workspace.host_path",
-        "requires `workspace.host_path`",
+        config.normalize_and_validate(case.intent),
+        case.expected_field,
+        case.expected_reason,
     );
 }
 
@@ -87,33 +131,6 @@ fn workspace_base_dir_rejects_relative_path() {
     assert_invalid_value(
         config.normalize_and_validate(CommandIntent::Any),
         "workspace.base_dir",
-        "must be an absolute container path",
-    );
-}
-
-#[rstest]
-fn host_mount_rejects_relative_host_path() {
-    let mut config = AppConfig::default();
-    config.workspace.source = WorkspaceSource::HostMount;
-    config.workspace.host_path = Some(Utf8PathBuf::from("relative/host"));
-
-    assert_invalid_value(
-        config.normalize_and_validate(CommandIntent::Any),
-        "workspace.host_path",
-        "must be an absolute host path",
-    );
-}
-
-#[rstest]
-fn host_mount_rejects_relative_container_path() {
-    let mut config = AppConfig::default();
-    config.workspace.source = WorkspaceSource::HostMount;
-    config.workspace.host_path = Some(Utf8PathBuf::from("/tmp/project"));
-    config.workspace.container_path = Some(Utf8PathBuf::from("relative/container"));
-
-    assert_invalid_value(
-        config.normalize_and_validate(CommandIntent::Any),
-        "workspace.container_path",
         "must be an absolute container path",
     );
 }
