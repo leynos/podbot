@@ -1,19 +1,17 @@
 //! Behavioural tests for protocol exec byte proxying.
 
 use std::io;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
 
 use bollard::container::LogOutput;
 use futures_util::stream;
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
-use tokio::io::{AsyncWrite, AsyncWriteExt, DuplexStream};
+use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_io_async};
 use super::*;
+use super::proxy_helpers::{RecordingInputWriter, RecordingWriter, WriterFailureMode};
 
 type StepResult<T> = Result<T, String>;
 
@@ -43,80 +41,6 @@ fn protocol_proxy_state() -> ProtocolProxyState {
     state.stderr_chunks.set(Vec::new());
     state.fail_stdout_write.set(false);
     state
-}
-
-struct ScenarioWriter {
-    bytes: Arc<Mutex<Vec<u8>>>,
-    fail_write: bool,
-}
-
-impl ScenarioWriter {
-    fn new(fail_write: bool) -> Self {
-        Self {
-            bytes: Arc::new(Mutex::new(Vec::new())),
-            fail_write,
-        }
-    }
-}
-
-impl AsyncWrite for ScenarioWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        if self.fail_write {
-            return Poll::Ready(Err(io::Error::other("writer failure")));
-        }
-
-        self.bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
-}
-
-struct ScenarioInputWriter {
-    bytes: Arc<Mutex<Vec<u8>>>,
-}
-
-impl ScenarioInputWriter {
-    fn new() -> Self {
-        Self {
-            bytes: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-}
-
-impl AsyncWrite for ScenarioInputWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        self.bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
 }
 
 async fn build_host_stdin(bytes: &[u8]) -> io::Result<DuplexStream> {
@@ -197,9 +121,13 @@ fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepRes
     let host_stdin = runtime
         .block_on(build_host_stdin(&host_stdin_bytes))
         .map_err(|error| format!("failed to build host stdin: {error}"))?;
-    let host_stdout = ScenarioWriter::new(fail_stdout_write);
-    let host_stderr = ScenarioWriter::new(false);
-    let container_stdin = ScenarioInputWriter::new();
+    let host_stdout = if fail_stdout_write {
+        RecordingWriter::with_failure(WriterFailureMode::Write)
+    } else {
+        RecordingWriter::new()
+    };
+    let host_stderr = RecordingWriter::new();
+    let container_stdin = RecordingInputWriter::new();
     let captured_stdout = host_stdout.bytes.clone();
     let captured_stderr = host_stderr.bytes.clone();
     let captured_stdin = container_stdin.bytes.clone();

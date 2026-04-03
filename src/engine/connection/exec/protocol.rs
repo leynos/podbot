@@ -25,6 +25,8 @@ pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     stderr: HostStderr,
 }
 
+const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
+
 impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     /// Create a host-IO bundle for a protocol proxy session.
     pub(super) const fn new(
@@ -94,15 +96,26 @@ async fn settle_stdin_forwarding_task(
     container_id: &str,
     mut stdin_task: JoinHandle<io::Result<()>>,
 ) -> Result<(), PodbotError> {
-    let Ok(join_result) = timeout(Duration::from_millis(50), &mut stdin_task).await else {
+    let Ok(join_result) = timeout(STDIN_SETTLE_TIMEOUT, &mut stdin_task).await else {
         // The container output path has already completed, so stdin can be
         // cancelled instead of waiting indefinitely on a live host reader. A
-        // short grace period above still captures EOF- and flush-driven
-        // completion paths deterministically.
+        // timeout here still indicates that stdin forwarding did not complete
+        // cleanly before shutdown, so protocol mode must surface that failure
+        // instead of reporting success with potentially truncated input.
         abort_stdin_forwarding_task(stdin_task).await;
-        return Ok(());
+        return Err(exec_failed(
+            container_id,
+            "stdin forwarding did not complete before protocol session shutdown",
+        ));
     };
 
+    classify_stdin_forwarding_task_result(container_id, join_result)
+}
+
+fn classify_stdin_forwarding_task_result(
+    container_id: &str,
+    join_result: Result<io::Result<()>, tokio::task::JoinError>,
+) -> Result<(), PodbotError> {
     match join_result {
         Ok(Ok(())) => Ok(()),
         Ok(Err(error)) => Err(exec_failed(
@@ -149,19 +162,31 @@ where
     while let Some(chunk_result) = output.next().await {
         let chunk = chunk_result
             .map_err(|error| exec_failed(container_id, format!("exec stream failed: {error}")))?;
-
-        match chunk {
-            LogOutput::StdOut { message } | LogOutput::Console { message } => {
-                write_output_chunk(container_id, host_stdout, message.as_ref(), "stdout").await?;
-            }
-            LogOutput::StdErr { message } => {
-                write_output_chunk(container_id, host_stderr, message.as_ref(), "stderr").await?;
-            }
-            LogOutput::StdIn { .. } => {}
-        }
+        handle_log_output_chunk(container_id, chunk, host_stdout, host_stderr).await?;
     }
 
     Ok(())
+}
+
+async fn handle_log_output_chunk<HostStdout, HostStderr>(
+    container_id: &str,
+    chunk: LogOutput,
+    host_stdout: &mut HostStdout,
+    host_stderr: &mut HostStderr,
+) -> Result<(), PodbotError>
+where
+    HostStdout: AsyncWrite + Unpin,
+    HostStderr: AsyncWrite + Unpin,
+{
+    match chunk {
+        LogOutput::StdOut { message } | LogOutput::Console { message } => {
+            write_output_chunk(container_id, host_stdout, message.as_ref(), "stdout").await
+        }
+        LogOutput::StdErr { message } => {
+            write_output_chunk(container_id, host_stderr, message.as_ref(), "stderr").await
+        }
+        LogOutput::StdIn { .. } => Ok(()),
+    }
 }
 
 async fn write_output_chunk<Writer>(
