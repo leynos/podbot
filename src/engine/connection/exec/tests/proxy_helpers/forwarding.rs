@@ -51,6 +51,9 @@ fn protocol_proxy_non_eof_stdin_does_not_hang(runtime: RuntimeFixture) {
     let request = make_protocol_request().expect("protocol request should build");
     let (mut stdin_write, stdin_read) = duplex(1024);
     let background_task = runtime_handle.spawn(async move {
+        // `background_task` keeps `stdin_write` alive, and the `write_all`
+        // result is deliberately discarded via `drop(...)` so the helper task
+        // does not propagate write failures or block the non-EOF test path.
         drop(stdin_write.write_all(b"partial input").await);
         pending::<()>().await;
     });

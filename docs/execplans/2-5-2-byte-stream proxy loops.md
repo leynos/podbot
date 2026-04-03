@@ -138,7 +138,7 @@ Current code shape:
   - spawns a stdin-forwarding task using `tokio::io::stdin()`;
   - writes stdout/stderr directly to process stdio handles;
   - forwards `LogOutput::StdIn` to stdout to preserve interactive echo;
-  - initialises resize handling conditionally via `request.tty()`.
+  - initializes resize handling conditionally via `request.tty()`.
 - `src/engine/connection/exec/terminal.rs` already skips resize work when
   `tty()` is false, so protocol mode should continue to avoid `SIGWINCH`
   handling naturally.
@@ -257,7 +257,7 @@ there.
 Update engine orchestration so protocol-mode exec uses the new proxy helper and
 still returns accurate exit codes.
 
-Expected touch points:
+Expected touchpoints:
 
 - `src/engine/connection/exec/mod.rs`
 - new internal protocol proxy module(s)

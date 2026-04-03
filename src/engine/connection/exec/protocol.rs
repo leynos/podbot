@@ -25,6 +25,12 @@ pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     stderr: HostStderr,
 }
 
+/// Allow a short grace period for EOF- and flush-driven completion paths to
+/// finish before treating stdin forwarding as stalled. `50ms` matches typical
+/// local pipe and socket flush timings in this code path without adding a
+/// noticeable shutdown delay; if future benchmarks or transport changes show
+/// different behaviour, adjust `STDIN_SETTLE_TIMEOUT` and extend the proxy
+/// tests that exercise EOF and non-EOF stdin shutdown cases.
 const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
 
 impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
@@ -133,6 +139,9 @@ fn classify_stdin_forwarding_task_result(
 async fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     if !stdin_task.is_finished() {
         stdin_task.abort();
+        // `abort_stdin_forwarding_task` intentionally uses
+        // `drop(stdin_task.await)` to consume and ignore the aborted task's
+        // `JoinHandle` result while still satisfying the must-use contract.
         drop(stdin_task.await);
     }
 }

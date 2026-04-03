@@ -165,7 +165,7 @@ In app server hosting mode, Podbot's stream contract is strict:
   stderr continue forwarding until the daemon stream completes, and only then
   does Podbot inspect the exec exit code. If the container finishes while host
   stdin is still open, Podbot cancels the stdin-forwarding task after a short
-  grace period so shutdown does not hang indefinitely on a live host reader.
+  grace period, so shutdown does not hang indefinitely on a live host reader.
 
 The dedicated `podbot host` command is protocol-only. Unlike interactive
 operator commands, it must not emit banners, progress lines, or lifecycle
