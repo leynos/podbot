@@ -177,12 +177,12 @@ fn validate_host_mount_workspace(config: &AppConfig) -> Result<()> {
         );
     }
 
-    let Some(container_path) = config.workspace.container_path.as_ref() else {
-        return invalid_value(
-            "workspace.container_path",
-            "`workspace.source = \"host_mount\"` requires `workspace.container_path`",
-        );
-    };
+    let default_container_path = default_host_mount_container_path();
+    let container_path = config
+        .workspace
+        .container_path
+        .as_ref()
+        .unwrap_or(&default_container_path);
 
     if !container_path.is_absolute() {
         return invalid_value(
