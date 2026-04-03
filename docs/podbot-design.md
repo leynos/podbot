@@ -544,7 +544,7 @@ Custom mode uses `agent.command` and `agent.args` so new hosted agents can be
 introduced without Rust refactors. Podbot now treats `agent.args` as optional
 with a default of `[]`, but it requires a non-empty `agent.command` whenever
 `agent.kind = "custom"`. Built-in agent kinds reject stray custom launcher
-fields so the effective runtime stays unambiguous. The configuration validator
+fields, so the effective runtime stays unambiguous. The configuration validator
 must enforce legal `(kind, mode)` combinations.
 
 The `workspace.source` setting controls where the agent sees source code:

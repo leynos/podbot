@@ -104,18 +104,14 @@ documentation, and quality gates passed.
   design intent and codebase seams.
 - [x] (2026-03-29 02:00Z) Draft approved by user.
 - [x] (2026-03-29 03:00Z) Extend configuration schema and defaults for
-      hosting-era fields and MCP
-  hosting defaults.
+  hosting-era fields and MCP hosting defaults.
 - [x] (2026-03-29 03:00Z) Implement deterministic migration rules and
-      centralized semantic
-  validation.
+  centralized semantic validation.
 - [x] (2026-03-29 03:00Z) Add rstest unit coverage and rstest-bdd behavioural
-      coverage for the
-  compatibility matrix.
+  coverage for the compatibility matrix.
 - [x] (2026-03-29 03:00Z) Update design and user documentation.
 - [x] (2026-03-29 03:00Z) Mark Step 1.4 complete in `docs/podbot-roadmap.md`
-      after all validations
-  pass.
+  after all validations pass.
 - [x] (2026-03-29 03:00Z) Run and capture validation commands.
 
 ## Surprises & Discoveries

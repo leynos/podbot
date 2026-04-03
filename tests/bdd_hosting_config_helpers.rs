@@ -12,15 +12,15 @@ use rstest_bdd_macros::{ScenarioState, given, then, when};
 
 type StepResult<T> = Result<T, String>;
 
-#[derive(Default, ScenarioState)]
 /// State shared across hosted configuration scenarios.
+#[derive(Default, ScenarioState)]
 pub struct HostingConfigState {
     config: Slot<AppConfig>,
     error: Slot<String>,
 }
 
-#[fixture]
 /// Fixture providing a fresh hosted configuration state.
+#[fixture]
 pub fn hosting_config_state() -> HostingConfigState {
     HostingConfigState::default()
 }

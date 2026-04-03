@@ -13,8 +13,8 @@ use rstest_bdd_macros::{ScenarioState, given, then, when};
 type StepResult<T> = Result<T, String>;
 type EnvVars = Arc<Mutex<HashMap<String, String>>>;
 
-#[derive(Default, ScenarioState)]
 /// State shared across hosted library configuration scenarios.
+#[derive(Default, ScenarioState)]
 pub struct HostingConfigLoaderState {
     env_vars: Slot<EnvVars>,
     temp_dir: Slot<Arc<tempfile::TempDir>>,
@@ -23,8 +23,8 @@ pub struct HostingConfigLoaderState {
     error: Slot<String>,
 }
 
-#[fixture]
 /// Fixture providing a fresh hosting loader state.
+#[fixture]
 pub fn hosting_config_loader_state() -> HostingConfigLoaderState {
     let state = HostingConfigLoaderState::default();
     state.env_vars.set(Arc::new(Mutex::new(HashMap::new())));
