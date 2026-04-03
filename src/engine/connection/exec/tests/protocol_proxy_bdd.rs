@@ -10,8 +10,8 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_io_async};
-use super::*;
 use super::proxy_helpers::{RecordingInputWriter, RecordingWriter, WriterFailureMode};
+use super::*;
 
 type StepResult<T> = Result<T, String>;
 

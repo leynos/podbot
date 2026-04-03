@@ -6,8 +6,8 @@ use bollard::container::LogOutput;
 use rstest::rstest;
 use tokio::io::{AsyncWriteExt, duplex};
 
-use super::*;
 use super::super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_io_async};
+use super::*;
 
 #[rstest]
 fn protocol_proxy_forwards_stdin_bytes_and_shutdowns_input(runtime: RuntimeFixture) {
