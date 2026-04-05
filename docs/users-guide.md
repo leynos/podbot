@@ -99,7 +99,9 @@ Execution behaviour:
   permanently disables TTY allocation. This mode is used internally by the
   hosting subsystem to proxy protocol bytes without TTY framing corruption.
   Library consumers can use it for non-TTY attached execution where stdout must
-  remain a pure byte stream.
+  remain a pure byte stream. In protocol mode, podbot forwards host stdin to
+  container stdin, container stdout to host stdout, and container stderr to
+  host stderr without terminal framing or interactive echo injection.
 - TTY allocation is enabled only when attached mode is selected and both local
   stdin and stdout are terminals.
 - When TTY is enabled, podbot sends an initial resize to the daemon. On Unix
@@ -108,6 +110,10 @@ Execution behaviour:
   not register a resize listener. podbot reads terminal size using `stty size`;
   if that command is unavailable or returns unexpected output, resize
   propagation is skipped and execution continues.
+- Protocol mode ignores daemon `StdIn` echo records, so stdout contains only
+  bytes that originated from container stdout or console output. When host
+  stdin reaches EOF, podbot flushes and closes container stdin before waiting
+  for the command to finish.
 - podbot polls exec status until the command exits, then uses the daemon exit
   code as the CLI outcome. Exit code `0` returns success. Non-zero values in
   the `1..=255` range are returned directly, negative values are mapped to `1`,

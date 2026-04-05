@@ -4,6 +4,7 @@
 //! execution behaviour can be unit-tested without a live daemon.
 
 mod attached;
+mod protocol;
 mod terminal;
 
 use std::future::Future;
@@ -13,6 +14,7 @@ use bollard::exec::{CreateExecOptions, CreateExecResults, ResizeExecOptions, Sta
 use bollard::{Docker, errors::Error as BollardError};
 
 use self::attached::{run_attached_session_async, wait_for_exit_code_async};
+use self::protocol::run_protocol_session_async;
 use self::terminal::{SystemTerminalSizeProvider, TerminalSizeProvider};
 use super::EngineConnector;
 use crate::error::{ConfigError, ContainerError, PodbotError};
@@ -272,12 +274,12 @@ impl EngineConnector {
             })?;
 
         match (request.mode(), start_result) {
-            (
-                ExecMode::Attached | ExecMode::Protocol,
-                bollard::exec::StartExecResults::Attached { output, input },
-            ) => {
+            (ExecMode::Attached, bollard::exec::StartExecResults::Attached { output, input }) => {
                 run_attached_session_async(client, request, &exec_id, output, input, size_provider)
                     .await?;
+            }
+            (ExecMode::Protocol, bollard::exec::StartExecResults::Attached { output, input }) => {
+                run_protocol_session_async(request, output, input).await?;
             }
             (
                 ExecMode::Attached | ExecMode::Protocol,

@@ -3,3 +3,4 @@ target/
 **/*.rs.bk
 .grepai/
 *~
+.agents/mcp/context_pack/packs/
