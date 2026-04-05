@@ -90,15 +90,15 @@ impl AppConfig {
                 CommandIntent::Run => invalid_value(
                     "agent.mode",
                     format!(
-                        "hosted modes require `podbot host`; use `agent.mode = \"podbot\"` for `podbot run` (current mode: {:?})",
-                        self.agent.mode
+                        "hosted modes require `podbot host`; use `agent.mode = \"podbot\"` for `podbot run` (current mode: {})",
+                        self.agent.mode.as_token()
                     ),
                 ),
                 CommandIntent::Host => invalid_value(
                     "agent.mode",
                     format!(
-                        "interactive mode requires `podbot run`; use `codex_app_server` or `acp` with `podbot host` (current mode: {:?})",
-                        self.agent.mode
+                        "interactive mode requires `podbot run`; use `codex_app_server` or `acp` with `podbot host` (current mode: {})",
+                        self.agent.mode.as_token()
                     ),
                 ),
                 CommandIntent::Any => Ok(()), // unreachable: Any is always legal

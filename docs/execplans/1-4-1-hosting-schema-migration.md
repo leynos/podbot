@@ -196,10 +196,10 @@ The configuration entry points live in four places:
 - `src/config/load_options.rs` defines the library-facing loader inputs used by
   embedders and by the CLI adapter.
 
-The current CLI surface lives in `src/cli/mod.rs`. It converts CLI flags into
-`ConfigLoadOptions`, but it does not yet expose a `host` subcommand. The
-current main entry point in `src/main.rs` dispatches only `run`,
-`token-daemon`, `ps`, `stop`, and `exec`.
+The CLI surface lives in `src/cli/mod.rs`. A `Commands::Host` variant was added
+to expose the `podbot host` subcommand, converting CLI flags into
+`ConfigLoadOptions`. The main entry point in `src/main.rs` now dispatches
+`host`, `run`, `token-daemon`, `ps`, `stop`, and `exec`.
 
 The relevant existing tests are:
 

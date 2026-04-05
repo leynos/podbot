@@ -41,6 +41,18 @@ fn builtin_agents_reject_custom_command_fields() {
 }
 
 #[rstest]
+fn builtin_agents_reject_custom_args_fields() {
+    let mut config = AppConfig::default();
+    config.agent.args = vec![String::from("--verbose")];
+
+    assert_invalid_value(
+        config.normalize_and_validate(CommandIntent::Run),
+        "agent.args",
+        "built-in agent kinds",
+    );
+}
+
+#[rstest]
 #[case(HostMountCase {
     host_path: None,
     container_path: None,
@@ -112,13 +124,24 @@ fn host_rejects_podbot_mode() {
 }
 
 #[rstest]
-fn github_clone_rejects_host_mount_fields() {
+#[case("workspace.host_path", Some(Utf8PathBuf::from("/tmp/project")), None)]
+#[case(
+    "workspace.container_path",
+    None,
+    Some(Utf8PathBuf::from("/workspace"))
+)]
+fn github_clone_rejects_host_mount_fields(
+    #[case] field: &str,
+    #[case] host_path: Option<Utf8PathBuf>,
+    #[case] container_path: Option<Utf8PathBuf>,
+) {
     let mut config = AppConfig::default();
-    config.workspace.host_path = Some(Utf8PathBuf::from("/tmp/project"));
+    config.workspace.host_path = host_path;
+    config.workspace.container_path = container_path;
 
     assert_invalid_value(
         config.normalize_and_validate(CommandIntent::Any),
-        "workspace.host_path",
+        field,
         "only valid when `workspace.source = \"host_mount\"`",
     );
 }

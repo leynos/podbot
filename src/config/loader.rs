@@ -87,7 +87,8 @@ fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<
 /// 3. Environment variables prefixed with `PODBOT_`
 /// 4. Host-supplied overrides (for example CLI flags)
 ///
-/// Later sources override earlier ones.
+/// Later sources override earlier ones. After merging, the configuration is
+/// semantically validated via `AppConfig::normalize_and_validate`.
 ///
 /// # Errors
 ///
@@ -96,6 +97,8 @@ fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<
 /// - Invalid typed environment variable values (e.g., non-boolean for
 ///   `PODBOT_SANDBOX_PRIVILEGED`)
 /// - Missing required fields after merge
+/// - Semantic validation failures (`ConfigError::InvalidValue`) such as illegal
+///   `(command_intent, agent.mode)` combinations or missing host mount paths
 pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig> {
     let env = mockable::DefaultEnv::new();
     load_config_with_env(&env, options)
@@ -104,7 +107,8 @@ pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig> {
 /// Load configuration with full layer precedence using an injected environment.
 ///
 /// This function enables deterministic unit and behavioural testing without
-/// mutating the process environment.
+/// mutating the process environment. After merging, the configuration is
+/// semantically validated via `AppConfig::normalize_and_validate`.
 ///
 /// # Errors
 ///
@@ -113,6 +117,8 @@ pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig> {
 /// - Invalid typed environment variable values (e.g., non-boolean for
 ///   `PODBOT_SANDBOX_PRIVILEGED`)
 /// - `OrthoConfig` merge failures after layer composition
+/// - Semantic validation failures (`ConfigError::InvalidValue`) such as illegal
+///   `(command_intent, agent.mode)` combinations or missing host mount paths
 pub fn load_config_with_env<E: mockable::Env>(
     env: &E,
     options: &ConfigLoadOptions,

@@ -53,6 +53,14 @@ podbot run --repo owner/name --branch main --agent claude
 Host an app-server protocol for a long-lived agent runtime.
 
 ```bash
+podbot host --agent codex --agent-mode codex_app_server
+```
+
+For custom agents, you must configure `agent.command` via config file or
+environment variable:
+
+```bash
+export PODBOT_AGENT_COMMAND=/usr/local/bin/my-agent
 podbot host --agent custom --agent-mode acp
 ```
 

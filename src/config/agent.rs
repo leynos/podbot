@@ -28,6 +28,18 @@ pub enum AgentMode {
     Acp,
 }
 
+impl AgentMode {
+    /// Returns the `snake_case` token representation used in configuration and CLI.
+    #[must_use]
+    pub const fn as_token(&self) -> &'static str {
+        match self {
+            Self::Podbot => "podbot",
+            Self::CodexAppServer => "codex_app_server",
+            Self::Acp => "acp",
+        }
+    }
+}
+
 /// Agent execution configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]

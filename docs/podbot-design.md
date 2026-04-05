@@ -525,7 +525,7 @@ command = "opencode" # required when kind = "custom"
 args = ["acp"] # defaults to [] when omitted
 env_allowlist = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FACTORY_API_KEY"]
 
-[mcp]
+[mcp] # Model Context Protocol (MCP)
 bind_strategy = "host_gateway" # "host_gateway" or "loopback"
 idle_timeout_secs = 900
 max_message_size_bytes = 1048576

@@ -106,7 +106,7 @@ fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
         config.agent.kind, config.agent.mode
     );
     println!("Hosted agent orchestration not yet implemented.");
-    CommandOutcome::Success
+    CommandOutcome::CommandExit { code: 1 }
 }
 
 /// CLI adapter for the token refresh daemon.
