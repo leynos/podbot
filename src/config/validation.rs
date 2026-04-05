@@ -23,16 +23,18 @@ impl AppConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use podbot::config::{AppConfig, CommandIntent, WorkspaceSource};
+    /// use camino::Utf8Path;
+    /// use podbot::config::{AgentMode, AppConfig, CommandIntent, WorkspaceSource};
     ///
     /// let mut config = AppConfig::default();
+    /// config.agent.mode = AgentMode::CodexAppServer;
     /// config.workspace.source = WorkspaceSource::HostMount;
     /// config.workspace.host_path = Some("/tmp/project".into());
     ///
     /// config.normalize_and_validate(CommandIntent::Host)?;
     /// assert_eq!(
     ///     config.workspace.container_path.as_deref(),
-    ///     Some("/workspace")
+    ///     Some(Utf8Path::new("/workspace"))
     /// );
     /// # Ok::<(), podbot::error::PodbotError>(())
     /// ```
@@ -81,25 +83,35 @@ impl AppConfig {
     }
 
     fn validate_command_intent(&self, intent: CommandIntent) -> Result<()> {
-        match intent {
-            CommandIntent::Any => Ok(()),
-            CommandIntent::Run if self.agent.mode == AgentMode::Podbot => Ok(()),
-            CommandIntent::Run => invalid_value(
-                "agent.mode",
-                format!(
-                    "hosted modes require `podbot host`; use `agent.mode = \"podbot\"` for `podbot run` (current mode: {:?})",
-                    self.agent.mode
+        if is_intent_legal(intent, self.agent.mode) {
+            Ok(())
+        } else {
+            match intent {
+                CommandIntent::Run => invalid_value(
+                    "agent.mode",
+                    format!(
+                        "hosted modes require `podbot host`; use `agent.mode = \"podbot\"` for `podbot run` (current mode: {:?})",
+                        self.agent.mode
+                    ),
                 ),
-            ),
-            CommandIntent::Host if self.agent.mode != AgentMode::Podbot => Ok(()),
-            CommandIntent::Host => invalid_value(
-                "agent.mode",
-                format!(
-                    "interactive mode requires `podbot run`; use `codex_app_server` or `acp` with `podbot host` (current mode: {:?})",
-                    self.agent.mode
+                CommandIntent::Host => invalid_value(
+                    "agent.mode",
+                    format!(
+                        "interactive mode requires `podbot run`; use `codex_app_server` or `acp` with `podbot host` (current mode: {:?})",
+                        self.agent.mode
+                    ),
                 ),
-            ),
+                CommandIntent::Any => Ok(()), // unreachable: Any is always legal
+            }
         }
+    }
+}
+
+fn is_intent_legal(intent: CommandIntent, mode: AgentMode) -> bool {
+    match intent {
+        CommandIntent::Any => true,
+        CommandIntent::Run => mode == AgentMode::Podbot,
+        CommandIntent::Host => mode != AgentMode::Podbot,
     }
 }
 
