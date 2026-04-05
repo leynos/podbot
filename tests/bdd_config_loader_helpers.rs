@@ -175,6 +175,8 @@ fn host_overrides_set_image_to(
     options.overrides = ConfigOverrides {
         engine_socket: None,
         image: Some(image),
+        agent_kind: None,
+        agent_mode: None,
     };
     set_options(config_loader_state, options);
     Ok(())

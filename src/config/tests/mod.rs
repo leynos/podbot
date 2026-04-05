@@ -5,8 +5,14 @@
 //! - [`types_tests`] - Basic type and serialisation tests
 //! - [`validation`] - `GitHubConfig` validation tests
 //! - [`layer_precedence_tests`] - `MergeComposer` layer precedence tests
+//! - [`hosting_layer_precedence_tests`] - Hosting layer precedence tests
+//! - [`hosting_types_tests`] - Hosting schema defaults and serialisation tests
+//! - [`semantic_validation_tests`] - Hosted-era semantic validation tests
 
 mod helpers;
+mod hosting_layer_precedence_tests;
+mod hosting_types_tests;
 mod layer_precedence_tests;
+mod semantic_validation_tests;
 mod types_tests;
 mod validation;

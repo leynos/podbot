@@ -15,7 +15,7 @@ use std::io::IsTerminal;
 use clap::Parser;
 use eyre::{Report, Result as EyreResult};
 use podbot::api::{CommandOutcome, ExecParams};
-use podbot::cli::{Cli, Commands, ExecArgs, RunArgs, StopArgs, TokenDaemonArgs};
+use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, RunArgs, StopArgs, TokenDaemonArgs};
 use podbot::config::{AppConfig, load_config};
 use podbot::engine::{EngineConnector, ExecMode, SocketResolver};
 use podbot::error::{ContainerError, Result as PodbotResult};
@@ -58,6 +58,7 @@ fn run(
 ) -> PodbotResult<CommandOutcome> {
     match &cli.command {
         Commands::Run(args) => run_agent_cli(config, args, runtime_handle),
+        Commands::Host(args) => Ok(host_agent_cli(config, args)),
         Commands::TokenDaemon(args) => run_token_daemon_cli(args),
         Commands::Ps => list_containers_cli(),
         Commands::Stop(args) => stop_container_cli(args),
@@ -83,8 +84,8 @@ fn run_agent_cli(
     }
 
     println!(
-        "Running {:?} agent for repository {} on branch {}",
-        args.agent, args.repo, args.branch
+        "Running {:?} agent in {:?} mode for repository {} on branch {}",
+        config.agent.kind, config.agent.mode, args.repo, args.branch
     );
     if let Some(ref socket) = config.engine_socket {
         println!("Using engine socket: {socket}");
@@ -95,6 +96,17 @@ fn run_agent_cli(
     let result = podbot::api::run_agent(config)?;
     println!("Container orchestration not yet implemented.");
     Ok(result)
+}
+
+/// CLI adapter for hosted app-server execution.
+#[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
+fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
+    println!(
+        "Hosting {:?} agent in {:?} mode",
+        config.agent.kind, config.agent.mode
+    );
+    println!("Hosted agent orchestration not yet implemented.");
+    CommandOutcome::CommandExit { code: 1 }
 }
 
 /// CLI adapter for the token refresh daemon.

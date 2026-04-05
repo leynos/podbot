@@ -41,12 +41,33 @@ Run an AI agent in a sandboxed container.
 podbot run --repo owner/name --branch main --agent claude
 ```
 
-| Option         | Required | Default  | Description                        |
-| -------------- | -------- | -------- | ---------------------------------- |
-| `--repo`       | Yes      | -        | Repository in owner/name format    |
-| `--branch`     | Yes      | -        | Branch to check out                |
-| `--agent`      | No       | `claude` | Agent type: `claude` or `codex`    |
-| `--agent-mode` | No       | `podbot` | Agent execution mode (podbot only) |
+| Option         | Required | Default         | Description                                          |
+| -------------- | -------- | --------------- | ---------------------------------------------------- |
+| `--repo`       | Yes      | -               | Repository in owner/name format                      |
+| `--branch`     | Yes      | -               | Branch to check out                                  |
+| `--agent`      | No       | Config/defaults | Agent type: `claude`, `codex`, or `custom`           |
+| `--agent-mode` | No       | Config/defaults | Agent mode; `run` accepts only `podbot` semantically |
+
+#### `host`
+
+Host an app-server protocol for a long-lived agent runtime.
+
+```bash
+podbot host --agent codex --agent-mode codex_app_server
+```
+
+For custom agents, you must configure `agent.command` via config file or
+environment variable:
+
+```bash
+export PODBOT_AGENT_COMMAND=/usr/local/bin/my-agent
+podbot host --agent custom --agent-mode acp
+```
+
+| Option         | Required | Default         | Description                                |
+| -------------- | -------- | --------------- | ------------------------------------------ |
+| `--agent`      | No       | Config/defaults | Agent type: `claude`, `codex`, or `custom` |
+| `--agent-mode` | No       | Config/defaults | Hosted mode: `codex_app_server` or `acp`   |
 
 #### `token-daemon`
 
@@ -175,20 +196,54 @@ mount_dev_fuse = true
 selinux_label_mode = "disable_for_container"
 
 [agent]
-# Default agent type: "claude" or "codex"
+# Default agent type: "claude", "codex", or "custom"
 kind = "claude"
-# Execution mode for the agent (currently only "podbot")
+# Execution mode for the agent: "podbot", "codex_app_server", or "acp"
 mode = "podbot"
+# Custom launcher command (required when kind = "custom")
+command = "opencode"
+# Additional launcher arguments (defaults to [])
+args = ["acp"]
+# Environment variables copied from the host (defaults to [])
+env_allowlist = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
 
 [workspace]
+# Workspace source: "github_clone" or "host_mount"
+source = "github_clone"
 # Base directory for cloned repositories inside the container
 base_dir = "/work"
+# Host path mounted into the sandbox when source = "host_mount"
+host_path = "/abs/path/to/project"
+# Container path for the mount; defaults to "/workspace" in host_mount mode
+container_path = "/workspace/project"
 
 [creds]
 # Copy credentials from the host into the container
 copy_claude = true
 copy_codex = true
+
+[mcp]
+# HTTP bridge reachability strategy for hosted MCP servers
+bind_strategy = "host_gateway"
+# Idle timeout in seconds for hosted MCP bridges
+idle_timeout_secs = 900
+# Maximum message size in bytes
+max_message_size_bytes = 1048576
+# Token issuance policy: "per_workspace" or "per_wire"
+auth_token_policy = "per_workspace"
+# Allowed-origin policy: "same_origin" or "any"
+allowed_origin_policy = "same_origin"
 ```
+
+Semantic validation rules:
+
+- `podbot run` accepts only `agent.mode = "podbot"`.
+- `podbot host` accepts only `agent.mode = "codex_app_server"` or `"acp"`.
+- `agent.kind = "custom"` requires a non-empty `agent.command`.
+- Built-in agent kinds reject `agent.command` and `agent.args`.
+- `workspace.source = "host_mount"` requires `workspace.host_path` and
+  defaults `workspace.container_path` to `"/workspace"` when omitted.
+- `workspace.source = "github_clone"` rejects host-mount-only fields.
 
 ### Private key file requirements
 
@@ -234,9 +289,22 @@ All configuration options can be set via environment variables using the
 | `PODBOT_SANDBOX_SELINUX_LABEL_MODE` | `sandbox.selinux_label_mode` |
 | `PODBOT_AGENT_KIND`                 | `agent.kind`                 |
 | `PODBOT_AGENT_MODE`                 | `agent.mode`                 |
+| `PODBOT_AGENT_COMMAND`              | `agent.command`              |
+| `PODBOT_AGENT_ARGS`                 | `agent.args`                 |
+| `PODBOT_AGENT_ENV_ALLOWLIST`        | `agent.env_allowlist`        |
+| `PODBOT_WORKSPACE_SOURCE`           | `workspace.source`           |
 | `PODBOT_WORKSPACE_BASE_DIR`         | `workspace.base_dir`         |
+| `PODBOT_WORKSPACE_HOST_PATH`        | `workspace.host_path`        |
+| `PODBOT_WORKSPACE_CONTAINER_PATH`   | `workspace.container_path`   |
 | `PODBOT_CREDS_COPY_CLAUDE`          | `creds.copy_claude`          |
 | `PODBOT_CREDS_COPY_CODEX`           | `creds.copy_codex`           |
+| `PODBOT_MCP_BIND_STRATEGY`          | `mcp.bind_strategy`          |
+| `PODBOT_MCP_IDLE_TIMEOUT_SECS`      | `mcp.idle_timeout_secs`      |
+| `PODBOT_MCP_MAX_MESSAGE_SIZE_BYTES` | `mcp.max_message_size_bytes` |
+| `PODBOT_MCP_AUTH_TOKEN_POLICY`      | `mcp.auth_token_policy`      |
+| `PODBOT_MCP_ALLOWED_ORIGIN_POLICY`  | `mcp.allowed_origin_policy`  |
+
+`PODBOT_AGENT_ARGS` and `PODBOT_AGENT_ENV_ALLOWLIST` use comma-separated values.
 
 ### Container engine socket
 

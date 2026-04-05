@@ -1,9 +1,11 @@
-//! Configuration data types for podbot.
+//! Root configuration types for podbot.
 
 use camino::Utf8PathBuf;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
+
+use crate::config::{AgentConfig, McpConfig, WorkspaceConfig};
 
 /// How `SELinux` labels should be applied to the container.
 ///
@@ -22,26 +24,6 @@ pub enum SelinuxLabelMode {
     DisableForContainer,
 }
 
-/// The kind of AI agent to run.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AgentKind {
-    /// Claude Code agent.
-    #[default]
-    Claude,
-    /// `OpenAI` Codex agent.
-    Codex,
-}
-
-/// The execution mode for the agent.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AgentMode {
-    /// Run the agent in podbot-managed mode.
-    #[default]
-    Podbot,
-}
-
 /// `GitHub` App configuration.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct GitHubConfig {
@@ -58,21 +40,14 @@ pub struct GitHubConfig {
 impl GitHubConfig {
     /// Validates that all required `GitHub` fields are present and non-zero.
     ///
-    /// This method checks that `app_id`, `installation_id`, and `private_key_path`
-    /// are all set and that numeric IDs are non-zero. Call this before performing
-    /// `GitHub` operations that require authentication.
-    ///
-    /// # Note on zero values
-    ///
-    /// `GitHub` never issues `app_id` or `installation_id` values of `0`, so this
-    /// validation treats `Some(0)` as invalid to catch default/placeholder values
-    /// early.
+    /// This method checks that `app_id`, `installation_id`, and
+    /// `private_key_path` are all set and that numeric IDs are non-zero. Call
+    /// this before performing `GitHub` operations that require authentication.
     ///
     /// # Errors
     ///
-    /// Returns `ConfigError::MissingRequired` if any required field is `None`
-    /// or if numeric IDs are zero, with the field names listed in the error
-    /// message.
+    /// Returns `ConfigError::MissingRequired` when any required field is
+    /// missing or contains the sentinel value `0`.
     pub fn validate(&self) -> crate::error::Result<()> {
         let mut missing = Vec::new();
         if self.app_id.is_none() || self.app_id == Some(0) {
@@ -94,10 +69,6 @@ impl GitHubConfig {
     }
 
     /// Returns whether all `GitHub` credentials are properly configured.
-    ///
-    /// This checks that all three fields (`app_id`, `installation_id`,
-    /// `private_key_path`) are present and that numeric IDs are non-zero.
-    /// This mirrors the checks performed by [`validate()`](Self::validate).
     #[must_use]
     pub fn is_configured(&self) -> bool {
         self.app_id.is_some_and(|v| v != 0)
@@ -121,42 +92,6 @@ pub struct SandboxConfig {
     pub selinux_label_mode: SelinuxLabelMode,
 }
 
-/// Agent execution configuration.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct AgentConfig {
-    /// The type of agent to run.
-    pub kind: AgentKind,
-
-    /// The execution mode for the agent.
-    pub mode: AgentMode,
-}
-
-impl Default for AgentConfig {
-    fn default() -> Self {
-        Self {
-            kind: AgentKind::Claude,
-            mode: AgentMode::Podbot,
-        }
-    }
-}
-
-/// Workspace configuration.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct WorkspaceConfig {
-    /// Base directory for cloned repositories inside the container.
-    pub base_dir: Utf8PathBuf,
-}
-
-impl Default for WorkspaceConfig {
-    fn default() -> Self {
-        Self {
-            base_dir: Utf8PathBuf::from("/work"),
-        }
-    }
-}
-
 /// Credential copying configuration.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -178,27 +113,6 @@ impl Default for CredsConfig {
 }
 
 /// Root application configuration.
-///
-/// This structure is loaded from configuration files, environment variables,
-/// and host overrides with layered precedence. The precedence order (lowest to
-/// highest) is: defaults, configuration file, environment variables, host
-/// overrides (for example CLI flags).
-///
-/// Configuration files are discovered in this order (see `loader.rs`):
-/// 1. Host-provided config-path hint (for example `--config`), if it exists
-/// 2. Path specified via `PODBOT_CONFIG_PATH` environment variable, if present
-/// 3. `~/.config/podbot/config.toml` (XDG default)
-/// 4. `~/.podbot.toml` (dotfile in home directory)
-///
-/// When a host provides a config-path hint, `PODBOT_CONFIG_PATH` is ignored
-/// even if the hint is missing. This avoids surprising behaviour where a
-/// missing explicit path would silently pick up a different configuration via
-/// the process environment.
-///
-/// Note: Discovery is implemented in `loader.rs` using `ConfigDiscovery` rather
-/// than via `OrthoConfig`'s `discovery(...)` attribute, because we need to
-/// expose a `Clap`-free library API that still supports CLI-provided config
-/// paths and fail-fast environment validation.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "PODBOT", post_merge_hook)]
 pub struct AppConfig {
@@ -232,13 +146,15 @@ pub struct AppConfig {
     #[serde(default)]
     #[ortho_config(skip_cli)]
     pub creds: CredsConfig,
+
+    /// Defaults for hosted MCP bridge behaviour.
+    #[serde(default)]
+    #[ortho_config(skip_cli)]
+    pub mcp: McpConfig,
 }
 
 impl PostMergeHook for AppConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
-        // Placeholder for future normalisation logic.
-        // GitHub validation is intentionally NOT performed here because
-        // not all commands require GitHub credentials (e.g., `podbot ps`).
         Ok(())
     }
 }

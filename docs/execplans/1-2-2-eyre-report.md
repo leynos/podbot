@@ -149,6 +149,7 @@ user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
 1. Inspect the entry point and error modules, and search for unwrap/expect:
 
    <!-- markdownlint-disable-next-line MD046 -->
+
    ```shell
    rg --hidden --line-number "unwrap\(|expect\(" src
    ```
@@ -180,6 +181,7 @@ user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
 8. Run validation commands with logs (use tee + pipefail):
 
    <!-- markdownlint-disable-next-line MD046 -->
+
    ```shell
    set -o pipefail
    make all | tee /tmp/podbot-make-all.log
@@ -188,6 +190,7 @@ user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
    If documentation changed, also run:
 
    <!-- markdownlint-disable-next-line MD046 -->
+
    ```shell
    make fmt | tee /tmp/podbot-fmt.log
    MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint | \

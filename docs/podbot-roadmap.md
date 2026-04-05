@@ -76,22 +76,22 @@ installations.
 
 **Tasks:**
 
-- [ ] Add schema fields for hosting: `workspace.source`, `workspace.host_path`,
+- [x] Add schema fields for hosting: `workspace.source`, `workspace.host_path`,
   `workspace.container_path`, `agent.command`, `agent.args`, and
   `agent.env_allowlist`.
-- [ ] Add MCP hosting defaults to configuration: bind strategy, idle timeout,
+- [x] Add MCP hosting defaults to configuration: bind strategy, idle timeout,
   maximum message size, auth token policy, and allowed-origin policy.
-- [ ] Add execution-mode values required for hosting mode while preserving
+- [x] Add execution-mode values required for hosting mode while preserving
   `podbot` defaults for existing configurations.
-- [ ] Define migration rules, so legacy config files load deterministically
+- [x] Define migration rules, so legacy config files load deterministically
   without manual edits.
-- [ ] Implement validation for legal combinations of subcommand, `agent.kind`,
+- [x] Implement validation for legal combinations of subcommand, `agent.kind`,
   `agent.mode`, and `workspace.source`.
-- [ ] Add a compatibility test matrix covering legacy and hosting-era
+- [x] Add a compatibility test matrix covering legacy and hosting-era
   configuration variants.
 
 **Completion criteria:** Legacy configurations continue to load as expected,
-and hosting-mode configurations validate with actionable semantic errors.
+and hosting-mode configurations validate with actionable semantic errors. ✓
 
 ## Phase 2: Container engine integration
 

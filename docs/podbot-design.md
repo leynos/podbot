@@ -522,8 +522,15 @@ mount_dev_fuse = true
 kind = "codex"
 mode = "codex_app_server" # "podbot", "codex_app_server", or "acp"
 command = "opencode" # required when kind = "custom"
-args = ["acp"] # required when kind = "custom"
+args = ["acp"] # defaults to [] when omitted
 env_allowlist = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "FACTORY_API_KEY"]
+
+[mcp] # Model Context Protocol (MCP)
+bind_strategy = "host_gateway" # "host_gateway" or "loopback"
+idle_timeout_secs = 900
+max_message_size_bytes = 1048576
+auth_token_policy = "per_workspace" # "per_workspace" or "per_wire"
+allowed_origin_policy = "same_origin" # "same_origin" or "any"
 ```
 
 The `agent.mode` setting defines the execution mode for the agent:
@@ -534,8 +541,11 @@ The `agent.mode` setting defines the execution mode for the agent:
 
 The `agent.kind` setting supports built-ins (`claude`, `codex`) and `custom`.
 Custom mode uses `agent.command` and `agent.args` so new hosted agents can be
-introduced without Rust refactors. The configuration validator must enforce
-legal `(kind, mode)` combinations.
+introduced without Rust refactors. Podbot now treats `agent.args` as optional
+with a default of `[]`, but it requires a non-empty `agent.command` whenever
+`agent.kind = "custom"`. Built-in agent kinds reject stray custom launcher
+fields, so the effective runtime stays unambiguous. The configuration validator
+must enforce legal `(kind, mode)` combinations.
 
 The `workspace.source` setting controls where the agent sees source code:
 
@@ -543,6 +553,9 @@ The `workspace.source` setting controls where the agent sees source code:
 - `host_mount`: Podbot bind-mounts `workspace.host_path` at
   `workspace.container_path`, and the mounted host workspace becomes the active
   working directory for the agent.
+
+When `workspace.source = "host_mount"` and `workspace.container_path` is
+omitted, Podbot normalizes it to `"/workspace"`.
 
 In `host_mount` mode, GitHub token and clone operations are optional and should
 run only when explicitly requested.

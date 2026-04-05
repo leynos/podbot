@@ -21,6 +21,7 @@
 //!
 //! [workspace]
 //! base_dir = "/work"
+//! source = "github_clone"
 //!
 //! [sandbox]
 //! privileged = false
@@ -30,20 +31,29 @@
 //! [agent]
 //! kind = "claude"
 //! mode = "podbot"
+//!
+//! [mcp]
+//! bind_strategy = "host_gateway"
 //! ```
 
+mod agent;
 mod env_vars;
+mod hosting;
 mod load_options;
 mod loader;
 mod types;
+mod validation;
+mod workspace;
 
 #[cfg(test)]
 mod tests;
 
+pub use agent::{AgentConfig, AgentKind, AgentMode};
 pub use env_vars::env_var_names;
+pub use hosting::{McpAllowedOriginPolicy, McpAuthTokenPolicy, McpBindStrategy, McpConfig};
 pub use load_options::{ConfigLoadOptions, ConfigOverrides};
 pub use loader::{load_config, load_config_with_env};
-pub use types::{
-    AgentConfig, AgentKind, AgentMode, AppConfig, CredsConfig, GitHubConfig, SandboxConfig,
-    SelinuxLabelMode, WorkspaceConfig,
-};
+pub use types::{AppConfig, CredsConfig, GitHubConfig, SandboxConfig, SelinuxLabelMode};
+pub use validation::CommandIntent;
+pub(crate) use workspace::default_host_mount_container_path;
+pub use workspace::{WorkspaceConfig, WorkspaceSource};

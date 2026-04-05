@@ -87,7 +87,8 @@ fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<
 /// 3. Environment variables prefixed with `PODBOT_`
 /// 4. Host-supplied overrides (for example CLI flags)
 ///
-/// Later sources override earlier ones.
+/// Later sources override earlier ones. After merging, the configuration is
+/// semantically validated via `AppConfig::normalize_and_validate`.
 ///
 /// # Errors
 ///
@@ -96,6 +97,8 @@ fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<
 /// - Invalid typed environment variable values (e.g., non-boolean for
 ///   `PODBOT_SANDBOX_PRIVILEGED`)
 /// - Missing required fields after merge
+/// - Semantic validation failures (`ConfigError::InvalidValue`) such as illegal
+///   `(command_intent, agent.mode)` combinations or missing host mount paths
 pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig> {
     let env = mockable::DefaultEnv::new();
     load_config_with_env(&env, options)
@@ -104,7 +107,8 @@ pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig> {
 /// Load configuration with full layer precedence using an injected environment.
 ///
 /// This function enables deterministic unit and behavioural testing without
-/// mutating the process environment.
+/// mutating the process environment. After merging, the configuration is
+/// semantically validated via `AppConfig::normalize_and_validate`.
 ///
 /// # Errors
 ///
@@ -113,6 +117,8 @@ pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig> {
 /// - Invalid typed environment variable values (e.g., non-boolean for
 ///   `PODBOT_SANDBOX_PRIVILEGED`)
 /// - `OrthoConfig` merge failures after layer composition
+/// - Semantic validation failures (`ConfigError::InvalidValue`) such as illegal
+///   `(command_intent, agent.mode)` combinations or missing host mount paths
 pub fn load_config_with_env<E: mockable::Env>(
     env: &E,
     options: &ConfigLoadOptions,
@@ -140,14 +146,16 @@ pub fn load_config_with_env<E: mockable::Env>(
     }
 
     // Layer 4: host overrides.
-    let overrides = build_overrides(&options.overrides);
+    let overrides = build_overrides(&options.overrides)?;
     if !overrides.is_null() {
         composer.push_cli(overrides);
     }
 
     // Merge all layers into the final configuration.
-    let config =
+    let merged_config =
         AppConfig::merge_from_layers(composer.layers()).map_err(ConfigError::OrthoConfig)?;
+    let mut config = merged_config;
+    config.normalize_and_validate(options.command_intent)?;
 
     Ok(config)
 }
@@ -190,9 +198,9 @@ fn discover_config_path(enabled: bool) -> Option<Utf8PathBuf> {
 }
 
 /// Build a JSON value containing host overrides.
-fn build_overrides(overrides: &ConfigOverrides) -> serde_json::Value {
+fn build_overrides(overrides: &ConfigOverrides) -> Result<serde_json::Value> {
     if overrides.is_empty() {
-        return serde_json::Value::Null;
+        return Ok(serde_json::Value::Null);
     }
 
     let mut json_overrides = serde_json::Map::new();
@@ -208,5 +216,29 @@ fn build_overrides(overrides: &ConfigOverrides) -> serde_json::Value {
         json_overrides.insert("image".to_owned(), serde_json::Value::String(image.clone()));
     }
 
-    serde_json::Value::Object(json_overrides)
+    if overrides.agent_kind.is_some() || overrides.agent_mode.is_some() {
+        let mut agent = serde_json::Map::new();
+
+        if let Some(kind) = overrides.agent_kind {
+            agent.insert(
+                "kind".to_owned(),
+                serde_json::to_value(kind).map_err(|error| ConfigError::ParseError {
+                    message: format!("failed to serialize agent kind override: {error}"),
+                })?,
+            );
+        }
+
+        if let Some(mode) = overrides.agent_mode {
+            agent.insert(
+                "mode".to_owned(),
+                serde_json::to_value(mode).map_err(|error| ConfigError::ParseError {
+                    message: format!("failed to serialize agent mode override: {error}"),
+                })?,
+            );
+        }
+
+        json_overrides.insert("agent".to_owned(), serde_json::Value::Object(agent));
+    }
+
+    Ok(serde_json::Value::Object(json_overrides))
 }

@@ -7,6 +7,8 @@
 
 use camino::Utf8PathBuf;
 
+use crate::config::{AgentKind, AgentMode, CommandIntent};
+
 /// High-precedence configuration overrides supplied by the host application.
 ///
 /// These overrides are applied after configuration files and environment
@@ -18,13 +20,22 @@ pub struct ConfigOverrides {
 
     /// Sandbox container image reference.
     pub image: Option<String>,
+
+    /// Agent kind override supplied by the host adapter.
+    pub agent_kind: Option<AgentKind>,
+
+    /// Agent mode override supplied by the host adapter.
+    pub agent_mode: Option<AgentMode>,
 }
 
 impl ConfigOverrides {
     /// Returns whether no overrides are present.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.engine_socket.is_none() && self.image.is_none()
+        self.engine_socket.is_none()
+            && self.image.is_none()
+            && self.agent_kind.is_none()
+            && self.agent_mode.is_none()
     }
 }
 
@@ -48,6 +59,9 @@ pub struct ConfigLoadOptions {
 
     /// High-precedence overrides supplied by the host application.
     pub overrides: ConfigOverrides,
+
+    /// Command intent used for semantic validation after layer merging.
+    pub command_intent: CommandIntent,
 }
 
 impl Default for ConfigLoadOptions {
@@ -56,6 +70,7 @@ impl Default for ConfigLoadOptions {
             config_path_hint: None,
             discover_config: true,
             overrides: ConfigOverrides::default(),
+            command_intent: CommandIntent::Any,
         }
     }
 }
