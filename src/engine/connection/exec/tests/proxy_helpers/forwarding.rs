@@ -10,7 +10,7 @@ use super::super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_i
 use super::*;
 
 #[rstest]
-fn protocol_proxy_forwards_stdin_bytes_and_shutdowns_input(runtime: RuntimeFixture) {
+fn protocol_proxy_forwards_stdin_bytes_and_shuts_down_input(runtime: RuntimeFixture) {
     let host_stdout = RecordingWriter::new();
     let host_stderr = RecordingWriter::new();
     let container_input = RecordingInputWriter::new();
