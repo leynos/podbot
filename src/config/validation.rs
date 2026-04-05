@@ -111,7 +111,7 @@ fn is_intent_legal(intent: CommandIntent, mode: AgentMode) -> bool {
     match intent {
         CommandIntent::Any => true,
         CommandIntent::Run => mode == AgentMode::Podbot,
-        CommandIntent::Host => mode != AgentMode::Podbot,
+        CommandIntent::Host => matches!(mode, AgentMode::CodexAppServer | AgentMode::Acp),
     }
 }
 
@@ -189,14 +189,13 @@ fn validate_host_mount_workspace(config: &AppConfig) -> Result<()> {
         );
     }
 
-    let default_container_path = default_host_mount_container_path();
-    let container_path = config
-        .workspace
-        .container_path
-        .as_ref()
-        .unwrap_or(&default_container_path);
+    // Validate container_path absoluteness; apply_dependent_defaults ensures it's set
+    let is_absolute = config.workspace.container_path.as_ref().map_or_else(
+        || default_host_mount_container_path().is_absolute(),
+        |p| p.is_absolute(),
+    );
 
-    if !container_path.is_absolute() {
+    if !is_absolute {
         return invalid_value(
             "workspace.container_path",
             "workspace.container_path must be an absolute container path",
