@@ -546,6 +546,38 @@ Verification notes:
 3. Compare permission bits for a representative file between host and
    container, for example, with `stat` on each side.
 
+### Git identity configuration
+
+After creating the container and injecting credentials, podbot configures
+Git identity inside the container by reading the host's `user.name` and
+`user.email` from Git configuration and executing `git config --global`
+within the container for each present field.
+
+**Behaviour:**
+
+- If both `user.name` and `user.email` are configured on the host, both
+  are applied to the container.
+- If only one field is configured, the present field is applied and a
+  warning is emitted for the missing field.
+- If neither field is configured, a warning is emitted and the container
+  uses its default Git identity. Agent execution continues normally.
+- If the `git config --global` command fails inside the container (for
+  example, because `git` is not installed), a warning is emitted. The
+  failure does not prevent agent execution from proceeding.
+
+This step requires no user configuration. Podbot reads the identity from
+the host's Git configuration automatically using `git config --get`.
+
+**Possible warning messages:**
+
+| Warning                                                | Cause                                      |
+| ------------------------------------------------------ | ------------------------------------------ |
+| "host Git user.name is not configured; skipping"       | No `user.name` in host Git configuration   |
+| "host Git user.email is not configured; skipping"      | No `user.email` in host Git configuration  |
+| "no Git identity configured on the host"               | Neither `user.name` nor `user.email` found |
+| "failed to create exec for git config user.name: ..." | Container exec failed for name field       |
+| "failed to create exec for git config user.email: ..." | Container exec failed for email field      |
+
 ## Security model
 
 Podbot's security model is based on capability-based containment:

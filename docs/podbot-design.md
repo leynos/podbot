@@ -611,6 +611,48 @@ or whitespace-only, the operation fails with a semantic
 resolved layered configuration (`AppConfig.image`) at request-construction
 time, so this validation happens before any engine create call is attempted.
 
+## Git identity configuration
+
+After container creation and credential injection, podbot configures Git
+identity within the container so that commits made by agents carry the
+correct author information. This corresponds to Step 3 in the execution
+flow above.
+
+### Reading host identity
+
+The host Git identity is read by invoking `git config --get user.name` and
+`git config --get user.email` as subprocesses. This approach respects the
+full Git configuration precedence chain (system, global, local, worktree,
+command-line, includes, and conditional includes) without reimplementing
+Git's configuration resolution logic.
+
+The reading is abstracted behind a `GitIdentityReader` trait so that tests
+can inject deterministic values without depending on the host Git
+installation.
+
+### Applying identity to the container
+
+For each present field, podbot executes `git config --global user.<field>
+<value>` within the container using the existing `ContainerExecClient`
+trait seam. The commands run in detached mode with `tty = false`.
+
+### Graceful degradation
+
+Missing identity fields produce warnings rather than errors. The following
+cases are handled:
+
+- **Neither field configured**: a single warning is emitted and no exec
+  calls are made. Agent execution continues normally.
+- **One field missing**: the present field is applied; a warning is emitted
+  for the absent field.
+- **Container exec failure**: each field is applied independently. If one
+  exec fails, the other is still attempted. Failures are reported as
+  warnings rather than aborting orchestration.
+
+This design ensures that operators without Git configuration (such as CI
+environments where identity is managed externally) are not blocked from
+using podbot.
+
 ## Error handling
 
 Podbot defines semantic error enums in `src/error.rs` for configuration,
