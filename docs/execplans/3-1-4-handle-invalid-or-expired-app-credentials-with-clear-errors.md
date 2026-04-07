@@ -129,8 +129,8 @@ Retry after the service recovers.
 
 ## Progress
 
-- [ ] Draft ExecPlan.
-- [ ] Investigate `octocrab::Error` structure for HTTP status code extraction.
+- [x] Draft ExecPlan.
+- [x] Investigate `octocrab::Error` structure for HTTP status code extraction.
 - [ ] Extract HTTP error classification function in `src/github/mod.rs`.
 - [ ] Split `src/github/tests.rs` if at line budget.
 - [ ] Add unit tests for error classification.
@@ -144,11 +144,26 @@ Retry after the service recovers.
 
 ## Surprises and discoveries
 
-(To be filled during implementation.)
+- Octocrab v0.49.5's `Error::GitHub` variant wraps a `Box<GitHubError>`
+  with a **public** `status_code: http::StatusCode` field. No string
+  parsing is needed — status codes are directly accessible via pattern
+  matching.
 
 ## Decision log
 
-(To be filled during implementation.)
+- **2026-04-07 — Status code extraction strategy:** Use direct pattern
+  matching on `octocrab::Error::GitHub { source, .. }` to access
+  `source.status_code`. This is type-safe, idiomatic, and robust
+  against display format changes. The `#[non_exhaustive]` attribute
+  means a wildcard arm is needed, which aligns with the "Other /
+  unexpected" classification category. String parsing rejected as
+  unnecessary.
+- **2026-04-07 — Dev-dependencies for test construction:** Added `http`
+  and `snafu` as dev-dependencies to construct `octocrab::Error::GitHub`
+  variants in unit tests. Both crates are already in the dependency
+  graph (transitive via octocrab), so no new code is introduced. This
+  is strictly for test support — the production classifier does not
+  require direct access to these crates.
 
 ## Context and orientation
 

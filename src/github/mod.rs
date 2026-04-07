@@ -105,6 +105,86 @@ pub fn build_app_client(app_id: u64, private_key: EncodingKey) -> Result<Octocra
         })
 }
 
+/// Classify a GitHub API error into an actionable authentication failure.
+///
+/// Extracts the HTTP status code from the Octocrab error (when available)
+/// and produces a targeted error message with remediation hints. The raw
+/// error is always preserved for debugging.
+fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
+    match error {
+        octocrab::Error::GitHub { ref source, .. } => {
+            let code = source.status_code.as_u16();
+            let raw = format!("{error}");
+            let msg = classify_by_status(code, &source.message, &raw);
+            GitHubError::AuthenticationFailed { message: msg }
+        }
+        _ => GitHubError::AuthenticationFailed {
+            message: format!(
+                concat!(
+                    "failed to validate GitHub App credentials: {error}. ",
+                    "Hint: Check network connectivity and DNS resolution. ",
+                    "The GitHub API endpoint may be unreachable.",
+                ),
+                error = error,
+            ),
+        },
+    }
+}
+
+/// Format a classified message for a known HTTP status code.
+///
+/// `raw_message` is the GitHub API message body (from the response JSON).
+/// `full_error` is the complete `Display` output from the Octocrab error,
+/// used only for the catch-all branch.
+fn classify_by_status(code: u16, raw_message: &str, full_error: &str) -> String {
+    match code {
+        401 => format!(
+            concat!(
+                "credentials rejected (HTTP 401). ",
+                "Hint: The private key may not match the App, or the App may have been ",
+                "suspended. Verify the App ID and regenerate the private key from the ",
+                "GitHub App settings page. If the system clock is significantly skewed, ",
+                "JWT validation will also fail. Raw error: {raw}",
+            ),
+            raw = raw_message,
+        ),
+        403 => format!(
+            concat!(
+                "insufficient permissions (HTTP 403). ",
+                "Hint: The App may lack the required permissions. Check the App's ",
+                "permission settings in GitHub. Raw error: {raw}",
+            ),
+            raw = raw_message,
+        ),
+        404 => format!(
+            concat!(
+                "App not found (HTTP 404). ",
+                "Hint: Verify that github.app_id is correct. The App may have been ",
+                "deleted. Raw error: {raw}",
+            ),
+            raw = raw_message,
+        ),
+        500..=599 => format!(
+            concat!(
+                "GitHub API unavailable (HTTP {code}). ",
+                "Hint: Check https://www.githubstatus.com for outage information. ",
+                "Retry after the service recovers. Raw error: {raw}",
+            ),
+            code = code,
+            raw = raw_message,
+        ),
+        _ => format!(
+            concat!(
+                "unexpected response (HTTP {code}). ",
+                "Hint: Check https://www.githubstatus.com for outage information. ",
+                "Raw error: {error}",
+            ),
+            code = code,
+            error = full_error,
+        ),
+    }
+}
+
 /// Trait for GitHub App client operations.
 ///
 /// This trait abstracts the Octocrab client to enable testing without
@@ -143,9 +223,7 @@ impl GitHubAppClient for OctocrabAppClient {
             self.client
                 .get::<(), _, ()>("/app", None)
                 .await
-                .map_err(|error| GitHubError::AuthenticationFailed {
-                    message: format!("failed to validate GitHub App credentials: {error}"),
-                })?;
+                .map_err(classify_github_api_error)?;
             Ok(())
         })
     }
@@ -292,5 +370,7 @@ fn read_key_file(
     Ok(contents)
 }
 
+#[cfg(test)]
+mod credential_error_tests;
 #[cfg(test)]
 mod tests;
