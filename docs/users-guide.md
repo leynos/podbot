@@ -631,6 +631,52 @@ fn run_command(
 }
 ```
 
+### Library embedding
+
+Podbot can be used as a library dependency without the CLI adapter layer.
+The `cli` Cargo feature controls the visibility of the `podbot::cli` module,
+which contains Clap parse types. This feature is enabled by default.
+
+To depend on Podbot as a library without the CLI types:
+
+```toml
+[dependencies]
+podbot = { version = "0.1.0", default-features = false }
+```
+
+With this configuration, the `podbot::cli` module is not compiled and the
+consumer can use the library without interacting with Clap types directly.
+
+**Note:** The `clap` crate remains a transitive dependency through
+`ortho_config` at present, so it is still pulled into the dependency tree.
+The feature flag controls module visibility, not the `clap` dependency itself.
+
+#### Stable modules
+
+The following modules are part of the stable public API:
+
+- `podbot::api` — orchestration functions (`exec`, `run_agent`,
+  `list_containers`, `stop_container`, `run_token_daemon`)
+- `podbot::config` — configuration types and loaders (`AppConfig`,
+  `ConfigLoadOptions`, `load_config`)
+- `podbot::engine` — container engine types and traits
+  (`ContainerExecClient`, `EngineConnector`, `ExecRequest`)
+- `podbot::error` — semantic error hierarchy (`PodbotError`, `ConfigError`,
+  `ContainerError`)
+
+#### Internal modules
+
+The following modules are public but internal and subject to change:
+
+- `podbot::github` — GitHub App authentication types
+
+#### Adapter modules
+
+The following modules are public but gated behind Cargo features:
+
+- `podbot::cli` — Clap parse types (requires the `cli` feature, enabled by
+  default)
+
 ## Development
 
 ### Running tests

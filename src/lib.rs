@@ -15,15 +15,30 @@
 //! # Modules
 //!
 //! - [`api`]: Orchestration API for run, exec, stop, ps, and token daemon commands
-//! - [`cli`]: `Clap` parse types for the `podbot` binary (CLI adapter layer)
+//! - [`cli`]: `Clap` parse types for the `podbot` binary (CLI adapter layer,
+//!   requires the `cli` feature, enabled by default)
 //! - [`config`]: Configuration system with layered precedence (defaults < file < env < host overrides)
 //! - [`engine`]: Container engine connection and management
 //! - [`error`]: Semantic error types for the application
 //! - [`github`]: GitHub App authentication (internal, subject to change)
 
 pub mod api;
+#[cfg(feature = "cli")]
 pub mod cli;
 pub mod config;
 pub mod engine;
 pub mod error;
 pub mod github;
+
+#[cfg(test)]
+mod tests {
+    /// Verify the `cli` module is available when the `cli` feature is enabled.
+    ///
+    /// This is a compile-time proof: if the test compiles, the module is
+    /// accessible. The test body is intentionally minimal.
+    #[cfg(feature = "cli")]
+    #[test]
+    fn cli_module_is_available_with_feature() {
+        assert!(!std::any::type_name::<crate::cli::Cli>().is_empty());
+    }
+}

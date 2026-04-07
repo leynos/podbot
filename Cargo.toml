@@ -7,6 +7,15 @@ description = "A sandboxed execution environment for running AI coding agents"
 license = "MIT"
 repository = "https://github.com/leynos/podbot"
 
+[features]
+default = ["cli"]
+cli = []
+
+[[bin]]
+name = "podbot"
+path = "src/main.rs"
+required-features = ["cli"]
+
 [dependencies]
 # Async runtime
 tokio = { version = "1.49.0", features = ["full"] }

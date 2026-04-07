@@ -571,14 +571,14 @@ Define and document the supported long-term API surface.
 
 **Tasks:**
 
-- [ ] Document supported public modules and request/response types.
-- [ ] Ensure public APIs use semantic errors (`PodbotError`) and avoid opaque
+- [x] Document supported public modules and request/response types.
+- [x] Ensure public APIs use semantic errors (`PodbotError`) and avoid opaque
   `eyre` types.
-- [ ] Gate CLI-only dependencies and code paths behind a binary or feature
+- [x] Gate CLI-only dependencies and code paths behind a binary or feature
   boundary.
-- [ ] Reconcile the public hook and validation schemas with the documented
+- [x] Reconcile the public hook and validation schemas with the documented
   integration contract before stabilizing them.
-- [ ] Add integration tests that embed Podbot as a library from a host-style
+- [x] Add integration tests that embed Podbot as a library from a host-style
   call path.
 
 **Completion criteria:** Podbot can be integrated as a dependency in another

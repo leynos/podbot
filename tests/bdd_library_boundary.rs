@@ -1,0 +1,38 @@
+//! Behavioural tests for library boundary stability.
+
+mod bdd_library_boundary_helpers;
+
+use bdd_library_boundary_helpers::{LibraryBoundaryState, library_boundary_state};
+use rstest_bdd_macros::scenario;
+
+#[scenario(
+    path = "tests/features/library_boundary.feature",
+    name = "Library consumer loads configuration without CLI types"
+)]
+fn library_loads_config(library_boundary_state: LibraryBoundaryState) {
+    let _ = library_boundary_state;
+}
+
+#[scenario(
+    path = "tests/features/library_boundary.feature",
+    name = "Library consumer executes a command via the API"
+)]
+fn library_exec_command(library_boundary_state: LibraryBoundaryState) {
+    let _ = library_boundary_state;
+}
+
+#[scenario(
+    path = "tests/features/library_boundary.feature",
+    name = "Library consumer receives semantic error for exec failure"
+)]
+fn library_exec_failure(library_boundary_state: LibraryBoundaryState) {
+    let _ = library_boundary_state;
+}
+
+#[scenario(
+    path = "tests/features/library_boundary.feature",
+    name = "Stub orchestration functions return success"
+)]
+fn stub_functions_succeed(library_boundary_state: LibraryBoundaryState) {
+    let _ = library_boundary_state;
+}
