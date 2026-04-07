@@ -27,3 +27,18 @@ Feature: Protocol byte proxying
     And host stdout write fails
     When the protocol proxy runs
     Then the protocol proxy fails with an exec error
+
+  Scenario: Protocol proxy maintains stream purity through startup to shutdown
+    Given container stdout emits startup-message
+    And container stdout emits steady-state-data
+    And the output stream ends
+    When the protocol proxy runs
+    Then host stdout concatenates startup-message and steady-state-data
+    And host stdout contains no prefix or suffix bytes
+
+  Scenario: Protocol proxy maintains purity when stream errors occur
+    Given container stdout emits partial-output
+    And the daemon stream fails with an error
+    When the protocol proxy runs
+    Then the protocol proxy fails with an exec error
+    And host stdout contains only partial-output without error messages

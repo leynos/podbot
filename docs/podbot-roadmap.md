@@ -159,7 +159,7 @@ Attach a terminal to the agent process for interactive sessions.
 **Completion criteria:** Interactive sessions work with proper terminal
 handling. Resize events propagate correctly. Exit codes return accurately.
 
-### Step 2.5: Protocol-safe execution (stdio proxy)
+### Step 2.5: Protocol-safe execution (stdio proxy) ✓
 
 Provide non-TTY execution for app-server hosting protocols.
 
@@ -168,15 +168,15 @@ Provide non-TTY execution for app-server hosting protocols.
 - [x] Implement exec attachment with `tty = false` enforced.
 - [x] Implement byte-stream proxy loops: stdin -> container stdin, container
   stdout -> host stdout, and container stderr -> host stderr.
-- [ ] Keep proxy buffering bounded, so hosted protocols can apply backpressure.
-- [ ] Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
-- [ ] Add lifecycle stream-purity tests for startup, steady-state, shutdown, and
+- [x] Keep proxy buffering bounded, so hosted protocols can apply backpressure.
+- [x] Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
+- [x] Add lifecycle stream-purity tests for startup, steady-state, shutdown, and
   error paths.
-- [ ] Add a regression test asserting zero stdout bytes before the first proxied
+- [x] Add a regression test asserting zero stdout bytes before the first proxied
   protocol byte and after the final proxied byte.
 
 **Completion criteria:** Hosting sessions run without TTY framing, preserve
-protocol byte streams, and keep stdout free from Podbot diagnostics.
+protocol byte streams, and keep stdout free from Podbot diagnostics. ✓
 
 ### Step 2.6: ACP capability masking enforcement
 

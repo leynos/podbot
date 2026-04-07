@@ -183,7 +183,7 @@ fn configure_start_exec_expectation(
                     Some(bollard::exec::StartExecOptions {
                         detach: false,
                         tty: false,
-                        output_capacity: None
+                        output_capacity: Some(65_536)
                     })
                 );
                 let output_stream = stream::iter(vec![Ok(LogOutput::StdOut {

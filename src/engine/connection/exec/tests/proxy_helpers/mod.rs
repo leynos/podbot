@@ -2,6 +2,7 @@
 
 mod error_mapping;
 mod forwarding;
+mod lifecycle_purity;
 mod routing;
 
 use std::io;

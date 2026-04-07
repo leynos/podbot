@@ -21,6 +21,13 @@ use crate::error::{ConfigError, ContainerError, PodbotError};
 
 pub(super) const EXEC_INSPECT_POLL_INTERVAL_MS: u64 = 100;
 
+/// Maximum bytes per `LogOutput` chunk from the daemon for protocol-mode exec
+/// sessions. This bounds the per-chunk memory consumption while reducing
+/// overhead compared to the default 8 KiB for large protocol messages. A 64 KiB
+/// capacity matches common JSON-RPC frame buffer sizes and aligns with the
+/// stdin/output buffer capacities used by the protocol proxy.
+const PROTOCOL_OUTPUT_CAPACITY: usize = 65_536;
+
 /// Boxed future type returned by [`ContainerExecClient::create_exec`].
 pub type CreateExecFuture<'a> =
     Pin<Box<dyn Future<Output = Result<CreateExecResults, BollardError>> + Send + 'a>>;
@@ -318,10 +325,14 @@ fn build_create_exec_options(request: &ExecRequest) -> CreateExecOptions<String>
 }
 
 const fn build_start_exec_options(request: &ExecRequest) -> StartExecOptions {
+    let output_capacity = match request.mode() {
+        ExecMode::Protocol => Some(PROTOCOL_OUTPUT_CAPACITY),
+        ExecMode::Attached | ExecMode::Detached => None,
+    };
     StartExecOptions {
         detach: !request.mode().is_attached(),
         tty: request.mode().is_attached() && request.tty(),
-        output_capacity: None,
+        output_capacity,
     }
 }
 

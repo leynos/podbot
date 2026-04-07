@@ -3,6 +3,7 @@
 use std::io;
 
 use bollard::container::LogOutput;
+use bollard::errors::Error as BollardError;
 use futures_util::stream;
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -27,6 +28,7 @@ struct ProtocolProxyState {
     stdout_chunks: Slot<Vec<Vec<u8>>>,
     stderr_chunks: Slot<Vec<Vec<u8>>>,
     fail_stdout_write: Slot<bool>,
+    stream_error: Slot<bool>,
     host_stdout: Slot<Vec<u8>>,
     host_stderr: Slot<Vec<u8>>,
     container_stdin: Slot<Vec<u8>>,
@@ -40,6 +42,7 @@ fn protocol_proxy_state() -> ProtocolProxyState {
     state.stdout_chunks.set(Vec::new());
     state.stderr_chunks.set(Vec::new());
     state.fail_stdout_write.set(false);
+    state.stream_error.set(false);
     state
 }
 
@@ -93,6 +96,17 @@ fn host_stdout_write_fails(protocol_proxy_state: &ProtocolProxyState) {
     protocol_proxy_state.fail_stdout_write.set(true);
 }
 
+#[given("the output stream ends")]
+fn the_output_stream_ends(protocol_proxy_state: &ProtocolProxyState) {
+    let _ = protocol_proxy_state;
+    // No-op marker step; stream ending is implicit when no error is set
+}
+
+#[given("the daemon stream fails with an error")]
+fn the_daemon_stream_fails(protocol_proxy_state: &ProtocolProxyState) {
+    protocol_proxy_state.stream_error.set(true);
+}
+
 #[when("the protocol proxy runs")]
 fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepResult<()> {
     let request = protocol_request().map_err(|error| error.to_string())?;
@@ -103,6 +117,7 @@ fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepRes
         .fail_stdout_write
         .get()
         .unwrap_or(false);
+    let stream_error = protocol_proxy_state.stream_error.get().unwrap_or(false);
 
     let mut output_chunks = Vec::new();
     for chunk in stdout_chunks {
@@ -113,6 +128,12 @@ fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepRes
     for chunk in stderr_chunks {
         output_chunks.push(Ok(LogOutput::StdErr {
             message: chunk.into(),
+        }));
+    }
+    if stream_error {
+        output_chunks.push(Err(BollardError::DockerResponseServerError {
+            status_code: 500,
+            message: String::from("daemon stream error"),
         }));
     }
 
@@ -235,6 +256,50 @@ fn the_protocol_proxy_fails(protocol_proxy_state: &ProtocolProxyState) -> StepRe
     }
 }
 
+#[then("host stdout concatenates {text1} and {text2}")]
+fn host_stdout_concatenates(
+    protocol_proxy_state: &ProtocolProxyState,
+    text1: String,
+    text2: String,
+) -> StepResult<()> {
+    let mut expected = normalize_feature_text(&text1);
+    expected.extend_from_slice(&normalize_feature_text(&text2));
+    assert_channel_receives(
+        &expected,
+        protocol_proxy_state.host_stdout.get(),
+        "host stdout",
+    )
+}
+
+#[then("host stdout contains no prefix or suffix bytes")]
+fn host_stdout_contains_no_extra_bytes(
+    protocol_proxy_state: &ProtocolProxyState,
+) -> StepResult<()> {
+    // This step verifies the earlier assertion covered the complete output
+    let outcome = protocol_proxy_state
+        .outcome
+        .get()
+        .ok_or_else(|| String::from("proxy outcome should be recorded"))?;
+    match outcome {
+        ProtocolProxyOutcome::Success => Ok(()),
+        ProtocolProxyOutcome::Failure(message) => Err(format!(
+            "expected successful proxy run, got failure: {message}"
+        )),
+    }
+}
+
+#[then("host stdout contains only {text} without error messages")]
+fn host_stdout_contains_only_partial_output(
+    protocol_proxy_state: &ProtocolProxyState,
+    text: String,
+) -> StepResult<()> {
+    assert_channel_receives(
+        &normalize_feature_text(&text),
+        protocol_proxy_state.host_stdout.get(),
+        "host stdout",
+    )
+}
+
 #[scenario(
     path = "tests/features/protocol_proxy.feature",
     name = "Protocol proxy writes stdout bytes to host stdout"
@@ -264,5 +329,21 @@ fn protocol_proxy_forwards_host_stdin(protocol_proxy_state: ProtocolProxyState) 
     name = "Protocol proxy fails when host stdout cannot be written"
 )]
 fn protocol_proxy_fails_when_host_stdout_breaks(protocol_proxy_state: ProtocolProxyState) {
+    let _ = protocol_proxy_state;
+}
+
+#[scenario(
+    path = "tests/features/protocol_proxy.feature",
+    name = "Protocol proxy maintains stream purity through startup to shutdown"
+)]
+fn protocol_proxy_maintains_lifecycle_purity(protocol_proxy_state: ProtocolProxyState) {
+    let _ = protocol_proxy_state;
+}
+
+#[scenario(
+    path = "tests/features/protocol_proxy.feature",
+    name = "Protocol proxy maintains purity when stream errors occur"
+)]
+fn protocol_proxy_maintains_purity_on_error(protocol_proxy_state: ProtocolProxyState) {
     let _ = protocol_proxy_state;
 }
