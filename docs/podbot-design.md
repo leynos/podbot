@@ -417,8 +417,28 @@ testing via mock clients without network calls.
 On success the function returns `Ok(())`. On failure it returns
 `GitHubError::PrivateKeyLoadFailed` if the key cannot be loaded, or
 `GitHubError::AuthenticationFailed` if the client cannot be built or GitHub
-rejects the credentials. Error messages include context such as "failed to
-validate GitHub App credentials: 401 Unauthorized".
+rejects the credentials.
+
+#### Error classification
+
+When GitHub API validation fails, the implementation classifies HTTP errors by
+status code and provides actionable remediation hints. The classification
+strategy extracts the HTTP status code directly from `octocrab::Error::GitHub`
+via its public `status_code` field and maps it to user-facing messages:
+
+- HTTP 401: credentials rejected (wrong key or suspended App, with hints to
+  verify App ID, regenerate the key, and check for clock skew)
+- HTTP 403: insufficient permissions (with hint to check App permission
+  settings)
+- HTTP 404: App not found (with hint to verify the App ID)
+- HTTP 5xx: GitHub API unavailable (with hint to check service status and
+  retry)
+- Other HTTP codes and network errors: unexpected response (with hint to check
+  network connectivity and review the raw error message)
+
+All error messages preserve the raw error details for debugging while
+presenting classified, actionable guidance first. This design balances
+user-friendliness with diagnostic transparency.
 
 ### OrthoConfig
 

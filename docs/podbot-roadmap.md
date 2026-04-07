@@ -215,7 +215,7 @@ Configure Octocrab with GitHub App credentials.
 - [x] Load the private key from the configured path.
 - [x] Configure OctocrabBuilder with app_id and private_key.
 - [x] Validate credentials produce a valid App token on startup.
-- [ ] Handle invalid or expired App credentials with clear errors.
+- [x] Handle invalid or expired App credentials with clear errors.
 
 **Completion criteria:** App authentication succeeds against GitHub. Invalid
 credentials produce actionable error messages.

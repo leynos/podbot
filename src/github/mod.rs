@@ -110,6 +110,10 @@ pub fn build_app_client(app_id: u64, private_key: EncodingKey) -> Result<Octocra
 /// Extracts the HTTP status code from the Octocrab error (when available)
 /// and produces a targeted error message with remediation hints. The raw
 /// error is always preserved for debugging.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "required by map_err signature; error is consumed to extract status"
+)]
 fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
     match error {
         octocrab::Error::GitHub { ref source, .. } => {
