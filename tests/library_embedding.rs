@@ -303,6 +303,14 @@ fn exec_with_missing_exit_code_returns_container_error(runtime: tokio::runtime::
     );
 }
 
+// Note: resize_exec failure testing is omitted from library boundary tests because:
+// 1. resize_exec is only called when both tty=true AND stdio is a terminal, which requires
+//    complex mocking of the terminal size provider infrastructure.
+// 2. This failure path is already comprehensively tested in the unit tests at
+//    src/engine/connection/exec/tests.rs (see setup_resize_exec_failure test helper).
+// 3. The library boundary tests focus on API-level error propagation, and resize failures
+//    propagate the same ContainerError::ExecFailed variant as other exec failures.
+
 #[rstest]
 fn error_types_are_matchable() {
     let config_err: PodbotError = ConfigError::MissingRequired {
