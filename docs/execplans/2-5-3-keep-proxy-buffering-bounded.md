@@ -323,14 +323,13 @@ Required test cases (unit tests with `rstest`):
 Required BDD test scenarios (add to
 `tests/features/protocol_proxy.feature`):
 
-5. **Lifecycle purity scenario**: protocol proxy delivers only container output
+1. **Lifecycle purity scenario**: protocol proxy delivers only container output
    bytes to host stdout during a complete startup-to-shutdown lifecycle.
 
-6. **Error purity scenario**: protocol proxy fails without contaminating host
+2. **Error purity scenario**: protocol proxy fails without contaminating host
    stdout when the daemon stream errors.
 
-### Stage E: Add regression test for zero stdout bytes before/after proxied
-bytes
+### Stage E: Add regression test for zero stdout bytes before/after proxied bytes
 
 Add a focused regression test that asserts zero host stdout bytes before the
 first proxied protocol byte and after the final proxied byte.
@@ -451,7 +450,7 @@ pass.
 
 ## Decision log
 
-**2025-04-07: Chose 64 KiB for all buffer constants**
+### 2025-04-07: Chose 64 KiB for all buffer constants
 
 Set `STDIN_BUFFER_CAPACITY`, `OUTPUT_BUFFER_CAPACITY`, and
 `PROTOCOL_OUTPUT_CAPACITY` to 65,536 bytes (64 KiB). Rationale:

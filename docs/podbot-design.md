@@ -167,7 +167,7 @@ In app server hosting mode, Podbot's stream contract is strict:
   stdin is still open, Podbot cancels the stdin-forwarding task after a short
   grace period, so shutdown does not hang indefinitely on a live host reader.
 
-#### Bounded buffering implementation
+### Bounded buffering implementation
 
 Protocol-mode exec sessions use explicitly bounded buffers to ensure
 backpressure remains visible to the hosted server:

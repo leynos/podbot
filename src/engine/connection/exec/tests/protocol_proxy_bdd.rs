@@ -107,18 +107,11 @@ fn the_daemon_stream_fails(protocol_proxy_state: &ProtocolProxyState) {
     protocol_proxy_state.stream_error.set(true);
 }
 
-#[when("the protocol proxy runs")]
-fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepResult<()> {
-    let request = protocol_request().map_err(|error| error.to_string())?;
-    let host_stdin_bytes = protocol_proxy_state.host_stdin.get().unwrap_or_default();
-    let stdout_chunks = protocol_proxy_state.stdout_chunks.get().unwrap_or_default();
-    let stderr_chunks = protocol_proxy_state.stderr_chunks.get().unwrap_or_default();
-    let fail_stdout_write = protocol_proxy_state
-        .fail_stdout_write
-        .get()
-        .unwrap_or(false);
-    let stream_error = protocol_proxy_state.stream_error.get().unwrap_or(false);
-
+fn build_output_stream(
+    stdout_chunks: Vec<Vec<u8>>,
+    stderr_chunks: Vec<Vec<u8>>,
+    stream_error: bool,
+) -> Vec<Result<LogOutput, BollardError>> {
     let mut output_chunks = Vec::new();
     for chunk in stdout_chunks {
         output_chunks.push(Ok(LogOutput::StdOut {
@@ -136,6 +129,63 @@ fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepRes
             message: String::from("daemon stream error"),
         }));
     }
+    output_chunks
+}
+
+struct CapturedIo {
+    stdout: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    stderr: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    stdin: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+}
+
+fn store_proxy_results(
+    state: &ProtocolProxyState,
+    captured: &CapturedIo,
+    result: Result<(), PodbotError>,
+) {
+    state.host_stdout.set(
+        captured
+            .stdout
+            .lock()
+            .expect("writer mutex should not poison")
+            .clone(),
+    );
+    state.host_stderr.set(
+        captured
+            .stderr
+            .lock()
+            .expect("writer mutex should not poison")
+            .clone(),
+    );
+    state.container_stdin.set(
+        captured
+            .stdin
+            .lock()
+            .expect("writer mutex should not poison")
+            .clone(),
+    );
+
+    match result {
+        Ok(()) => state.outcome.set(ProtocolProxyOutcome::Success),
+        Err(error) => state
+            .outcome
+            .set(ProtocolProxyOutcome::Failure(error.to_string())),
+    }
+}
+
+#[when("the protocol proxy runs")]
+fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepResult<()> {
+    let request = protocol_request().map_err(|error| error.to_string())?;
+    let host_stdin_bytes = protocol_proxy_state.host_stdin.get().unwrap_or_default();
+    let stdout_chunks = protocol_proxy_state.stdout_chunks.get().unwrap_or_default();
+    let stderr_chunks = protocol_proxy_state.stderr_chunks.get().unwrap_or_default();
+    let fail_stdout_write = protocol_proxy_state
+        .fail_stdout_write
+        .get()
+        .unwrap_or(false);
+    let stream_error = protocol_proxy_state.stream_error.get().unwrap_or(false);
+
+    let output_chunks = build_output_stream(stdout_chunks, stderr_chunks, stream_error);
 
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| format!("failed to create runtime: {error}"))?;
@@ -149,9 +199,11 @@ fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepRes
     };
     let host_stderr = RecordingWriter::new();
     let container_stdin = RecordingInputWriter::new();
-    let captured_stdout = host_stdout.bytes.clone();
-    let captured_stderr = host_stderr.bytes.clone();
-    let captured_stdin = container_stdin.bytes.clone();
+    let captured = CapturedIo {
+        stdout: host_stdout.bytes.clone(),
+        stderr: host_stderr.bytes.clone(),
+        stdin: container_stdin.bytes.clone(),
+    };
 
     let result = runtime.block_on(run_protocol_session_with_io_async(
         &request,
@@ -160,33 +212,7 @@ fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepRes
         ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
     ));
 
-    protocol_proxy_state.host_stdout.set(
-        captured_stdout
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-    );
-    protocol_proxy_state.host_stderr.set(
-        captured_stderr
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-    );
-    protocol_proxy_state.container_stdin.set(
-        captured_stdin
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-    );
-
-    match result {
-        Ok(()) => protocol_proxy_state
-            .outcome
-            .set(ProtocolProxyOutcome::Success),
-        Err(error) => protocol_proxy_state
-            .outcome
-            .set(ProtocolProxyOutcome::Failure(error.to_string())),
-    }
+    store_proxy_results(protocol_proxy_state, &captured, result);
 
     Ok(())
 }
