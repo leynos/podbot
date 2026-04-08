@@ -38,22 +38,55 @@ fn failure_output() -> Output {
     }
 }
 
-#[rstest]
-fn read_identity_returns_both_when_configured() {
+fn make_runner(name_raw: Option<&str>, email_raw: Option<&str>) -> MockCommandRunner {
     let mut runner = MockCommandRunner::new();
-    runner
-        .expect_run_command()
-        .withf(|prog, args| prog == "git" && args == ["config", "--get", "user.name"])
-        .returning(|_, _| Ok(success_output("Alice\n")));
-    runner
-        .expect_run_command()
-        .withf(|prog, args| prog == "git" && args == ["config", "--get", "user.email"])
-        .returning(|_, _| Ok(success_output("alice@example.com\n")));
 
+    let name_out = match name_raw {
+        Some(s) => success_output(s),
+        None => failure_output(),
+    };
+    runner
+        .expect_run_command()
+        .withf(|_, args| args.contains(&"user.name"))
+        .returning(move |_, _| Ok(name_out.clone()));
+
+    let email_out = match email_raw {
+        Some(s) => success_output(s),
+        None => failure_output(),
+    };
+    runner
+        .expect_run_command()
+        .withf(|_, args| args.contains(&"user.email"))
+        .returning(move |_, _| Ok(email_out.clone()));
+
+    runner
+}
+
+#[rstest]
+#[case(
+    Some("Alice\n"),
+    Some("alice@example.com\n"),
+    Some("Alice"),
+    Some("alice@example.com")
+)]
+#[case(None, Some("bob@example.com\n"), None, Some("bob@example.com"))]
+#[case(
+    Some("  Alice  \n"),
+    Some("  alice@example.com  \n"),
+    Some("Alice"),
+    Some("alice@example.com")
+)]
+#[case(Some("  \n"), Some("  \n"), None, None)]
+fn read_identity_with_ok_responses(
+    #[case] name_raw: Option<&str>,
+    #[case] email_raw: Option<&str>,
+    #[case] expected_name: Option<&str>,
+    #[case] expected_email: Option<&str>,
+) {
+    let runner = make_runner(name_raw, email_raw);
     let identity = read_host_git_identity(&runner);
-
-    assert_eq!(identity.name.as_deref(), Some("Alice"));
-    assert_eq!(identity.email.as_deref(), Some("alice@example.com"));
+    assert_eq!(identity.name.as_deref(), expected_name);
+    assert_eq!(identity.email.as_deref(), expected_email);
 }
 
 #[rstest]
@@ -62,55 +95,6 @@ fn read_identity_returns_none_when_git_not_installed() {
     runner
         .expect_run_command()
         .returning(|_, _| Err(io::Error::new(io::ErrorKind::NotFound, "not found")));
-
-    let identity = read_host_git_identity(&runner);
-
-    assert!(identity.name.is_none());
-    assert!(identity.email.is_none());
-}
-
-#[rstest]
-fn read_identity_returns_none_for_unconfigured_fields() {
-    let mut runner = MockCommandRunner::new();
-    runner
-        .expect_run_command()
-        .withf(|_, args| args.contains(&"user.name"))
-        .returning(|_, _| Ok(failure_output()));
-    runner
-        .expect_run_command()
-        .withf(|_, args| args.contains(&"user.email"))
-        .returning(|_, _| Ok(success_output("bob@example.com\n")));
-
-    let identity = read_host_git_identity(&runner);
-
-    assert!(identity.name.is_none());
-    assert_eq!(identity.email.as_deref(), Some("bob@example.com"));
-}
-
-#[rstest]
-fn read_identity_trims_whitespace() {
-    let mut runner = MockCommandRunner::new();
-    runner
-        .expect_run_command()
-        .withf(|_, args| args.contains(&"user.name"))
-        .returning(|_, _| Ok(success_output("  Alice  \n")));
-    runner
-        .expect_run_command()
-        .withf(|_, args| args.contains(&"user.email"))
-        .returning(|_, _| Ok(success_output("  alice@example.com  \n")));
-
-    let identity = read_host_git_identity(&runner);
-
-    assert_eq!(identity.name.as_deref(), Some("Alice"));
-    assert_eq!(identity.email.as_deref(), Some("alice@example.com"));
-}
-
-#[rstest]
-fn read_identity_returns_none_for_empty_output() {
-    let mut runner = MockCommandRunner::new();
-    runner
-        .expect_run_command()
-        .returning(|_, _| Ok(success_output("  \n")));
 
     let identity = read_host_git_identity(&runner);
 

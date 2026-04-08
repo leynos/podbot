@@ -55,6 +55,71 @@ fn failure_output() -> Output {
     }
 }
 
+fn setup_mock_host_runner(
+    host_name: &Option<String>,
+    host_email: &Option<String>,
+) -> MockHostRunner {
+    let mut host_runner = MockHostRunner::new();
+
+    match host_name {
+        Some(name) => {
+            let name_clone = name.clone();
+            host_runner
+                .expect_run_command()
+                .withf(|_, args| args.contains(&"user.name"))
+                .returning(move |_, _| Ok(success_output(&format!("{name_clone}\n"))));
+        }
+        None => {
+            host_runner
+                .expect_run_command()
+                .withf(|_, args| args.contains(&"user.name"))
+                .returning(|_, _| Ok(failure_output()));
+        }
+    }
+
+    match host_email {
+        Some(email) => {
+            let email_clone = email.clone();
+            host_runner
+                .expect_run_command()
+                .withf(|_, args| args.contains(&"user.email"))
+                .returning(move |_, _| Ok(success_output(&format!("{email_clone}\n"))));
+        }
+        None => {
+            host_runner
+                .expect_run_command()
+                .withf(|_, args| args.contains(&"user.email"))
+                .returning(|_, _| Ok(failure_output()));
+        }
+    }
+
+    host_runner
+}
+
+fn setup_mock_exec_client(should_fail: bool) -> MockExecClient {
+    let mut exec_client = MockExecClient::new();
+
+    exec_client
+        .expect_create_exec()
+        .returning(|_, _, _| Box::pin(async { Ok(String::from("exec-1")) }));
+    exec_client
+        .expect_start_exec()
+        .returning(|_, _| Box::pin(async { Ok(()) }));
+
+    let exit_code = if should_fail { 1 } else { 0 };
+    exec_client.expect_inspect_exec().returning(move |_| {
+        Box::pin(async move {
+            Ok(bollard::models::ExecInspectResponse {
+                exit_code: Some(exit_code),
+                running: Some(false),
+                ..Default::default()
+            })
+        })
+    });
+
+    exec_client
+}
+
 #[given("host git user.name is {name}")]
 fn host_git_name_is_name(git_identity_state: &GitIdentityState, name: String) {
     git_identity_state.host_name.set(Some(name));
@@ -107,75 +172,12 @@ fn git_identity_configuration_is_requested(
         .get()
         .ok_or_else(|| String::from("should_fail_exec not set"))?;
 
-    // Setup mock host runner
-    let mut host_runner = MockHostRunner::new();
-
-    if let Some(name) = &host_name {
-        let name_clone = name.clone();
-        host_runner
-            .expect_run_command()
-            .withf(|_, args| args.contains(&"user.name"))
-            .returning(move |_, _| Ok(success_output(&format!("{name_clone}\n"))));
-    } else {
-        host_runner
-            .expect_run_command()
-            .withf(|_, args| args.contains(&"user.name"))
-            .returning(|_, _| Ok(failure_output()));
-    }
-
-    if let Some(email) = &host_email {
-        let email_clone = email.clone();
-        host_runner
-            .expect_run_command()
-            .withf(|_, args| args.contains(&"user.email"))
-            .returning(move |_, _| Ok(success_output(&format!("{email_clone}\n"))));
-    } else {
-        host_runner
-            .expect_run_command()
-            .withf(|_, args| args.contains(&"user.email"))
-            .returning(|_, _| Ok(failure_output()));
-    }
-
-    // Setup mock exec client
-    let mut exec_client = MockExecClient::new();
-
-    if should_fail {
-        exec_client
-            .expect_create_exec()
-            .returning(|_, _, _| Box::pin(async { Ok(String::from("exec-1")) }));
-        exec_client
-            .expect_start_exec()
-            .returning(|_, _| Box::pin(async { Ok(()) }));
-        exec_client.expect_inspect_exec().returning(|_| {
-            Box::pin(async {
-                Ok(bollard::models::ExecInspectResponse {
-                    exit_code: Some(1),
-                    running: Some(false),
-                    ..Default::default()
-                })
-            })
-        });
-    } else {
-        exec_client
-            .expect_create_exec()
-            .returning(|_, _, _| Box::pin(async { Ok(String::from("exec-1")) }));
-        exec_client
-            .expect_start_exec()
-            .returning(|_, _| Box::pin(async { Ok(()) }));
-        exec_client.expect_inspect_exec().returning(|_| {
-            Box::pin(async {
-                Ok(bollard::models::ExecInspectResponse {
-                    exit_code: Some(0),
-                    running: Some(false),
-                    ..Default::default()
-                })
-            })
-        });
-    }
+    let host_runner = setup_mock_host_runner(&host_name, &host_email);
+    let exec_client = setup_mock_exec_client(should_fail);
 
     // Create runtime and execute
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| format!("Failed to create runtime: {e}"))?;
+    let runtime =
+        tokio::runtime::Runtime::new().map_err(|e| format!("Failed to create runtime: {e}"))?;
     let handle = runtime.handle().clone();
 
     let params = GitIdentityParams {

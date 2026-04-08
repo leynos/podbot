@@ -6,7 +6,13 @@ pub mod steps;
 
 pub use state::{GitIdentityState, StepResult, git_identity_state};
 
-#[expect(unused_imports, reason = "step definitions used via rstest-bdd macro expansion")]
+#[expect(
+    unused_imports,
+    reason = "step definitions used via rstest-bdd macro expansion"
+)]
 pub use assertions::*;
-#[expect(unused_imports, reason = "step definitions used via rstest-bdd macro expansion")]
+#[expect(
+    unused_imports,
+    reason = "step definitions used via rstest-bdd macro expansion"
+)]
 pub use steps::*;
