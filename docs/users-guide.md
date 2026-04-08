@@ -615,8 +615,8 @@ The supported stable embedding boundary is:
 - `podbot::error`
 
 The `cli` module is optional behind the `cli` feature. Hidden compatibility
-modules such as `engine` and `github` are not part of the supported semver
-contract for embedders.
+modules such as `engine` and `GitHub` integration shims are not part of the
+supported semver contract for embedders.
 
 ### Available functions
 

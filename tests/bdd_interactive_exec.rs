@@ -1,6 +1,7 @@
 //! Behavioural tests for interactive container execution.
 
 mod bdd_interactive_exec_helpers;
+mod test_utils;
 
 use bdd_interactive_exec_helpers::{InteractiveExecState, interactive_exec_state};
 use rstest_bdd_macros::scenario;

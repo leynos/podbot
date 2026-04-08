@@ -39,10 +39,21 @@ impl From<ExecMode> for crate::engine::ExecMode {
 
 /// Stable request type for executing a command in a running container.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "ExecRequestDef")]
 pub struct ExecRequest {
     container: String,
     command: Vec<String>,
     mode: ExecMode,
+    tty: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExecRequestDef {
+    container: String,
+    command: Vec<String>,
+    #[serde(default = "default_exec_mode")]
+    mode: ExecMode,
+    #[serde(default)]
     tty: bool,
 }
 
@@ -136,6 +147,22 @@ impl ExecRequest {
     }
 }
 
+impl TryFrom<ExecRequestDef> for ExecRequest {
+    type Error = PodbotError;
+
+    fn try_from(value: ExecRequestDef) -> Result<Self, Self::Error> {
+        let request = Self::new(value.container, value.command)?
+            .with_mode(value.mode)
+            .with_tty(value.tty);
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+const fn default_exec_mode() -> ExecMode {
+    ExecMode::Attached
+}
+
 /// Reusable exec context for embedders that want to cache engine state.
 pub struct ExecContext {
     connector: Docker,
@@ -202,8 +229,15 @@ pub fn exec(config: &AppConfig, request: &ExecRequest) -> PodbotResult<CommandOu
     context.exec(request)
 }
 
-/// Execute a command using a pre-connected engine client.
-#[doc(hidden)]
+/// Execute a command using a pre-connected engine client and runtime handle.
+///
+/// This helper is intended for advanced embedders and test harnesses that
+/// already own a connector implementation and Tokio runtime. Callers that want
+/// the simpler stable surface should prefer [`exec`] or [`ExecContext`].
+///
+/// # Errors
+///
+/// Returns the same engine execution and request-conversion errors as [`exec`].
 pub fn exec_with_client<C: ContainerExecClient>(
     connector: &C,
     runtime_handle: &tokio::runtime::Handle,

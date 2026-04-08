@@ -10,6 +10,7 @@ repository = "https://github.com/leynos/podbot"
 [features]
 default = ["cli"]
 cli = ["dep:clap"]
+# Reserved opt-in gate for future unstable library surfaces from ADR 001.
 experimental = []
 
 [dependencies]

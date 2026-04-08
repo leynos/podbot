@@ -122,6 +122,37 @@ pub fn set_env_var(_guard: &EnvGuard<'_>, key: &str, value: &str) {
     }
 }
 
+const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
+
+/// RAII guard that disables stdin forwarding for exec integration tests.
+pub struct TestStdinForwardingGuard {
+    env_guard: EnvGuard<'static>,
+}
+
+impl TestStdinForwardingGuard {
+    /// Disable host stdin forwarding while holding the shared environment lock.
+    #[must_use]
+    pub fn disable() -> Self {
+        let env_guard = EnvGuard::lock();
+
+        set_env_var(&env_guard, DISABLE_STDIN_FORWARDING_ENV, "1");
+
+        Self { env_guard }
+    }
+}
+
+impl Drop for TestStdinForwardingGuard {
+    fn drop(&mut self) {
+        // SAFETY: `env_guard` keeps exclusive access to environment variables
+        // until the knob is removed during drop.
+        unsafe {
+            std::env::remove_var(DISABLE_STDIN_FORWARDING_ENV);
+        }
+
+        let _ = &self.env_guard;
+    }
+}
+
 /// Rstest fixture that provides a clean environment for tests.
 ///
 /// This fixture clears all `PODBOT_*` environment variables and returns a guard

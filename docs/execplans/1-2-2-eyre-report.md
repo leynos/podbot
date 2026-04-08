@@ -154,31 +154,31 @@ user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
    rg --hidden --line-number "unwrap\(|expect\(" src
    ```
 
-1. Update `src/main.rs` to use `eyre::Result<()>` at the boundary and keep
+2. Update `src/main.rs` to use `eyre::Result<()>` at the boundary and keep
    domain logic returning `podbot::error::Result<T>` if needed.
 
-2. If any unwrap/expect calls exist outside tests, replace them with error
+3. If any unwrap/expect calls exist outside tests, replace them with error
    returns or `?` propagation.
 
-3. Add rstest unit coverage for the eyre boundary in a suitable test module
+4. Add rstest unit coverage for the eyre boundary in a suitable test module
    (for example, `src/error.rs` or `tests/error_report.rs`). Use fixtures and
    parameterized cases for both happy and unhappy paths.
 
-4. Extend behavioural tests:
+5. Extend behavioural tests:
 
     - Update `tests/features/error_handling.feature` with scenarios that
       mention the report boundary.
     - Update `tests/bdd_error_handling.rs` to format `eyre::Report` values and
       assert user-visible messages.
 
-5. Update documentation:
+6. Update documentation:
 
     - `docs/podbot-design.md` for any new decisions about the error boundary.
     - `docs/users-guide.md` if user-facing error output changes.
 
-6. Mark Step 1.2 as done in `docs/podbot-roadmap.md`.
+7. Mark Step 1.2 as done in `docs/podbot-roadmap.md`.
 
-7. Run validation commands with logs (use tee + pipefail):
+8. Run validation commands with logs (use tee + pipefail):
 
    <!-- markdownlint-disable-next-line MD046 -->
 

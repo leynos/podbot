@@ -15,8 +15,7 @@ use rstest_bdd_macros::{given, when};
 
 use super::StepResult;
 use super::state::{OrchestrationResult, OrchestrationState};
-
-const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
+use crate::test_utils::TestStdinForwardingGuard;
 
 /// Invoke an orchestration operation and capture its outcome in state.
 fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F)
@@ -108,28 +107,6 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
         exec_with_client(&client, runtime.handle(), &request)
     });
     Ok(())
-}
-
-struct TestStdinForwardingGuard;
-
-impl TestStdinForwardingGuard {
-    fn disable() -> Self {
-        // SAFETY: the orchestration scenarios are serialized in their test
-        // binary before this process-wide test knob is mutated.
-        unsafe {
-            std::env::set_var(DISABLE_STDIN_FORWARDING_ENV, "1");
-        }
-        Self
-    }
-}
-
-impl Drop for TestStdinForwardingGuard {
-    fn drop(&mut self) {
-        // SAFETY: see `disable`; removal happens under the same serialization.
-        unsafe {
-            std::env::remove_var(DISABLE_STDIN_FORWARDING_ENV);
-        }
-    }
 }
 
 #[when("run orchestration is invoked")]

@@ -56,7 +56,7 @@ may execute every role, but the responsibilities should remain distinct.
   application boundary (`src/main.rs`) and must not appear in public library
   signatures.
 - Stable public types must not require importing `podbot::cli`,
-  `podbot::engine`, or `podbot::github`.
+  `podbot::engine`, or `podbot::github` (the GitHub integration module).
 - CLI-only dependencies and code paths must be gated behind a binary or Cargo
   feature boundary. A library embedder must be able to avoid the CLI surface.
 - The documented boundary in Architecture Decision Record (ADR) 001 is
@@ -111,7 +111,7 @@ may execute every role, but the responsibilities should remain distinct.
   `engine`.
 
 - Risk: `src/main.rs` currently imports
-  `podbot::github::validate_app_credentials` and
+  `podbot::github::validate_app_credentials` (GitHub App validation) and
   `podbot::engine::{EngineConnector, SocketResolver, ExecMode}` directly.
   Hiding those modules without a replacement seam will break the binary.
   Mitigation: add feature-gated CLI support paths or move the needed behaviour
@@ -156,8 +156,8 @@ may execute every role, but the responsibilities should remain distinct.
 ## Surprises & Discoveries
 
 - `src/lib.rs` currently exports `api`, `cli`, `config`, `engine`, `error`,
-  and `github` publicly. That is far broader than the intended long-term
-  library boundary.
+  and `github` (the GitHub integration module) publicly. That is far broader
+  than the intended long-term library boundary.
 - `Cargo.toml` currently lists `clap` in `[dependencies]`, so library builds
   always resolve CLI parsing code even though Step 5.3 requires a boundary.
 - `docs/users-guide.md` already has a "Library API" section, but the example
@@ -172,10 +172,11 @@ may execute every role, but the responsibilities should remain distinct.
   the long-term stable shape, but the currently implemented and documented
   surface is `podbot::api`. Step 5.3 must reconcile that mismatch instead of
   accidentally enshrining both.
-- Keeping `engine` and `github` physically public but `#[doc(hidden)]` avoids
-  detonating the existing internal test matrix in one step. The documented
-  stable surface is still `api`, `config`, and `error`; the hidden modules are
-  compatibility-only and explicitly unsupported for semver purposes.
+- Keeping `engine` and `github` (the GitHub integration) physically public but
+  `#[doc(hidden)]` avoids detonating the existing internal test matrix in one
+  step. The documented stable surface is still `api`, `config`, and `error`;
+  the hidden modules are compatibility-only and explicitly unsupported for
+  semver purposes.
 
 ## Decision Log
 
@@ -256,7 +257,7 @@ Current repository state that matters:
 
 - `src/lib.rs` exports every major module publicly.
 - `src/main.rs` is a thin adapter in principle, but it still depends directly
-  on `engine` and `github` public modules.
+  on `engine` and `github` (the GitHub integration) public modules.
 - `src/api/mod.rs` and `src/api/exec.rs` provide the current orchestration
   surface.
 - `src/error.rs` already defines `PodbotError` correctly, so this step should
@@ -290,7 +291,8 @@ The expected starting classification is:
   once their request/response types exist and are tested.
 - Experimental preview candidate: `podbot::hooks`, `podbot::validate`,
   possibly `podbot::session` and `podbot::mcp` if implemented only partially.
-- Internal only: `podbot::cli`, `podbot::engine`, `podbot::github`.
+- Internal only: `podbot::cli`, `podbot::engine`, `podbot::github` (the
+  GitHub integration module).
 
 Do not skip this audit. The implementation turn should begin by writing one or
 more red tests that describe the intended stable import paths and the modules

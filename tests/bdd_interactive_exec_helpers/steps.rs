@@ -11,10 +11,9 @@ use podbot::engine::{
 use rstest_bdd_macros::{given, when};
 
 use super::state::{ExecutionOutcome, InteractiveExecState};
+use crate::test_utils::TestStdinForwardingGuard;
 
 pub type StepResult<T> = Result<T, String>;
-
-const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
 
 mock! {
     #[derive(Debug)]
@@ -124,29 +123,6 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
     }
 
     Ok(())
-}
-
-struct TestStdinForwardingGuard;
-
-impl TestStdinForwardingGuard {
-    fn disable() -> Self {
-        // SAFETY: The `execution_is_requested` step is serialized within this
-        // test binary so the process-wide environment mutation cannot race with
-        // another interactive-exec scenario.
-        unsafe {
-            std::env::set_var(DISABLE_STDIN_FORWARDING_ENV, "1");
-        }
-        Self
-    }
-}
-
-impl Drop for TestStdinForwardingGuard {
-    fn drop(&mut self) {
-        // SAFETY: See `disable`; removal happens under the same serialized step.
-        unsafe {
-            std::env::remove_var(DISABLE_STDIN_FORWARDING_ENV);
-        }
-    }
 }
 
 fn configure_create_exec_expectation(client: &mut MockExecClient, should_fail: bool) {

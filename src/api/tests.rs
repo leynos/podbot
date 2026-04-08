@@ -122,33 +122,44 @@ fn exec_request_rejects_blank_executable() {
 }
 
 #[rstest]
-fn exec_with_client_maps_zero_exit_code_to_success() {
-    let base_request = ExecRequest::new("sandbox", vec![String::from("echo"), String::from("ok")])
-        .expect("request should be valid");
+#[case(0, vec![String::from("echo"), String::from("ok")], CommandOutcome::Success)]
+#[case(
+    42,
+    vec![String::from("false")],
+    CommandOutcome::CommandExit { code: 42 }
+)]
+fn exec_with_client_maps_exit_codes(
+    #[case] exit_code: i64,
+    #[case] command: Vec<String>,
+    #[case] expected: CommandOutcome,
+) {
+    let base_request = ExecRequest::new("sandbox", command).expect("request should be valid");
     let request = base_request.with_mode(ExecMode::Detached);
     let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
     let mut client = MockApiExecClient::new();
-    configure_exec_client(&mut client, request.mode(), 0);
+    configure_exec_client(&mut client, request.mode(), exit_code);
 
     let outcome = exec_with_client(&client, runtime.handle(), &request)
-        .expect("zero exit code should map to success");
+        .expect("exit code should map to a command outcome");
 
-    assert_eq!(outcome, CommandOutcome::Success);
+    assert_eq!(outcome, expected);
 }
 
 #[rstest]
-fn exec_with_client_maps_non_zero_exit_code() {
-    let base_request =
-        ExecRequest::new("sandbox", vec![String::from("false")]).expect("request should be valid");
-    let request = base_request.with_mode(ExecMode::Detached);
-    let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
-    let mut client = MockApiExecClient::new();
-    configure_exec_client(&mut client, request.mode(), 42);
+#[case(r#"{"container":"   ","command":["echo"]}"#, "container")]
+#[case(r#"{"container":"sandbox","command":[]}"#, "command")]
+#[case(r#"{"container":"sandbox","command":["   "]}"#, "command[0]")]
+fn exec_request_deserialization_reuses_validation(
+    #[case] payload: &str,
+    #[case] expected_field: &str,
+) {
+    let error = serde_json::from_str::<ExecRequest>(payload)
+        .expect_err("invalid payload should fail validation");
 
-    let outcome = exec_with_client(&client, runtime.handle(), &request)
-        .expect("non-zero exit code should map to a command outcome");
-
-    assert_eq!(outcome, CommandOutcome::CommandExit { code: 42 });
+    assert!(
+        error.to_string().contains(expected_field),
+        "expected error to mention {expected_field}, got: {error}"
+    );
 }
 
 #[rstest]

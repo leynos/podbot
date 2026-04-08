@@ -1,6 +1,7 @@
 //! Behavioural tests for command orchestration.
 
 mod bdd_orchestration_helpers;
+mod test_utils;
 
 use bdd_orchestration_helpers::{OrchestrationState, orchestration_state};
 use rstest_bdd_macros::scenario;
