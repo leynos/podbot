@@ -34,6 +34,9 @@ use tokio::time::timeout;
 use super::{ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
+#[cfg(not(test))]
+const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
+
 /// Host-side stdio handles used by the protocol byte proxy.
 pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     stdin: HostStdin,
@@ -77,8 +80,51 @@ pub(super) async fn run_protocol_session_async(
     output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
     input: Pin<Box<dyn AsyncWrite + Send>>,
 ) -> Result<(), PodbotError> {
-    let stdio = ProtocolProxyIo::new(tokio::io::stdin(), tokio::io::stdout(), tokio::io::stderr());
+    let stdio = ProtocolProxyIo::new(
+        default_host_stdin(),
+        tokio::io::stdout(),
+        tokio::io::stderr(),
+    );
     run_protocol_session_with_io_async(request, output, input, stdio).await
+}
+
+#[cfg(test)]
+fn default_host_stdin() -> tokio::io::Empty {
+    tokio::io::empty()
+}
+
+#[cfg(not(test))]
+fn default_host_stdin() -> DefaultHostStdin {
+    if stdin_forwarding_disabled_for_tests() {
+        DefaultHostStdin::Disabled(tokio::io::empty())
+    } else {
+        DefaultHostStdin::Live(tokio::io::stdin())
+    }
+}
+
+#[cfg(not(test))]
+enum DefaultHostStdin {
+    Live(tokio::io::Stdin),
+    Disabled(tokio::io::Empty),
+}
+
+#[cfg(not(test))]
+impl AsyncRead for DefaultHostStdin {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        match &mut *self {
+            Self::Live(stdin) => Pin::new(stdin).poll_read(cx, buf),
+            Self::Disabled(stdin) => Pin::new(stdin).poll_read(cx, buf),
+        }
+    }
+}
+
+#[cfg(not(test))]
+fn stdin_forwarding_disabled_for_tests() -> bool {
+    std::env::var_os(DISABLE_STDIN_FORWARDING_ENV).is_some()
 }
 
 /// Run a protocol exec session using caller-supplied host IO handles.
