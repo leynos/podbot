@@ -10,8 +10,10 @@
 //! [`crate::error::Result<CommandOutcome>`]. They do not print to
 //! stdout/stderr or call `std::process::exit`.
 
+mod configure_git_identity;
 mod exec;
 
+pub use configure_git_identity::{GitIdentityParams, configure_container_git_identity};
 pub use exec::{ExecParams, exec};
 
 use crate::config::AppConfig;

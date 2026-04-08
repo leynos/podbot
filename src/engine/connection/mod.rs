@@ -7,6 +7,7 @@
 mod create_container;
 mod error_classification;
 mod exec;
+mod git_identity;
 mod health_check;
 mod upload_credentials;
 
@@ -24,6 +25,10 @@ pub use create_container::{
 pub use exec::{
     ContainerExecClient, CreateExecFuture, ExecMode, ExecRequest, ExecResult, InspectExecFuture,
     ResizeExecFuture, StartExecFuture,
+};
+pub use git_identity::{
+    GitIdentityResult, HostCommandRunner, HostGitIdentity, SystemCommandRunner,
+    configure_git_identity, read_host_git_identity,
 };
 pub use upload_credentials::{
     ContainerUploader, CredentialUploadRequest, CredentialUploadResult, UploadToContainerFuture,
