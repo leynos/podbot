@@ -122,18 +122,14 @@ fn exec_request_rejects_blank_executable() {
 }
 
 #[rstest]
-#[case(0, vec![String::from("echo"), String::from("ok")], CommandOutcome::Success)]
-#[case(
-    42,
-    vec![String::from("false")],
-    CommandOutcome::CommandExit { code: 42 }
-)]
-fn exec_with_client_maps_exit_codes(
+#[case::zero_exit_code(0, CommandOutcome::Success)]
+#[case::non_zero_exit_code(42, CommandOutcome::CommandExit { code: 42 })]
+fn exec_with_client_maps_exit_code_to_outcome(
     #[case] exit_code: i64,
-    #[case] command: Vec<String>,
     #[case] expected: CommandOutcome,
 ) {
-    let base_request = ExecRequest::new("sandbox", command).expect("request should be valid");
+    let base_request = ExecRequest::new("sandbox", vec![String::from("echo"), String::from("ok")])
+        .expect("request should be valid");
     let request = base_request.with_mode(ExecMode::Detached);
     let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
     let mut client = MockApiExecClient::new();
