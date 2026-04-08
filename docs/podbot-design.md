@@ -929,7 +929,7 @@ breaking ways without a major version bump.
 |          |           | Provides `load_private_key`, `build_app_client`,                   |
 |          |           | `validate_app_credentials`, `GitHubAppClient` trait.               |
 | `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo  |
-|          |           | feature (enabled by default). Library-only consumers should set     |
+|          |           | feature (enabled by default). Library-only consumers should set    |
 |          |           | `default-features = false` to avoid the `clap` dependency.         |
 
 ### Planned API surfaces
