@@ -23,6 +23,20 @@ fn get_failure_message(state: &GitHubCredentialErrorsState) -> StepResult<String
     }
 }
 
+/// Assert that the failure message contains all expected substrings.
+fn assert_message_contains_all(
+    state: &GitHubCredentialErrorsState,
+    needles: &[&str],
+    description: &str,
+) -> StepResult<()> {
+    let message = get_failure_message(state)?;
+    if needles.iter().all(|n| message.contains(n)) {
+        Ok(())
+    } else {
+        Err(format!("expected {description} in: {message}"))
+    }
+}
+
 #[then("validation fails")]
 fn validation_fails(
     github_credential_errors_state: &GitHubCredentialErrorsState,
@@ -35,94 +49,86 @@ fn validation_fails(
 fn error_mentions_credentials_rejected(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
-    let message = get_failure_message(github_credential_errors_state)?;
-    if message.contains("credentials rejected") {
-        Ok(())
-    } else {
-        Err(format!("expected 'credentials rejected' in: {message}"))
-    }
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["credentials rejected"],
+        "'credentials rejected'",
+    )
 }
 
 #[then("the error includes a remediation hint")]
 fn error_includes_remediation_hint(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
-    let message = get_failure_message(github_credential_errors_state)?;
-    if message.contains("Hint:") && message.contains("regenerate") {
-        Ok(())
-    } else {
-        Err(format!("expected regeneration hint in: {message}"))
-    }
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["Hint:", "regenerate"],
+        "regeneration hint",
+    )
 }
 
 #[then("the error mentions not found")]
 fn error_mentions_not_found(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
-    let message = get_failure_message(github_credential_errors_state)?;
-    if message.contains("not found") {
-        Ok(())
-    } else {
-        Err(format!("expected 'not found' in: {message}"))
-    }
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["not found"],
+        "'not found'",
+    )
 }
 
 #[then("the error includes an app ID verification hint")]
 fn error_includes_app_id_hint(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
-    let message = get_failure_message(github_credential_errors_state)?;
-    if message.contains("github.app_id") {
-        Ok(())
-    } else {
-        Err(format!("expected 'github.app_id' hint in: {message}"))
-    }
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["github.app_id"],
+        "'github.app_id' hint",
+    )
 }
 
 #[then("the error mentions unavailable")]
 fn error_mentions_unavailable(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
-    let message = get_failure_message(github_credential_errors_state)?;
-    if message.contains("unavailable") {
-        Ok(())
-    } else {
-        Err(format!("expected 'unavailable' in: {message}"))
-    }
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["unavailable"],
+        "'unavailable'",
+    )
 }
 
 #[then("the error includes a status page hint")]
 fn error_includes_status_page_hint(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
-    let message = get_failure_message(github_credential_errors_state)?;
-    if message.contains("githubstatus.com") {
-        Ok(())
-    } else {
-        Err(format!("expected 'githubstatus.com' hint in: {message}"))
-    }
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["githubstatus.com"],
+        "'githubstatus.com' hint",
+    )
 }
 
 #[then("the error mentions permissions")]
 fn error_mentions_permissions(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
-    let message = get_failure_message(github_credential_errors_state)?;
-    if message.contains("permissions") {
-        Ok(())
-    } else {
-        Err(format!("expected 'permissions' in: {message}"))
-    }
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["permissions"],
+        "'permissions'",
+    )
 }
 
 #[then("the error includes a settings hint")]
 fn error_includes_settings_hint(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
-    let message = get_failure_message(github_credential_errors_state)?;
-    if message.contains("permission settings") {
-        Ok(())
-    } else {
-        Err(format!("expected 'permission settings' hint in: {message}"))
-    }
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["permission settings"],
+        "'permission settings' hint",
+    )
 }
