@@ -1,5 +1,7 @@
 //! Given/when/then steps for library boundary scenarios.
 
+use std::sync::Arc;
+
 use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
@@ -81,7 +83,7 @@ fn when_config_loader_called(library_boundary_state: &LibraryBoundaryState) -> S
             .set(ConfigResult::Ok(Box::new(config))),
         Err(e) => library_boundary_state
             .config_result
-            .set(ConfigResult::Err(e.to_string())),
+            .set(ConfigResult::Err(Arc::new(e))),
     }
     Ok(())
 }
@@ -158,7 +160,7 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
             .set(LibraryResult::Ok(outcome)),
         Err(e) => library_boundary_state
             .exec_result
-            .set(LibraryResult::Err(e.to_string())),
+            .set(LibraryResult::Err(Arc::new(e))),
     }
     Ok(())
 }
@@ -174,19 +176,19 @@ fn when_stubs_called(library_boundary_state: &LibraryBoundaryState) -> StepResul
 
     match run_agent(&config) {
         Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
-        Err(e) => results.push(LibraryResult::Err(e.to_string())),
+        Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
     }
     match list_containers() {
         Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
-        Err(e) => results.push(LibraryResult::Err(e.to_string())),
+        Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
     }
     match stop_container("test-ctr") {
         Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
-        Err(e) => results.push(LibraryResult::Err(e.to_string())),
+        Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
     }
     match run_token_daemon("test-ctr") {
         Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
-        Err(e) => results.push(LibraryResult::Err(e.to_string())),
+        Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
     }
 
     library_boundary_state

@@ -9,6 +9,9 @@ repository = "https://github.com/leynos/podbot"
 
 [features]
 default = ["cli"]
+# Note: clap cannot be made optional because ortho_config's OrthoConfig derive
+# macro unconditionally requires clap::Parser. The cli feature controls module
+# visibility only, not the clap dependency itself.
 cli = []
 
 [[bin]]
@@ -43,6 +46,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 smart-default = "0.7.1"
 
 # Command-line argument parsing
+# Note: Cannot be optional due to ortho_config's OrthoConfig derive macro dependency
 clap = { version = "4.5.60", features = ["derive"] }
 
 # Environment abstraction for testability

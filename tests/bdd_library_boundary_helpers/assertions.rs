@@ -1,6 +1,7 @@
 //! Assertion helpers for library boundary behavioural tests.
 
 use podbot::api::CommandOutcome;
+use podbot::error::{ContainerError, PodbotError};
 use rstest_bdd_macros::then;
 
 use super::StepResult;
@@ -15,7 +16,7 @@ fn config_is_valid(library_boundary_state: &LibraryBoundaryState) -> StepResult<
 
     match result {
         ConfigResult::Ok(_) => Ok(()),
-        ConfigResult::Err(msg) => Err(format!("expected valid AppConfig, got error: {msg}")),
+        ConfigResult::Err(err) => Err(format!("expected valid AppConfig, got error: {err:?}")),
     }
 }
 
@@ -45,7 +46,7 @@ fn engine_socket_matches(library_boundary_state: &LibraryBoundaryState) -> StepR
                 ))
             }
         }
-        ConfigResult::Err(msg) => Err(format!("expected valid config, got error: {msg}")),
+        ConfigResult::Err(err) => Err(format!("expected valid config, got error: {err:?}")),
     }
 }
 
@@ -61,7 +62,7 @@ fn outcome_is_success(library_boundary_state: &LibraryBoundaryState) -> StepResu
         LibraryResult::Ok(CommandOutcome::CommandExit { code }) => Err(format!(
             "expected Success, got CommandExit {{ code: {code} }}"
         )),
-        LibraryResult::Err(msg) => Err(format!("expected Success, got error: {msg}")),
+        LibraryResult::Err(err) => Err(format!("expected Success, got error: {err:?}")),
     }
 }
 
@@ -73,15 +74,17 @@ fn error_is_container_error(library_boundary_state: &LibraryBoundaryState) -> St
         .ok_or_else(|| String::from("exec_result should be set"))?;
 
     match result {
-        LibraryResult::Err(msg) => {
-            // ContainerError::ExecFailed messages start with "failed to execute
-            // command in container".
-            if msg.contains("failed to execute command in container") {
-                Ok(())
-            } else {
-                Err(format!("expected ContainerError message, got: {msg}"))
-            }
+        LibraryResult::Err(err)
+            if matches!(
+                err.as_ref(),
+                PodbotError::Container(ContainerError::ExecFailed { .. })
+            ) =>
+        {
+            Ok(())
         }
+        LibraryResult::Err(err) => Err(format!(
+            "expected PodbotError::Container(ContainerError::ExecFailed {{ .. }}), got: {err:?}"
+        )),
         LibraryResult::Ok(outcome) => Err(format!("expected ContainerError, got Ok({outcome:?})")),
     }
 }
@@ -99,8 +102,8 @@ fn all_stubs_succeed(library_boundary_state: &LibraryBoundaryState) -> StepResul
             LibraryResult::Ok(CommandOutcome::CommandExit { code }) => {
                 return Err(format!("stub {i} returned CommandExit {{ code: {code} }}"));
             }
-            LibraryResult::Err(msg) => {
-                return Err(format!("stub {i} returned error: {msg}"));
+            LibraryResult::Err(err) => {
+                return Err(format!("stub {i} returned error: {err:?}"));
             }
         }
     }

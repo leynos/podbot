@@ -1,7 +1,10 @@
 //! Scenario state for library boundary behavioural tests.
 
+use std::sync::Arc;
+
 use podbot::api::CommandOutcome;
 use podbot::config::AppConfig;
+use podbot::error::PodbotError;
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::ScenarioState;
@@ -12,7 +15,8 @@ pub(crate) enum LibraryResult {
     /// Library call returned a `CommandOutcome`.
     Ok(CommandOutcome),
     /// Library call returned an error.
-    Err(String),
+    /// Wrapped in Arc to allow cloning for BDD state management.
+    Err(Arc<PodbotError>),
 }
 
 /// High-level config loading result.
@@ -21,7 +25,8 @@ pub(crate) enum ConfigResult {
     /// Configuration loaded successfully.
     Ok(Box<AppConfig>),
     /// Configuration loading failed.
-    Err(String),
+    /// Wrapped in Arc to allow cloning for BDD state management.
+    Err(Arc<PodbotError>),
 }
 
 /// Collected outcomes from stub orchestration functions.

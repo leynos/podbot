@@ -135,7 +135,7 @@ fn exec_via_library_api_returns_expected_outcome(
 // -------------------------------------------------------------------------
 
 #[rstest]
-fn exec_failure_returns_container_error(runtime: tokio::runtime::Runtime) {
+fn exec_failure_on_create_returns_container_error(runtime: tokio::runtime::Runtime) {
     let mut client = MockEmbedClient::new();
     client.expect_create_exec().times(1).returning(|_, _| {
         Box::pin(async {
@@ -151,6 +151,144 @@ fn exec_failure_returns_container_error(runtime: tokio::runtime::Runtime) {
         container: "embed-sandbox",
         command: vec![String::from("echo"), String::from("fail")],
         mode: ExecMode::Attached,
+        tty: false,
+        runtime_handle: runtime.handle(),
+    });
+
+    assert!(result.is_err(), "exec should return an error");
+    assert!(
+        matches!(
+            result,
+            Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
+        ),
+        "error should be ContainerError::ExecFailed, got: {result:?}"
+    );
+}
+
+#[rstest]
+fn exec_failure_on_start_returns_container_error(runtime: tokio::runtime::Runtime) {
+    let mut client = MockEmbedClient::new();
+
+    // create_exec succeeds
+    client.expect_create_exec().times(1).returning(|_, _| {
+        Box::pin(async {
+            Ok(CreateExecResults {
+                id: String::from("exec-id"),
+            })
+        })
+    });
+
+    // start_exec fails
+    client.expect_start_exec().times(1).returning(|_, _| {
+        Box::pin(async {
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 500,
+                message: String::from("failed to start exec"),
+            })
+        })
+    });
+
+    let result = exec(ExecParams {
+        connector: &client,
+        container: "embed-sandbox",
+        command: vec![String::from("echo"), String::from("fail")],
+        mode: ExecMode::Attached,
+        tty: false,
+        runtime_handle: runtime.handle(),
+    });
+
+    assert!(result.is_err(), "exec should return an error");
+    assert!(
+        matches!(
+            result,
+            Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
+        ),
+        "error should be ContainerError::ExecFailed, got: {result:?}"
+    );
+}
+
+#[rstest]
+fn exec_failure_on_inspect_returns_container_error(runtime: tokio::runtime::Runtime) {
+    let mut client = MockEmbedClient::new();
+
+    // create_exec succeeds
+    client.expect_create_exec().times(1).returning(|_, _| {
+        Box::pin(async {
+            Ok(CreateExecResults {
+                id: String::from("exec-id"),
+            })
+        })
+    });
+
+    // start_exec succeeds
+    client
+        .expect_start_exec()
+        .times(1)
+        .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
+
+    // inspect_exec fails
+    client.expect_inspect_exec().times(1).returning(|_| {
+        Box::pin(async {
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 500,
+                message: String::from("failed to inspect exec"),
+            })
+        })
+    });
+
+    let result = exec(ExecParams {
+        connector: &client,
+        container: "embed-sandbox",
+        command: vec![String::from("echo"), String::from("fail")],
+        mode: ExecMode::Detached,
+        tty: false,
+        runtime_handle: runtime.handle(),
+    });
+
+    assert!(result.is_err(), "exec should return an error");
+    assert!(
+        matches!(
+            result,
+            Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
+        ),
+        "error should be ContainerError::ExecFailed, got: {result:?}"
+    );
+}
+
+#[rstest]
+fn exec_with_missing_exit_code_returns_container_error(runtime: tokio::runtime::Runtime) {
+    let mut client = MockEmbedClient::new();
+
+    // create_exec succeeds
+    client.expect_create_exec().times(1).returning(|_, _| {
+        Box::pin(async {
+            Ok(CreateExecResults {
+                id: String::from("exec-id"),
+            })
+        })
+    });
+
+    // start_exec succeeds
+    client
+        .expect_start_exec()
+        .times(1)
+        .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
+
+    // inspect_exec returns None exit_code
+    client.expect_inspect_exec().times(1).returning(|_| {
+        let inspect = ExecInspectResponse {
+            running: Some(false),
+            exit_code: None, // Missing exit code
+            ..ExecInspectResponse::default()
+        };
+        Box::pin(async move { Ok(inspect) })
+    });
+
+    let result = exec(ExecParams {
+        connector: &client,
+        container: "embed-sandbox",
+        command: vec![String::from("echo"), String::from("fail")],
+        mode: ExecMode::Detached,
         tty: false,
         runtime_handle: runtime.handle(),
     });
@@ -233,6 +371,8 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         })
     });
 
+    // ExecMode is marked #[non_exhaustive], so we must handle the wildcard pattern.
+    // If new variants are added, this match will need updating.
     match mode {
         ExecMode::Attached | ExecMode::Protocol => {
             client.expect_start_exec().times(1).returning(|_, _| {
@@ -260,7 +400,14 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
 
             client.expect_resize_exec().never();
         }
-        _ => panic!("unexpected exec mode in test setup"),
+        _ => {
+            // Fallback for future ExecMode variants that haven't been explicitly handled.
+            // Tests using unsupported modes will fail with a clear error message.
+            panic!(
+                "configure_successful_exec does not support ExecMode::{mode:?}. \
+                 Please add explicit handling for this variant."
+            );
+        }
     }
 
     client.expect_inspect_exec().times(1).returning(move |_| {
