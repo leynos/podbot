@@ -151,11 +151,9 @@ impl TryFrom<ExecRequestDef> for ExecRequest {
     type Error = PodbotError;
 
     fn try_from(value: ExecRequestDef) -> Result<Self, Self::Error> {
-        let request = Self::new(value.container, value.command)?
+        Ok(Self::new(value.container, value.command)?
             .with_mode(value.mode)
-            .with_tty(value.tty);
-        request.validate()?;
-        Ok(request)
+            .with_tty(value.tty))
     }
 }
 

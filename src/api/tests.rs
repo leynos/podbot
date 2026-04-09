@@ -1,6 +1,7 @@
 //! Unit tests for the orchestration API module.
 
 use bollard::container::LogOutput;
+use camino::Utf8PathBuf;
 use futures_util::stream;
 use mockall::mock;
 use rstest::rstest;
@@ -9,7 +10,7 @@ use super::{
     CommandOutcome, ExecMode, ExecRequest, exec_with_client, list_containers, run_agent,
     run_token_daemon, stop_container,
 };
-use crate::config::AppConfig;
+use crate::config::{AppConfig, GitHubConfig};
 use crate::engine::{
     ContainerExecClient, CreateExecFuture, ExecMode as EngineExecMode, InspectExecFuture,
     ResizeExecFuture, StartExecFuture,
@@ -111,6 +112,17 @@ fn exec_request_rejects_blank_container() {
 }
 
 #[rstest]
+fn exec_request_rejects_empty_command() {
+    let error =
+        ExecRequest::new("sandbox", Vec::new()).expect_err("empty command should be rejected");
+
+    assert!(matches!(
+        error,
+        PodbotError::Config(ConfigError::MissingRequired { field }) if field == "command"
+    ));
+}
+
+#[rstest]
 fn exec_request_rejects_blank_executable() {
     let error = ExecRequest::new("sandbox", vec![String::from("  ")])
         .expect_err("blank executable should be rejected");
@@ -139,6 +151,26 @@ fn exec_with_client_maps_exit_code_to_outcome(
         .expect("exit code should map to a command outcome");
 
     assert_eq!(outcome, expected);
+}
+
+#[rstest]
+fn run_agent_requires_complete_github_config() {
+    let config = AppConfig {
+        github: GitHubConfig {
+            app_id: Some(1),
+            installation_id: None,
+            private_key_path: Some(Utf8PathBuf::from("/tmp/test-key.pem")),
+        },
+        ..AppConfig::default()
+    };
+
+    let error = run_agent(&config).expect_err("incomplete GitHub config should be rejected");
+
+    assert!(matches!(
+        error,
+        PodbotError::Config(ConfigError::MissingRequired { field })
+            if field.contains("github.installation_id")
+    ));
 }
 
 #[rstest]
