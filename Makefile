@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release lint fmt check-fmt typecheck markdownlint nixie
 
 
 TARGET ?= podbot
@@ -36,6 +36,9 @@ fmt: ## Format Rust and Markdown sources
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
+
+typecheck: ## Run static type and borrow checks
+	$(CARGO) check $(CARGO_FLAGS)
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) '**/*.md'
