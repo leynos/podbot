@@ -191,8 +191,9 @@ backpressure remains visible to the hosted server:
   backpressure propagates to the container.
 
 The 64 KiB buffer sizes align with common protocol message sizes (such as
-JSON-RPC frame buffers) and typical OS pipe buffer defaults, keeping latency
-low while preventing unbounded accumulation during high-throughput scenarios.
+JSON Remote Procedure Call (JSON-RPC) frame buffers) and typical OS pipe
+buffer defaults, keeping latency low while preventing unbounded accumulation
+during high-throughput scenarios.
 
 The dedicated `podbot host` command is protocol-only. Unlike interactive
 operator commands, it must not emit banners, progress lines, or lifecycle

@@ -102,9 +102,9 @@ Observable success for this task:
   protocol messages to be split into multiple `LogOutput` chunks, increasing
   per-chunk overhead. Setting it too high defeats the backpressure goal.
   Severity: medium. Likelihood: low. Mitigation: choose a value that matches
-  typical protocol message sizes (64 KiB is common for JSON-RPC frame
-  buffers). Document the choice in the decision log and design document so it
-  can be tuned later.
+  typical protocol message sizes (64 KiB is common for JSON Remote Procedure
+  Call (JSON-RPC) frame buffers). Document the choice in the decision log and
+  design document so it can be tuned later.
 
 - Risk: lifecycle tests need to simulate multi-phase session execution (startup
   with no output, steady-state output, then shutdown) through the library seam.
@@ -320,7 +320,7 @@ Required test cases (unit tests with `rstest`):
    error-related bytes written to stdout. The error should surface as a
    `PodbotError`.
 
-Required BDD test scenarios (add to
+Required behaviour-driven development (BDD) test scenarios (add to
 `tests/features/protocol_proxy.feature`):
 
 1. **Lifecycle purity scenario**: protocol proxy delivers only container output

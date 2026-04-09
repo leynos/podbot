@@ -301,17 +301,27 @@ fn host_stdout_concatenates(
 fn host_stdout_contains_no_extra_bytes(
     protocol_proxy_state: &ProtocolProxyState,
 ) -> StepResult<()> {
-    // This step verifies the earlier assertion covered the complete output
+    // First, ensure the proxy run itself was successful.
     let outcome = protocol_proxy_state
         .outcome
         .get()
         .ok_or_else(|| String::from("proxy outcome should be recorded"))?;
-    match outcome {
-        ProtocolProxyOutcome::Success => Ok(()),
-        ProtocolProxyOutcome::Failure(message) => Err(format!(
+    if let ProtocolProxyOutcome::Failure(message) = outcome {
+        return Err(format!(
             "expected successful proxy run, got failure: {message}"
-        )),
+        ));
     }
+
+    // Then, explicitly assert that host stdout contains exactly the concatenated
+    // container stdout chunks with no prefix or suffix bytes.
+    let stdout_chunks = protocol_proxy_state.stdout_chunks.get().unwrap_or_default();
+    let expected: Vec<u8> = stdout_chunks.into_iter().flatten().collect();
+
+    assert_channel_receives(
+        &expected,
+        protocol_proxy_state.host_stdout.get(),
+        "host stdout",
+    )
 }
 
 #[then("host stdout contains only {text} without error messages")]
