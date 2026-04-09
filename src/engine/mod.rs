@@ -17,9 +17,10 @@ mod connection;
 pub use connection::{
     ContainerCreator, ContainerExecClient, ContainerSecurityOptions, ContainerUploader,
     CreateContainerFuture, CreateContainerRequest, CreateExecFuture, CredentialUploadRequest,
-    CredentialUploadResult, EngineConnector, ExecMode, ExecRequest, ExecResult, GitIdentityResult,
-    HostCommandRunner, HostGitIdentity, InspectExecFuture, ResizeExecFuture, SelinuxLabelMode,
-    SocketResolver, StartExecFuture, SystemCommandRunner, UploadToContainerFuture,
+    CredentialUploadResult, EngineConnector, ExecMode, ExecRequest, ExecResult, GitIdentityResult, HostCommandRunner, HostGitIdentity, ExecSessionOptions,
+    InspectExecFuture, ResizeExecFuture, SelinuxLabelMode,
+    SocketResolver, StartExecFuture, SystemCommandRunner,
+    UploadToContainerFuture,
     configure_git_identity, read_host_git_identity,
 };
 

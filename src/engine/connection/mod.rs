@@ -25,8 +25,8 @@ pub use create_container::{
     SelinuxLabelMode,
 };
 pub use exec::{
-    ContainerExecClient, CreateExecFuture, ExecMode, ExecRequest, ExecResult, InspectExecFuture,
-    ResizeExecFuture, StartExecFuture,
+    ContainerExecClient, CreateExecFuture, ExecMode, ExecRequest, ExecResult, ExecSessionOptions,
+    InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 pub use git_identity::{
     GitIdentityResult, HostCommandRunner, HostGitIdentity, SystemCommandRunner,

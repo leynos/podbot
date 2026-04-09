@@ -14,7 +14,7 @@ use bollard::exec::{CreateExecOptions, CreateExecResults, ResizeExecOptions, Sta
 use bollard::{Docker, errors::Error as BollardError};
 
 use self::attached::{run_attached_session_async, wait_for_exit_code_async};
-use self::protocol::run_protocol_session_async;
+use self::protocol::{ProtocolSessionOptions, run_protocol_session_async_with_options};
 use self::terminal::{SystemTerminalSizeProvider, TerminalSizeProvider};
 use super::EngineConnector;
 use crate::error::{ConfigError, ContainerError, PodbotError};
@@ -223,6 +223,37 @@ impl ExecResult {
     }
 }
 
+/// Internal exec-session knobs used by test harnesses that need deterministic
+/// stream behaviour.
+#[derive(Debug, Clone, Copy, Default)]
+#[doc(hidden)]
+pub struct ExecSessionOptions {
+    disable_protocol_stdin_forwarding: bool,
+}
+
+impl ExecSessionOptions {
+    /// Create default exec-session options with production behaviour.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            disable_protocol_stdin_forwarding: false,
+        }
+    }
+
+    /// Disable protocol stdin forwarding for tests that must avoid inherited
+    /// process stdin.
+    #[must_use]
+    pub const fn with_protocol_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
+        self.disable_protocol_stdin_forwarding = disable;
+        self
+    }
+
+    const fn protocol_session_options(self) -> ProtocolSessionOptions {
+        ProtocolSessionOptions::new()
+            .with_stdin_forwarding_disabled(self.disable_protocol_stdin_forwarding)
+    }
+}
+
 impl EngineConnector {
     /// Execute a command in a running container (async version).
     ///
@@ -234,8 +265,23 @@ impl EngineConnector {
         client: &C,
         request: &ExecRequest,
     ) -> Result<ExecResult, PodbotError> {
-        Self::exec_async_with_terminal_size_provider(client, request, &SystemTerminalSizeProvider)
-            .await
+        Self::exec_async_with_options(client, request, ExecSessionOptions::new()).await
+    }
+
+    /// Execute a command in a running container with explicit session options.
+    #[doc(hidden)]
+    pub async fn exec_async_with_options<C: ContainerExecClient>(
+        client: &C,
+        request: &ExecRequest,
+        options: ExecSessionOptions,
+    ) -> Result<ExecResult, PodbotError> {
+        Self::exec_async_with_terminal_size_provider_and_options(
+            client,
+            request,
+            &SystemTerminalSizeProvider,
+            options,
+        )
+        .await
     }
 
     /// Execute a command in a running container using a caller runtime handle.
@@ -251,6 +297,7 @@ impl EngineConnector {
         runtime.block_on(Self::exec_async(client, request))
     }
 
+    #[cfg(test)]
     async fn exec_async_with_terminal_size_provider<
         C: ContainerExecClient,
         P: TerminalSizeProvider,
@@ -258,6 +305,24 @@ impl EngineConnector {
         client: &C,
         request: &ExecRequest,
         size_provider: &P,
+    ) -> Result<ExecResult, PodbotError> {
+        Self::exec_async_with_terminal_size_provider_and_options(
+            client,
+            request,
+            size_provider,
+            ExecSessionOptions::new(),
+        )
+        .await
+    }
+
+    async fn exec_async_with_terminal_size_provider_and_options<
+        C: ContainerExecClient,
+        P: TerminalSizeProvider,
+    >(
+        client: &C,
+        request: &ExecRequest,
+        size_provider: &P,
+        options: ExecSessionOptions,
     ) -> Result<ExecResult, PodbotError> {
         let create_result = client
             .create_exec(request.container_id(), build_create_exec_options(request))
@@ -286,7 +351,13 @@ impl EngineConnector {
                     .await?;
             }
             (ExecMode::Protocol, bollard::exec::StartExecResults::Attached { output, input }) => {
-                run_protocol_session_async(request, output, input).await?;
+                run_protocol_session_async_with_options(
+                    request,
+                    output,
+                    input,
+                    options.protocol_session_options(),
+                )
+                .await?;
             }
             (
                 ExecMode::Attached | ExecMode::Protocol,

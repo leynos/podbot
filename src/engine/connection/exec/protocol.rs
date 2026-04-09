@@ -34,9 +34,6 @@ use tokio::time::timeout;
 use super::{ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
-#[cfg(not(test))]
-const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
-
 /// Host-side stdio handles used by the protocol byte proxy.
 pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     stdin: HostStdin,
@@ -59,6 +56,24 @@ const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
 /// low while preventing unbounded accumulation during high-throughput scenarios.
 const STDIN_BUFFER_CAPACITY: usize = 65_536;
 
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct ProtocolSessionOptions {
+    disable_stdin_forwarding: bool,
+}
+
+impl ProtocolSessionOptions {
+    pub(super) const fn new() -> Self {
+        Self {
+            disable_stdin_forwarding: false,
+        }
+    }
+
+    pub(super) const fn with_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
+        self.disable_stdin_forwarding = disable;
+        self
+    }
+}
+
 impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     /// Create a host-IO bundle for a protocol proxy session.
     pub(super) const fn new(
@@ -74,57 +89,26 @@ impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, H
     }
 }
 
-/// Run a protocol exec session using the process stdio handles.
-pub(super) async fn run_protocol_session_async(
+pub(super) async fn run_protocol_session_async_with_options(
     request: &ExecRequest,
     output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
     input: Pin<Box<dyn AsyncWrite + Send>>,
+    options: ProtocolSessionOptions,
 ) -> Result<(), PodbotError> {
     let stdio = ProtocolProxyIo::new(
-        default_host_stdin(),
+        default_host_stdin(options.disable_stdin_forwarding),
         tokio::io::stdout(),
         tokio::io::stderr(),
     );
     run_protocol_session_with_io_async(request, output, input, stdio).await
 }
 
-#[cfg(test)]
-fn default_host_stdin() -> tokio::io::Empty {
-    tokio::io::empty()
-}
-
-#[cfg(not(test))]
-fn default_host_stdin() -> DefaultHostStdin {
-    if stdin_forwarding_disabled_for_tests() {
-        DefaultHostStdin::Disabled(tokio::io::empty())
+fn default_host_stdin(disable_stdin_forwarding: bool) -> Pin<Box<dyn AsyncRead + Send>> {
+    if disable_stdin_forwarding {
+        Box::pin(tokio::io::empty())
     } else {
-        DefaultHostStdin::Live(tokio::io::stdin())
+        Box::pin(tokio::io::stdin())
     }
-}
-
-#[cfg(not(test))]
-enum DefaultHostStdin {
-    Live(tokio::io::Stdin),
-    Disabled(tokio::io::Empty),
-}
-
-#[cfg(not(test))]
-impl AsyncRead for DefaultHostStdin {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<io::Result<()>> {
-        match &mut *self {
-            Self::Live(stdin) => Pin::new(stdin).poll_read(cx, buf),
-            Self::Disabled(stdin) => Pin::new(stdin).poll_read(cx, buf),
-        }
-    }
-}
-
-#[cfg(not(test))]
-fn stdin_forwarding_disabled_for_tests() -> bool {
-    std::env::var_os(DISABLE_STDIN_FORWARDING_ENV).is_some()
 }
 
 /// Run a protocol exec session using caller-supplied host IO handles.
