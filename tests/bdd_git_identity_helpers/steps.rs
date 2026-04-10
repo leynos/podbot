@@ -8,8 +8,8 @@ use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
 use mockall::mock;
 use podbot::api::{GitIdentityParams, configure_container_git_identity};
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, HostCommandRunner, InspectExecFuture,
-    ResizeExecFuture, StartExecFuture,
+    ContainerExecClient, CreateExecFuture, HostCommandRunner, InspectExecFuture, ResizeExecFuture,
+    StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
 
@@ -106,9 +106,9 @@ fn setup_mock_exec_client(should_fail: bool) -> MockExecClient {
             })
         })
     });
-    exec_client.expect_start_exec().returning(|_, _| {
-        Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
-    });
+    exec_client
+        .expect_start_exec()
+        .returning(|_, _| Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) }));
 
     let exit_code = i64::from(should_fail);
     exec_client.expect_inspect_exec().returning(move |_| {

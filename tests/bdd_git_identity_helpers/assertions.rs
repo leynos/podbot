@@ -182,10 +182,7 @@ fn configured_email_is(git_identity_state: &GitIdentityState, word: String) -> S
 }
 
 #[then("warnings include {word}")]
-fn warnings_include_warning(
-    git_identity_state: &GitIdentityState,
-    word: String,
-) -> StepResult<()> {
+fn warnings_include_warning(git_identity_state: &GitIdentityState, word: String) -> StepResult<()> {
     git_identity_state
         .outcome
         .with_ref(|outcome| {
@@ -220,11 +217,9 @@ fn git_identity_configuration_fails_with_exec_error(
     git_identity_state
         .outcome
         .with_ref(|outcome| {
-            outcome
-                .as_ref()
-                .map_or(Ok(()), |result| {
-                    Err(format!("Expected error, got success: {result:?}"))
-                })
+            outcome.as_ref().map_or(Ok(()), |result| {
+                Err(format!("Expected error, got success: {result:?}"))
+            })
         })
         .ok_or_else(|| String::from("outcome not set"))?
 }
