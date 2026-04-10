@@ -6,7 +6,7 @@
 
 #![allow(
     clippy::too_many_arguments,
-    reason = "parameterized rstest functions require multiple test case parameters"
+    reason = "parameterised rstest cases require multiple test parameters"
 )]
 
 use bollard::container::LogOutput;

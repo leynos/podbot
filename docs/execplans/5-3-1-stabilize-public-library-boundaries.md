@@ -16,8 +16,8 @@ can depend on `podbot` as a library with:
 - documented, versioned public modules and request/response types,
 - semantic errors (`PodbotError`) exclusively (no `eyre` types in public
   signatures),
-- no transitive dependency on CLI-only crates (`clap`) when the consumer
-  does not need CLI functionality,
+- gated CLI module visibility via the `cli` feature (note: `clap` remains a
+  transitive dependency via `ortho_config` regardless of feature settings),
 - reconciled hook and validation schemas that match the documented
   integration contract, and
 - integration tests that exercise Podbot as a library dependency from a
@@ -31,8 +31,9 @@ Observable success:
    from a host-application call path, proving that the library surface is
    self-contained and usable without CLI types.
 3. `podbot::cli` is gated behind a Cargo feature `cli` (enabled by
-   default) so library-only consumers can opt out of the `clap`
-   dependency.
+   default) to control module visibility. Note: `ortho_config` maintains
+   an unconditional dependency on `clap`, so the feature gates API surface
+   only.
 4. All public modules have a documented API reference in
    `docs/podbot-design.md` under a "Public library API reference"
    section.
@@ -95,8 +96,9 @@ escalation, not workarounds.
 - `pub mod cli` must be conditionally compiled behind the `cli` Cargo
   feature (enabled by default).
 - The binary crate must enable the `cli` feature.
-- `cargo check --no-default-features` must succeed (library compiles
-  without `clap`).
+- Note: `cargo check --no-default-features` will still pull in `clap` as a
+  transitive dependency via `ortho_config`. The `cli` feature gates module
+  visibility, not dependency removal.
 - No new external crate dependencies may be added.
 - Existing public API signatures in `podbot::api`, `podbot::config`, and
   `podbot::engine` must not change in a breaking way.
