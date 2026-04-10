@@ -23,11 +23,10 @@ pub(super) const EXEC_INSPECT_POLL_INTERVAL_MS: u64 = 100;
 
 /// Maximum bytes per `LogOutput` chunk from the daemon for protocol-mode exec
 /// sessions. This bounds the per-chunk memory consumption while reducing
-/// overhead compared to the default 8 KiB for large protocol messages. The
-/// capacity is set to match the stdin/output buffer capacities used by the
-/// protocol proxy to maintain consistent buffering across all protocol-mode
-/// boundaries.
-const PROTOCOL_OUTPUT_CAPACITY: usize = protocol::STDIN_WRITE_BUFFER_CAPACITY;
+/// overhead compared to the default 8 KiB for large protocol messages. A 64 KiB
+/// capacity aligns with the stdin read buffer used by the protocol proxy and
+/// matches common protocol message sizes.
+const PROTOCOL_OUTPUT_CAPACITY: usize = 65_536;
 
 /// Boxed future type returned by [`ContainerExecClient::create_exec`].
 pub type CreateExecFuture<'a> =

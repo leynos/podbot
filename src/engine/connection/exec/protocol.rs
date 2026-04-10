@@ -56,17 +56,6 @@ const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
 /// low while preventing unbounded accumulation during high-throughput scenarios.
 const STDIN_BUFFER_CAPACITY: usize = 65_536;
 
-/// Maximum bytes buffered for the container stdin write path. This complements
-/// `STDIN_BUFFER_CAPACITY` to ensure the write side also remains explicitly
-/// bounded, preventing the copy operation from accumulating an unbounded write
-/// queue. The value matches the read buffer size to maintain symmetrical
-/// backpressure behaviour.
-///
-/// This constant is also used by the parent `exec` module to set Bollard's
-/// `output_capacity` for protocol-mode exec sessions, ensuring consistency
-/// across all buffering boundaries in the protocol proxy path.
-pub(super) const STDIN_WRITE_BUFFER_CAPACITY: usize = 65_536;
-
 impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     /// Create a host-IO bundle for a protocol proxy session.
     pub(super) const fn new(
@@ -182,17 +171,15 @@ async fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
 
 async fn forward_host_stdin_to_exec_async<HostStdin>(
     host_stdin: HostStdin,
-    input: Pin<Box<dyn AsyncWrite + Send>>,
+    mut input: Pin<Box<dyn AsyncWrite + Send>>,
 ) -> io::Result<()>
 where
     HostStdin: AsyncRead + Unpin,
 {
     let mut buffered_stdin = tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
-    let mut buffered_input =
-        tokio::io::BufWriter::with_capacity(STDIN_WRITE_BUFFER_CAPACITY, input);
-    tokio::io::copy(&mut buffered_stdin, &mut buffered_input).await?;
-    buffered_input.flush().await?;
-    buffered_input.shutdown().await
+    tokio::io::copy(&mut buffered_stdin, &mut input).await?;
+    input.flush().await?;
+    input.shutdown().await
 }
 
 async fn run_output_loop_async<HostStdout, HostStderr>(

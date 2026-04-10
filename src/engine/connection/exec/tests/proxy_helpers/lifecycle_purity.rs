@@ -34,18 +34,35 @@ fn run_stdout_purity_test(
     assert_eq!(captured.as_slice(), expected_stdout, "{stdout_msg}");
 }
 
-/// Startup purity: protocol proxy delivers exactly the container output with
-/// no prefix bytes from session setup.
+/// Single-chunk stdout purity: proxy delivers exactly one StdOut chunk's
+/// bytes to host stdout. Parametrised across startup and shutdown to
+/// confirm no prefix or suffix bytes are injected by session setup or
+/// teardown.
 #[rstest]
-fn startup_purity_no_prefix_bytes(runtime: RuntimeFixture) {
+#[case::startup(
+    b"STARTUP_OUTPUT" as &[u8],
+    "startup should succeed",
+    "host stdout must contain exactly the container output with no prefix"
+)]
+#[case::shutdown(
+    b"output-before-shutdown" as &[u8],
+    "shutdown should succeed cleanly",
+    "host stdout must contain exactly the proxied bytes with no suffix"
+)]
+fn single_chunk_stdout_purity(
+    runtime: RuntimeFixture,
+    #[case] payload: &'static [u8],
+    #[case] success_msg: &'static str,
+    #[case] stdout_msg: &'static str,
+) {
     run_stdout_purity_test(
         runtime,
         vec![Ok(LogOutput::StdOut {
-            message: b"STARTUP_OUTPUT".to_vec().into(),
+            message: payload.to_vec().into(),
         })],
-        b"STARTUP_OUTPUT",
-        "startup should succeed",
-        "host stdout must contain exactly the container output with no prefix",
+        payload,
+        success_msg,
+        stdout_msg,
     );
 }
 
@@ -116,21 +133,6 @@ fn steady_state_purity_mixed_streams(runtime: RuntimeFixture) {
         stderr_data.as_slice(),
         b"stderr-1stderr-2",
         "host stderr must contain only stderr bytes in order"
-    );
-}
-
-/// Shutdown purity: protocol proxy delivers exactly the proxied bytes with no
-/// trailing bytes added by shutdown logic.
-#[rstest]
-fn shutdown_purity_no_suffix_bytes(runtime: RuntimeFixture) {
-    run_stdout_purity_test(
-        runtime,
-        vec![Ok(LogOutput::StdOut {
-            message: b"output-before-shutdown".to_vec().into(),
-        })],
-        b"output-before-shutdown",
-        "shutdown should succeed cleanly",
-        "host stdout must contain exactly the proxied bytes with no suffix",
     );
 }
 
