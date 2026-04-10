@@ -1,6 +1,5 @@
 //! Shared behavioural-test state for Git identity scenarios.
 
-use podbot::api::GitIdentityParams;
 use podbot::engine::GitIdentityResult;
 use podbot::error::PodbotError;
 use rstest::fixture;

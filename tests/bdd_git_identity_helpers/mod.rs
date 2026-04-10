@@ -4,7 +4,7 @@ pub mod assertions;
 pub mod state;
 pub mod steps;
 
-pub use state::{GitIdentityState, StepResult, git_identity_state};
+pub use state::{GitIdentityState, git_identity_state};
 
 #[expect(
     unused_imports,

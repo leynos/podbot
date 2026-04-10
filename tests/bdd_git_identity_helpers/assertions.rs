@@ -1,22 +1,9 @@
 //! Then step definitions for Git identity behavioural scenarios.
 
 use podbot::engine::GitIdentityResult;
-use podbot::error::PodbotError;
 use rstest_bdd_macros::then;
 
 use super::state::{GitIdentityState, StepResult};
-
-fn get_outcome(state: &GitIdentityState) -> StepResult<Result<GitIdentityResult, String>> {
-    let result = state
-        .outcome
-        .get()
-        .ok_or_else(|| String::from("outcome not set"))?;
-
-    match result {
-        Ok(identity_result) => Ok(Ok(identity_result)),
-        Err(e) => Ok(Err(format!("{e}"))),
-    }
-}
 
 fn assert_ok_variant(
     outcome: &Result<GitIdentityResult, String>,
@@ -62,119 +49,182 @@ fn assert_field_absent(
 
 #[then("git identity result is configured")]
 fn git_identity_result_is_configured(git_identity_state: &GitIdentityState) -> StepResult<()> {
-    assert_ok_variant(
-        get_outcome(git_identity_state)?,
-        |r| matches!(r, GitIdentityResult::Configured { .. }),
-        "Configured",
-    )
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            let converted = match outcome {
+                Ok(r) => Ok(r.clone()),
+                Err(e) => Err(format!("{e}")),
+            };
+            assert_ok_variant(
+                &converted,
+                |r| matches!(r, GitIdentityResult::Configured { .. }),
+                "Configured",
+            )
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
 }
 
 #[then("git identity result is partial")]
 fn git_identity_result_is_partial(git_identity_state: &GitIdentityState) -> StepResult<()> {
-    assert_ok_variant(
-        get_outcome(git_identity_state)?,
-        |r| matches!(r, GitIdentityResult::Partial { .. }),
-        "Partial",
-    )
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            let converted = match outcome {
+                Ok(r) => Ok(r.clone()),
+                Err(e) => Err(format!("{e}")),
+            };
+            assert_ok_variant(
+                &converted,
+                |r| matches!(r, GitIdentityResult::Partial { .. }),
+                "Partial",
+            )
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
 }
 
 #[then("git identity result is none configured")]
 fn git_identity_result_is_none_configured(git_identity_state: &GitIdentityState) -> StepResult<()> {
-    assert_ok_variant(
-        get_outcome(git_identity_state)?,
-        |r| matches!(r, GitIdentityResult::NoneConfigured { .. }),
-        "NoneConfigured",
-    )
-}
-
-#[then("configured name is {name}")]
-fn configured_name_is_name(git_identity_state: &GitIdentityState, name: String) -> StepResult<()> {
-    assert_field_value(
-        get_outcome(git_identity_state)?,
-        |r| match r {
-            GitIdentityResult::Configured { name, .. } => Some(name.as_str()),
-            GitIdentityResult::Partial { name: Some(n), .. } => Some(n.as_str()),
-            _ => None,
-        },
-        &name,
-        "name",
-    )
-}
-
-#[then("configured email is {email}")]
-fn configured_email_is_email(
-    git_identity_state: &GitIdentityState,
-    email: String,
-) -> StepResult<()> {
-    assert_field_value(
-        get_outcome(git_identity_state)?,
-        |r| match r {
-            GitIdentityResult::Configured { email, .. } => Some(email.as_str()),
-            GitIdentityResult::Partial { email: Some(e), .. } => Some(e.as_str()),
-            _ => None,
-        },
-        &email,
-        "email",
-    )
-}
-
-#[then("configured name is absent")]
-fn configured_name_is_absent(git_identity_state: &GitIdentityState) -> StepResult<()> {
-    assert_field_absent(
-        get_outcome(git_identity_state)?,
-        |r| {
-            matches!(
-                r,
-                GitIdentityResult::Configured { .. }
-                    | GitIdentityResult::Partial { name: Some(_), .. }
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            let converted = match outcome {
+                Ok(r) => Ok(r.clone()),
+                Err(e) => Err(format!("{e}")),
+            };
+            assert_ok_variant(
+                &converted,
+                |r| matches!(r, GitIdentityResult::NoneConfigured { .. }),
+                "NoneConfigured",
             )
-        },
-        "name",
-    )
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
 }
 
-#[then("configured email is absent")]
-fn configured_email_is_absent(git_identity_state: &GitIdentityState) -> StepResult<()> {
-    assert_field_absent(
-        get_outcome(git_identity_state)?,
-        |r| {
-            matches!(
-                r,
-                GitIdentityResult::Configured { .. }
-                    | GitIdentityResult::Partial { email: Some(_), .. }
-            )
-        },
-        "email",
-    )
+/// Checks configured name matches expected value.
+/// "absent" is treated specially to check for None.
+#[then("configured name is {word}")]
+fn configured_name_is(git_identity_state: &GitIdentityState, word: String) -> StepResult<()> {
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            let converted = match outcome {
+                Ok(r) => Ok(r.clone()),
+                Err(e) => Err(format!("{e}")),
+            };
+
+            if word == "absent" {
+                assert_field_absent(
+                    &converted,
+                    |r| {
+                        matches!(
+                            r,
+                            GitIdentityResult::Configured { .. }
+                                | GitIdentityResult::Partial { name: Some(_), .. }
+                        )
+                    },
+                    "name",
+                )
+            } else {
+                assert_field_value(
+                    &converted,
+                    |r| match r {
+                        GitIdentityResult::Configured { name, .. } => Some(name.as_str()),
+                        GitIdentityResult::Partial { name: Some(n), .. } => Some(n.as_str()),
+                        _ => None,
+                    },
+                    &word,
+                    "name",
+                )
+            }
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
 }
 
-#[then("warnings include {warning}")]
+/// Checks configured email matches expected value.
+/// "absent" is treated specially to check for None.
+#[then("configured email is {word}")]
+fn configured_email_is(git_identity_state: &GitIdentityState, word: String) -> StepResult<()> {
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            let converted = match outcome {
+                Ok(r) => Ok(r.clone()),
+                Err(e) => Err(format!("{e}")),
+            };
+
+            if word == "absent" {
+                assert_field_absent(
+                    &converted,
+                    |r| {
+                        matches!(
+                            r,
+                            GitIdentityResult::Configured { .. }
+                                | GitIdentityResult::Partial { email: Some(_), .. }
+                        )
+                    },
+                    "email",
+                )
+            } else {
+                assert_field_value(
+                    &converted,
+                    |r| match r {
+                        GitIdentityResult::Configured { email, .. } => Some(email.as_str()),
+                        GitIdentityResult::Partial { email: Some(e), .. } => Some(e.as_str()),
+                        _ => None,
+                    },
+                    &word,
+                    "email",
+                )
+            }
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
+}
+
+#[then("warnings include {word}")]
 fn warnings_include_warning(
     git_identity_state: &GitIdentityState,
-    warning: String,
+    word: String,
 ) -> StepResult<()> {
-    let warnings = match get_outcome(git_identity_state)? {
-        Ok(GitIdentityResult::Partial { warnings, .. }) => warnings,
-        Ok(GitIdentityResult::NoneConfigured { warnings }) => warnings,
-        Ok(other) => return Err(format!("Expected result with warnings, got {other:?}")),
-        Err(e) => return Err(format!("Expected success, got error: {e}")),
-    };
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            let converted = match outcome {
+                Ok(r) => Ok(r.clone()),
+                Err(e) => Err(format!("{e}")),
+            };
+            let warnings = match &converted {
+                Ok(
+                    GitIdentityResult::Partial { warnings, .. }
+                    | GitIdentityResult::NoneConfigured { warnings },
+                ) => warnings,
+                Ok(other) => return Err(format!("Expected result with warnings, got {other:?}")),
+                Err(e) => return Err(format!("Expected success, got error: {e}")),
+            };
 
-    if warnings.contains(&warning) {
-        Ok(())
-    } else {
-        Err(format!(
-            "Expected warning '{warning}' not found in {warnings:?}"
-        ))
-    }
+            if warnings.contains(&word) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Expected warning '{word}' not found in {warnings:?}"
+                ))
+            }
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
 }
 
 #[then("git identity configuration fails with an exec error")]
 fn git_identity_configuration_fails_with_exec_error(
     git_identity_state: &GitIdentityState,
 ) -> StepResult<()> {
-    match get_outcome(git_identity_state)? {
-        Err(_) => Ok(()),
-        Ok(result) => Err(format!("Expected error, got success: {result:?}")),
-    }
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            outcome
+                .as_ref()
+                .map_or(Ok(()), |result| {
+                    Err(format!("Expected error, got success: {result:?}"))
+                })
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
 }

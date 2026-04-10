@@ -41,19 +41,13 @@ fn failure_output() -> Output {
 fn make_runner(name_raw: Option<&str>, email_raw: Option<&str>) -> MockCommandRunner {
     let mut runner = MockCommandRunner::new();
 
-    let name_out = match name_raw {
-        Some(s) => success_output(s),
-        None => failure_output(),
-    };
+    let name_out = name_raw.map_or_else(failure_output, success_output);
     runner
         .expect_run_command()
         .withf(|_, args| args.contains(&"user.name"))
         .returning(move |_, _| Ok(name_out.clone()));
 
-    let email_out = match email_raw {
-        Some(s) => success_output(s),
-        None => failure_output(),
-    };
+    let email_out = email_raw.map_or_else(failure_output, success_output);
     runner
         .expect_run_command()
         .withf(|_, args| args.contains(&"user.email"))
