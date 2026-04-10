@@ -49,21 +49,10 @@ fn classify_404_error_mentions_app_not_found() {
 }
 
 #[rstest]
-fn classify_5xx_error_mentions_api_unavailable() {
-    let msg = classify_by_status(503, "Service temporarily unavailable", "full error text");
-    assert!(
-        msg.contains("unavailable"),
-        "expected 'unavailable' in: {msg}"
-    );
-    assert!(
-        msg.contains("githubstatus.com"),
-        "expected status page hint in: {msg}"
-    );
-}
-
-#[rstest]
-fn classify_500_error_mentions_api_unavailable() {
-    let msg = classify_by_status(500, "Internal Server Error", "full error text");
+#[case(500, "Internal Server Error")]
+#[case(503, "Service temporarily unavailable")]
+fn classify_5xx_error_mentions_api_unavailable(#[case] status: u16, #[case] body: &str) {
+    let msg = classify_by_status(status, body, "full error text");
     assert!(
         msg.contains("unavailable"),
         "expected 'unavailable' in: {msg}"
