@@ -211,3 +211,24 @@ pub(super) fn run_routing_session(
     );
     (result, stdout_bytes, stderr_bytes)
 }
+
+/// Helper for lifecycle purity tests that only need to inspect stdout.
+/// Creates recording writers, runs the session, and returns the result
+/// with captured stdout bytes.
+pub(super) fn run_lifecycle_session(
+    runtime: RuntimeFixture,
+    stdin_bytes: &[u8],
+    output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+) -> (Result<(), PodbotError>, Arc<Mutex<Vec<u8>>>) {
+    let host_stdout = RecordingWriter::new();
+    let stdout_bytes = host_stdout.bytes.clone();
+    let result = run_session(
+        runtime,
+        stdin_bytes,
+        output,
+        Box::pin(RecordingInputWriter::new()),
+        host_stdout,
+        RecordingWriter::new(),
+    );
+    (result, stdout_bytes)
+}

@@ -7,15 +7,18 @@ use rstest::rstest;
 
 use super::*;
 
-/// Startup purity: protocol proxy delivers exactly the container output with
-/// no prefix bytes from session setup.
-#[rstest]
-fn startup_purity_no_prefix_bytes(runtime: RuntimeFixture) {
-    let output_chunks = vec![Ok(LogOutput::StdOut {
-        message: b"STARTUP_OUTPUT".to_vec().into(),
-    })];
+#[expect(
+    clippy::too_many_arguments,
+    reason = "test helper needs all parameters to fully specify test case"
+)]
+fn run_stdout_purity_test(
+    runtime: RuntimeFixture,
+    output_chunks: Vec<Result<LogOutput, BollardError>>,
+    expected_stdout: &[u8],
+    success_msg: &str,
+    stdout_msg: &str,
+) {
     let output = make_output_stream(output_chunks);
-
     let host_stdout = RecordingWriter::new();
     let captured_stdout = host_stdout.bytes.clone();
     let result = run_session(
@@ -26,13 +29,23 @@ fn startup_purity_no_prefix_bytes(runtime: RuntimeFixture) {
         host_stdout,
         RecordingWriter::new(),
     );
-
-    assert!(result.is_ok(), "startup should succeed");
+    assert!(result.is_ok(), "{success_msg}");
     let captured = captured_stdout.lock().expect("mutex should not poison");
-    assert_eq!(
-        captured.as_slice(),
+    assert_eq!(captured.as_slice(), expected_stdout, "{stdout_msg}");
+}
+
+/// Startup purity: protocol proxy delivers exactly the container output with
+/// no prefix bytes from session setup.
+#[rstest]
+fn startup_purity_no_prefix_bytes(runtime: RuntimeFixture) {
+    run_stdout_purity_test(
+        runtime,
+        vec![Ok(LogOutput::StdOut {
+            message: b"STARTUP_OUTPUT".to_vec().into(),
+        })],
         b"STARTUP_OUTPUT",
-        "host stdout must contain exactly the container output with no prefix"
+        "startup should succeed",
+        "host stdout must contain exactly the container output with no prefix",
     );
 }
 
@@ -41,27 +54,12 @@ fn startup_purity_no_prefix_bytes(runtime: RuntimeFixture) {
 /// diagnostic bytes are injected.
 #[rstest]
 fn lifecycle_purity_no_stdout_bytes(runtime: RuntimeFixture) {
-    // Daemon never emits stdout bytes; ensure we don't inject any banner/prefix/suffix.
-    let output_chunks: Vec<Result<LogOutput, BollardError>> = Vec::new();
-    let output = make_output_stream(output_chunks);
-
-    let host_stdout = RecordingWriter::new();
-    let captured_stdout = host_stdout.bytes.clone();
-    let result = run_session(
+    run_stdout_purity_test(
         runtime,
+        Vec::new(),
         b"",
-        output,
-        Box::pin(RecordingInputWriter::new()),
-        host_stdout,
-        RecordingWriter::new(),
-    );
-
-    assert!(result.is_ok(), "session should succeed even with no stdout");
-    let captured = captured_stdout.lock().expect("mutex should not poison");
-    assert_eq!(
-        captured.as_slice(),
-        b"",
-        "host stdout must remain empty when container never writes to stdout"
+        "session should succeed even with no stdout",
+        "host stdout must remain empty when container never writes to stdout",
     );
 }
 
@@ -125,31 +123,14 @@ fn steady_state_purity_mixed_streams(runtime: RuntimeFixture) {
 /// trailing bytes added by shutdown logic.
 #[rstest]
 fn shutdown_purity_no_suffix_bytes(runtime: RuntimeFixture) {
-    let output_chunks = vec![
-        Ok(LogOutput::StdOut {
-            message: b"output-before-shutdown".to_vec().into(),
-        }),
-        // Stream ends here - daemon closes the stream
-    ];
-    let output = make_output_stream(output_chunks);
-
-    let host_stdout = RecordingWriter::new();
-    let captured_stdout = host_stdout.bytes.clone();
-    let result = run_session(
+    run_stdout_purity_test(
         runtime,
-        b"",
-        output,
-        Box::pin(RecordingInputWriter::new()),
-        host_stdout,
-        RecordingWriter::new(),
-    );
-
-    assert!(result.is_ok(), "shutdown should succeed cleanly");
-    let captured = captured_stdout.lock().expect("mutex should not poison");
-    assert_eq!(
-        captured.as_slice(),
+        vec![Ok(LogOutput::StdOut {
+            message: b"output-before-shutdown".to_vec().into(),
+        })],
         b"output-before-shutdown",
-        "host stdout must contain exactly the proxied bytes with no suffix"
+        "shutdown should succeed cleanly",
+        "host stdout must contain exactly the proxied bytes with no suffix",
     );
 }
 
@@ -205,16 +186,7 @@ fn regression_zero_bytes_before_first_and_after_last_proxied_byte(runtime: Runti
     })];
     let output = make_output_stream(output_chunks);
 
-    let host_stdout = RecordingWriter::new();
-    let captured_stdout = host_stdout.bytes.clone();
-    let result = run_session(
-        runtime,
-        b"",
-        output,
-        Box::pin(RecordingInputWriter::new()),
-        host_stdout,
-        RecordingWriter::new(),
-    );
+    let (result, captured_stdout) = run_lifecycle_session(runtime, b"", output);
 
     assert!(
         result.is_ok(),
@@ -277,16 +249,7 @@ fn regression_stdout_bounded_buffering_preserves_all_bytes(runtime: RuntimeFixtu
 
     let output = make_output_stream(output_chunks);
 
-    let host_stdout = RecordingWriter::new();
-    let captured_stdout = host_stdout.bytes.clone();
-    let result = run_session(
-        runtime,
-        b"",
-        output,
-        Box::pin(RecordingInputWriter::new()),
-        host_stdout,
-        RecordingWriter::new(),
-    );
+    let (result, captured_stdout) = run_lifecycle_session(runtime, b"", output);
 
     assert!(
         result.is_ok(),

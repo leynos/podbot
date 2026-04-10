@@ -22,13 +22,18 @@ enum ProtocolProxyOutcome {
     Failure(String),
 }
 
+#[derive(Debug, Clone)]
+enum OutputEvent {
+    Stdout(Vec<u8>),
+    Stderr(Vec<u8>),
+    StreamError,
+}
+
 #[derive(Default, ScenarioState)]
 struct ProtocolProxyState {
     host_stdin: Slot<Vec<u8>>,
-    stdout_chunks: Slot<Vec<Vec<u8>>>,
-    stderr_chunks: Slot<Vec<Vec<u8>>>,
+    output_events: Slot<Vec<OutputEvent>>,
     fail_stdout_write: Slot<bool>,
-    stream_error: Slot<bool>,
     host_stdout: Slot<Vec<u8>>,
     host_stderr: Slot<Vec<u8>>,
     container_stdin: Slot<Vec<u8>>,
@@ -39,10 +44,8 @@ struct ProtocolProxyState {
 fn protocol_proxy_state() -> ProtocolProxyState {
     let state = ProtocolProxyState::default();
     state.host_stdin.set(Vec::new());
-    state.stdout_chunks.set(Vec::new());
-    state.stderr_chunks.set(Vec::new());
+    state.output_events.set(Vec::new());
     state.fail_stdout_write.set(false);
-    state.stream_error.set(false);
     state
 }
 
@@ -79,16 +82,16 @@ fn host_stdin_is(protocol_proxy_state: &ProtocolProxyState, text: String) {
 
 #[given("container stdout emits {text}")]
 fn container_stdout_emits(protocol_proxy_state: &ProtocolProxyState, text: String) {
-    let mut chunks = protocol_proxy_state.stdout_chunks.get().unwrap_or_default();
-    chunks.push(normalize_feature_text(&text));
-    protocol_proxy_state.stdout_chunks.set(chunks);
+    let mut events = protocol_proxy_state.output_events.get().unwrap_or_default();
+    events.push(OutputEvent::Stdout(normalize_feature_text(&text)));
+    protocol_proxy_state.output_events.set(events);
 }
 
 #[given("container stderr emits {text}")]
 fn container_stderr_emits(protocol_proxy_state: &ProtocolProxyState, text: String) {
-    let mut chunks = protocol_proxy_state.stderr_chunks.get().unwrap_or_default();
-    chunks.push(normalize_feature_text(&text));
-    protocol_proxy_state.stderr_chunks.set(chunks);
+    let mut events = protocol_proxy_state.output_events.get().unwrap_or_default();
+    events.push(OutputEvent::Stderr(normalize_feature_text(&text)));
+    protocol_proxy_state.output_events.set(events);
 }
 
 #[given("host stdout write fails")]
@@ -104,32 +107,27 @@ fn the_output_stream_ends(protocol_proxy_state: &ProtocolProxyState) {
 
 #[given("the daemon stream fails with an error")]
 fn the_daemon_stream_fails(protocol_proxy_state: &ProtocolProxyState) {
-    protocol_proxy_state.stream_error.set(true);
+    let mut events = protocol_proxy_state.output_events.get().unwrap_or_default();
+    events.push(OutputEvent::StreamError);
+    protocol_proxy_state.output_events.set(events);
 }
 
-fn build_output_stream(
-    stdout_chunks: Vec<Vec<u8>>,
-    stderr_chunks: Vec<Vec<u8>>,
-    stream_error: bool,
-) -> Vec<Result<LogOutput, BollardError>> {
-    let mut output_chunks = Vec::new();
-    for chunk in stdout_chunks {
-        output_chunks.push(Ok(LogOutput::StdOut {
-            message: chunk.into(),
-        }));
-    }
-    for chunk in stderr_chunks {
-        output_chunks.push(Ok(LogOutput::StdErr {
-            message: chunk.into(),
-        }));
-    }
-    if stream_error {
-        output_chunks.push(Err(BollardError::DockerResponseServerError {
-            status_code: 500,
-            message: String::from("daemon stream error"),
-        }));
-    }
-    output_chunks
+fn build_output_stream(events: Vec<OutputEvent>) -> Vec<Result<LogOutput, BollardError>> {
+    events
+        .into_iter()
+        .map(|event| match event {
+            OutputEvent::Stdout(bytes) => Ok(LogOutput::StdOut {
+                message: bytes.into(),
+            }),
+            OutputEvent::Stderr(bytes) => Ok(LogOutput::StdErr {
+                message: bytes.into(),
+            }),
+            OutputEvent::StreamError => Err(BollardError::DockerResponseServerError {
+                status_code: 500,
+                message: String::from("daemon stream error"),
+            }),
+        })
+        .collect()
 }
 
 struct CapturedIo {
@@ -177,15 +175,13 @@ fn store_proxy_results(
 fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepResult<()> {
     let request = protocol_request().map_err(|error| error.to_string())?;
     let host_stdin_bytes = protocol_proxy_state.host_stdin.get().unwrap_or_default();
-    let stdout_chunks = protocol_proxy_state.stdout_chunks.get().unwrap_or_default();
-    let stderr_chunks = protocol_proxy_state.stderr_chunks.get().unwrap_or_default();
+    let output_events = protocol_proxy_state.output_events.get().unwrap_or_default();
     let fail_stdout_write = protocol_proxy_state
         .fail_stdout_write
         .get()
         .unwrap_or(false);
-    let stream_error = protocol_proxy_state.stream_error.get().unwrap_or(false);
 
-    let output_chunks = build_output_stream(stdout_chunks, stderr_chunks, stream_error);
+    let output_chunks = build_output_stream(output_events);
 
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| format!("failed to create runtime: {error}"))?;
@@ -313,9 +309,16 @@ fn host_stdout_contains_no_extra_bytes(
     }
 
     // Then, explicitly assert that host stdout contains exactly the concatenated
-    // container stdout chunks with no prefix or suffix bytes.
-    let stdout_chunks = protocol_proxy_state.stdout_chunks.get().unwrap_or_default();
-    let expected: Vec<u8> = stdout_chunks.into_iter().flatten().collect();
+    // container stdout events with no prefix or suffix bytes.
+    let output_events = protocol_proxy_state.output_events.get().unwrap_or_default();
+    let expected: Vec<u8> = output_events
+        .into_iter()
+        .filter_map(|event| match event {
+            OutputEvent::Stdout(bytes) => Some(bytes),
+            _ => None,
+        })
+        .flatten()
+        .collect();
 
     assert_channel_receives(
         &expected,

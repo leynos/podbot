@@ -450,7 +450,7 @@ pass.
 
 ## Decision log
 
-### 2025-04-07: Chose 64 KiB for all buffer constants
+### 2026-04-07: Chose 64 KiB for all buffer constants
 
 Set `STDIN_BUFFER_CAPACITY`, `OUTPUT_BUFFER_CAPACITY`, and
 `PROTOCOL_OUTPUT_CAPACITY` to 65,536 bytes (64 KiB). Rationale:
@@ -459,17 +459,17 @@ Set `STDIN_BUFFER_CAPACITY`, `OUTPUT_BUFFER_CAPACITY`, and
   use 64 KiB).
 - Matches typical OS pipe buffer defaults on Linux and macOS.
 - Provides a good balance between latency (small enough) and throughput
-  (large enough to amortise syscall overhead).
+  (large enough to amortize syscall overhead).
 - Keeps all three constants symmetrical for consistent backpressure behaviour.
 
-**2025-04-07: Made `build_start_exec_options` const**
+**2026-04-07: Made `build_start_exec_options` const**
 
 Changed the function signature from `fn` to `const fn` to satisfy clippy's
 `missing_const_for_fn` lint. The function body already supported const
 evaluation (simple match and struct construction), so this was a zero-cost
 improvement to enable compile-time evaluation where possible.
 
-**2025-04-07: Unit tests do not return `Result`**
+**2026-04-07: Unit tests do not return `Result`**
 
 Converted lifecycle purity tests from returning `TestResult` to returning `()`
 to satisfy clippy's `panic_in_result_fn` and `unnecessary_wraps` lints. Since
