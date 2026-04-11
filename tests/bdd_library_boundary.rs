@@ -1,4 +1,13 @@
 //! Behavioural tests for library boundary stability.
+//!
+//! These BDD scenarios verify that Podbot can be embedded as a library
+//! dependency with a self-contained API surface. Each scenario exercises the
+//! public library boundary from a host-application perspective — loading
+//! configuration without CLI types, executing commands via the orchestration
+//! API, receiving semantic errors, and calling stub orchestration functions.
+//!
+//! Scenarios are defined in `tests/features/library_boundary.feature` and
+//! step definitions live in the `bdd_library_boundary_helpers` module.
 
 mod bdd_library_boundary_helpers;
 

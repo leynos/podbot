@@ -1,4 +1,8 @@
 //! Behavioural helpers for library boundary scenarios.
+//!
+//! This module re-exports step definitions, assertions, and scenario state
+//! used by the BDD tests in `tests/bdd_library_boundary.rs`. The helpers
+//! exercise Podbot's public library API without depending on CLI types.
 
 mod assertions;
 mod state;

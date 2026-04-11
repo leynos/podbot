@@ -633,9 +633,9 @@ fn run_command(
 
 ### Library embedding
 
-Podbot can be used as a library dependency without the CLI adapter layer.
-The `cli` Cargo feature controls the visibility of the `podbot::cli` module,
-which contains Clap parse types. This feature is enabled by default.
+Podbot can be used as a library dependency without the CLI adapter layer. The
+`cli` Cargo feature controls the visibility of the `podbot::cli` module, which
+contains Clap parse types. This feature is enabled by default.
 
 To depend on Podbot as a library without the CLI types:
 
@@ -648,8 +648,8 @@ With this configuration, the `podbot::cli` module is not compiled and the
 consumer can use the library without interacting with Clap types directly.
 
 **Note:** The `clap` crate remains a transitive dependency through
-`ortho_config` at present, so it is still pulled into the dependency tree.
-The feature flag controls module visibility, not the `clap` dependency itself.
+`ortho_config` at present, so it is still pulled into the dependency tree. The
+feature flag controls module visibility, not the `clap` dependency itself.
 
 #### Stable modules
 
@@ -702,3 +702,67 @@ make check-fmt
 ```bash
 make all
 ```
+
+### Feature gate verification
+
+The `cli` Cargo feature gates the `podbot::cli` module and the `podbot` binary
+target. When modifying library code, verify that the crate compiles without the
+CLI feature to ensure the library boundary remains self-contained:
+
+```bash
+cargo check --no-default-features
+```
+
+This confirms that library consumers who depend on podbot with
+`default-features = false` will not encounter compilation errors caused by
+unconditional imports of CLI or Clap types. The full feature matrix tested
+during development is:
+
+| Command                             | What it verifies                 |
+| ----------------------------------- | -------------------------------- |
+| `cargo check --no-default-features` | Library compiles without CLI     |
+| `cargo check --all-features`        | Everything compiles together     |
+| `make test`                         | All tests pass with all features |
+
+### Feature gate maintenance
+
+When adding new public modules or dependencies:
+
+- If the module is part of the stable library boundary (`api`, `config`,
+  `error`, `engine`), it must compile without the `cli` feature.
+- If the module depends on `clap` or other CLI-only crates, gate it behind
+  `#[cfg(feature = "cli")]` in `src/lib.rs` and mark the dependency as
+  `optional = true` in `Cargo.toml`.
+- Run `cargo check --no-default-features` after any change to the public
+  module structure to verify the boundary is intact.
+
+### Behavioural test infrastructure
+
+Podbot uses [rstest-bdd](https://crates.io/crates/rstest-bdd) for
+behaviour-driven development (BDD) tests alongside standard `rstest`
+parametrised integration tests. The two test styles serve complementary
+purposes:
+
+- **BDD scenario tests** (`tests/bdd_*.rs`) are driven by Gherkin feature
+  files in `tests/features/`. Each scenario test file declares a helper module
+  (`tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
+  `then`), shared state, and assertion helpers. Feature files are read at
+  compile time; changes to `.feature` content may require
+  `cargo clean -p podbot` to invalidate incremental compilation caches.
+- **Parametrised integration tests** (`tests/library_embedding.rs` and
+  others) use `rstest` fixtures and `#[case]` parameters directly, without
+  feature files. These tests exercise the library API from a
+  host-application perspective.
+
+The BDD helper module layout follows a consistent pattern:
+
+```plaintext
+tests/bdd_<domain>_helpers/
+  mod.rs          -- re-exports and shared types
+  state.rs        -- ScenarioState struct and fixture
+  steps.rs        -- Given/When step definitions
+  assertions.rs   -- Then step definitions
+```
+
+Every test module and helper file must begin with a module-level (`//!`) doc
+comment explaining its purpose.

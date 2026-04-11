@@ -1,4 +1,8 @@
 //! Assertion helpers for library boundary behavioural tests.
+//!
+//! Provides `then` step definitions that verify configuration loading
+//! outcomes, exec orchestration results, error type matching, and stub
+//! function return values across the library API surface.
 
 use podbot::api::CommandOutcome;
 use podbot::error::{ContainerError, PodbotError};

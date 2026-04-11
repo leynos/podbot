@@ -1,4 +1,8 @@
 //! Given/when/then steps for library boundary scenarios.
+//!
+//! Provides `given` and `when` step definitions that configure mock
+//! environments, construct library-facing load options, invoke exec
+//! orchestration with mock clients, and call stub orchestration functions.
 
 use std::sync::Arc;
 

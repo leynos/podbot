@@ -1,4 +1,8 @@
 //! Scenario state for library boundary behavioural tests.
+//!
+//! Defines the `LibraryBoundaryState` struct that carries intermediate results
+//! between BDD steps — configuration loading outcomes, exec results, mock
+//! failure flags, and stub orchestration outcomes.
 
 use std::sync::Arc;
 
