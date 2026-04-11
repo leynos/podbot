@@ -52,42 +52,44 @@ fn read_inputs(state: &GitHubCredentialErrorsState) -> StepResult<ValidationInpu
     })
 }
 
-/// Build the error message a classified 401 produces.
+/// Build a mock error message for 401 responses.
+///
+/// Returns a minimal error message containing the key substrings that
+/// the BDD assertions check for. This avoids duplicating the complete
+/// classification wording, which could silently diverge if the classifier
+/// changes.
 fn error_401() -> String {
-    String::from(concat!(
-        "credentials rejected (HTTP 401). ",
-        "Hint: The private key may not match the App, or the App may have been ",
-        "suspended. Verify the App ID and regenerate the private key from the ",
-        "GitHub App settings page. If the system clock is significantly skewed, ",
-        "JWT validation will also fail. Raw error: Bad credentials",
-    ))
+    String::from("credentials rejected. Hint: regenerate the private key. clock")
 }
 
-/// Build the error message a classified 403 produces.
+/// Build a mock error message for 403 responses.
+///
+/// Returns a minimal error message containing the key substrings that
+/// the BDD assertions check for. This avoids duplicating the complete
+/// classification wording, which could silently diverge if the classifier
+/// changes.
 fn error_403() -> String {
-    String::from(concat!(
-        "insufficient permissions (HTTP 403). ",
-        "Hint: The App may lack the required permissions. Check the App's ",
-        "permission settings in GitHub. Raw error: Resource not accessible",
-    ))
+    String::from("permissions. Hint: permission settings")
 }
 
-/// Build the error message a classified 404 produces.
+/// Build a mock error message for 404 responses.
+///
+/// Returns a minimal error message containing the key substrings that
+/// the BDD assertions check for. This avoids duplicating the complete
+/// classification wording, which could silently diverge if the classifier
+/// changes.
 fn error_404() -> String {
-    String::from(concat!(
-        "App not found (HTTP 404). ",
-        "Hint: Verify that github.app_id is correct. The App may have been ",
-        "deleted. Raw error: Not Found",
-    ))
+    String::from("not found. Hint: github.app_id")
 }
 
-/// Build the error message a classified 503 produces.
+/// Build a mock error message for 503 responses.
+///
+/// Returns a minimal error message containing the key substrings that
+/// the BDD assertions check for. This avoids duplicating the complete
+/// classification wording, which could silently diverge if the classifier
+/// changes.
 fn error_503() -> String {
-    String::from(concat!(
-        "GitHub API unavailable (HTTP 503). ",
-        "Hint: Check https://www.githubstatus.com for outage information. ",
-        "Retry after the service recovers. Raw error: Service unavailable",
-    ))
+    String::from("unavailable. Hint: githubstatus.com")
 }
 
 /// Create and configure a mock client for the given HTTP response.

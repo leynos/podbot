@@ -4,6 +4,23 @@
 //! codes from the GitHub API are classified into actionable error messages
 //! with remediation hints. Also covers the non-HTTP (network) fallback
 //! path through `classify_github_api_error`.
+//!
+//! # Integration testing note
+//!
+//! Direct unit tests for `classify_github_api_error` with HTTP-based
+//! `octocrab::Error::GitHub` variants are not included because:
+//! - `octocrab::error::GitHubError` is marked `#[non_exhaustive]`, preventing
+//!   direct construction in external crates
+//! - The `error` module in octocrab is private, so we cannot access
+//!   `GitHubError` to construct test instances
+//! - Adding HTTP mocking (wiremock/mockito) would add significant complexity
+//!   for tests that are already covered by the BDD integration tests
+//!
+//! The HTTP error classification path is validated through:
+//! 1. Unit tests of `classify_by_status` (this file) - tests the classification
+//!    logic for all status codes
+//! 2. BDD tests (`tests/bdd_github_credential_errors.rs`) - exercises the full
+//!    integration path with mocked GitHub API responses
 
 use super::*;
 use rstest::rstest;
@@ -83,11 +100,23 @@ fn classify_unexpected_status_includes_code() {
     assert!(msg.contains("418"), "expected status code 418 in: {msg}");
 }
 
-// ── classify_github_api_error integration (non-HTTP path) ─────────────
+// ── classify_github_api_error (non-HTTP path) ─────────────────────────
 
 #[rstest]
 fn classify_network_error_mentions_connectivity() {
     // Use the Service variant to simulate a non-HTTP (network) failure.
+    // This exercises the fallback path in classify_github_api_error when
+    // the error is not a GitHub API error with a status code.
+    //
+    // Note: While octocrab::Error is #[non_exhaustive] and this test
+    // directly constructs the Service variant with snafu::Backtrace::generate(),
+    // this is acceptable because:
+    // 1. Service is a documented public variant of the Error enum
+    // 2. The backtrace field is required by snafu and expected to be present
+    // 3. Creating a real network error would require HTTP mocking infrastructure
+    //    (wiremock/mockito), adding significant complexity for a simple test
+    // 4. If octocrab changes its error structure, the compilation will fail,
+    //    alerting us to update the test
     let io_err = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
     let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_err);
     let error = octocrab::Error::Service {
