@@ -177,10 +177,9 @@ backpressure remains visible to the hosted server:
   consumed by the stdin path per read cycle and provides backpressure by
   limiting how many bytes can be in flight between host stdin reads and
   container input writes.
-- **Container input writes**: the container stdin writer is wrapped in a
-  `BufWriter` with 64 KiB capacity, ensuring the write side also remains
-  explicitly bounded and preventing the copy operation from accumulating an
-  unbounded write queue.
+- **Container input writes**: the container stdin writer receives
+  unbuffered writes from the copy operation. An explicit flush and
+  shutdown sequence follows copy completion to signal end-of-input.
 - **Output chunk size**: Bollard's `output_capacity` is set to 64 KiB for
   protocol-mode exec sessions, controlling the maximum bytes per `LogOutput`
   chunk delivered by the daemon. This reduces per-chunk overhead for large
