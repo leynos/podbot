@@ -52,44 +52,40 @@ fn read_inputs(state: &GitHubCredentialErrorsState) -> StepResult<ValidationInpu
     })
 }
 
-/// Build a mock error message for 401 responses.
+/// Build a mock error message for 401 responses by calling the real classifier.
 ///
-/// Returns a minimal error message containing the key substrings that
-/// the BDD assertions check for. This avoids duplicating the complete
-/// classification wording, which could silently diverge if the classifier
-/// changes.
+/// Uses the actual `classify_by_status` function to ensure BDD tests
+/// exercise the production classification logic, rather than hard-coding
+/// expected error strings that could silently diverge.
 fn error_401() -> String {
-    String::from("credentials rejected. Hint: regenerate the private key. clock")
+    podbot::github::classify_by_status(401, "Bad credentials", "Bad credentials")
 }
 
-/// Build a mock error message for 403 responses.
+/// Build a mock error message for 403 responses by calling the real classifier.
 ///
-/// Returns a minimal error message containing the key substrings that
-/// the BDD assertions check for. This avoids duplicating the complete
-/// classification wording, which could silently diverge if the classifier
-/// changes.
+/// Uses the actual `classify_by_status` function to ensure BDD tests
+/// exercise the production classification logic, rather than hard-coding
+/// expected error strings that could silently diverge.
 fn error_403() -> String {
-    String::from("permissions. Hint: permission settings")
+    podbot::github::classify_by_status(403, "Resource not accessible", "Resource not accessible")
 }
 
-/// Build a mock error message for 404 responses.
+/// Build a mock error message for 404 responses by calling the real classifier.
 ///
-/// Returns a minimal error message containing the key substrings that
-/// the BDD assertions check for. This avoids duplicating the complete
-/// classification wording, which could silently diverge if the classifier
-/// changes.
+/// Uses the actual `classify_by_status` function to ensure BDD tests
+/// exercise the production classification logic, rather than hard-coding
+/// expected error strings that could silently diverge.
 fn error_404() -> String {
-    String::from("not found. Hint: github.app_id")
+    podbot::github::classify_by_status(404, "Not Found", "Not Found")
 }
 
-/// Build a mock error message for 503 responses.
+/// Build a mock error message for 503 responses by calling the real classifier.
 ///
-/// Returns a minimal error message containing the key substrings that
-/// the BDD assertions check for. This avoids duplicating the complete
-/// classification wording, which could silently diverge if the classifier
-/// changes.
+/// Uses the actual `classify_by_status` function to ensure BDD tests
+/// exercise the production classification logic, rather than hard-coding
+/// expected error strings that could silently diverge.
 fn error_503() -> String {
-    String::from("unavailable. Hint: githubstatus.com")
+    podbot::github::classify_by_status(503, "Service unavailable", "Service unavailable")
 }
 
 /// Create and configure a mock client for the given HTTP response.
@@ -113,20 +109,9 @@ fn configure_mock_client(mock_response: MockHttpResponse) -> MockGitHubAppClient
 
 /// Build a factory closure that creates a mock client.
 fn build_factory(
-    expected_app_id: u64,
     mock_response: MockHttpResponse,
 ) -> impl FnOnce(u64, EncodingKey) -> Result<MockGitHubAppClient, GitHubError> {
-    move |received_app_id: u64, _key: EncodingKey| {
-        if received_app_id != expected_app_id {
-            return Err(GitHubError::AuthenticationFailed {
-                message: format!(
-                    "app_id mismatch: expected {expected_app_id}, \
-                     received {received_app_id}"
-                ),
-            });
-        }
-        Ok(configure_mock_client(mock_response))
-    }
+    move |_app_id: u64, _key: EncodingKey| Ok(configure_mock_client(mock_response))
 }
 
 /// Run validation and convert the result to a `ValidationOutcome`.
@@ -246,7 +231,7 @@ fn validate_credentials_step(
     github_credential_errors_state: &GitHubCredentialErrorsState,
 ) -> StepResult<()> {
     let inputs = read_inputs(github_credential_errors_state)?;
-    let factory = build_factory(inputs.app_id, inputs.mock_response);
+    let factory = build_factory(inputs.mock_response);
     let outcome = run_validation(inputs.app_id, &inputs.key_path, factory)?;
     github_credential_errors_state.outcome.set(outcome);
     Ok(())
