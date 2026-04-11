@@ -225,7 +225,7 @@ When adding a new execution mode:
 
 ## 8. Testing conventions
 
-### 8.1. Test organisation
+### 8.1. Test organization
 
 - Unit tests live in `tests.rs` submodules colocated with production
   code.
@@ -241,7 +241,7 @@ When adding a new execution mode:
 - `ContainerExecClient` mock implementations for unit testing without a
   live daemon.
 
-### 8.3. Parameterised tests
+### 8.3. Parameterized tests
 
 Use `#[rstest(...)]` to eliminate duplicated test cases. Group related
 parameters in structs when the parameter list exceeds three items.
