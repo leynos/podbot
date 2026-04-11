@@ -925,7 +925,7 @@ breaking ways without a major version bump.
 |          |           | `CredentialUploadRequest`, `CredentialUploadResult`                |
 | `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`,                    |
 |          |           | `GitHubError`, `FilesystemError`, `Result<T>`                      |
-| `github` | Internal  | Subject to change; not part of the stable integration contract.    |
+| `GitHub` | Internal  | Subject to change; not part of the stable integration contract.    |
 |          |           | Provides `load_private_key`, `build_app_client`,                   |
 |          |           | `validate_app_credentials`, `GitHubAppClient` trait.               |
 | `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo  |

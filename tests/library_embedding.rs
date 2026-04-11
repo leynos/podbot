@@ -237,7 +237,23 @@ enum FailAt {
     InspectMissingExitCode,
 }
 
-#[expect(clippy::too_many_lines, reason = "test helper clarity over length")]
+fn expect_create_exec_ok(client: &mut MockEmbedClient) {
+    client.expect_create_exec().times(1).returning(|_, _| {
+        Box::pin(async {
+            Ok(CreateExecResults {
+                id: String::from("exec-id"),
+            })
+        })
+    });
+}
+
+fn expect_start_exec_detached_ok(client: &mut MockEmbedClient) {
+    client
+        .expect_start_exec()
+        .times(1)
+        .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
+}
+
 fn configure_failing_exec(client: &mut MockEmbedClient, fail_at: FailAt) -> ExecMode {
     match fail_at {
         FailAt::Create => {
@@ -252,13 +268,7 @@ fn configure_failing_exec(client: &mut MockEmbedClient, fail_at: FailAt) -> Exec
             ExecMode::Attached
         }
         FailAt::Start => {
-            client.expect_create_exec().times(1).returning(|_, _| {
-                Box::pin(async {
-                    Ok(CreateExecResults {
-                        id: String::from("exec-id"),
-                    })
-                })
-            });
+            expect_create_exec_ok(client);
             client.expect_start_exec().times(1).returning(|_, _| {
                 Box::pin(async {
                     Err(bollard::errors::Error::DockerResponseServerError {
@@ -270,17 +280,8 @@ fn configure_failing_exec(client: &mut MockEmbedClient, fail_at: FailAt) -> Exec
             ExecMode::Attached
         }
         FailAt::Inspect => {
-            client.expect_create_exec().times(1).returning(|_, _| {
-                Box::pin(async {
-                    Ok(CreateExecResults {
-                        id: String::from("exec-id"),
-                    })
-                })
-            });
-            client
-                .expect_start_exec()
-                .times(1)
-                .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
+            expect_create_exec_ok(client);
+            expect_start_exec_detached_ok(client);
             client.expect_inspect_exec().times(1).returning(|_| {
                 Box::pin(async {
                     Err(bollard::errors::Error::DockerResponseServerError {
@@ -292,17 +293,8 @@ fn configure_failing_exec(client: &mut MockEmbedClient, fail_at: FailAt) -> Exec
             ExecMode::Detached
         }
         FailAt::InspectMissingExitCode => {
-            client.expect_create_exec().times(1).returning(|_, _| {
-                Box::pin(async {
-                    Ok(CreateExecResults {
-                        id: String::from("exec-id"),
-                    })
-                })
-            });
-            client
-                .expect_start_exec()
-                .times(1)
-                .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
+            expect_create_exec_ok(client);
+            expect_start_exec_detached_ok(client);
             client.expect_inspect_exec().times(1).returning(|_| {
                 let inspect = ExecInspectResponse {
                     running: Some(false),
