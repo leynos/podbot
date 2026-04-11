@@ -239,6 +239,53 @@ use detached_helpers::{
     setup_start_exec_returns_detached,
 };
 
+struct StartOptionsCase {
+    mode: ExecMode,
+    expected_detach: bool,
+    expected_tty: bool,
+    expected_output_capacity: Option<usize>,
+}
+
+fn assert_start_options(options: &StartExecOptions, case: &StartOptionsCase) {
+    assert_eq!(
+        options.detach, case.expected_detach,
+        "detach for {:?}",
+        case.mode
+    );
+    assert_eq!(options.tty, case.expected_tty, "tty for {:?}", case.mode);
+    assert_eq!(
+        options.output_capacity, case.expected_output_capacity,
+        "output_capacity for {:?}",
+        case.mode
+    );
+}
+
+#[rstest]
+#[case(StartOptionsCase {
+    mode: ExecMode::Protocol,
+    expected_detach: false,
+    expected_tty: false,
+    expected_output_capacity: Some(65_536),
+})]
+#[case(StartOptionsCase {
+    mode: ExecMode::Attached,
+    expected_detach: false,
+    expected_tty: true,
+    expected_output_capacity: None,
+})]
+#[case(StartOptionsCase {
+    mode: ExecMode::Detached,
+    expected_detach: true,
+    expected_tty: false,
+    expected_output_capacity: None,
+})]
+fn build_start_exec_options_per_mode(#[case] case: StartOptionsCase) -> TestResult {
+    let request = ExecRequest::new("c", vec![String::from("cmd")], case.mode)?;
+    let options = build_start_exec_options(&request);
+    assert_start_options(&options, &case);
+    Ok(())
+}
+
 #[rstest]
 fn exec_async_detached_returns_exit_code(runtime: RuntimeFixture) -> TestResult {
     let runtime_handle = runtime?;

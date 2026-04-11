@@ -238,6 +238,12 @@ When adding a new execution mode:
 - `RecordingWriter`: captures bytes written to a stream for assertion.
 - `ProtocolProxyIo::new(stdin, stdout, stderr)`: injects host-IO
   handles so tests can supply in-memory readers and writers.
+- `run_lifecycle_session(runtime, stdin_bytes, output)`: convenience
+  wrapper around `run_session` for lifecycle purity tests that only
+  need to inspect stdout. It creates `RecordingWriter` handles
+  internally and returns `(Result<(), PodbotError>,
+  Arc<Mutex<Vec<u8>>>)` — the session result paired with captured
+  stdout bytes.
 - `ContainerExecClient` mock implementations for unit testing without a
   live daemon.
 
