@@ -4,11 +4,6 @@
 //! perspective, without importing `podbot::cli` or depending on Clap types
 //! directly. This proves that the library boundary is self-contained.
 
-#![allow(
-    clippy::too_many_arguments,
-    reason = "parameterised rstest cases require multiple test parameters"
-)]
-
 use bollard::container::LogOutput;
 use bollard::exec::{CreateExecOptions, CreateExecResults, StartExecOptions, StartExecResults};
 use bollard::models::ExecInspectResponse;
@@ -92,42 +87,50 @@ fn load_config_without_cli_types() {
 // Exec orchestration through library API
 // -------------------------------------------------------------------------
 
+struct LibraryApiExecTestCase {
+    exit_code: i64,
+    mode: ExecMode,
+    command: Vec<String>,
+    check: fn(&Result<CommandOutcome, PodbotError>) -> bool,
+    description: &'static str,
+}
+
 #[rstest]
-#[case::success(
-    0,
-    ExecMode::Attached,
-    vec![String::from("echo"), String::from("hello")],
-    |r: &Result<CommandOutcome, PodbotError>| matches!(r, Ok(CommandOutcome::Success)),
-    "exec should return Success"
-)]
-#[case::command_exit(
-    42,
-    ExecMode::Detached,
-    vec![String::from("exit"), String::from("42")],
-    |r: &Result<CommandOutcome, PodbotError>| matches!(r, Ok(CommandOutcome::CommandExit { code: 42 })),
-    "exec should return CommandExit with code 42"
-)]
+#[case::success(LibraryApiExecTestCase {
+    exit_code: 0,
+    mode: ExecMode::Attached,
+    command: vec![String::from("echo"), String::from("hello")],
+    check: |r| matches!(r, Ok(CommandOutcome::Success)),
+    description: "exec should return Success",
+})]
+#[case::command_exit(LibraryApiExecTestCase {
+    exit_code: 42,
+    mode: ExecMode::Detached,
+    command: vec![String::from("exit"), String::from("42")],
+    check: |r| matches!(r, Ok(CommandOutcome::CommandExit { code: 42 })),
+    description: "exec should return CommandExit with code 42",
+})]
 fn exec_via_library_api_returns_expected_outcome(
     runtime: tokio::runtime::Runtime,
-    #[case] exit_code: i64,
-    #[case] mode: ExecMode,
-    #[case] command: Vec<String>,
-    #[case] check: impl Fn(&Result<CommandOutcome, PodbotError>) -> bool,
-    #[case] description: &str,
+    #[case] test_case: LibraryApiExecTestCase,
 ) {
     let mut client = MockEmbedClient::new();
-    configure_successful_exec(&mut client, exit_code, mode);
+    configure_successful_exec(&mut client, test_case.exit_code, test_case.mode);
 
     let result = exec(ExecParams {
         connector: &client,
         container: "embed-sandbox",
-        command,
-        mode,
+        command: test_case.command,
+        mode: test_case.mode,
         tty: false,
         runtime_handle: runtime.handle(),
     });
 
-    assert!(check(&result), "{description}, got: {result:?}");
+    assert!(
+        (test_case.check)(&result),
+        "{}, got: {result:?}",
+        test_case.description
+    );
 }
 
 // -------------------------------------------------------------------------
