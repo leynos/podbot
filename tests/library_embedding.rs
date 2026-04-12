@@ -336,10 +336,7 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
                 })
             });
 
-            client
-                .expect_resize_exec()
-                .times(0..)
-                .returning(|_, _| Box::pin(async { Ok(()) }));
+            client.expect_resize_exec().never();
         }
         ExecMode::Detached => {
             client

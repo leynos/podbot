@@ -925,14 +925,17 @@ breaking ways without a major version bump.
 |          |           | `CredentialUploadRequest`, `CredentialUploadResult`                |
 | `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`,                    |
 |          |           | `GitHubError`, `FilesystemError`, `Result<T>`                      |
-| `GitHub` | Internal  | Subject to change; not part of the stable integration contract.    |
-|          |           | Provides `load_private_key`, `build_app_client`,                   |
+| `github` | Internal  | Subject to change; not part of the stable integration contract.    |
+|          |           | GitHub App support provided by the `podbot::github` module with    |
+|          |           | `load_private_key`, `build_app_client`,                            |
 |          |           | `validate_app_credentials`, `GitHubAppClient` trait.               |
 | `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo  |
 |          |           | feature (enabled by default). When enabled, adds `clap` as a       |
 |          |           | direct dependency. Library-only consumers can set                  |
 |          |           | `default-features = false` to hide CLI module visibility.          |
 |          |           | Note: `clap` remains in the dependency tree via `ortho_config`.    |
+
+Table: Module stability and key types for Podbot modules
 
 ### Planned API surfaces
 
@@ -948,6 +951,8 @@ steps are complete.
 | Prompt/bundle schemas   | Step 4.8     | Prompt validation and bundle surface |
 | MCP wire models         | Step 4.7     | MCP wire provisioning and injection  |
 | `HostedSession`         | Step 4.6     | Hosted session control plane         |
+
+Table: Planned API surfaces with roadmap milestones
 
 ### Normalized launch contract
 
