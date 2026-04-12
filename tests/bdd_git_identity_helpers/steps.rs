@@ -147,7 +147,8 @@ fn host_git_email_is(git_identity_state: &GitIdentityState, word: String) {
 }
 
 #[given("the container engine is available")]
-fn container_engine_is_available(_git_identity_state: &GitIdentityState) {
+fn container_engine_is_available(git_identity_state: &GitIdentityState) {
+    let _ = git_identity_state;
     // No-op: this is just narrative confirmation that exec will succeed.
 }
 
