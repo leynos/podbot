@@ -52,50 +52,69 @@ fn read_inputs(state: &GitHubCredentialErrorsState) -> StepResult<ValidationInpu
     })
 }
 
-/// Build a mock error message for 401 responses by calling the real classifier.
+/// Build a mock error message for a given HTTP status code.
 ///
-/// Uses the actual `classify_by_status` function to ensure BDD tests
-/// exercise the production classification logic, rather than hard-coding
-/// expected error strings that could silently diverge.
-fn error_401() -> String {
-    podbot::github::classify_by_status(401, "Bad credentials", "Bad credentials")
-}
-
-/// Build a mock error message for 403 responses by calling the real classifier.
-///
-/// Uses the actual `classify_by_status` function to ensure BDD tests
-/// exercise the production classification logic, rather than hard-coding
-/// expected error strings that could silently diverge.
-fn error_403() -> String {
-    podbot::github::classify_by_status(403, "Resource not accessible", "Resource not accessible")
-}
-
-/// Build a mock error message for 404 responses by calling the real classifier.
-///
-/// Uses the actual `classify_by_status` function to ensure BDD tests
-/// exercise the production classification logic, rather than hard-coding
-/// expected error strings that could silently diverge.
-fn error_404() -> String {
-    podbot::github::classify_by_status(404, "Not Found", "Not Found")
-}
-
-/// Build a mock error message for 503 responses by calling the real classifier.
-///
-/// Uses the actual `classify_by_status` function to ensure BDD tests
-/// exercise the production classification logic, rather than hard-coding
-/// expected error strings that could silently diverge.
-fn error_503() -> String {
-    podbot::github::classify_by_status(503, "Service unavailable", "Service unavailable")
+/// Maps status codes to their expected error message formats. BDD tests
+/// verify user-visible behavior, so we hard-code the expected strings
+/// that `classify_by_status` should produce rather than calling the
+/// implementation directly.
+fn error_for(status: u16, raw: &str) -> String {
+    match status {
+        401 => format!(
+            concat!(
+                "credentials rejected (HTTP 401). ",
+                "Hint: The private key may not match the App, or the App may have been ",
+                "suspended. Verify the App ID and regenerate the private key from the ",
+                "GitHub App settings page. If the system clock is significantly skewed, ",
+                "JWT validation will also fail. Raw error: {raw}",
+            ),
+            raw = raw,
+        ),
+        403 => format!(
+            concat!(
+                "insufficient permissions (HTTP 403). ",
+                "Hint: The App may lack the required permissions. Check the App's ",
+                "permission settings in GitHub. Raw error: {raw}",
+            ),
+            raw = raw,
+        ),
+        404 => format!(
+            concat!(
+                "App not found (HTTP 404). ",
+                "Hint: Verify that github.app_id is correct. The App may have been ",
+                "deleted. Raw error: {raw}",
+            ),
+            raw = raw,
+        ),
+        500..=599 => format!(
+            concat!(
+                "GitHub API unavailable (HTTP {code}). ",
+                "Hint: Check https://www.githubstatus.com for outage information. ",
+                "Retry after the service recovers. Raw error: {raw}",
+            ),
+            code = status,
+            raw = raw,
+        ),
+        _ => format!(
+            concat!(
+                "unexpected response (HTTP {code}). ",
+                "Hint: Check https://www.githubstatus.com for outage information. ",
+                "Raw error: {error}",
+            ),
+            code = status,
+            error = raw,
+        ),
+    }
 }
 
 /// Create and configure a mock client for the given HTTP response.
 fn configure_mock_client(mock_response: MockHttpResponse) -> MockGitHubAppClient {
     let mut mock_client = MockGitHubAppClient::new();
     let message = match mock_response {
-        MockHttpResponse::Unauthorized401 => error_401(),
-        MockHttpResponse::Forbidden403 => error_403(),
-        MockHttpResponse::NotFound404 => error_404(),
-        MockHttpResponse::ServerError503 => error_503(),
+        MockHttpResponse::Unauthorized401 => error_for(401, "Bad credentials"),
+        MockHttpResponse::Forbidden403 => error_for(403, "Resource not accessible"),
+        MockHttpResponse::NotFound404 => error_for(404, "Not Found"),
+        MockHttpResponse::ServerError503 => error_for(503, "Service unavailable"),
     };
     mock_client
         .expect_validate_credentials()

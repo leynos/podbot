@@ -140,16 +140,8 @@ fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
 /// `raw_message` is the GitHub API message body (from the response JSON).
 /// `full_error` is the complete `Display` output from the Octocrab error,
 /// used only for the catch-all branch.
-///
-/// This function is public to allow BDD integration tests to use the real
-/// classification logic. While production code calls this via
-/// [`classify_github_api_error`], the BDD tests cannot easily construct
-/// `octocrab::Error` instances due to non-exhaustive types, so they call
-/// this function directly to ensure they test the real classifier rather
-/// than hard-coding expected error strings.
-#[doc(hidden)] // Hide from public docs since it's primarily for testing
 #[must_use]
-pub fn classify_by_status(code: u16, raw_message: &str, full_error: &str) -> String {
+pub(crate) fn classify_by_status(code: u16, raw_message: &str, full_error: &str) -> String {
     match code {
         401 => format!(
             concat!(
