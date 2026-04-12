@@ -75,7 +75,7 @@ src/engine/connection/exec/
 _Table 1: Execution modes and their behavioural properties._
 
 Attached mode enables TTY only when both local stdin and stdout are terminals.
-Protocol mode permanently disables TTY so the byte stream is not corrupted by
+Protocol mode permanently disables TTY, so the byte stream is not corrupted by
 terminal framing.
 
 ### 3.2. Key types
