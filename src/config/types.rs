@@ -75,6 +75,16 @@ impl GitHubConfig {
             && self.installation_id.is_some_and(|v| v != 0)
             && self.private_key_path.is_some()
     }
+
+    /// Returns `true` if any `GitHub` credential field has been set.
+    ///
+    /// Use this to decide whether complete credential configuration should be
+    /// enforced: if any field is present, call [`Self::validate`] to confirm
+    /// all required fields are also present.
+    #[must_use]
+    pub const fn is_partially_configured(&self) -> bool {
+        self.app_id.is_some() || self.installation_id.is_some() || self.private_key_path.is_some()
+    }
 }
 
 /// Sandbox security configuration.
