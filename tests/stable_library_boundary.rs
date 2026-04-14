@@ -16,7 +16,8 @@ fn stable_embedder_path_uses_only_supported_modules() {
 
     assert_eq!(round_trip, request);
     assert_eq!(round_trip.mode(), ExecMode::Protocol);
-    assert!(round_trip.tty());
+    assert!(!request.tty());
+    assert!(!round_trip.tty());
 
     let connect_signature: fn(
         &AppConfig,

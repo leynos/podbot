@@ -50,8 +50,8 @@ pub enum CommandOutcome {
 /// This orchestration entry point currently performs `GitHub` configuration
 /// and credential validation before the wider agent lifecycle exists. If any
 /// `GitHub` field is present in the supplied [`AppConfig`], `run_agent` calls
-/// `config.github.validate()` immediately to require a complete credential set.
-/// When both `app_id` and `private_key_path` are present, it then calls
+/// `config.github.validate()` immediately to require a complete credential
+/// set. When both `app_id` and `private_key_path` are present, it then calls
 /// `validate_agent_github_credentials` to confirm the key material can
 /// authenticate successfully.
 ///

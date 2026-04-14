@@ -113,13 +113,14 @@ impl ExecRequest {
     #[must_use]
     pub const fn with_mode(mut self, mode: ExecMode) -> Self {
         self.mode = mode;
+        self.tty = normalized_tty(mode, self.tty);
         self
     }
 
     /// Return a copy of the request with an updated TTY preference.
     #[must_use]
     pub const fn with_tty(mut self, tty: bool) -> Self {
-        self.tty = tty;
+        self.tty = normalized_tty(self.mode, tty);
         self
     }
 
@@ -159,6 +160,10 @@ impl TryFrom<ExecRequestDef> for ExecRequest {
 
 const fn default_exec_mode() -> ExecMode {
     ExecMode::Attached
+}
+
+const fn normalized_tty(mode: ExecMode, tty: bool) -> bool {
+    matches!(mode, ExecMode::Attached) && tty
 }
 
 /// Reusable exec context for embedders that want to cache engine state.

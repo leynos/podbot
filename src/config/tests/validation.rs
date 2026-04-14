@@ -115,7 +115,9 @@ fn github_config_is_configured_false_when_partial() {
 
 #[rstest]
 #[case(None, None, None, false)]
+#[case(Some(0), None, None, true)]
 #[case(Some(12345), None, None, true)]
+#[case(None, Some(0), None, true)]
 #[case(None, Some(67890), None, true)]
 #[case(None, None, Some(Utf8PathBuf::from("/path/to/key.pem")), true)]
 fn github_config_is_partially_configured_matches_any_present_field(

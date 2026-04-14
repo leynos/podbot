@@ -4,7 +4,9 @@
 //! execution behaviour can be unit-tested without a live daemon.
 
 mod attached;
+mod helpers;
 mod protocol;
+mod session;
 mod terminal;
 
 use std::future::Future;
@@ -14,10 +16,15 @@ use bollard::exec::{CreateExecOptions, CreateExecResults, ResizeExecOptions, Sta
 use bollard::{Docker, errors::Error as BollardError};
 
 use self::attached::{run_attached_session_async, wait_for_exit_code_async};
-use self::protocol::{ProtocolSessionOptions, run_protocol_session_async_with_options};
+use self::helpers::{
+    build_create_exec_options, build_start_exec_options, map_create_exec_error,
+    map_start_exec_error, validate_command, validate_required_field,
+};
+use self::protocol::run_protocol_session_async_with_options;
+use self::session::{ExecSessionOptions, protocol_session_options};
 use self::terminal::{SystemTerminalSizeProvider, TerminalSizeProvider};
 use super::EngineConnector;
-use crate::error::{ConfigError, ContainerError, PodbotError};
+use crate::error::{ContainerError, PodbotError};
 
 pub(super) const EXEC_INSPECT_POLL_INTERVAL_MS: u64 = 100;
 
@@ -223,37 +230,6 @@ impl ExecResult {
     }
 }
 
-/// Internal exec-session knobs used by test harnesses that need deterministic
-/// stream behaviour.
-#[derive(Debug, Clone, Copy, Default)]
-#[doc(hidden)]
-pub struct ExecSessionOptions {
-    disable_protocol_stdin_forwarding: bool,
-}
-
-impl ExecSessionOptions {
-    /// Create default exec-session options with production behaviour.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self {
-            disable_protocol_stdin_forwarding: false,
-        }
-    }
-
-    /// Disable protocol stdin forwarding for tests that must avoid inherited
-    /// process stdin.
-    #[must_use]
-    pub const fn with_protocol_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
-        self.disable_protocol_stdin_forwarding = disable;
-        self
-    }
-
-    const fn protocol_session_options(self) -> ProtocolSessionOptions {
-        ProtocolSessionOptions::new()
-            .with_stdin_forwarding_disabled(self.disable_protocol_stdin_forwarding)
-    }
-}
-
 impl EngineConnector {
     /// Execute a command in a running container (async version).
     ///
@@ -269,8 +245,7 @@ impl EngineConnector {
     }
 
     /// Execute a command in a running container with explicit session options.
-    #[doc(hidden)]
-    pub async fn exec_async_with_options<C: ContainerExecClient>(
+    pub(crate) async fn exec_async_with_options<C: ContainerExecClient>(
         client: &C,
         request: &ExecRequest,
         options: ExecSessionOptions,
@@ -280,6 +255,24 @@ impl EngineConnector {
             request,
             &SystemTerminalSizeProvider,
             options,
+        )
+        .await
+    }
+
+    /// Execute a protocol request without forwarding inherited stdin.
+    ///
+    /// This hidden seam exists for integration tests that must avoid inheriting
+    /// the harness process stdin while still exercising the production
+    /// protocol-mode flow.
+    #[doc(hidden)]
+    pub async fn exec_async_without_protocol_stdin_forwarding<C: ContainerExecClient>(
+        client: &C,
+        request: &ExecRequest,
+    ) -> Result<ExecResult, PodbotError> {
+        Self::exec_async_with_options(
+            client,
+            request,
+            ExecSessionOptions::new().with_protocol_stdin_forwarding_disabled(true),
         )
         .await
     }
@@ -294,7 +287,7 @@ impl EngineConnector {
         client: &C,
         request: &ExecRequest,
     ) -> Result<ExecResult, PodbotError> {
-        runtime.block_on(Self::exec_async(client, request))
+        block_on_runtime(runtime, async { Self::exec_async(client, request).await })
     }
 
     #[cfg(test)]
@@ -327,23 +320,13 @@ impl EngineConnector {
         let create_result = client
             .create_exec(request.container_id(), build_create_exec_options(request))
             .await
-            .map_err(|error| {
-                exec_failed(
-                    request.container_id(),
-                    format!("create exec failed: {error}"),
-                )
-            })?;
+            .map_err(|error| map_create_exec_error(request.container_id(), error))?;
 
         let exec_id = create_result.id;
         let start_result = client
             .start_exec(&exec_id, Some(build_start_exec_options(request)))
             .await
-            .map_err(|error| {
-                exec_failed(
-                    request.container_id(),
-                    format!("start exec failed: {error}"),
-                )
-            })?;
+            .map_err(|error| map_start_exec_error(request.container_id(), error))?;
 
         match (request.mode(), start_result) {
             (ExecMode::Attached, bollard::exec::StartExecResults::Attached { output, input }) => {
@@ -355,7 +338,7 @@ impl EngineConnector {
                     request,
                     output,
                     input,
-                    options.protocol_session_options(),
+                    protocol_session_options(options),
                 )
                 .await?;
             }
@@ -382,60 +365,16 @@ impl EngineConnector {
     }
 }
 
-fn build_create_exec_options(request: &ExecRequest) -> CreateExecOptions<String> {
-    let attached = request.mode().is_attached();
-    CreateExecOptions::<String> {
-        attach_stdin: Some(attached),
-        attach_stdout: Some(attached),
-        attach_stderr: Some(attached),
-        tty: Some(attached && request.tty()),
-        env: request.env().map(<[String]>::to_vec),
-        cmd: Some(request.command().to_vec()),
-        ..CreateExecOptions::default()
+fn block_on_runtime<F>(runtime: &tokio::runtime::Handle, future: F) -> F::Output
+where
+    F: std::future::Future,
+{
+    if tokio::runtime::Handle::try_current().is_ok() {
+        tokio::task::block_in_place(|| runtime.block_on(future))
+    } else {
+        runtime.block_on(future)
     }
 }
-
-const fn build_start_exec_options(request: &ExecRequest) -> StartExecOptions {
-    let output_capacity = match request.mode() {
-        ExecMode::Protocol => Some(PROTOCOL_OUTPUT_CAPACITY),
-        ExecMode::Attached | ExecMode::Detached => None,
-    };
-    StartExecOptions {
-        detach: !request.mode().is_attached(),
-        tty: request.mode().is_attached() && request.tty(),
-        output_capacity,
-    }
-}
-
-fn validate_command(command: Vec<String>) -> Result<Vec<String>, PodbotError> {
-    if command.is_empty() {
-        return Err(PodbotError::from(ConfigError::MissingRequired {
-            field: String::from("command"),
-        }));
-    }
-
-    let executable = command.first().map(String::as_str).unwrap_or_default();
-    if executable.trim().is_empty() {
-        return Err(PodbotError::from(ConfigError::InvalidValue {
-            field: String::from("command"),
-            reason: String::from("command executable must not be empty"),
-        }));
-    }
-
-    Ok(command)
-}
-
-fn validate_required_field<'a>(field: &str, value: &'a str) -> Result<&'a str, PodbotError> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(PodbotError::from(ConfigError::MissingRequired {
-            field: String::from(field),
-        }));
-    }
-
-    Ok(trimmed)
-}
-
 pub(super) fn exec_failed(container_id: &str, message: impl Into<String>) -> PodbotError {
     PodbotError::from(ContainerError::ExecFailed {
         container_id: String::from(container_id),

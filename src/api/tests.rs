@@ -89,7 +89,7 @@ fn exec_request_builder_methods_preserve_other_fields() {
         &[String::from("echo"), String::from("hello")]
     );
     assert_eq!(updated.mode(), ExecMode::Protocol);
-    assert!(updated.tty());
+    assert!(!updated.tty());
 
     assert_eq!(base.container(), "sandbox");
     assert_eq!(
@@ -98,6 +98,23 @@ fn exec_request_builder_methods_preserve_other_fields() {
     );
     assert_eq!(base.mode(), ExecMode::Attached);
     assert!(!base.tty());
+}
+
+#[rstest]
+#[case(ExecMode::Detached)]
+#[case(ExecMode::Protocol)]
+fn exec_request_normalizes_tty_for_non_attached_modes(#[case] mode: ExecMode) {
+    let request = ExecRequest::new("sandbox", vec![String::from("echo")])
+        .expect("request should be valid")
+        .with_tty(true)
+        .with_mode(mode)
+        .with_tty(true);
+
+    assert_eq!(request.mode(), mode);
+    assert!(
+        !request.tty(),
+        "tty should be disabled for non-attached modes"
+    );
 }
 
 #[rstest]
@@ -187,6 +204,28 @@ fn exec_request_deserialization_reuses_validation(
     assert!(
         error.to_string().contains(expected_field),
         "expected error to mention {expected_field}, got: {error}"
+    );
+}
+
+#[rstest]
+#[case(
+    r#"{"container":"sandbox","command":["echo"],"mode":"Detached","tty":true}"#,
+    ExecMode::Detached
+)]
+#[case(
+    r#"{"container":"sandbox","command":["echo"],"mode":"Protocol","tty":true}"#,
+    ExecMode::Protocol
+)]
+fn exec_request_deserialization_normalizes_tty_for_non_attached_modes(
+    #[case] payload: &str,
+    #[case] expected_mode: ExecMode,
+) {
+    let request = serde_json::from_str::<ExecRequest>(payload).expect("payload should deserialize");
+
+    assert_eq!(request.mode(), expected_mode);
+    assert!(
+        !request.tty(),
+        "tty should be disabled for non-attached modes"
     );
 }
 

@@ -6,7 +6,7 @@ use futures_util::stream;
 use mockall::mock;
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, EngineConnector, ExecMode, ExecRequest,
-    ExecSessionOptions, InspectExecFuture, ResizeExecFuture, StartExecFuture,
+    InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
 
@@ -107,11 +107,9 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| format!("failed to create runtime: {error}"))?;
     let execution_result = if mode == ExecMode::Protocol {
-        runtime.block_on(EngineConnector::exec_async_with_options(
-            &client,
-            &request,
-            ExecSessionOptions::new().with_protocol_stdin_forwarding_disabled(true),
-        ))
+        runtime.block_on(
+            EngineConnector::exec_async_without_protocol_stdin_forwarding(&client, &request),
+        )
     } else {
         let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
         runtime.block_on(EngineConnector::exec_async(&client, &request))
