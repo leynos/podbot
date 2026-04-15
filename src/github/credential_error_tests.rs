@@ -33,30 +33,17 @@ use snafu::GenerateImplicitData;
 // ── classify_by_status tests ──────────────────────────────────────────
 
 #[rstest]
-fn classify_401_error_mentions_credentials_rejected() {
-    let msg = classify_by_status(401, "Bad credentials");
-    assert!(
-        msg.contains("credentials rejected"),
-        "expected 'credentials rejected' in: {msg}"
-    );
-    assert!(
-        msg.contains("regenerate the private key"),
-        "expected regeneration hint in: {msg}"
-    );
-    assert!(msg.contains("clock"), "expected clock-skew hint in: {msg}");
-}
-
-#[rstest]
-fn classify_403_error_mentions_insufficient_permissions() {
-    let msg = classify_by_status(403, "Resource not accessible");
-    assert!(
-        msg.contains("insufficient permissions"),
-        "expected 'insufficient permissions' in: {msg}"
-    );
-    assert!(
-        msg.contains("permission settings"),
-        "expected permission settings hint in: {msg}"
-    );
+#[case(401, "Bad credentials", &["credentials rejected", "regenerate the private key", "clock"])]
+#[case(403, "Resource not accessible", &["insufficient permissions", "permission settings"])]
+fn classify_error_messages(
+    #[case] status: u16,
+    #[case] message: &str,
+    #[case] expected_substrings: &[&str],
+) {
+    let msg = classify_by_status(status, message);
+    for expected in expected_substrings {
+        assert!(msg.contains(expected), "expected '{expected}' in: {msg}");
+    }
 }
 
 // ── rate-limit 403 tests ────────────────────────────────────────────
