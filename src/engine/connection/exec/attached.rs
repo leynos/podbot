@@ -7,18 +7,16 @@ use std::time::Duration;
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use futures_util::{Stream, StreamExt};
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
+use super::host_io::default_host_stdin;
 use super::terminal::{TerminalSizeProvider, resize_exec_to_current_terminal_async};
 #[cfg(unix)]
 use super::terminal::{maybe_sigwinch_listener, wait_for_sigwinch};
 use super::{ContainerExecClient, EXEC_INSPECT_POLL_INTERVAL_MS, ExecRequest, exec_failed};
 use crate::error::PodbotError;
-
-#[cfg(not(test))]
-const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
 
 /// Run an attached exec session by wiring stdio and streaming daemon output.
 ///
@@ -46,11 +44,12 @@ pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: Termin
 ) -> Result<(), PodbotError> {
     let mut stdout = tokio::io::stdout();
     let mut stderr = tokio::io::stderr();
-    run_attached_session_with_stdio_async(
+    run_attached_session_with_io_async(
         client,
         request,
         exec_id,
         &mut output,
+        default_host_stdin(),
         input,
         size_provider,
         &mut stdout,
@@ -63,17 +62,23 @@ pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: Termin
     clippy::too_many_arguments,
     reason = "attached-session orchestration needs stream, IO, and resize state together"
 )]
-async fn run_attached_session_with_stdio_async<C: ContainerExecClient, P: TerminalSizeProvider>(
+async fn run_attached_session_with_io_async<C, P, HostStdin>(
     client: &C,
     request: &ExecRequest,
     exec_id: &str,
     output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    host_stdin: HostStdin,
     input: Pin<Box<dyn AsyncWrite + Send>>,
     size_provider: &P,
     stdout: &mut tokio::io::Stdout,
     stderr: &mut tokio::io::Stderr,
-) -> Result<(), PodbotError> {
-    let stdin_task = spawn_stdin_forwarding_task(input);
+) -> Result<(), PodbotError>
+where
+    C: ContainerExecClient,
+    P: TerminalSizeProvider,
+    HostStdin: AsyncRead + Send + Unpin + 'static,
+{
+    let stdin_task = spawn_stdin_forwarding_task(host_stdin, input);
     let session_result = run_output_session_with_resize_init_async(
         client,
         request,
@@ -88,20 +93,14 @@ async fn run_attached_session_with_stdio_async<C: ContainerExecClient, P: Termin
     session_result
 }
 
-#[cfg(test)]
-fn spawn_stdin_forwarding_task(_: Pin<Box<dyn AsyncWrite + Send>>) -> JoinHandle<io::Result<()>> {
-    tokio::spawn(async { Ok(()) })
-}
-
-#[cfg(not(test))]
-fn spawn_stdin_forwarding_task(
+fn spawn_stdin_forwarding_task<HostStdin>(
+    host_stdin: HostStdin,
     input: Pin<Box<dyn AsyncWrite + Send>>,
-) -> JoinHandle<io::Result<()>> {
-    if stdin_forwarding_disabled_for_tests() {
-        return tokio::spawn(async { Ok(()) });
-    }
-
-    tokio::spawn(async move { forward_stdin_to_exec_async(input).await })
+) -> JoinHandle<io::Result<()>>
+where
+    HostStdin: AsyncRead + Send + Unpin + 'static,
+{
+    tokio::spawn(async move { forward_host_stdin_to_exec_async(host_stdin, input).await })
 }
 
 fn stop_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
@@ -110,11 +109,6 @@ fn stop_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     // in a non-cancellable read, and shutdown should not hang waiting for that
     // task to observe cancellation.
     drop(stdin_task);
-}
-
-#[cfg(not(test))]
-fn stdin_forwarding_disabled_for_tests() -> bool {
-    std::env::var_os(DISABLE_STDIN_FORWARDING_ENV).is_some()
 }
 
 #[expect(
@@ -239,10 +233,14 @@ async fn write_exec_output_chunk(
     Ok(true)
 }
 
-#[cfg(not(test))]
-async fn forward_stdin_to_exec_async(mut input: Pin<Box<dyn AsyncWrite + Send>>) -> io::Result<()> {
-    let mut stdin = tokio::io::stdin();
-    tokio::io::copy(&mut stdin, &mut input).await?;
+async fn forward_host_stdin_to_exec_async<HostStdin>(
+    mut host_stdin: HostStdin,
+    mut input: Pin<Box<dyn AsyncWrite + Send>>,
+) -> io::Result<()>
+where
+    HostStdin: AsyncRead + Unpin,
+{
+    tokio::io::copy(&mut host_stdin, &mut input).await?;
     input.flush().await
 }
 

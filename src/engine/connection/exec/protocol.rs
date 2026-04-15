@@ -31,6 +31,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
+use super::host_io::default_host_stdin;
 use super::{ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
@@ -96,18 +97,18 @@ pub(super) async fn run_protocol_session_async_with_options(
     options: ProtocolSessionOptions,
 ) -> Result<(), PodbotError> {
     let stdio = ProtocolProxyIo::new(
-        default_host_stdin(options.disable_stdin_forwarding),
+        protocol_host_stdin(options),
         tokio::io::stdout(),
         tokio::io::stderr(),
     );
     run_protocol_session_with_io_async(request, output, input, stdio).await
 }
 
-fn default_host_stdin(disable_stdin_forwarding: bool) -> Pin<Box<dyn AsyncRead + Send>> {
-    if disable_stdin_forwarding {
+fn protocol_host_stdin(options: ProtocolSessionOptions) -> Pin<Box<dyn AsyncRead + Send>> {
+    if options.disable_stdin_forwarding {
         Box::pin(tokio::io::empty())
     } else {
-        Box::pin(tokio::io::stdin())
+        default_host_stdin()
     }
 }
 

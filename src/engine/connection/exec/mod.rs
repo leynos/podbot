@@ -5,6 +5,7 @@
 
 mod attached;
 mod helpers;
+mod host_io;
 mod protocol;
 mod session;
 mod terminal;
