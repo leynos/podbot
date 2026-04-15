@@ -141,7 +141,7 @@ fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
 /// preserving the GitHub API message body, documentation URL, error
 /// details, and backtrace context for debugging.
 #[must_use]
-pub(crate) fn classify_by_status(code: u16, full_error: &str) -> String {
+pub fn classify_by_status(code: u16, full_error: &str) -> String {
     match code {
         401 => format!(
             concat!(

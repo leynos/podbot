@@ -10,7 +10,7 @@ use rstest_bdd_macros::{given, when};
 
 use jsonwebtoken::EncodingKey;
 use podbot::error::GitHubError;
-use podbot::github::{BoxFuture, GitHubAppClient, validate_with_factory};
+use podbot::github::{BoxFuture, GitHubAppClient, classify_by_status, validate_with_factory};
 
 use super::state::{GitHubCredentialErrorsState, MockHttpResponse, StepResult, ValidationOutcome};
 
@@ -52,87 +52,17 @@ fn read_inputs(state: &GitHubCredentialErrorsState) -> StepResult<ValidationInpu
     })
 }
 
-/// Build a mock error message for a given HTTP status code.
-///
-/// Mirrors the production `classify_by_status` message format. The
-/// `full_error` parameter represents the complete octocrab `Display`
-/// output that would be passed to the classifier in production.
-fn error_for(status: u16, full_error: &str) -> String {
-    match status {
-        401 => format!(
-            concat!(
-                "credentials rejected (HTTP 401). ",
-                "Hint: The private key may not match the App, or the App may have been ",
-                "suspended. Verify the App ID and regenerate the private key from the ",
-                "GitHub App settings page. If the system clock is significantly skewed, ",
-                "JWT validation will also fail. Raw error: {raw}",
-            ),
-            raw = full_error,
-        ),
-        403 => format!(
-            concat!(
-                "insufficient permissions (HTTP 403). ",
-                "Hint: The App may lack the required permissions. Check the App's ",
-                "permission settings in GitHub. Raw error: {raw}",
-            ),
-            raw = full_error,
-        ),
-        404 => format!(
-            concat!(
-                "App not found (HTTP 404). ",
-                "Hint: Verify that github.app_id is correct. The App may have been ",
-                "deleted. Raw error: {raw}",
-            ),
-            raw = full_error,
-        ),
-        500..=599 => format!(
-            concat!(
-                "GitHub API unavailable (HTTP {code}). ",
-                "Hint: Check https://www.githubstatus.com for outage information. ",
-                "Retry after the service recovers. Raw error: {raw}",
-            ),
-            code = status,
-            raw = full_error,
-        ),
-        _ => format!(
-            concat!(
-                "unexpected response (HTTP {code}). ",
-                "Hint: Check https://www.githubstatus.com for outage information. ",
-                "Raw error: {raw}",
-            ),
-            code = status,
-            raw = full_error,
-        ),
-    }
-}
-
-/// Build a mock error message for a rate-limit 403 response.
-///
-/// Separate from `error_for` because rate-limit 403 is a sub-case of
-/// HTTP 403 distinguished by the message body, not the status code alone.
-fn error_for_rate_limit(full_error: &str) -> String {
-    format!(
-        concat!(
-            "rate limit exceeded (HTTP 403). ",
-            "Hint: The GitHub API rate limit has been exceeded. ",
-            "Wait a few minutes and retry. Check https://www.githubstatus.com ",
-            "if the problem persists. Raw error: {raw}",
-        ),
-        raw = full_error,
-    )
-}
-
 /// Create and configure a mock client for the given HTTP response.
 fn configure_mock_client(mock_response: MockHttpResponse) -> MockGitHubAppClient {
     let mut mock_client = MockGitHubAppClient::new();
     let message = match mock_response {
-        MockHttpResponse::Unauthorized401 => error_for(401, "Bad credentials"),
-        MockHttpResponse::Forbidden403 => error_for(403, "Resource not accessible"),
+        MockHttpResponse::Unauthorized401 => classify_by_status(401, "Bad credentials"),
+        MockHttpResponse::Forbidden403 => classify_by_status(403, "Resource not accessible"),
         MockHttpResponse::RateLimited403 => {
-            error_for_rate_limit("API rate limit exceeded for installation ID 12345")
+            classify_by_status(403, "API rate limit exceeded for installation ID 12345")
         }
-        MockHttpResponse::NotFound404 => error_for(404, "Not Found"),
-        MockHttpResponse::ServerError503 => error_for(503, "Service unavailable"),
+        MockHttpResponse::NotFound404 => classify_by_status(404, "Not Found"),
+        MockHttpResponse::ServerError503 => classify_by_status(503, "Service unavailable"),
     };
     mock_client
         .expect_validate_credentials()

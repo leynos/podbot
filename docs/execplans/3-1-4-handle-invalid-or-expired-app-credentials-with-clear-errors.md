@@ -16,7 +16,7 @@ remediation hints. After this change, users who misconfigure their GitHub App
 credentials will receive targeted guidance instead of a generic "authentication
 failed" message.
 
-Currently `OctocrabAppClient::validate_credentials` maps all `octocrab::Error`
+Currently, `OctocrabAppClient::validate_credentials` maps all `octocrab::Error`
 responses into a single `GitHubError::AuthenticationFailed` variant with a
 `format!("{error}")` message. This conflates HTTP 401 (invalid credentials),
 HTTP 403 (insufficient permissions), HTTP 404 (App not found / wrong App ID),
@@ -33,7 +33,7 @@ credential failure modes produce the correct actionable error messages with
 remediation hints.
 
 User-visible behaviour: when GitHub credential validation fails, the user sees
-contextualised error messages such as:
+contextualized error messages such as:
 
 ```plaintext
 GitHub App authentication failed: credentials rejected (HTTP 401)
