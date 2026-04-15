@@ -46,16 +46,9 @@ mock! {
 }
 
 /// Fixture providing a tokio runtime for exec tests.
-///
-/// # Panics
-///
-/// Panics if the tokio runtime cannot be created. This is a test setup
-/// failure and indicates a fundamental environment issue.
 #[fixture]
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Runtime::new().unwrap_or_else(|e| {
-        panic!("failed to create tokio runtime: {e}");
-    })
+fn runtime() -> Result<tokio::runtime::Runtime, std::io::Error> {
+    tokio::runtime::Runtime::new()
 }
 
 // -------------------------------------------------------------------------
@@ -116,9 +109,10 @@ struct LibraryApiExecTestCase {
     description: "exec should return CommandExit with code 42",
 })]
 fn exec_via_library_api_returns_expected_outcome(
-    runtime: tokio::runtime::Runtime,
+    runtime: Result<tokio::runtime::Runtime, std::io::Error>,
     #[case] test_case: LibraryApiExecTestCase,
-) {
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = runtime?;
     let mut client = MockEmbedClient::new();
     configure_successful_exec(&mut client, test_case.exit_code, test_case.mode);
 
@@ -128,14 +122,11 @@ fn exec_via_library_api_returns_expected_outcome(
         command: test_case.command,
         mode: test_case.mode,
         tty: false,
-        runtime_handle: runtime.handle(),
+        runtime_handle: rt.handle(),
     });
 
-    assert!(
-        (test_case.check)(&result),
-        "{}, got: {result:?}",
-        test_case.description
-    );
+    assert_exec_outcome_matches(&result, test_case.check, test_case.description);
+    Ok(())
 }
 
 // -------------------------------------------------------------------------
@@ -147,7 +138,11 @@ fn exec_via_library_api_returns_expected_outcome(
 #[case::start(FailAt::Start)]
 #[case::inspect(FailAt::Inspect)]
 #[case::missing_exit_code(FailAt::InspectMissingExitCode)]
-fn exec_failure_returns_container_error(runtime: tokio::runtime::Runtime, #[case] fail_at: FailAt) {
+fn exec_failure_returns_container_error(
+    runtime: Result<tokio::runtime::Runtime, std::io::Error>,
+    #[case] fail_at: FailAt,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = runtime?;
     let mut client = MockEmbedClient::new();
     let mode = configure_failing_exec(&mut client, fail_at);
 
@@ -157,17 +152,11 @@ fn exec_failure_returns_container_error(runtime: tokio::runtime::Runtime, #[case
         command: vec![String::from("echo"), String::from("fail")],
         mode,
         tty: false,
-        runtime_handle: runtime.handle(),
+        runtime_handle: rt.handle(),
     });
 
-    assert!(result.is_err(), "exec should return an error");
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
-        ),
-        "error should be ContainerError::ExecFailed for {fail_at:?}, got: {result:?}"
-    );
+    assert_exec_failed_with_container_error(&result, fail_at);
+    Ok(())
 }
 
 // Note: resize_exec failure testing is omitted from library boundary tests because:
@@ -314,6 +303,28 @@ fn configure_failing_exec(client: &mut MockEmbedClient, fail_at: FailAt) -> Exec
             ExecMode::Detached
         }
     }
+}
+
+fn assert_exec_outcome_matches(
+    result: &Result<CommandOutcome, PodbotError>,
+    check: fn(&Result<CommandOutcome, PodbotError>) -> bool,
+    description: &str,
+) {
+    assert!(check(result), "{description}, got: {result:?}");
+}
+
+fn assert_exec_failed_with_container_error(
+    result: &Result<CommandOutcome, PodbotError>,
+    fail_at: FailAt,
+) {
+    assert!(result.is_err(), "exec should return an error");
+    assert!(
+        matches!(
+            result,
+            Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
+        ),
+        "error should be ContainerError::ExecFailed for {fail_at:?}, got: {result:?}"
+    );
 }
 
 fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode: ExecMode) {
