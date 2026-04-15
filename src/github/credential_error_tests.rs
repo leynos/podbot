@@ -33,7 +33,7 @@ use snafu::GenerateImplicitData;
 
 #[rstest]
 fn classify_401_error_mentions_credentials_rejected() {
-    let msg = classify_by_status(401, "Bad credentials", "full error text");
+    let msg = classify_by_status(401, "Bad credentials");
     assert!(
         msg.contains("credentials rejected"),
         "expected 'credentials rejected' in: {msg}"
@@ -47,7 +47,7 @@ fn classify_401_error_mentions_credentials_rejected() {
 
 #[rstest]
 fn classify_403_error_mentions_insufficient_permissions() {
-    let msg = classify_by_status(403, "Resource not accessible", "full error text");
+    let msg = classify_by_status(403, "Resource not accessible");
     assert!(
         msg.contains("insufficient permissions"),
         "expected 'insufficient permissions' in: {msg}"
@@ -64,7 +64,7 @@ fn classify_403_error_mentions_insufficient_permissions() {
 #[case("API rate limit exceeded for installation ID 12345")]
 #[case("You have exceeded a secondary rate limit")]
 fn classify_403_rate_limit_mentions_rate_limit(#[case] body: &str) {
-    let msg = classify_by_status(403, body, "full error text");
+    let msg = classify_by_status(403, body);
     assert!(
         msg.contains("rate limit exceeded"),
         "expected 'rate limit exceeded' in: {msg}"
@@ -79,7 +79,7 @@ fn classify_403_rate_limit_mentions_rate_limit(#[case] body: &str) {
 #[rstest]
 fn classify_403_rate_limit_preserves_raw_message() {
     let raw = "API rate limit exceeded for installation ID 12345";
-    let msg = classify_by_status(403, raw, "full error text");
+    let msg = classify_by_status(403, raw);
     assert!(
         msg.contains(raw),
         "expected raw message '{raw}' preserved in: {msg}"
@@ -88,7 +88,7 @@ fn classify_403_rate_limit_preserves_raw_message() {
 
 #[rstest]
 fn classify_404_error_mentions_app_not_found() {
-    let msg = classify_by_status(404, "Not Found", "full error text");
+    let msg = classify_by_status(404, "Not Found");
     assert!(msg.contains("not found"), "expected 'not found' in: {msg}");
     assert!(
         msg.contains("github.app_id"),
@@ -100,7 +100,7 @@ fn classify_404_error_mentions_app_not_found() {
 #[case(500, "Internal Server Error")]
 #[case(503, "Service temporarily unavailable")]
 fn classify_5xx_error_mentions_api_unavailable(#[case] status: u16, #[case] body: &str) {
-    let msg = classify_by_status(status, body, "full error text");
+    let msg = classify_by_status(status, body);
     assert!(
         msg.contains("unavailable"),
         "expected 'unavailable' in: {msg}"
@@ -112,18 +112,18 @@ fn classify_5xx_error_mentions_api_unavailable(#[case] status: u16, #[case] body
 }
 
 #[rstest]
-fn classified_error_preserves_raw_message() {
-    let raw = "Bad credentials";
-    let msg = classify_by_status(401, raw, "full error text");
+fn classified_error_preserves_full_error() {
+    let full = "Bad credentials\nDocumentation URL: https://docs.github.com";
+    let msg = classify_by_status(401, full);
     assert!(
-        msg.contains(raw),
-        "expected raw message '{raw}' preserved in: {msg}"
+        msg.contains(full),
+        "expected full error text preserved in: {msg}"
     );
 }
 
 #[rstest]
 fn classify_unexpected_status_includes_code() {
-    let msg = classify_by_status(418, "I'm a teapot", "full error text 418");
+    let msg = classify_by_status(418, "I'm a teapot");
     assert!(
         msg.contains("unexpected response"),
         "expected 'unexpected response' in: {msg}"

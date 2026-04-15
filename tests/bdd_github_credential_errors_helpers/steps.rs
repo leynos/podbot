@@ -54,11 +54,10 @@ fn read_inputs(state: &GitHubCredentialErrorsState) -> StepResult<ValidationInpu
 
 /// Build a mock error message for a given HTTP status code.
 ///
-/// Maps status codes to their expected error message formats. BDD tests
-/// verify user-visible behavior, so we hard-code the expected strings
-/// that `classify_by_status` should produce rather than calling the
-/// implementation directly.
-fn error_for(status: u16, raw: &str) -> String {
+/// Mirrors the production `classify_by_status` message format. The
+/// `full_error` parameter represents the complete octocrab `Display`
+/// output that would be passed to the classifier in production.
+fn error_for(status: u16, full_error: &str) -> String {
     match status {
         401 => format!(
             concat!(
@@ -68,7 +67,7 @@ fn error_for(status: u16, raw: &str) -> String {
                 "GitHub App settings page. If the system clock is significantly skewed, ",
                 "JWT validation will also fail. Raw error: {raw}",
             ),
-            raw = raw,
+            raw = full_error,
         ),
         403 => format!(
             concat!(
@@ -76,7 +75,7 @@ fn error_for(status: u16, raw: &str) -> String {
                 "Hint: The App may lack the required permissions. Check the App's ",
                 "permission settings in GitHub. Raw error: {raw}",
             ),
-            raw = raw,
+            raw = full_error,
         ),
         404 => format!(
             concat!(
@@ -84,7 +83,7 @@ fn error_for(status: u16, raw: &str) -> String {
                 "Hint: Verify that github.app_id is correct. The App may have been ",
                 "deleted. Raw error: {raw}",
             ),
-            raw = raw,
+            raw = full_error,
         ),
         500..=599 => format!(
             concat!(
@@ -93,16 +92,16 @@ fn error_for(status: u16, raw: &str) -> String {
                 "Retry after the service recovers. Raw error: {raw}",
             ),
             code = status,
-            raw = raw,
+            raw = full_error,
         ),
         _ => format!(
             concat!(
                 "unexpected response (HTTP {code}). ",
                 "Hint: Check https://www.githubstatus.com for outage information. ",
-                "Raw error: {error}",
+                "Raw error: {raw}",
             ),
             code = status,
-            error = raw,
+            raw = full_error,
         ),
     }
 }
@@ -111,7 +110,7 @@ fn error_for(status: u16, raw: &str) -> String {
 ///
 /// Separate from `error_for` because rate-limit 403 is a sub-case of
 /// HTTP 403 distinguished by the message body, not the status code alone.
-fn error_for_rate_limit(raw: &str) -> String {
+fn error_for_rate_limit(full_error: &str) -> String {
     format!(
         concat!(
             "rate limit exceeded (HTTP 403). ",
@@ -119,7 +118,7 @@ fn error_for_rate_limit(raw: &str) -> String {
             "Wait a few minutes and retry. Check https://www.githubstatus.com ",
             "if the problem persists. Raw error: {raw}",
         ),
-        raw = raw,
+        raw = full_error,
     )
 }
 

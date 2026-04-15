@@ -119,7 +119,7 @@ fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
         octocrab::Error::GitHub { ref source, .. } => {
             let code = source.status_code.as_u16();
             let raw = format!("{error}");
-            let msg = classify_by_status(code, &source.message, &raw);
+            let msg = classify_by_status(code, &raw);
             GitHubError::AuthenticationFailed { message: msg }
         }
         _ => GitHubError::AuthenticationFailed {
@@ -137,11 +137,11 @@ fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
 
 /// Format a classified message for a known HTTP status code.
 ///
-/// `raw_message` is the GitHub API message body (from the response JSON).
 /// `full_error` is the complete `Display` output from the Octocrab error,
-/// used only for the catch-all branch.
+/// preserving the GitHub API message body, documentation URL, error
+/// details, and backtrace context for debugging.
 #[must_use]
-pub(crate) fn classify_by_status(code: u16, raw_message: &str, full_error: &str) -> String {
+pub(crate) fn classify_by_status(code: u16, full_error: &str) -> String {
     match code {
         401 => format!(
             concat!(
@@ -151,16 +151,16 @@ pub(crate) fn classify_by_status(code: u16, raw_message: &str, full_error: &str)
                 "GitHub App settings page. If the system clock is significantly skewed, ",
                 "JWT validation will also fail. Raw error: {raw}",
             ),
-            raw = raw_message,
+            raw = full_error,
         ),
-        403 if is_rate_limited(raw_message) => format!(
+        403 if is_rate_limited(full_error) => format!(
             concat!(
                 "rate limit exceeded (HTTP 403). ",
                 "Hint: The GitHub API rate limit has been exceeded. ",
                 "Wait a few minutes and retry. Check https://www.githubstatus.com ",
                 "if the problem persists. Raw error: {raw}",
             ),
-            raw = raw_message,
+            raw = full_error,
         ),
         403 => format!(
             concat!(
@@ -168,7 +168,7 @@ pub(crate) fn classify_by_status(code: u16, raw_message: &str, full_error: &str)
                 "Hint: The App may lack the required permissions. Check the App's ",
                 "permission settings in GitHub. Raw error: {raw}",
             ),
-            raw = raw_message,
+            raw = full_error,
         ),
         404 => format!(
             concat!(
@@ -176,7 +176,7 @@ pub(crate) fn classify_by_status(code: u16, raw_message: &str, full_error: &str)
                 "Hint: Verify that github.app_id is correct. The App may have been ",
                 "deleted. Raw error: {raw}",
             ),
-            raw = raw_message,
+            raw = full_error,
         ),
         500..=599 => format!(
             concat!(
@@ -185,16 +185,16 @@ pub(crate) fn classify_by_status(code: u16, raw_message: &str, full_error: &str)
                 "Retry after the service recovers. Raw error: {raw}",
             ),
             code = code,
-            raw = raw_message,
+            raw = full_error,
         ),
         _ => format!(
             concat!(
                 "unexpected response (HTTP {code}). ",
                 "Hint: Check https://www.githubstatus.com for outage information. ",
-                "Raw error: {error}",
+                "Raw error: {raw}",
             ),
             code = code,
-            error = full_error,
+            raw = full_error,
         ),
     }
 }
