@@ -20,7 +20,7 @@ Feature: Git identity configuration
     Then git identity result is partial
     And configured name is Bob
     And configured email is absent
-    And warnings include git user.email is not configured on the host
+    And warnings include "git user.email is not configured on the host"
 
   Scenario: Only email is configured on the host
     Given host git user.name is missing
@@ -30,7 +30,7 @@ Feature: Git identity configuration
     Then git identity result is partial
     And configured name is absent
     And configured email is carol@example.com
-    And warnings include git user.name is not configured on the host
+    And warnings include "git user.name is not configured on the host"
 
   Scenario: Neither name nor email is configured
     Given host git user.name is missing
@@ -38,8 +38,8 @@ Feature: Git identity configuration
     And the container engine is available
     When git identity configuration is requested for container sandbox-4
     Then git identity result is none configured
-    And warnings include git user.name is not configured on the host
-    And warnings include git user.email is not configured on the host
+    And warnings include "git user.name is not configured on the host"
+    And warnings include "git user.email is not configured on the host"
 
   Scenario: Container exec failure propagates as error
     Given host git user.name is Alice

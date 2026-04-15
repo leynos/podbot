@@ -9,6 +9,12 @@ use crate::error::PodbotError;
 
 use super::host_reader::HostGitIdentity;
 
+/// Warning message for missing Git user.name configuration.
+const MISSING_NAME_WARNING: &str = "git user.name is not configured on the host";
+
+/// Warning message for missing Git user.email configuration.
+const MISSING_EMAIL_WARNING: &str = "git user.email is not configured on the host";
+
 /// Outcome of configuring Git identity in a container.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GitIdentityResult {
@@ -35,6 +41,26 @@ pub enum GitIdentityResult {
     },
 }
 
+/// Classifies the completeness of host Git identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdentityCompleteness {
+    /// Both name and email are present.
+    Complete,
+    /// At least one of name or email is missing.
+    Partial,
+    /// Neither name nor email is present.
+    None,
+}
+
+/// Determines the completeness of the host Git identity.
+const fn classify_identity(identity: &HostGitIdentity) -> IdentityCompleteness {
+    match (&identity.name, &identity.email) {
+        (None, None) => IdentityCompleteness::None,
+        (Some(_), Some(_)) => IdentityCompleteness::Complete,
+        _ => IdentityCompleteness::Partial,
+    }
+}
+
 /// Configure Git identity in a container using host-read values.
 ///
 /// Executes `git config --global user.name` and/or
@@ -51,28 +77,47 @@ pub fn configure_git_identity<C: ContainerExecClient>(
     container_id: &str,
     identity: &HostGitIdentity,
 ) -> Result<GitIdentityResult, PodbotError> {
-    match (&identity.name, &identity.email) {
-        (None, None) => Ok(GitIdentityResult::NoneConfigured {
+    match classify_identity(identity) {
+        IdentityCompleteness::None => Ok(GitIdentityResult::NoneConfigured {
             warnings: vec![
-                String::from("git user.name is not configured on the host"),
-                String::from("git user.email is not configured on the host"),
+                String::from(MISSING_NAME_WARNING),
+                String::from(MISSING_EMAIL_WARNING),
             ],
         }),
-        (Some(name), Some(email)) => {
-            let params = GitConfigParams {
-                runtime,
-                client,
-                container_id,
-            };
-            set_git_config(&params, "user.name", name)?;
-            set_git_config(&params, "user.email", email)?;
-            Ok(GitIdentityResult::Configured {
-                name: name.clone(),
-                email: email.clone(),
-            })
+        IdentityCompleteness::Complete => {
+            configure_complete_identity(runtime, client, container_id, identity)
         }
-        _ => configure_partial_identity(runtime, client, container_id, identity),
+        IdentityCompleteness::Partial => {
+            configure_partial_identity(runtime, client, container_id, identity)
+        }
     }
+}
+
+fn configure_complete_identity<C: ContainerExecClient>(
+    runtime: &tokio::runtime::Handle,
+    client: &C,
+    container_id: &str,
+    identity: &HostGitIdentity,
+) -> Result<GitIdentityResult, PodbotError> {
+    // Pattern match to extract values; this function is only called
+    // when classify_identity returns Complete
+    let (Some(name), Some(email)) = (&identity.name, &identity.email) else {
+        // This should never happen if classify_identity is correct, but we
+        // handle it gracefully by falling back to partial configuration
+        return configure_partial_identity(runtime, client, container_id, identity);
+    };
+
+    let params = GitConfigParams {
+        runtime,
+        client,
+        container_id,
+    };
+    set_git_config(&params, "user.name", name)?;
+    set_git_config(&params, "user.email", email)?;
+    Ok(GitIdentityResult::Configured {
+        name: name.clone(),
+        email: email.clone(),
+    })
 }
 
 fn configure_partial_identity<C: ContainerExecClient>(
@@ -91,13 +136,13 @@ fn configure_partial_identity<C: ContainerExecClient>(
     if let Some(name) = &identity.name {
         set_git_config(&params, "user.name", name)?;
     } else {
-        warnings.push(String::from("git user.name is not configured on the host"));
+        warnings.push(String::from(MISSING_NAME_WARNING));
     }
 
     if let Some(email) = &identity.email {
         set_git_config(&params, "user.email", email)?;
     } else {
-        warnings.push(String::from("git user.email is not configured on the host"));
+        warnings.push(String::from(MISSING_EMAIL_WARNING));
     }
 
     Ok(GitIdentityResult::Partial {

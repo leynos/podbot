@@ -2,9 +2,10 @@
 //!
 //! This module provides public orchestration functions for each podbot
 //! command: [`exec`], [`run_agent`], [`stop_container`], [`list_containers`],
-//! and [`run_token_daemon`]. These functions contain the business logic that
-//! was previously embedded in the CLI binary, making it available to both
-//! the CLI adapter and library embedders.
+//! [`run_token_daemon`], and [`configure_container_git_identity`]. These
+//! functions contain the business logic that was previously embedded in the
+//! CLI binary, making it available to both the CLI adapter and library
+//! embedders.
 //!
 //! All functions accept library-owned types (not clap types) and return
 //! [`crate::error::Result<CommandOutcome>`]. They do not print to

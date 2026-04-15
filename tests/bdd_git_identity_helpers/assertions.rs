@@ -1,9 +1,22 @@
 //! Then step definitions for Git identity behavioural scenarios.
 
 use podbot::engine::GitIdentityResult;
+use podbot::error::{ContainerError, PodbotError};
 use rstest_bdd_macros::then;
 
 use super::state::{GitIdentityState, StepResult};
+
+/// Helper to convert the outcome from state into a cloneable Result.
+/// Since `Slot::with_ref` gives us a reference, we need to clone the
+/// `GitIdentityResult` and convert the error to String for assertions.
+fn convert_outcome(
+    outcome: &Result<GitIdentityResult, PodbotError>,
+) -> Result<GitIdentityResult, String> {
+    match outcome {
+        Ok(r) => Ok(r.clone()),
+        Err(e) => Err(format!("{e}")),
+    }
+}
 
 fn assert_ok_variant(
     outcome: &Result<GitIdentityResult, String>,
@@ -52,12 +65,8 @@ fn git_identity_result_is_configured(git_identity_state: &GitIdentityState) -> S
     git_identity_state
         .outcome
         .with_ref(|outcome| {
-            let converted = match outcome {
-                Ok(r) => Ok(r.clone()),
-                Err(e) => Err(format!("{e}")),
-            };
             assert_ok_variant(
-                &converted,
+                &convert_outcome(outcome),
                 |r| matches!(r, GitIdentityResult::Configured { .. }),
                 "Configured",
             )
@@ -70,12 +79,8 @@ fn git_identity_result_is_partial(git_identity_state: &GitIdentityState) -> Step
     git_identity_state
         .outcome
         .with_ref(|outcome| {
-            let converted = match outcome {
-                Ok(r) => Ok(r.clone()),
-                Err(e) => Err(format!("{e}")),
-            };
             assert_ok_variant(
-                &converted,
+                &convert_outcome(outcome),
                 |r| matches!(r, GitIdentityResult::Partial { .. }),
                 "Partial",
             )
@@ -88,12 +93,8 @@ fn git_identity_result_is_none_configured(git_identity_state: &GitIdentityState)
     git_identity_state
         .outcome
         .with_ref(|outcome| {
-            let converted = match outcome {
-                Ok(r) => Ok(r.clone()),
-                Err(e) => Err(format!("{e}")),
-            };
             assert_ok_variant(
-                &converted,
+                &convert_outcome(outcome),
                 |r| matches!(r, GitIdentityResult::NoneConfigured { .. }),
                 "NoneConfigured",
             )
@@ -108,10 +109,7 @@ fn configured_name_is(git_identity_state: &GitIdentityState, word: String) -> St
     git_identity_state
         .outcome
         .with_ref(|outcome| {
-            let converted = match outcome {
-                Ok(r) => Ok(r.clone()),
-                Err(e) => Err(format!("{e}")),
-            };
+            let converted = convert_outcome(outcome);
 
             if word == "absent" {
                 assert_field_absent(
@@ -148,10 +146,7 @@ fn configured_email_is(git_identity_state: &GitIdentityState, word: String) -> S
     git_identity_state
         .outcome
         .with_ref(|outcome| {
-            let converted = match outcome {
-                Ok(r) => Ok(r.clone()),
-                Err(e) => Err(format!("{e}")),
-            };
+            let converted = convert_outcome(outcome);
 
             if word == "absent" {
                 assert_field_absent(
@@ -181,15 +176,17 @@ fn configured_email_is(git_identity_state: &GitIdentityState, word: String) -> S
         .ok_or_else(|| String::from("outcome not set"))?
 }
 
-#[then("warnings include {word}")]
-fn warnings_include_warning(git_identity_state: &GitIdentityState, word: String) -> StepResult<()> {
+#[then("warnings include {string}")]
+fn warnings_include_warning(
+    git_identity_state: &GitIdentityState,
+    string: String,
+) -> StepResult<()> {
+    // rstest-bdd {string} captures include the surrounding quotes, so strip them
+    let warning = string.trim_matches('"').to_owned();
     git_identity_state
         .outcome
         .with_ref(|outcome| {
-            let converted = match outcome {
-                Ok(r) => Ok(r.clone()),
-                Err(e) => Err(format!("{e}")),
-            };
+            let converted = convert_outcome(outcome);
             let warnings = match &converted {
                 Ok(
                     GitIdentityResult::Partial { warnings, .. }
@@ -199,11 +196,11 @@ fn warnings_include_warning(git_identity_state: &GitIdentityState, word: String)
                 Err(e) => return Err(format!("Expected success, got error: {e}")),
             };
 
-            if warnings.contains(&word) {
+            if warnings.contains(&warning) {
                 Ok(())
             } else {
                 Err(format!(
-                    "Expected warning '{word}' not found in {warnings:?}"
+                    "Expected warning '{warning}' not found in {warnings:?}"
                 ))
             }
         })
@@ -216,10 +213,14 @@ fn git_identity_configuration_fails_with_exec_error(
 ) -> StepResult<()> {
     git_identity_state
         .outcome
-        .with_ref(|outcome| {
-            outcome.as_ref().map_or(Ok(()), |result| {
-                Err(format!("Expected error, got success: {result:?}"))
-            })
+        .with_ref(|outcome| match outcome {
+            Ok(result) => Err(format!(
+                "Expected exec failure error, got success: {result:?}"
+            )),
+            Err(err) => match err {
+                PodbotError::Container(ContainerError::ExecFailed { .. }) => Ok(()),
+                _ => Err(format!("Expected ContainerError::ExecFailed, got: {err:?}")),
+            },
         })
         .ok_or_else(|| String::from("outcome not set"))?
 }

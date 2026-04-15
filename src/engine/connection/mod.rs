@@ -2,7 +2,9 @@
 //!
 //! This module provides functionality to resolve container engine socket endpoints
 //! from multiple sources (environment variables, configuration, platform defaults)
-//! and establish connections using the `Bollard` library.
+//! and establish connections using the `Bollard` library. It also re-exports Git
+//! identity configuration utilities for propagating host Git credentials into
+//! containers.
 
 mod create_container;
 mod error_classification;

@@ -1,7 +1,6 @@
 //! Unit tests for Git identity configuration.
 
 use std::io;
-use std::os::unix::process::ExitStatusExt;
 use std::process::{ExitStatus, Output};
 
 use mockall::mock;
@@ -22,9 +21,22 @@ mock! {
     }
 }
 
+/// Create an exit status with the given exit code in a platform-independent way.
+#[cfg(unix)]
+fn exit_status(code: i32) -> ExitStatus {
+    use std::os::unix::process::ExitStatusExt;
+    ExitStatus::from_raw(code << 8)
+}
+
+#[cfg(windows)]
+fn exit_status(code: i32) -> ExitStatus {
+    use std::os::windows::process::ExitStatusExt;
+    ExitStatus::from_raw(code as u32)
+}
+
 fn success_output(stdout: &str) -> Output {
     Output {
-        status: ExitStatus::from_raw(0),
+        status: exit_status(0),
         stdout: stdout.as_bytes().to_vec(),
         stderr: Vec::new(),
     }
@@ -32,7 +44,7 @@ fn success_output(stdout: &str) -> Output {
 
 fn failure_output() -> Output {
     Output {
-        status: ExitStatus::from_raw(256), // exit code 1
+        status: exit_status(1),
         stdout: Vec::new(),
         stderr: b"error".to_vec(),
     }
@@ -63,6 +75,7 @@ fn make_runner(name_raw: Option<&str>, email_raw: Option<&str>) -> MockCommandRu
     Some("Alice"),
     Some("alice@example.com")
 )]
+#[case(Some("Alice\n"), None, Some("Alice"), None)]
 #[case(None, Some("bob@example.com\n"), None, Some("bob@example.com"))]
 #[case(
     Some("  Alice  \n"),

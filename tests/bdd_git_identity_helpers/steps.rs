@@ -1,7 +1,6 @@
 //! Given/when step definitions for Git identity behavioural scenarios.
 
 use std::io;
-use std::os::unix::process::ExitStatusExt;
 use std::process::{ExitStatus, Output};
 
 use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
@@ -39,9 +38,22 @@ mock! {
     }
 }
 
+/// Create an exit status with the given exit code in a platform-independent way.
+#[cfg(unix)]
+fn exit_status(code: i32) -> ExitStatus {
+    use std::os::unix::process::ExitStatusExt;
+    ExitStatus::from_raw(code << 8)
+}
+
+#[cfg(windows)]
+fn exit_status(code: i32) -> ExitStatus {
+    use std::os::windows::process::ExitStatusExt;
+    ExitStatus::from_raw(code as u32)
+}
+
 fn success_output(stdout: &str) -> Output {
     Output {
-        status: ExitStatus::from_raw(0),
+        status: exit_status(0),
         stdout: stdout.as_bytes().to_vec(),
         stderr: Vec::new(),
     }
@@ -49,7 +61,7 @@ fn success_output(stdout: &str) -> Output {
 
 fn failure_output() -> Output {
     Output {
-        status: ExitStatus::from_raw(256),
+        status: exit_status(1),
         stdout: Vec::new(),
         stderr: b"error".to_vec(),
     }
@@ -99,13 +111,33 @@ fn setup_mock_host_runner(
 fn setup_mock_exec_client(should_fail: bool) -> MockExecClient {
     let mut exec_client = MockExecClient::new();
 
-    exec_client.expect_create_exec().returning(|_, _| {
-        Box::pin(async {
-            Ok(bollard::exec::CreateExecResults {
-                id: String::from("exec-1"),
-            })
+    exec_client
+        .expect_create_exec()
+        .withf(|_, options| {
+            // Validate that the container exec is invoking:
+            //   git config --global user.name ...
+            // or:
+            //   git config --global user.email ...
+            let Some(cmd) = &options.cmd else {
+                return false;
+            };
+
+            // We expect at least: ["git", "config", "--global", "user.name" or "user.email", ...]
+            cmd.len() >= 4
+                && cmd.first().is_some_and(|s| s == "git")
+                && cmd.get(1).is_some_and(|s| s == "config")
+                && cmd.get(2).is_some_and(|s| s == "--global")
+                && cmd
+                    .get(3)
+                    .is_some_and(|s| s == "user.name" || s == "user.email")
         })
-    });
+        .returning(|_, _| {
+            Box::pin(async {
+                Ok(bollard::exec::CreateExecResults {
+                    id: String::from("exec-1"),
+                })
+            })
+        });
     exec_client
         .expect_start_exec()
         .returning(|_, _| Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) }));
@@ -177,6 +209,8 @@ fn git_identity_configuration_is_requested(
         .get()
         .ok_or_else(|| String::from("should_fail_exec not set"))?;
 
+    // Convert Option<String> to Option<&String>
+    // host_name is already Option<String> after get(), not Option<Option<String>>
     let host_runner = setup_mock_host_runner(host_name.as_ref(), host_email.as_ref());
     let exec_client = setup_mock_exec_client(should_fail);
 

@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: IN-PROGRESS
+Status: COMPLETED
 
 ## Purpose and big picture
 
@@ -97,18 +97,18 @@ escalation, not workarounds.
 
 ## Progress
 
-- [ ] Stage A: Create `src/engine/connection/git_identity/` module with
+- [x] Stage A: Create `src/engine/connection/git_identity/` module with
   host reader trait, container configurator, and unit tests.
-- [ ] Stage A: Gate check (`make check-fmt`, `make lint`, `make test`).
-- [ ] Stage B: Create API orchestration function in `src/api/`.
-- [ ] Stage B: Gate check.
-- [ ] Stage C: Create BDD feature file, test scaffolding, steps,
+- [x] Stage A: Gate check (`make check-fmt`, `make lint`, `make test`).
+- [x] Stage B: Create API orchestration function in `src/api/`.
+- [x] Stage B: Gate check.
+- [x] Stage C: Create BDD feature file, test scaffolding, steps,
   assertions.
-- [ ] Stage C: Gate check.
-- [ ] Stage D: Update design doc, users' guide, roadmap; save execution
+- [x] Stage C: Gate check.
+- [x] Stage D: Update design doc, users' guide, roadmap; save execution
   plan.
-- [ ] Stage D: Gate check (full stack including markdownlint).
-- [ ] Stage E: Final verification and commit.
+- [x] Stage D: Gate check (full stack including markdownlint).
+- [x] Stage E: Final verification and commit.
 
 ## Surprises and discoveries
 
@@ -118,9 +118,9 @@ escalation, not workarounds.
 
 - Decision: abstract host Git config reading behind a
   `HostCommandRunner` trait rather than calling `std::process::Command`
-  directly. Rationale: follows the project's DI convention
-  (`docs/reliable-testing-in-rust-via-dependency-injection.md`). Tests
-  can inject a mock that returns configurable identity values without
+  directly. Rationale: follows the project's dependency injection (DI)
+  convention (`docs/reliable-testing-in-rust-via-dependency-injection.md`).
+  Tests can inject a mock that returns configurable identity values without
   requiring `git` to be installed. The trait has a single method
   `run_command(&self, program: &str, args: &[&str]) -> io::Result<Output>`
   with a production implementation wrapping `std::process::Command`.
@@ -156,8 +156,9 @@ escalation, not workarounds.
 ## Context and orientation
 
 Podbot is a Rust application that runs AI coding agents (Claude Code,
-Codex) in sandboxed containers. It provides two delivery surfaces: a CLI
-binary and a Rust library. The project lives at `/home/user/project`.
+Codex) in sandboxed containers. It provides two delivery surfaces: a
+command-line interface (CLI) binary and a Rust library. The project lives at
+`/home/user/project`.
 
 The design document (`docs/podbot-design.md`, line 100) specifies:
 
@@ -694,7 +695,7 @@ pub fn configure_container_git_identity<
     C: ContainerExecClient,
     R: HostCommandRunner,
 >(
-    params: GitIdentityParams<'_, C, R>,
+    params: &GitIdentityParams<'_, C, R>,
 ) -> PodbotResult<GitIdentityResult> {
     let identity = read_host_git_identity(params.host_runner);
     engine_configure(
@@ -907,7 +908,7 @@ In `src/api/configure_git_identity.rs`:
 pub struct GitIdentityParams<'a, C, R> { ... }
 
 pub fn configure_container_git_identity<C, R>(
-    params: GitIdentityParams<'_, C, R>,
+    params: &GitIdentityParams<'_, C, R>,
 ) -> PodbotResult<GitIdentityResult>;
 ```
 

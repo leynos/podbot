@@ -32,8 +32,6 @@ pub struct GitIdentityState {
 #[fixture]
 pub fn git_identity_state() -> GitIdentityState {
     let state = GitIdentityState::default();
-    state.host_name.set(None);
-    state.host_email.set(None);
     state.container_id.set(String::from("sandbox-default"));
     state.should_fail_exec.set(false);
     state
