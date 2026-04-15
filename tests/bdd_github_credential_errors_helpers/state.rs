@@ -19,6 +19,8 @@ pub enum MockHttpResponse {
     Unauthorized401,
     /// HTTP 403 — insufficient permissions.
     Forbidden403,
+    /// HTTP 403 — rate limit exceeded.
+    RateLimited403,
     /// HTTP 404 — App not found.
     NotFound404,
     /// HTTP 503 — server error.

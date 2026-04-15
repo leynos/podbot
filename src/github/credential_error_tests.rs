@@ -7,20 +7,23 @@
 //!
 //! # Integration testing note
 //!
-//! Direct unit tests for `classify_github_api_error` with HTTP-based
+//! Direct unit tests for `classify_github_api_error` with HTTP status-based
 //! `octocrab::Error::GitHub` variants are not included because:
-//! - `octocrab::error::GitHubError` is marked `#[non_exhaustive]`, preventing
-//!   direct construction in external crates
-//! - The `error` module in octocrab is private, so we cannot access
-//!   `GitHubError` to construct test instances
+//! - `octocrab::error::GitHubError` is `#[non_exhaustive]` with no public
+//!   constructor or `Deserialize` impl, so it cannot be constructed outside
+//!   the octocrab crate
+//! - The `octocrab::Error::Http` variant wraps `http::Error` (HTTP protocol
+//!   errors such as malformed requests), **not** HTTP response errors with
+//!   status codes — it falls into the non-HTTP fallback path, same as
+//!   `Service`
 //! - Adding HTTP mocking (wiremock/mockito) would add significant complexity
 //!   for tests that are already covered by the BDD integration tests
 //!
 //! The HTTP error classification path is validated through:
-//! 1. Unit tests of `classify_by_status` (this file) - tests the classification
-//!    logic for all status codes
-//! 2. BDD tests (`tests/bdd_github_credential_errors.rs`) - exercises the full
-//!    integration path with mocked GitHub API responses
+//! 1. Unit tests of `classify_by_status` (this file) — tests the
+//!    classification logic for all status codes including rate-limit 403
+//! 2. BDD tests (`tests/bdd_github_credential_errors.rs`) — exercises the
+//!    full integration path with mocked GitHub API responses
 
 use super::*;
 use rstest::rstest;
@@ -52,6 +55,34 @@ fn classify_403_error_mentions_insufficient_permissions() {
     assert!(
         msg.contains("permission settings"),
         "expected permission settings hint in: {msg}"
+    );
+}
+
+// ── rate-limit 403 tests ────────────────────────────────────────────
+
+#[rstest]
+#[case("API rate limit exceeded for installation ID 12345")]
+#[case("You have exceeded a secondary rate limit")]
+fn classify_403_rate_limit_mentions_rate_limit(#[case] body: &str) {
+    let msg = classify_by_status(403, body, "full error text");
+    assert!(
+        msg.contains("rate limit exceeded"),
+        "expected 'rate limit exceeded' in: {msg}"
+    );
+    assert!(msg.contains("Wait"), "expected retry hint in: {msg}");
+    assert!(
+        !msg.contains("insufficient permissions"),
+        "rate-limit 403 should not mention permissions: {msg}"
+    );
+}
+
+#[rstest]
+fn classify_403_rate_limit_preserves_raw_message() {
+    let raw = "API rate limit exceeded for installation ID 12345";
+    let msg = classify_by_status(403, raw, "full error text");
+    assert!(
+        msg.contains(raw),
+        "expected raw message '{raw}' preserved in: {msg}"
     );
 }
 

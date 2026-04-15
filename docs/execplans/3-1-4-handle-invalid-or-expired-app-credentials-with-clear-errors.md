@@ -25,8 +25,9 @@ whether they need to regenerate their private key, correct the App ID, or wait
 for a GitHub outage to resolve.
 
 Observable outcome: running `make test` passes and the following new tests
-exist: unit tests in `src/github/tests.rs` covering HTTP error classification
-and error message formatting, and behaviour-driven development (BDD) scenarios
+exist: unit tests in `src/github/credential_error_tests.rs` covering HTTP error
+classification and error message formatting, and behaviour-driven development
+(BDD) scenarios
 in `tests/features/github_credential_errors.feature` verifying that distinct
 credential failure modes produce the correct actionable error messages with
 remediation hints.
@@ -158,12 +159,14 @@ Retry after the service recovers.
   means a wildcard arm is needed, which aligns with the "Other /
   unexpected" classification category. String parsing rejected as
   unnecessary.
-- **2026-04-07 — Dev-dependencies for test construction:** Added `http`
-  and `snafu` as dev-dependencies to construct `octocrab::Error::GitHub`
-  variants in unit tests. Both crates are already in the dependency
-  graph (transitive via octocrab), so no new code is introduced. This
-  is strictly for test support — the production classifier does not
-  require direct access to these crates.
+- **2026-04-07 — Dev-dependency for test construction:** `snafu` was
+  added as an explicit dev-dependency to construct `octocrab::Error`
+  variants in unit tests (specifically, to supply
+  `snafu::Backtrace::generate()` for the `Service` variant). `http` is
+  used transitively via octocrab but was **not** added as an explicit
+  dev-dependency — the unit tests do not directly import `http` types.
+  This is strictly for test support and does not affect production
+  dependencies.
 
 ## Context and orientation
 
@@ -569,11 +572,15 @@ set -o pipefail; make nixie 2>&1 | tee /tmp/nixie-3-1-4.out
 
 ## Interfaces and dependencies
 
-No new dependencies. The implementation uses:
+No new production dependencies. `snafu` was added as an explicit
+dev-dependency (already in the transitive dependency graph via octocrab)
+for unit test construction only. The implementation uses:
 
 - `octocrab::Octocrab` (the client type, already a dependency).
 - `octocrab::Error` (the error type, already a transitive type).
 - `mockall` (for generating mock implementations, already a dev-dependency).
+- `snafu` (for `Backtrace::generate()` in unit tests, added as explicit
+  dev-dependency).
 - `tokio` (for async runtime, already a dependency).
 - `crate::error::GitHubError` (already defined).
 

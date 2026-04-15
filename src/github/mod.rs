@@ -153,6 +153,15 @@ pub(crate) fn classify_by_status(code: u16, raw_message: &str, full_error: &str)
             ),
             raw = raw_message,
         ),
+        403 if is_rate_limited(raw_message) => format!(
+            concat!(
+                "rate limit exceeded (HTTP 403). ",
+                "Hint: The GitHub API rate limit has been exceeded. ",
+                "Wait a few minutes and retry. Check https://www.githubstatus.com ",
+                "if the problem persists. Raw error: {raw}",
+            ),
+            raw = raw_message,
+        ),
         403 => format!(
             concat!(
                 "insufficient permissions (HTTP 403). ",
@@ -188,6 +197,18 @@ pub(crate) fn classify_by_status(code: u16, raw_message: &str, full_error: &str)
             error = full_error,
         ),
     }
+}
+
+/// Check whether a GitHub API error message indicates a rate-limit
+/// response rather than a genuine permissions failure.
+///
+/// GitHub returns HTTP 403 for both insufficient permissions *and*
+/// rate-limit exhaustion. The message body distinguishes the two:
+/// primary limits contain "API rate limit exceeded" and secondary
+/// limits contain "secondary rate limit".
+fn is_rate_limited(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("rate limit")
 }
 
 /// Trait for GitHub App client operations.

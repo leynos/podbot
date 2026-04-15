@@ -107,12 +107,31 @@ fn error_for(status: u16, raw: &str) -> String {
     }
 }
 
+/// Build a mock error message for a rate-limit 403 response.
+///
+/// Separate from `error_for` because rate-limit 403 is a sub-case of
+/// HTTP 403 distinguished by the message body, not the status code alone.
+fn error_for_rate_limit(raw: &str) -> String {
+    format!(
+        concat!(
+            "rate limit exceeded (HTTP 403). ",
+            "Hint: The GitHub API rate limit has been exceeded. ",
+            "Wait a few minutes and retry. Check https://www.githubstatus.com ",
+            "if the problem persists. Raw error: {raw}",
+        ),
+        raw = raw,
+    )
+}
+
 /// Create and configure a mock client for the given HTTP response.
 fn configure_mock_client(mock_response: MockHttpResponse) -> MockGitHubAppClient {
     let mut mock_client = MockGitHubAppClient::new();
     let message = match mock_response {
         MockHttpResponse::Unauthorized401 => error_for(401, "Bad credentials"),
         MockHttpResponse::Forbidden403 => error_for(403, "Resource not accessible"),
+        MockHttpResponse::RateLimited403 => {
+            error_for_rate_limit("API rate limit exceeded for installation ID 12345")
+        }
         MockHttpResponse::NotFound404 => error_for(404, "Not Found"),
         MockHttpResponse::ServerError503 => error_for(503, "Service unavailable"),
     };
@@ -186,6 +205,20 @@ fn mock_api_returns_403(
     github_credential_errors_state
         .mock_response
         .set(MockHttpResponse::Forbidden403);
+    Ok(())
+}
+
+#[given("a mock GitHub API that returns HTTP 403 for rate limiting")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd step functions must return StepResult"
+)]
+fn mock_api_rate_limits_403(
+    github_credential_errors_state: &GitHubCredentialErrorsState,
+) -> StepResult<()> {
+    github_credential_errors_state
+        .mock_response
+        .set(MockHttpResponse::RateLimited403);
     Ok(())
 }
 

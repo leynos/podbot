@@ -39,3 +39,12 @@ Feature: GitHub App credential error classification
     Then validation fails
     And the error mentions permissions
     And the error includes a settings hint
+
+  Scenario: Rate-limit error produces a retry hint
+    Given a mock GitHub API that returns HTTP 403 for rate limiting
+    And a valid RSA private key file exists at the configured path
+    And the GitHub App ID is 12345
+    When credentials are validated
+    Then validation fails
+    And the error mentions rate limit
+    And the error includes a retry hint

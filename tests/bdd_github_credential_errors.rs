@@ -50,3 +50,13 @@ fn permission_error_produces_a_permissions_hint(
 ) {
     let _ = github_credential_errors_state;
 }
+
+#[scenario(
+    path = "tests/features/github_credential_errors.feature",
+    name = "Rate-limit error produces a retry hint"
+)]
+fn rate_limit_error_produces_a_retry_hint(
+    github_credential_errors_state: GitHubCredentialErrorsState,
+) {
+    let _ = github_credential_errors_state;
+}

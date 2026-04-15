@@ -111,6 +111,28 @@ fn error_includes_status_page_hint(
     )
 }
 
+#[then("the error mentions rate limit")]
+fn error_mentions_rate_limit(
+    github_credential_errors_state: &GitHubCredentialErrorsState,
+) -> StepResult<()> {
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["rate limit exceeded"],
+        "'rate limit exceeded'",
+    )
+}
+
+#[then("the error includes a retry hint")]
+fn error_includes_retry_hint(
+    github_credential_errors_state: &GitHubCredentialErrorsState,
+) -> StepResult<()> {
+    assert_message_contains_all(
+        github_credential_errors_state,
+        &["Wait", "retry"],
+        "retry hint",
+    )
+}
+
 #[then("the error mentions permissions")]
 fn error_mentions_permissions(
     github_credential_errors_state: &GitHubCredentialErrorsState,
