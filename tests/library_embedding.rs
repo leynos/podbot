@@ -46,10 +46,15 @@ mock! {
 }
 
 /// Fixture providing a tokio runtime for exec tests.
+///
+/// # Panics
+///
+/// Panics if the tokio runtime cannot be created. This is a test setup
+/// failure and indicates a fundamental environment issue.
 #[fixture]
 fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Runtime::new().ok().unwrap_or_else(|| {
-        panic!("failed to create tokio runtime");
+    tokio::runtime::Runtime::new().unwrap_or_else(|e| {
+        panic!("failed to create tokio runtime: {e}");
     })
 }
 
