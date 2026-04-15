@@ -10,7 +10,9 @@ use rstest_bdd_macros::{given, when};
 
 use jsonwebtoken::EncodingKey;
 use podbot::error::GitHubError;
-use podbot::github::{BoxFuture, GitHubAppClient, classify_by_status, validate_with_factory};
+use podbot::github::{
+    BoxFuture, GitHubAppClient, test_classify_error_message, validate_with_factory,
+};
 
 use super::state::{GitHubCredentialErrorsState, MockHttpResponse, StepResult, ValidationOutcome};
 
@@ -56,13 +58,15 @@ fn read_inputs(state: &GitHubCredentialErrorsState) -> StepResult<ValidationInpu
 fn configure_mock_client(mock_response: MockHttpResponse) -> MockGitHubAppClient {
     let mut mock_client = MockGitHubAppClient::new();
     let message = match mock_response {
-        MockHttpResponse::Unauthorized401 => classify_by_status(401, "Bad credentials"),
-        MockHttpResponse::Forbidden403 => classify_by_status(403, "Resource not accessible"),
-        MockHttpResponse::RateLimited403 => {
-            classify_by_status(403, "API rate limit exceeded for installation ID 12345")
+        MockHttpResponse::Unauthorized401 => test_classify_error_message(401, "Bad credentials"),
+        MockHttpResponse::Forbidden403 => {
+            test_classify_error_message(403, "Resource not accessible")
         }
-        MockHttpResponse::NotFound404 => classify_by_status(404, "Not Found"),
-        MockHttpResponse::ServerError503 => classify_by_status(503, "Service unavailable"),
+        MockHttpResponse::RateLimited403 => {
+            test_classify_error_message(403, "API rate limit exceeded for installation ID 12345")
+        }
+        MockHttpResponse::NotFound404 => test_classify_error_message(404, "Not Found"),
+        MockHttpResponse::ServerError503 => test_classify_error_message(503, "Service unavailable"),
     };
     mock_client
         .expect_validate_credentials()

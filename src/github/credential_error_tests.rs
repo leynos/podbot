@@ -25,6 +25,7 @@
 //! 2. BDD tests (`tests/bdd_github_credential_errors.rs`) — exercises the
 //!    full integration path with mocked GitHub API responses
 
+use super::classify::classify_by_status;
 use super::*;
 use rstest::rstest;
 use snafu::GenerateImplicitData;
