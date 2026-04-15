@@ -61,7 +61,7 @@ Retry after the service recovers.
   sufficiently expressive for all error classes because the `message` field
   carries the classification, context, and remediation hint as a
   human-readable string. Adding new variants would break exhaustive match
-  sites and is not justified for sub-classification of a single API call.
+  sites and is not justified for subclassification of a single API call.
 - Keep all files under 400 lines. Current budgets: `src/github/mod.rs` is
   296 lines (104 remaining), `src/github/tests.rs` is 398 lines (2
   remaining — a new test submodule will be needed).
@@ -714,7 +714,7 @@ generic "authentication failed" messages.
 
 **Lessons learned:**
 
-- For markdown tables with very long cells, use automated alignment
+- For Markdown tables with very long cells, use automated alignment
   calculation to ensure all rows match the header/separator exactly.
 - When lint suppression is required, always use `#[expect]` with a clear
   reason explaining why the lint cannot be satisfied.

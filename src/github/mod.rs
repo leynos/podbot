@@ -207,8 +207,12 @@ pub fn classify_by_status(code: u16, full_error: &str) -> String {
 /// primary limits contain "API rate limit exceeded" and secondary
 /// limits contain "secondary rate limit".
 fn is_rate_limited(message: &str) -> bool {
-    let lower = message.to_lowercase();
-    lower.contains("rate limit")
+    // Use ASCII case-insensitive search to avoid allocating a lowercased string.
+    // GitHub's error messages are ASCII, so byte-wise comparison is safe.
+    message
+        .as_bytes()
+        .windows("rate limit".len())
+        .any(|window| window.eq_ignore_ascii_case(b"rate limit"))
 }
 
 /// Trait for GitHub App client operations.
