@@ -89,7 +89,7 @@ terminal framing.
 - **`ProtocolProxyIo<HostStdin, HostStdout, HostStderr>`**: generic
   host-IO bundle injected into the protocol proxy for testing.
 
-## 4. Stdout Purity Contract
+## 4. Stdout purity contract
 
 The protocol proxy must never write bytes to host stdout that did not originate
 from container stdout or console output. The authoritative definition lives in
