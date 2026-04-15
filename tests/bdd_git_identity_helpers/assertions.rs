@@ -14,7 +14,7 @@ fn convert_outcome(
 ) -> Result<GitIdentityResult, String> {
     match outcome {
         Ok(r) => Ok(r.clone()),
-        Err(e) => Err(format!("{e}")),
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -104,14 +104,17 @@ fn git_identity_result_is_none_configured(git_identity_state: &GitIdentityState)
 
 /// Checks configured name matches expected value.
 /// "absent" is treated specially to check for None.
-#[then("configured name is {word}")]
-fn configured_name_is(git_identity_state: &GitIdentityState, word: String) -> StepResult<()> {
+#[then("configured name is {string}")]
+fn configured_name_is(git_identity_state: &GitIdentityState, string: String) -> StepResult<()> {
+    // rstest-bdd {string} captures include the surrounding quotes, so strip them
+    let value = string.trim_matches('"');
+
     git_identity_state
         .outcome
         .with_ref(|outcome| {
             let converted = convert_outcome(outcome);
 
-            if word == "absent" {
+            if value == "absent" {
                 assert_field_absent(
                     &converted,
                     |r| {
@@ -131,7 +134,7 @@ fn configured_name_is(git_identity_state: &GitIdentityState, word: String) -> St
                         GitIdentityResult::Partial { name: Some(n), .. } => Some(n.as_str()),
                         _ => None,
                     },
-                    &word,
+                    value,
                     "name",
                 )
             }
@@ -141,14 +144,17 @@ fn configured_name_is(git_identity_state: &GitIdentityState, word: String) -> St
 
 /// Checks configured email matches expected value.
 /// "absent" is treated specially to check for None.
-#[then("configured email is {word}")]
-fn configured_email_is(git_identity_state: &GitIdentityState, word: String) -> StepResult<()> {
+#[then("configured email is {string}")]
+fn configured_email_is(git_identity_state: &GitIdentityState, string: String) -> StepResult<()> {
+    // rstest-bdd {string} captures include the surrounding quotes, so strip them
+    let value = string.trim_matches('"');
+
     git_identity_state
         .outcome
         .with_ref(|outcome| {
             let converted = convert_outcome(outcome);
 
-            if word == "absent" {
+            if value == "absent" {
                 assert_field_absent(
                     &converted,
                     |r| {
@@ -168,7 +174,7 @@ fn configured_email_is(git_identity_state: &GitIdentityState, word: String) -> S
                         GitIdentityResult::Partial { email: Some(e), .. } => Some(e.as_str()),
                         _ => None,
                     },
-                    &word,
+                    value,
                     "email",
                 )
             }
