@@ -644,7 +644,7 @@ To depend on Podbot as a library without the CLI types:
 podbot = { version = "0.1.0", default-features = false }
 ```
 
-With this configuration, the `podbot::cli` module is not compiled and the
+With this configuration, the `podbot::cli` module is not compiled, and the
 consumer can use the library without interacting with Clap types directly.
 
 **Note:** The `clap` crate remains a transitive dependency through
@@ -740,7 +740,7 @@ When adding new public modules or dependencies:
 
 Podbot uses [rstest-bdd](https://crates.io/crates/rstest-bdd) for
 behaviour-driven development (BDD) tests alongside standard `rstest`
-parametrised integration tests. The two test styles serve complementary
+parametrized integration tests. The two test styles serve complementary
 purposes:
 
 - **BDD scenario tests** (`tests/bdd_*.rs`) are driven by Gherkin feature

@@ -100,6 +100,14 @@ fn all_stubs_succeed(library_boundary_state: &LibraryBoundaryState) -> StepResul
         .get()
         .ok_or_else(|| String::from("stub_outcomes should be set"))?;
 
+    const EXPECTED_STUB_COUNT: usize = 4;
+    if outcomes.results.len() != EXPECTED_STUB_COUNT {
+        return Err(format!(
+            "expected {EXPECTED_STUB_COUNT} stub outcomes but found {}",
+            outcomes.results.len()
+        ));
+    }
+
     for (i, result) in outcomes.results.iter().enumerate() {
         match result {
             LibraryResult::Ok(CommandOutcome::Success) => {}

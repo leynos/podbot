@@ -8,9 +8,10 @@ use std::sync::Arc;
 
 use bollard::container::LogOutput;
 use futures_util::stream;
+use mockable::MockEnv;
 use mockall::mock;
 use podbot::api::{ExecParams, exec, list_containers, run_agent, run_token_daemon, stop_container};
-use podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config};
+use podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config_with_env};
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, ExecMode, InspectExecFuture, ResizeExecFuture,
     StartExecFuture,
@@ -69,6 +70,9 @@ fn given_failing_mock_client(library_boundary_state: &LibraryBoundaryState) {
 fn when_config_loader_called(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
     let socket = library_boundary_state.engine_socket_override.get();
 
+    let mut mock_env = MockEnv::new();
+    mock_env.expect_string().returning(|_| None);
+
     let options = ConfigLoadOptions {
         config_path_hint: None,
         discover_config: false,
@@ -81,7 +85,7 @@ fn when_config_loader_called(library_boundary_state: &LibraryBoundaryState) -> S
         command_intent: podbot::config::CommandIntent::Any,
     };
 
-    match load_config(&options) {
+    match load_config_with_env(&mock_env, &options) {
         Ok(config) => library_boundary_state
             .config_result
             .set(ConfigResult::Ok(Box::new(config))),
@@ -133,7 +137,7 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
 
         client
             .expect_resize_exec()
-            .times(0..)
+            .times(0)
             .returning(|_, _| Box::pin(async { Ok(()) }));
 
         client.expect_inspect_exec().times(1).returning(|_| {
