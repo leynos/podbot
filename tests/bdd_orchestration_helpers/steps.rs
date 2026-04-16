@@ -4,12 +4,13 @@ use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
 use podbot::api::{
-    CommandOutcome, ExecMode, ExecRequest, exec_with_client, list_containers, run_agent,
-    run_token_daemon, stop_container,
+    CommandOutcome, ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon,
+    stop_container,
 };
 use podbot::config::AppConfig;
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
+    ContainerExecClient, CreateExecFuture, EngineConnector, InspectExecFuture, ResizeExecFuture,
+    StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
 
@@ -104,9 +105,31 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
             .with_mode(mode)
             .with_tty(tty);
 
-        exec_with_client(&client, runtime.handle(), &request)
+        exec_outcome_with_client(&client, runtime.handle(), &request)
     });
     Ok(())
+}
+
+fn exec_outcome_with_client<C: ContainerExecClient + Sync>(
+    client: &C,
+    runtime: &tokio::runtime::Handle,
+    request: &ExecRequest,
+) -> podbot::error::Result<CommandOutcome> {
+    let engine_request = podbot::engine::ExecRequest::new(
+        request.container(),
+        request.command().to_vec(),
+        request.mode().into(),
+    )?
+    .with_tty(request.tty());
+    let result = EngineConnector::exec(runtime, client, &engine_request)?;
+
+    if result.exit_code() == 0 {
+        Ok(CommandOutcome::Success)
+    } else {
+        Ok(CommandOutcome::CommandExit {
+            code: result.exit_code(),
+        })
+    }
 }
 
 #[when("run orchestration is invoked")]

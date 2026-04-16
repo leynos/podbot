@@ -6,9 +6,10 @@ use futures_util::stream;
 use mockall::mock;
 use rstest::rstest;
 
+use super::exec::exec_with_client;
 use super::{
-    CommandOutcome, ExecMode, ExecRequest, exec_with_client, list_containers, run_agent,
-    run_token_daemon, stop_container,
+    CommandOutcome, ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon,
+    stop_container,
 };
 use crate::config::{AppConfig, GitHubConfig};
 use crate::engine::{

@@ -116,8 +116,8 @@ fn stop_container_cli(args: &StopArgs) -> PodbotResult<CommandOutcome> {
 
 /// CLI adapter for executing a command in a running container.
 ///
-/// Performs terminal detection (a CLI concern) and engine connection
-/// before delegating to the library orchestration function.
+/// Performs terminal detection, builds the library-owned exec request, and
+/// delegates engine connection and execution to `podbot::api::exec`.
 fn exec_in_container_cli(config: &AppConfig, args: &ExecArgs) -> PodbotResult<CommandOutcome> {
     let mode = if args.detach {
         ExecMode::Detached

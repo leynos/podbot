@@ -265,8 +265,8 @@ impl EngineConnector {
     /// This hidden seam exists for integration tests that must avoid inheriting
     /// the harness process stdin while still exercising the production
     /// protocol-mode flow.
-    #[doc(hidden)]
-    pub async fn exec_async_without_protocol_stdin_forwarding<C: ContainerExecClient>(
+    #[cfg(test)]
+    pub(crate) async fn exec_async_without_protocol_stdin_forwarding<C: ContainerExecClient>(
         client: &C,
         request: &ExecRequest,
     ) -> Result<ExecResult, PodbotError> {
@@ -283,7 +283,7 @@ impl EngineConnector {
     /// # Errors
     ///
     /// Returns the same errors as [`Self::exec_async`].
-    pub fn exec<C: ContainerExecClient>(
+    pub fn exec<C: ContainerExecClient + Sync>(
         runtime: &tokio::runtime::Handle,
         client: &C,
         request: &ExecRequest,
@@ -368,14 +368,32 @@ impl EngineConnector {
 
 fn block_on_runtime<F>(runtime: &tokio::runtime::Handle, future: F) -> F::Output
 where
-    F: std::future::Future,
+    F: std::future::Future + Send,
+    F::Output: Send,
 {
     if tokio::runtime::Handle::try_current().is_ok() {
-        tokio::task::block_in_place(|| runtime.block_on(future))
+        std::thread::scope(|scope| {
+            let blocking_task = scope.spawn(|| create_blocking_exec_runtime().block_on(future));
+
+            match blocking_task.join() {
+                Ok(output) => output,
+                Err(panic) => std::panic::resume_unwind(panic),
+            }
+        })
     } else {
         runtime.block_on(future)
     }
 }
+
+fn create_blocking_exec_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap_or_else(|error| {
+            panic!("failed to create Tokio runtime for blocking exec wrapper: {error}")
+        })
+}
+
 pub(super) fn exec_failed(container_id: &str, message: impl Into<String>) -> PodbotError {
     PodbotError::from(ContainerError::ExecFailed {
         container_id: String::from(container_id),

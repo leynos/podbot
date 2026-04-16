@@ -126,7 +126,7 @@ const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_
 
 /// RAII guard that disables stdin forwarding for exec integration tests.
 pub struct TestStdinForwardingGuard {
-    env_guard: EnvGuard<'static>,
+    _env_guard: EnvGuard<'static>,
 }
 
 impl TestStdinForwardingGuard {
@@ -137,7 +137,9 @@ impl TestStdinForwardingGuard {
 
         set_env_var(&env_guard, DISABLE_STDIN_FORWARDING_ENV, "1");
 
-        Self { env_guard }
+        Self {
+            _env_guard: env_guard,
+        }
     }
 }
 
@@ -148,8 +150,6 @@ impl Drop for TestStdinForwardingGuard {
         unsafe {
             std::env::remove_var(DISABLE_STDIN_FORWARDING_ENV);
         }
-
-        let _ = &self.env_guard;
     }
 }
 

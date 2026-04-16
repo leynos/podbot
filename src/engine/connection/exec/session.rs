@@ -20,6 +20,7 @@ impl ExecSessionOptions {
 
     /// Disable protocol stdin forwarding for tests that must avoid inherited
     /// process stdin.
+    #[cfg(test)]
     #[must_use]
     pub const fn with_protocol_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
         self.disable_protocol_stdin_forwarding = disable;

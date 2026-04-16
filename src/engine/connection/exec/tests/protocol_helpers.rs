@@ -172,11 +172,8 @@ fn protocol_exec_maps_exit_code(
     setup_inspect_exec_once(&mut client, Some(case.inspect_exit_code));
 
     let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
-    let result = runtime_handle.block_on(EngineConnector::exec_async_with_options(
-        &client,
-        &request,
-        ExecSessionOptions::new().with_protocol_stdin_forwarding_disabled(true),
-    ));
+    let result = runtime_handle
+        .block_on(EngineConnector::exec_async_without_protocol_stdin_forwarding(&client, &request));
     assert_exit_code(result, case.expected_exit_code, case.context);
     Ok(())
 }

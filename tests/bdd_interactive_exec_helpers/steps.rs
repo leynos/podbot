@@ -37,12 +37,6 @@ fn detached_execution_mode_selected(interactive_exec_state: &InteractiveExecStat
     interactive_exec_state.mode.set(ExecMode::Detached);
 }
 
-#[given("protocol execution mode is selected")]
-fn protocol_execution_mode_selected(interactive_exec_state: &InteractiveExecState) {
-    interactive_exec_state.mode.set(ExecMode::Protocol);
-    interactive_exec_state.tty_enabled.set(false);
-}
-
 #[given("tty allocation is enabled")]
 fn tty_allocation_enabled(interactive_exec_state: &InteractiveExecState) {
     interactive_exec_state.tty_enabled.set(true);
@@ -106,14 +100,8 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
 
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| format!("failed to create runtime: {error}"))?;
-    let execution_result = if mode == ExecMode::Protocol {
-        runtime.block_on(
-            EngineConnector::exec_async_without_protocol_stdin_forwarding(&client, &request),
-        )
-    } else {
-        let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
-        runtime.block_on(EngineConnector::exec_async(&client, &request))
-    };
+    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
+    let execution_result = runtime.block_on(EngineConnector::exec_async(&client, &request));
 
     match execution_result {
         Ok(result) => interactive_exec_state

@@ -1,7 +1,6 @@
 //! Host-style integration tests for the documented stable library boundary.
 
-use podbot::api::{CommandOutcome, ExecContext, ExecMode, ExecRequest};
-use podbot::config::AppConfig;
+use podbot::api::{ExecMode, ExecRequest};
 use rstest::rstest;
 
 #[rstest]
@@ -18,22 +17,4 @@ fn stable_embedder_path_uses_only_supported_modules() {
     assert_eq!(round_trip.mode(), ExecMode::Protocol);
     assert!(!request.tty());
     assert!(!round_trip.tty());
-
-    let connect_signature: fn(
-        &AppConfig,
-        &tokio::runtime::Handle,
-    ) -> podbot::error::Result<ExecContext> = ExecContext::connect;
-    let exec_signature: fn(&ExecContext, &ExecRequest) -> podbot::error::Result<CommandOutcome> =
-        ExecContext::exec;
-
-    assert!(std::ptr::fn_addr_eq(
-        connect_signature,
-        ExecContext::connect
-            as fn(&AppConfig, &tokio::runtime::Handle) -> podbot::error::Result<ExecContext>,
-    ));
-    assert!(std::ptr::fn_addr_eq(
-        exec_signature,
-        ExecContext::exec
-            as fn(&ExecContext, &ExecRequest) -> podbot::error::Result<CommandOutcome>,
-    ));
 }

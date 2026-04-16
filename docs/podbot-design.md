@@ -178,8 +178,8 @@ backpressure remains visible to the hosted server:
   limiting how many bytes can be in flight between host stdin reads and
   container input writes.
 - **Container input writes**: the container stdin writer receives
-  unbuffered writes from the copy operation. An explicit flush and
-  shutdown sequence follows copy completion to signal end-of-input.
+  unbuffered writes from the copy operation. An explicit flush and shutdown
+  sequence follows copy completion to signal end-of-input.
 - **Output chunk size**: Bollard's `output_capacity` is set to 64 KiB for
   protocol-mode exec sessions, controlling the maximum bytes per `LogOutput`
   chunk delivered by the daemon. This reduces per-chunk overhead for large
@@ -189,10 +189,10 @@ backpressure remains visible to the hosted server:
   flush, the output loop yields, the Bollard stream stops being polled, and
   backpressure propagates to the container.
 
-The 64 KiB buffer sizes align with common protocol message sizes (such as
-JSON Remote Procedure Call (JSON-RPC) frame buffers) and typical OS pipe
-buffer defaults, keeping latency low while preventing unbounded accumulation
-during high-throughput scenarios.
+The 64 KiB buffer sizes align with common protocol message sizes (such as JSON
+Remote Procedure Call (JSON-RPC) frame buffers) and typical OS pipe buffer
+defaults, keeping latency low while preventing unbounded accumulation during
+high-throughput scenarios.
 
 The dedicated `podbot host` command is protocol-only. Unlike interactive
 operator commands, it must not emit banners, progress lines, or lifecycle
@@ -959,7 +959,7 @@ The stable library boundary should follow these constraints:
   `podbot::api::{ExecRequest, ExecMode, ExecContext, exec}` rather than
   engine-owned traits or runtime handles.
 - Hook, validation, session, and MCP contracts remain experimental until their
-  ADRs and Corbusier-facing integration notes converge on one request/response
+  ADRs and consumer-facing integration notes converge on one request/response
   taxonomy.
 
 ### Public library API reference

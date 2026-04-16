@@ -62,8 +62,11 @@ impl ExecRequest {
     ///
     /// # Errors
     ///
-    /// Returns `PodbotError::Config` when the container identifier is blank or
-    /// the command is empty.
+    /// Returns `PodbotError::Config` when `validate()` rejects the
+    /// request because:
+    /// - the container identifier is blank
+    /// - the command vector is empty
+    /// - `command[0]` is blank
     ///
     /// # Examples
     ///
@@ -241,7 +244,7 @@ pub fn exec(config: &AppConfig, request: &ExecRequest) -> PodbotResult<CommandOu
 /// # Errors
 ///
 /// Returns the same engine execution and request-conversion errors as [`exec`].
-pub fn exec_with_client<C: ContainerExecClient>(
+pub(crate) fn exec_with_client<C: ContainerExecClient + Sync>(
     connector: &C,
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
