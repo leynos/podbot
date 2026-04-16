@@ -611,6 +611,7 @@ or calling `std::process::exit`.
 | `podbot::api::stop_container(container)`   | Stop a running container (stub)                 |
 | `podbot::api::list_containers()`           | List running podbot containers (stub)           |
 | `podbot::api::run_token_daemon(container)` | Run the token refresh daemon (stub)             |
+| `podbot::api::configure_container_git_identity(params)` | Configure Git identity inside a container from host Git config |
 
 ### Return type
 
@@ -649,6 +650,73 @@ fn run_command(
 }
 ```
 
+### Git identity configuration
+
+`configure_container_git_identity` reads `user.name` and `user.email` from
+the host Git configuration and applies them inside a running container via
+`git config --global`. Missing fields produce warnings rather than errors.
+
+#### Parameters: `GitIdentityParams`
+
+```rust,no_run
+pub struct GitIdentityParams<'a, C: ContainerExecClient, R: HostCommandRunner> {
+    pub client: &'a C,
+    pub host_runner: &'a R,
+    pub container_id: &'a str,
+    pub runtime_handle: &'a tokio::runtime::Handle,
+}
+```
+
+#### Return type: `GitIdentityResult`
+
+`configure_container_git_identity` returns `podbot::error::Result<GitIdentityResult>`:
+
+| Variant | Meaning |
+| ------- | ------- |
+| `GitIdentityResult::Configured { name, email }` | Both `user.name` and `user.email` were set in the container. |
+| `GitIdentityResult::Partial { name, email, warnings }` | One field was set; `warnings` explains the missing field. |
+| `GitIdentityResult::NoneConfigured { warnings }` | Neither field was present on the host; container Git config unchanged. |
+
+Container-side exec failures (e.g. `git` not present in the container image)
+propagate as `PodbotError::Container(ContainerError::ExecFailed { .. })`.
+
+#### Example usage
+
+```rust,no_run
+use podbot::api::{GitIdentityParams, configure_container_git_identity};
+use podbot::engine::{GitIdentityResult, SystemCommandRunner};
+
+fn configure_identity(
+    client: &impl podbot::engine::ContainerExecClient,
+    runtime_handle: &tokio::runtime::Handle,
+) {
+    let host_runner = SystemCommandRunner;
+    let params = GitIdentityParams {
+        client,
+        host_runner: &host_runner,
+        container_id: "my-container",
+        runtime_handle,
+    };
+
+    match configure_container_git_identity(&params) {
+        Ok(GitIdentityResult::Configured { name, email }) => {
+            println!("Git identity set: {name} <{email}>");
+        }
+        Ok(GitIdentityResult::Partial { warnings, .. }) => {
+            for w in &warnings {
+                eprintln!("warning: {w}");
+            }
+        }
+        Ok(GitIdentityResult::NoneConfigured { warnings }) => {
+            for w in &warnings {
+                eprintln!("warning: {w}");
+            }
+        }
+        Err(e) => eprintln!("Error configuring Git identity: {e}"),
+    }
+}
+```
+
 ### Library embedding
 
 Podbot can be used as a library dependency without the CLI adapter layer. The
@@ -674,7 +742,8 @@ feature flag controls module visibility, not the `clap` dependency itself.
 The following modules are part of the stable public API:
 
 - `podbot::api` — orchestration functions (`exec`, `run_agent`,
-  `list_containers`, `stop_container`, `run_token_daemon`)
+  `list_containers`, `stop_container`, `run_token_daemon`,
+  `configure_container_git_identity`)
 - `podbot::config` — configuration types and loaders (`AppConfig`,
   `ConfigLoadOptions`, `load_config`)
 - `podbot::engine` — container engine types and traits
