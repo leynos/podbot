@@ -32,6 +32,8 @@ pub mod github;
 
 #[cfg(test)]
 mod tests {
+    //! Compile-time proofs for feature-gated module visibility.
+
     /// Verify the `cli` module is available when the `cli` feature is enabled.
     ///
     /// This is a compile-time proof: if the test compiles, the module is

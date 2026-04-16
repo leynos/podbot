@@ -239,6 +239,8 @@ pub type Result<T> = std::result::Result<T, PodbotError>;
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for error type display formatting and conversion behaviour.
+
     use super::*;
     use eyre::Report;
     use rstest::{fixture, rstest};
