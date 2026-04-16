@@ -749,7 +749,7 @@ purposes:
   `then`), shared state, and assertion helpers. Feature files are read at
   compile time; changes to `.feature` content may require
   `cargo clean -p podbot` to invalidate incremental compilation caches.
-- **Parametrised integration tests** (`tests/library_embedding.rs` and
+- **Parametrized integration tests** (`tests/library_embedding.rs` and
   others) use `rstest` fixtures and `#[case]` parameters directly, without
   feature files. These tests exercise the library API from a
   host-application perspective.
