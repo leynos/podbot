@@ -225,7 +225,7 @@ When adding a new execution mode:
 
 ## 8. Testing conventions
 
-### 8.1. Test organization
+### 8.1. Test organisation
 
 - Unit tests live in `tests.rs` submodules colocated with production
   code.
@@ -247,10 +247,30 @@ When adding a new execution mode:
 - `ContainerExecClient` mock implementations for unit testing without a
   live daemon.
 
-### 8.3. Parameterized tests
+### 8.3. Parameterised tests
 
 Use `#[rstest(...)]` to eliminate duplicated test cases. Group related
-parameters in structs when the parameter list exceeds three items.
+parameters in structs when the parameter list exceeds three items. For
+example:
+
+```rust
+#[rstest]
+#[case(401, "Bad credentials", &["credentials rejected", "regenerate"])]
+#[case(403, "Forbidden", &["insufficient permissions", "settings"])]
+fn classify_error_messages(
+    #[case] status: u16,
+    #[case] message: &str,
+    #[case] expected_substrings: &[&str],
+) {
+    let msg = classify_by_status(status, message);
+    for expected in expected_substrings {
+        assert!(msg.contains(expected), "expected '{expected}' in: {msg}");
+    }
+}
+```
+
+This reduces duplication whilst preserving independent test case execution and
+clear failure diagnostics.
 
 ## 9. Error handling boundary
 
@@ -261,3 +281,185 @@ these to `eyre::Report` for operator-facing display.
 
 See [podbot-design.md, Error handling](podbot-design.md#error-handling) for the
 full error hierarchy.
+
+## 10. GitHub error classification module
+
+The GitHub App credential validation system uses a layered error classification
+architecture to transform HTTP status codes and error messages into actionable
+user-facing diagnostics.
+
+### 10.1. Module structure
+
+Error classification logic is separated into `src/github/classify.rs` to keep
+the main `src/github/mod.rs` file under the 400-line budget. The classify
+module provides:
+
+- `classify_github_api_error(error: octocrab::Error) -> GitHubError` — entry
+  point called by `OctocrabAppClient::validate_credentials` via `map_err`
+- `classify_by_status(code: u16, full_error: &str) -> String` — maps HTTP
+  status codes to error messages with remediation hints
+- `is_rate_limited(message: &str) -> bool` — distinguishes rate-limit 403s
+  from permission 403s using case-insensitive substring matching
+
+### 10.2. Visibility and testing
+
+The classification functions use Rust's visibility controls to maintain a clean
+public API surface:
+
+- `classify_github_api_error` is `pub(super)` — visible only within the
+  `github` module
+- `classify_by_status` is `pub(crate)` — visible within the podbot crate for
+  unit tests but not part of the public library API
+- `is_rate_limited` is private (`fn`) — implementation detail
+
+Integration tests (in `tests/`) are outside the crate boundary and cannot
+import `pub(crate)` items. The `test_classify_error_message` function in
+`src/github/mod.rs` provides a `#[doc(hidden)]` public wrapper for BDD tests
+that need to construct mock error messages matching production output.
+
+### 10.3. Error message format
+
+All classified error messages follow this template:
+
+```plaintext
+<classification> (HTTP <code>). Hint: <remediation guidance>. Raw error: <original octocrab error>
+```
+
+The raw error is always preserved to aid debugging. HTTP status codes map to
+classifications as follows:
+
+- **401** — credentials rejected
+- **403** (rate limit) — rate limit exceeded
+- **403** (permissions) — insufficient permissions
+- **404** — App not found
+- **500–599** — GitHub API unavailable
+- **other** — unexpected response
+
+### 10.4. Extending the classifier
+
+To add a new HTTP status code classification:
+
+1. Add a new match arm in `classify_by_status` in `src/github/classify.rs`.
+2. Follow the existing message format with classification, hint, and raw error.
+3. Add a parameterised test case to `classify_error_messages` in
+   `src/github/credential_error_tests.rs`.
+4. Add a BDD scenario to `tests/features/github_credential_errors.feature` if
+   the classification affects user-visible orchestration behaviour.
+
+### 10.5. Rate-limit detection
+
+The `is_rate_limited` function uses ASCII case-insensitive byte comparison to
+avoid allocating a lowercased string on the error path. It scans for the
+substring "rate limit" using `as_bytes().windows().eq_ignore_ascii_case()`.
+This is safe because GitHub's error messages are ASCII.
+
+## 11. BDD testing patterns for credential validation
+
+Credential validation scenarios use the rstest-bdd framework with a four-file
+helper structure:
+
+- `tests/bdd_github_credential_errors.rs` — scenario entry points
+- `tests/bdd_github_credential_errors_helpers/mod.rs` — re-exports
+- `tests/bdd_github_credential_errors_helpers/state.rs` — scenario state with
+  `Slot`-based fields
+- `tests/bdd_github_credential_errors_helpers/steps.rs` — Given and When step
+  definitions
+- `tests/bdd_github_credential_errors_helpers/assertions.rs` — Then step
+  assertions
+
+### 11.1. Mock client construction
+
+BDD tests use `mockall::mock!` to define a local `MockGitHubAppClient` because
+`#[cfg_attr(test, mockall::automock)]` on the trait is only available within
+the main crate's test configuration. The `configure_mock_client` helper
+constructs mock responses by calling `test_classify_error_message` to ensure
+test expectations match production output exactly.
+
+### 11.2. Step result pattern
+
+All step functions return `StepResult<()>` (a type alias for
+`Result<(), String>`) to satisfy clippy's `expect_used` lint. Use
+`.ok_or_else(|| String::from("error message"))` instead of `.expect()` when
+extracting `Slot` values from scenario state.
+
+## 12. Dev-dependencies for test construction
+
+The `Cargo.toml` `[dev-dependencies]` section includes:
+
+- **snafu** — provides `Backtrace::generate()` for constructing
+  `octocrab::Error::Service` variants in unit tests. This dependency is already
+  in the transitive dependency graph via octocrab, so adding it as an explicit
+  dev-dependency does not increase the total dependency count.
+
+The unit tests do not directly import `http` types despite octocrab's use of
+`http::StatusCode`, because the tests access status codes through octocrab's
+public API rather than constructing HTTP responses directly.
+
+## 13. Code style conventions
+
+### 13.1. File length budgets
+
+The codebase enforces a 400-line limit per file to maintain readability. When a
+module approaches this budget:
+
+1. Extract logically cohesive functions into a new submodule.
+2. Use `mod submodule;` in the parent module.
+3. Control visibility with `pub(super)`, `pub(crate)`, or `pub` as appropriate.
+4. Update imports in calling code.
+
+The GitHub module demonstrates this pattern: classification functions were
+extracted from `src/github/mod.rs` into `src/github/classify.rs` when `mod.rs`
+exceeded 400 lines.
+
+### 13.2. Module-level documentation
+
+All Rust modules must begin with `//!` doc comments describing the module's
+purpose. This applies to:
+
+- Source files in `src/`
+- Test modules in `src/` (e.g., `credential_error_tests.rs`)
+- Integration test harnesses in `tests/`
+- Helper submodules under `tests/`
+
+Module docs should be concise (2–4 lines) and focus on what the module does,
+not how it works. Implementation details belong in function-level `///` docs.
+
+### 13.3. Rustdoc and missing_docs compliance
+
+The project uses `#![deny(missing_docs)]` at the crate level. All public items
+require `///` rustdoc comments. Use `#[doc(hidden)]` for items that must be
+public for technical reasons (such as cross-crate test helpers) but should not
+appear in generated documentation.
+
+### 13.4. Clippy pedantic and denied lints
+
+The project enforces clippy pedantic mode with additional denied lints:
+
+- `expect_used` — use `.ok_or_else()` or `?` instead
+- `unwrap_used` — use `.ok_or_else()` or `?` instead
+- `indexing_slicing` — use `.get()` with bounds checks
+- `print_stdout` / `print_stderr` — use logging or dedicated output functions
+
+When a lint cannot be satisfied due to API constraints, use `#[expect]` (not
+`#[allow]`) with a clear reason:
+
+```rust
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "required by map_err signature; error is consumed to extract status"
+)]
+fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
+    // ...
+}
+```
+
+### 13.5. En-GB-oxendict spelling
+
+Documentation uses British English with Oxford spelling (`en-GB-oxendict`):
+
+- Use `-ize` suffixes: contextualized, subclassification
+- Use `-our` suffixes: behaviour, colour
+- Use `-re` suffixes: centre, fibre
+- Capitalize proper nouns: Markdown, GitHub, Rust
+
+The words "outwith" and "caveat" are acceptable.
