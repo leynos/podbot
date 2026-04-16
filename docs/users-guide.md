@@ -122,7 +122,10 @@ Execution behaviour:
   Library consumers can use it for non-TTY attached execution where stdout must
   remain a pure byte stream. In protocol mode, podbot forwards host stdin to
   container stdin, container stdout to host stdout, and container stderr to
-  host stderr without terminal framing or interactive echo injection.
+  host stderr without terminal framing or interactive echo injection. Protocol
+  mode uses bounded buffering (64 KiB buffers for stdin forwarding and output
+  chunks) so hosted protocols can apply backpressure; if the host stdout writer
+  blocks, the proxy yields and backpressure propagates to the container.
 - TTY allocation is enabled only when attached mode is selected and both local
   stdin and stdout are terminals.
 - When TTY is enabled, podbot sends an initial resize to the daemon. On Unix

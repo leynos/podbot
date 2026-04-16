@@ -38,7 +38,7 @@ fn setup_start_exec_protocol(client: &mut MockExecClient, output_messages: Vec<&
                 Some(StartExecOptions {
                     detach: false,
                     tty: false,
-                    output_capacity: None
+                    output_capacity: Some(65_536)
                 })
             );
             let output_chunks = output_messages
@@ -81,6 +81,11 @@ fn assert_protocol_create_options(options: &CreateExecOptions<String>) {
 fn assert_protocol_start_options(options: &StartExecOptions) {
     assert!(!options.detach, "detach must be false for protocol mode");
     assert!(!options.tty, "tty must be false for protocol mode");
+    assert_eq!(
+        options.output_capacity,
+        Some(65_536),
+        "output_capacity must be set to 64 KiB for protocol mode"
+    );
 }
 
 fn assert_exit_code(result: Result<ExecResult, PodbotError>, expected: i64, context: &str) {
@@ -184,7 +189,7 @@ fn setup_start_exec_protocol_detached_response(client: &mut MockExecClient) {
             Some(StartExecOptions {
                 detach: false,
                 tty: false,
-                output_capacity: None
+                output_capacity: Some(65_536)
             })
         );
         Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })

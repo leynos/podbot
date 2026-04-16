@@ -167,6 +167,33 @@ In app server hosting mode, Podbot's stream contract is strict:
   stdin is still open, Podbot cancels the stdin-forwarding task after a short
   grace period, so shutdown does not hang indefinitely on a live host reader.
 
+### Bounded buffering implementation
+
+Protocol-mode exec sessions use explicitly bounded buffers to ensure
+backpressure remains visible to the hosted server:
+
+- **Stdin forwarding**: host stdin is wrapped in a `BufReader` with 64 KiB
+  capacity before copying to container stdin. This bounds the maximum memory
+  consumed by the stdin path per read cycle and provides backpressure by
+  limiting how many bytes can be in flight between host stdin reads and
+  container input writes.
+- **Container input writes**: the container stdin writer receives
+  unbuffered writes from the copy operation. An explicit flush and
+  shutdown sequence follows copy completion to signal end-of-input.
+- **Output chunk size**: Bollard's `output_capacity` is set to 64 KiB for
+  protocol-mode exec sessions, controlling the maximum bytes per `LogOutput`
+  chunk delivered by the daemon. This reduces per-chunk overhead for large
+  protocol messages while keeping memory bounded per chunk.
+- **Output forwarding backpressure**: each output chunk is written with
+  `write_all()` followed by `flush()`. If the host stdout writer blocks on
+  flush, the output loop yields, the Bollard stream stops being polled, and
+  backpressure propagates to the container.
+
+The 64 KiB buffer sizes align with common protocol message sizes (such as
+JSON Remote Procedure Call (JSON-RPC) frame buffers) and typical OS pipe
+buffer defaults, keeping latency low while preventing unbounded accumulation
+during high-throughput scenarios.
+
 The dedicated `podbot host` command is protocol-only. Unlike interactive
 operator commands, it must not emit banners, progress lines, or lifecycle
 status text to stdout at startup, steady-state, shutdown, or error boundaries.

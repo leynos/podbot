@@ -159,24 +159,29 @@ Attach a terminal to the agent process for interactive sessions.
 **Completion criteria:** Interactive sessions work with proper terminal
 handling. Resize events propagate correctly. Exit codes return accurately.
 
-### Step 2.5: Protocol-safe execution (stdio proxy)
+### Step 2.5: Protocol-safe execution (stdio proxy) ✓
 
 Provide non-TTY execution for app-server hosting protocols.
 
 **Tasks:**
 
-- [x] Implement exec attachment with `tty = false` enforced.
+- [x] Implement exec attachment with `tty = false` enforced. See
+  podbot-design.md "Execution flow" (protocol mode).
 - [x] Implement byte-stream proxy loops: stdin -> container stdin, container
-  stdout -> host stdout, and container stderr -> host stderr.
-- [ ] Keep proxy buffering bounded, so hosted protocols can apply backpressure.
-- [ ] Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
-- [ ] Add lifecycle stream-purity tests for startup, steady-state, shutdown, and
-  error paths.
-- [ ] Add a regression test asserting zero stdout bytes before the first proxied
-  protocol byte and after the final proxied byte.
+  stdout -> host stdout, and container stderr -> host stderr. See
+  podbot-design.md "Execution flow" (protocol mode stream contract).
+- [x] Keep proxy buffering bounded, so hosted protocols can apply backpressure.
+  See podbot-design.md "Bounded buffering implementation".
+- [x] Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
+  See podbot-design.md "Execution flow" (stdout purity contract).
+- [x] Add lifecycle stream-purity tests for startup, steady-state, shutdown, and
+  error paths. See podbot-design.md "Execution flow" (stream contract).
+- [x] Add a regression test asserting zero stdout bytes before the first proxied
+  protocol byte and after the final proxied byte. See podbot-design.md "Execution
+  flow" (stdout purity contract).
 
 **Completion criteria:** Hosting sessions run without TTY framing, preserve
-protocol byte streams, and keep stdout free from Podbot diagnostics.
+protocol byte streams, and keep stdout free from Podbot diagnostics. ✓
 
 ### Step 2.6: ACP capability masking enforcement
 
