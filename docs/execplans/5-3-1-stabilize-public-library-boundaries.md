@@ -412,24 +412,24 @@ During implementation, capture evidence in this order.
 1. Run formatting before Markdown linting because Markdown tools can rewrite
    files:
 
-```bash
-set -o pipefail && make fmt 2>&1 | tee /tmp/podbot-fmt.log
-```
+   ```bash
+   set -o pipefail && make fmt 2>&1 | tee /tmp/podbot-fmt.log
+   ```
 
-1. Run Markdown validation for the updated docs:
+2. Run Markdown validation for the updated docs:
 
-```bash
-set -o pipefail && MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint 2>&1 | tee /tmp/podbot-markdownlint.log
-set -o pipefail && make nixie 2>&1 | tee /tmp/podbot-nixie.log
-```
+   ```bash
+   set -o pipefail && MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint 2>&1 | tee /tmp/podbot-markdownlint.log
+   set -o pipefail && make nixie 2>&1 | tee /tmp/podbot-nixie.log
+   ```
 
-1. Run the required Rust quality gates:
+3. Run the required Rust quality gates:
 
-```bash
-set -o pipefail && make check-fmt 2>&1 | tee /tmp/podbot-check-fmt.log
-set -o pipefail && make lint 2>&1 | tee /tmp/podbot-lint.log
-set -o pipefail && make test 2>&1 | tee /tmp/podbot-test.log
-```
+   ```bash
+   set -o pipefail && make check-fmt 2>&1 | tee /tmp/podbot-check-fmt.log
+   set -o pipefail && make lint 2>&1 | tee /tmp/podbot-lint.log
+   set -o pipefail && make test 2>&1 | tee /tmp/podbot-test.log
+   ```
 
 Expected evidence for completion:
 
