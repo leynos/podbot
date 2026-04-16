@@ -17,6 +17,7 @@ experimental = []
 # Async runtime
 tokio = { version = "1.49.0", features = ["full"] }
 futures-util = "0.3.32"
+tracing = "0.1.44"
 
 # Container management
 bollard = "0.20.1"

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
-use futures_util::{Stream, StreamExt};
+use futures_util::{FutureExt, Stream, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
@@ -103,12 +103,40 @@ where
     tokio::spawn(async move { forward_host_stdin_to_exec_async(host_stdin, input).await })
 }
 
-fn stop_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
+fn stop_stdin_forwarding_task(mut stdin_task: JoinHandle<io::Result<()>>) {
+    if let Some(result) = (&mut stdin_task).now_or_never() {
+        log_completed_stdin_forwarding_task(result);
+        return;
+    }
+
     stdin_task.abort();
     // Do not await the aborted task here. `tokio::io::stdin()` may be blocked
     // in a non-cancellable read, and shutdown should not hang waiting for that
     // task to observe cancellation.
     drop(stdin_task);
+}
+
+fn log_completed_stdin_forwarding_task(result: Result<io::Result<()>, tokio::task::JoinError>) {
+    match result {
+        Ok(io_result) => log_stdin_forwarding_io_result(io_result),
+        Err(error) => log_stdin_forwarding_join_error(&error),
+    }
+}
+
+fn log_stdin_forwarding_io_result(result: io::Result<()>) {
+    if let Err(error) = result {
+        tracing::warn!(
+            error = %error,
+            "stdin forwarding task exited with an I/O error",
+        );
+    }
+}
+
+fn log_stdin_forwarding_join_error(error: &tokio::task::JoinError) {
+    tracing::error!(
+        error = %error,
+        "stdin forwarding task panicked while shutting down",
+    );
 }
 
 #[expect(
