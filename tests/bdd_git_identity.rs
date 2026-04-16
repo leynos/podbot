@@ -39,6 +39,14 @@ fn neither_name_nor_email_is_configured(git_identity_state: GitIdentityState) {
 
 #[scenario(
     path = "tests/features/git_identity.feature",
+    name = "Multi-word name is configured"
+)]
+fn multi_word_name_is_configured(git_identity_state: GitIdentityState) {
+    let _ = git_identity_state;
+}
+
+#[scenario(
+    path = "tests/features/git_identity.feature",
     name = "Container exec failure propagates as error"
 )]
 fn container_exec_failure_propagates_as_error(git_identity_state: GitIdentityState) {

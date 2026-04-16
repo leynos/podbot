@@ -103,7 +103,6 @@ fn git_identity_result_is_none_configured(git_identity_state: &GitIdentityState)
 }
 
 /// Checks configured name matches expected value.
-/// "absent" is treated specially to check for None.
 #[then("configured name is {string}")]
 fn configured_name_is(git_identity_state: &GitIdentityState, string: String) -> StepResult<()> {
     // rstest-bdd {string} captures include the surrounding quotes, so strip them
@@ -113,37 +112,43 @@ fn configured_name_is(git_identity_state: &GitIdentityState, string: String) -> 
         .outcome
         .with_ref(|outcome| {
             let converted = convert_outcome(outcome);
+            assert_field_value(
+                &converted,
+                |r| match r {
+                    GitIdentityResult::Configured { name, .. } => Some(name.as_str()),
+                    GitIdentityResult::Partial { name: Some(n), .. } => Some(n.as_str()),
+                    _ => None,
+                },
+                value,
+                "name",
+            )
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
+}
 
-            if value == "absent" {
-                assert_field_absent(
-                    &converted,
-                    |r| {
-                        matches!(
-                            r,
-                            GitIdentityResult::Configured { .. }
-                                | GitIdentityResult::Partial { name: Some(_), .. }
-                        )
-                    },
-                    "name",
-                )
-            } else {
-                assert_field_value(
-                    &converted,
-                    |r| match r {
-                        GitIdentityResult::Configured { name, .. } => Some(name.as_str()),
-                        GitIdentityResult::Partial { name: Some(n), .. } => Some(n.as_str()),
-                        _ => None,
-                    },
-                    value,
-                    "name",
-                )
-            }
+/// Checks that configured name is absent.
+#[then("name was not configured")]
+fn configured_name_is_absent(git_identity_state: &GitIdentityState) -> StepResult<()> {
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            let converted = convert_outcome(outcome);
+            assert_field_absent(
+                &converted,
+                |r| {
+                    matches!(
+                        r,
+                        GitIdentityResult::Configured { .. }
+                            | GitIdentityResult::Partial { name: Some(_), .. }
+                    )
+                },
+                "name",
+            )
         })
         .ok_or_else(|| String::from("outcome not set"))?
 }
 
 /// Checks configured email matches expected value.
-/// "absent" is treated specially to check for None.
 #[then("configured email is {string}")]
 fn configured_email_is(git_identity_state: &GitIdentityState, string: String) -> StepResult<()> {
     // rstest-bdd {string} captures include the surrounding quotes, so strip them
@@ -153,31 +158,38 @@ fn configured_email_is(git_identity_state: &GitIdentityState, string: String) ->
         .outcome
         .with_ref(|outcome| {
             let converted = convert_outcome(outcome);
+            assert_field_value(
+                &converted,
+                |r| match r {
+                    GitIdentityResult::Configured { email, .. } => Some(email.as_str()),
+                    GitIdentityResult::Partial { email: Some(e), .. } => Some(e.as_str()),
+                    _ => None,
+                },
+                value,
+                "email",
+            )
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
+}
 
-            if value == "absent" {
-                assert_field_absent(
-                    &converted,
-                    |r| {
-                        matches!(
-                            r,
-                            GitIdentityResult::Configured { .. }
-                                | GitIdentityResult::Partial { email: Some(_), .. }
-                        )
-                    },
-                    "email",
-                )
-            } else {
-                assert_field_value(
-                    &converted,
-                    |r| match r {
-                        GitIdentityResult::Configured { email, .. } => Some(email.as_str()),
-                        GitIdentityResult::Partial { email: Some(e), .. } => Some(e.as_str()),
-                        _ => None,
-                    },
-                    value,
-                    "email",
-                )
-            }
+/// Checks that configured email is absent.
+#[then("email was not configured")]
+fn configured_email_is_absent(git_identity_state: &GitIdentityState) -> StepResult<()> {
+    git_identity_state
+        .outcome
+        .with_ref(|outcome| {
+            let converted = convert_outcome(outcome);
+            assert_field_absent(
+                &converted,
+                |r| {
+                    matches!(
+                        r,
+                        GitIdentityResult::Configured { .. }
+                            | GitIdentityResult::Partial { email: Some(_), .. }
+                    )
+                },
+                "email",
+            )
         })
         .ok_or_else(|| String::from("outcome not set"))?
 }
