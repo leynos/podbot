@@ -4,7 +4,7 @@ use podbot::api::{ExecMode, ExecRequest};
 use rstest::rstest;
 
 #[rstest]
-fn exec_request_serialisation_round_trips_and_enforces_tty_normalisation() {
+fn stable_embedder_path_uses_only_supported_modules() {
     let request = ExecRequest::new("sandbox", vec![String::from("echo"), String::from("hello")])
         .expect("request should be valid")
         .with_mode(ExecMode::Protocol)
