@@ -239,6 +239,8 @@ pub type Result<T> = std::result::Result<T, PodbotError>;
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for error type display formatting and conversion behaviour.
+
     use super::*;
     use eyre::Report;
     use rstest::{fixture, rstest};
@@ -462,5 +464,23 @@ mod tests {
     fn eyre_report_preserves_error_messages(#[case] error: PodbotError, #[case] expected: &str) {
         let report = Report::from(error);
         assert_eq!(report.to_string(), expected);
+    }
+
+    /// Verify that `PodbotError` satisfies the trait bounds required for use
+    /// in async contexts and across thread boundaries.
+    #[rstest]
+    fn podbot_error_implements_std_error_send_sync() {
+        fn assert_bounds<T: std::error::Error + Send + Sync + 'static>() {}
+        assert_bounds::<PodbotError>();
+    }
+
+    /// Verify that each domain error enum implements `std::error::Error`.
+    #[rstest]
+    fn domain_errors_implement_std_error() {
+        fn assert_error<T: std::error::Error>() {}
+        assert_error::<ConfigError>();
+        assert_error::<ContainerError>();
+        assert_error::<GitHubError>();
+        assert_error::<FilesystemError>();
     }
 }

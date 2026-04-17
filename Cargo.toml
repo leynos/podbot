@@ -7,6 +7,15 @@ description = "A sandboxed execution environment for running AI coding agents"
 license = "MIT"
 repository = "https://github.com/leynos/podbot"
 
+[features]
+default = ["cli"]
+cli = ["dep:clap"]
+
+[[bin]]
+name = "podbot"
+path = "src/main.rs"
+required-features = ["cli"]
+
 [dependencies]
 # Async runtime
 tokio = { version = "1.49.0", features = ["full"] }
@@ -34,7 +43,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 smart-default = "0.7.1"
 
 # Command-line argument parsing
-clap = { version = "4.5.60", features = ["derive"] }
+clap = { version = "4.5.60", features = ["derive"], optional = true }
 
 # Environment abstraction for testability
 mockable = { version = "0.1.4", default-features = false }
