@@ -10,7 +10,7 @@ use std::sync::{Mutex, MutexGuard};
 use podbot::api::{CommandOutcome, ExecRequest};
 use podbot::config::env_var_names;
 use podbot::engine::{ContainerExecClient, EngineConnector};
-use rstest::fixture;
+use rstest::{fixture, rstest};
 
 /// Global mutex protecting environment variable access.
 ///
@@ -272,8 +272,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn exec_outcome_with_client_maps_zero_exit_code_to_success() {
+    #[rstest]
+    #[case(0, CommandOutcome::Success)]
+    #[case(42, CommandOutcome::CommandExit { code: 42 })]
+    fn exec_outcome_with_client_maps_exit_codes(
+        #[case] exit_code: i64,
+        #[case] expected: CommandOutcome,
+    ) {
         let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
         let request = ExecRequest::new("sandbox", vec![String::from("echo"), String::from("ok")])
             .expect("request should be valid")
@@ -291,10 +296,10 @@ mod tests {
             .expect_start_exec()
             .times(1)
             .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
-        client.expect_inspect_exec().times(1).returning(|_| {
+        client.expect_inspect_exec().times(1).returning(move |_| {
             let inspect = ExecInspectResponse {
                 running: Some(false),
-                exit_code: Some(0),
+                exit_code: Some(exit_code),
                 ..ExecInspectResponse::default()
             };
             Box::pin(async move { Ok(inspect) })
@@ -304,6 +309,6 @@ mod tests {
         let result = exec_outcome_with_client(&client, runtime.handle(), &request)
             .expect("exec should succeed");
 
-        assert_eq!(result, CommandOutcome::Success);
+        assert_eq!(result, expected);
     }
 }

@@ -224,7 +224,7 @@ fn ensure_defaults_layer_is_not_empty(layer: &MergeLayer<'_>) -> ortho_config::O
         return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
             key: String::from("defaults"),
             message: String::from(
-                "merge_from_layers requires a serialized AppConfig::default() layer",
+                "merge_from_layers requires a serialised AppConfig::default() layer",
             ),
         }));
     }
@@ -242,7 +242,7 @@ fn ensure_defaults_layer_matches_expected(
             key: String::from("defaults"),
             message: String::from(
                 "merge_from_layers only accepts caller-supplied defaults layers when they match \
-                 the serialized AppConfig::default() value",
+                 the serialised AppConfig::default() value",
             ),
         }));
     }
