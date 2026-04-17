@@ -4,6 +4,7 @@
 fn stable_exec_context_signatures_compile() {
     let test_cases = trybuild::TestCases::new();
     test_cases.pass("tests/ui/stable_exec_context_signatures.rs");
+    test_cases.pass("tests/ui/stable_embedder_uses_only_stable_modules.rs");
 }
 
 #[test]
