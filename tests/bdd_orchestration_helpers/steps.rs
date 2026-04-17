@@ -9,14 +9,13 @@ use podbot::api::{
 };
 use podbot::config::AppConfig;
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, EngineConnector, InspectExecFuture, ResizeExecFuture,
-    StartExecFuture,
+    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
 
 use super::StepResult;
 use super::state::{OrchestrationResult, OrchestrationState};
-use crate::test_utils::TestStdinForwardingGuard;
+use crate::test_utils::{TestStdinForwardingGuard, exec_outcome_with_client};
 
 /// Invoke an orchestration operation and capture its outcome in state.
 fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F)
@@ -108,28 +107,6 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
         exec_outcome_with_client(&client, runtime.handle(), &request)
     });
     Ok(())
-}
-
-fn exec_outcome_with_client<C: ContainerExecClient + Sync>(
-    client: &C,
-    runtime: &tokio::runtime::Handle,
-    request: &ExecRequest,
-) -> podbot::error::Result<CommandOutcome> {
-    let engine_request = podbot::engine::ExecRequest::new(
-        request.container(),
-        request.command().to_vec(),
-        request.mode().into(),
-    )?
-    .with_tty(request.tty());
-    let result = EngineConnector::exec(runtime, client, &engine_request)?;
-
-    if result.exit_code() == 0 {
-        Ok(CommandOutcome::Success)
-    } else {
-        Ok(CommandOutcome::CommandExit {
-            code: result.exit_code(),
-        })
-    }
 }
 
 #[when("run orchestration is invoked")]

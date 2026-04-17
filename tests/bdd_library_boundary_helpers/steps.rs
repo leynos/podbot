@@ -11,18 +11,17 @@ use futures_util::stream;
 use mockable::MockEnv;
 use mockall::mock;
 use podbot::api::{
-    CommandOutcome, ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon,
-    stop_container,
+    ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon, stop_container,
 };
 use podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config_with_env};
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, EngineConnector, InspectExecFuture, ResizeExecFuture,
-    StartExecFuture,
+    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
 
 use super::StepResult;
 use super::state::{ConfigResult, LibraryBoundaryState, LibraryResult, StubOutcomes};
+use crate::test_utils::exec_outcome_with_client;
 
 mock! {
     #[derive(Debug)]
@@ -175,28 +174,6 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
             .set(LibraryResult::Err(Arc::new(e))),
     }
     Ok(())
-}
-
-fn exec_outcome_with_client<C: ContainerExecClient + Sync>(
-    client: &C,
-    runtime: &tokio::runtime::Handle,
-    request: &ExecRequest,
-) -> podbot::error::Result<CommandOutcome> {
-    let engine_request = podbot::engine::ExecRequest::new(
-        request.container(),
-        request.command().to_vec(),
-        request.mode().into(),
-    )?
-    .with_tty(request.tty());
-    let result = EngineConnector::exec(runtime, client, &engine_request)?;
-
-    if result.exit_code() == 0 {
-        Ok(CommandOutcome::Success)
-    } else {
-        Ok(CommandOutcome::CommandExit {
-            code: result.exit_code(),
-        })
-    }
 }
 
 #[when("each stub orchestration function is called")]

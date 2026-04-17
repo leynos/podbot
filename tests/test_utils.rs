@@ -5,7 +5,9 @@
 
 use std::sync::{Mutex, MutexGuard};
 
+use podbot::api::{CommandOutcome, ExecRequest};
 use podbot::config::env_var_names;
+use podbot::engine::{ContainerExecClient, EngineConnector};
 use rstest::fixture;
 
 /// Global mutex protecting environment variable access.
@@ -122,6 +124,39 @@ pub fn set_env_var(_guard: &EnvGuard<'_>, key: &str, value: &str) {
     }
 }
 
+/// Execute an API `ExecRequest` against a mock engine client in integration tests.
+///
+/// This keeps the engine-to-API translation in one place for integration tests
+/// that must stay outside the crate-private `podbot::api::exec_with_client`
+/// seam.
+///
+/// # Errors
+///
+/// Returns any validation or engine-exec error produced while translating the
+/// API request into an engine request and running it through the provided mock
+/// client.
+pub fn exec_outcome_with_client<C: ContainerExecClient + Sync>(
+    client: &C,
+    runtime: &tokio::runtime::Handle,
+    request: &ExecRequest,
+) -> podbot::error::Result<CommandOutcome> {
+    let engine_request = podbot::engine::ExecRequest::new(
+        request.container(),
+        request.command().to_vec(),
+        request.mode().into(),
+    )?
+    .with_tty(request.tty());
+    let result = EngineConnector::exec(runtime, client, &engine_request)?;
+
+    if result.exit_code() == 0 {
+        Ok(CommandOutcome::Success)
+    } else {
+        Ok(CommandOutcome::CommandExit {
+            code: result.exit_code(),
+        })
+    }
+}
+
 const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
 
 /// RAII guard that disables stdin forwarding for exec integration tests.
@@ -173,4 +208,100 @@ impl Drop for TestStdinForwardingGuard {
 #[fixture]
 pub fn clean_env() -> EnvGuard<'static> {
     clear_podbot_env()
+}
+
+#[cfg(test)]
+mod tests {
+    use bollard::exec::{CreateExecOptions, CreateExecResults, StartExecOptions, StartExecResults};
+    use bollard::models::ExecInspectResponse;
+    use mockall::mock;
+
+    use super::*;
+    use podbot::api::ExecMode;
+    use podbot::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
+
+    mock! {
+        #[derive(Debug)]
+        TestExecClient {}
+
+        impl ContainerExecClient for TestExecClient {
+            fn create_exec(
+                &self,
+                container_id: &str,
+                options: CreateExecOptions<String>,
+            ) -> CreateExecFuture<'_>;
+            fn start_exec(
+                &self,
+                exec_id: &str,
+                options: Option<StartExecOptions>,
+            ) -> StartExecFuture<'_>;
+            fn inspect_exec(&self, exec_id: &str) -> InspectExecFuture<'_>;
+            fn resize_exec(
+                &self,
+                exec_id: &str,
+                options: bollard::exec::ResizeExecOptions,
+            ) -> ResizeExecFuture<'_>;
+        }
+    }
+
+    #[test]
+    fn set_env_var_updates_value_while_guard_is_held() {
+        let guard = clear_podbot_env();
+        set_env_var(&guard, "PODBOT_IMAGE", "test-image:latest");
+
+        let image = std::env::var("PODBOT_IMAGE").expect("env var should be set");
+        assert_eq!(image, "test-image:latest");
+    }
+
+    #[test]
+    fn test_stdin_forwarding_guard_sets_and_clears_env_var() {
+        let guard = TestStdinForwardingGuard::disable();
+
+        let enabled_value = std::env::var(DISABLE_STDIN_FORWARDING_ENV)
+            .expect("stdin forwarding knob should be enabled");
+        assert_eq!(enabled_value, "1");
+
+        drop(guard);
+
+        let cleared_value = std::env::var(DISABLE_STDIN_FORWARDING_ENV);
+        assert!(
+            cleared_value.is_err(),
+            "stdin forwarding knob should be removed"
+        );
+    }
+
+    #[test]
+    fn exec_outcome_with_client_maps_zero_exit_code_to_success() {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
+        let request = ExecRequest::new("sandbox", vec![String::from("echo"), String::from("ok")])
+            .expect("request should be valid")
+            .with_mode(ExecMode::Detached);
+        let mut client = MockTestExecClient::new();
+
+        client.expect_create_exec().times(1).returning(|_, _| {
+            Box::pin(async {
+                Ok(CreateExecResults {
+                    id: String::from("test-exec-id"),
+                })
+            })
+        });
+        client
+            .expect_start_exec()
+            .times(1)
+            .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
+        client.expect_inspect_exec().times(1).returning(|_| {
+            let inspect = ExecInspectResponse {
+                running: Some(false),
+                exit_code: Some(0),
+                ..ExecInspectResponse::default()
+            };
+            Box::pin(async move { Ok(inspect) })
+        });
+        client.expect_resize_exec().never();
+
+        let result = exec_outcome_with_client(&client, runtime.handle(), &request)
+            .expect("exec should succeed");
+
+        assert_eq!(result, CommandOutcome::Success);
+    }
 }

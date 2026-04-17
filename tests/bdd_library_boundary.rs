@@ -10,6 +10,7 @@
 //! step definitions live in the `bdd_library_boundary_helpers` module.
 
 mod bdd_library_boundary_helpers;
+mod test_utils;
 
 use bdd_library_boundary_helpers::{LibraryBoundaryState, library_boundary_state};
 use rstest_bdd_macros::scenario;

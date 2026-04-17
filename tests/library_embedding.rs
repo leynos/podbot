@@ -4,6 +4,8 @@
 //! perspective, without importing `podbot::cli` or depending on Clap types
 //! directly. This proves that the library boundary is self-contained.
 
+mod test_utils;
+
 use bollard::container::LogOutput;
 use bollard::exec::{CreateExecOptions, CreateExecResults, StartExecOptions, StartExecResults};
 use bollard::models::ExecInspectResponse;
@@ -17,10 +19,10 @@ use podbot::api::{
 };
 use podbot::config::{AppConfig, CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, EngineConnector, InspectExecFuture, ResizeExecFuture,
-    StartExecFuture,
+    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 use podbot::error::{ConfigError, ContainerError, PodbotError};
+use test_utils::exec_outcome_with_client;
 
 mock! {
     #[derive(Debug)]
@@ -228,28 +230,6 @@ enum FailAt {
     Start,
     Inspect,
     InspectMissingExitCode,
-}
-
-fn exec_outcome_with_client<C: ContainerExecClient + Sync>(
-    client: &C,
-    runtime: &tokio::runtime::Handle,
-    request: &ExecRequest,
-) -> podbot::error::Result<CommandOutcome> {
-    let engine_request = podbot::engine::ExecRequest::new(
-        request.container(),
-        request.command().to_vec(),
-        request.mode().into(),
-    )?
-    .with_tty(request.tty());
-    let result = EngineConnector::exec(runtime, client, &engine_request)?;
-
-    if result.exit_code() == 0 {
-        Ok(CommandOutcome::Success)
-    } else {
-        Ok(CommandOutcome::CommandExit {
-            code: result.exit_code(),
-        })
-    }
 }
 
 fn expect_create_exec_ok(client: &mut MockEmbedClient) {
