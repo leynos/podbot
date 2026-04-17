@@ -4,6 +4,8 @@
 //! perspective, without importing `podbot::cli` or depending on Clap types
 //! directly. This proves that the library boundary is self-contained.
 
+#![cfg(feature = "internal")]
+
 mod test_utils;
 
 use bollard::container::LogOutput;

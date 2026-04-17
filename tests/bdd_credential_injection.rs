@@ -1,5 +1,7 @@
 //! Behavioural tests for credential injection into sandbox containers.
 
+#![cfg(feature = "internal")]
+
 mod bdd_credential_injection_helpers;
 
 pub use bdd_credential_injection_helpers::{CredentialInjectionState, credential_injection_state};

@@ -1,5 +1,7 @@
 //! Behavioural tests for command orchestration.
 
+#![cfg(feature = "internal")]
+
 mod bdd_orchestration_helpers;
 mod test_utils;
 

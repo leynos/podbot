@@ -1,5 +1,7 @@
 //! Behavioural tests for interactive container execution.
 
+#![cfg(feature = "internal")]
+
 mod bdd_interactive_exec_helpers;
 mod test_utils;
 

@@ -9,6 +9,8 @@
 //! Scenarios are defined in `tests/features/library_boundary.feature` and
 //! step definitions live in the `bdd_library_boundary_helpers` module.
 
+#![cfg(feature = "internal")]
+
 mod bdd_library_boundary_helpers;
 mod test_utils;
 

@@ -3,6 +3,8 @@
 //! These tests validate that podbot correctly loads RSA private keys
 //! and rejects unsupported key types with clear error messages.
 
+#![cfg(feature = "internal")]
+
 mod bdd_github_private_key_helpers;
 
 pub use bdd_github_private_key_helpers::{GitHubPrivateKeyState, github_private_key_state};

@@ -172,6 +172,8 @@ impl GitHubAppClient for OctocrabAppClient {
 /// # Example
 ///
 /// ```rust,no_run
+/// # #[cfg(feature = "internal")]
+/// # {
 /// use podbot::github::validate_app_credentials;
 /// use camino::Utf8Path;
 ///
@@ -181,6 +183,7 @@ impl GitHubAppClient for OctocrabAppClient {
 /// validate_app_credentials(app_id, key_path).await?;
 /// println!("Credentials are valid!");
 /// # Ok(())
+/// # }
 /// # }
 /// ```
 pub async fn validate_app_credentials(

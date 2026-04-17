@@ -60,6 +60,11 @@ struct ExecRequestDef {
 impl ExecRequest {
     /// Build a new exec request with attached mode and no TTY by default.
     ///
+    /// Note: The API layer defaults `tty` to `false` for all modes, including
+    /// `Attached`. The engine layer defaults `tty` to `true` for `Attached`
+    /// mode. Call `.with_tty(true)` explicitly if a pseudo-terminal is
+    /// required.
+    ///
     /// # Errors
     ///
     /// Returns `PodbotError::Config` when `validate()` rejects the

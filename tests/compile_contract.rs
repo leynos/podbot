@@ -8,8 +8,9 @@ fn stable_exec_context_signatures_compile() {
 }
 
 #[test]
-#[cfg(not(feature = "cli"))]
+#[cfg(not(any(feature = "cli", feature = "internal")))]
 fn stable_api_without_cli_compiles() {
     let test_cases = trybuild::TestCases::new();
     test_cases.pass("tests/ui/stable_exec_context_no_cli.rs");
+    test_cases.compile_fail("tests/ui/stable_embedder_cannot_use_engine_without_internal.rs");
 }

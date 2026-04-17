@@ -3,6 +3,8 @@
 //! This module provides common helpers used across integration tests, particularly
 //! for environment variable manipulation which requires careful synchronization.
 
+#![cfg(feature = "internal")]
+
 use std::sync::{Mutex, MutexGuard};
 
 use podbot::api::{CommandOutcome, ExecRequest};

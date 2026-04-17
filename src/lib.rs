@@ -25,11 +25,17 @@ pub mod api;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod config;
+#[cfg(any(feature = "internal", test))]
 #[doc(hidden)]
 pub mod engine;
+#[cfg(not(any(feature = "internal", test)))]
+mod engine;
 pub mod error;
+#[cfg(any(feature = "internal", test))]
 #[doc(hidden)]
 pub mod github;
+#[cfg(not(any(feature = "internal", test)))]
+mod github;
 
 #[cfg(test)]
 mod tests {
