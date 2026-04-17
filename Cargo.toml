@@ -51,6 +51,7 @@ mockable = { version = "0.1.4", default-features = false }
 [dev-dependencies]
 mockable = { version = "0.1.4", default-features = false, features = ["mock"] }
 mockall = "0.14.0"
+snafu = "0.8.9"
 rstest = "0.26.1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["compile-time-validation"] }

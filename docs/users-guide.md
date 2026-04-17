@@ -275,6 +275,21 @@ Common error messages when loading the key:
 | "the file appears to contain an OpenSSH-format key" | An OpenSSH key was provided; convert with `ssh-keygen -p -m pem -f <keyfile>`. |
 | "invalid RSA private key"                           | The file contents are not valid PEM-encoded RSA data.                          |
 
+### Credential validation errors
+
+After loading the private key successfully, podbot validates the credentials
+against the GitHub API by making an authenticated request to `GET /app`. If
+this validation fails, podbot classifies the failure mode and provides
+actionable error messages with remediation hints:
+
+| Message fragment                            | Cause and remediation                                                                                                                                                                     |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "credentials rejected (HTTP 401)"           | The private key does not match the App, or the App has been suspended. Verify the App ID and regenerate the private key from the GitHub App settings page. Check for clock skew.          |
+| "insufficient permissions (HTTP 403)"       | The App lacks required permissions. Check the App's permission settings in GitHub.                                                                                                        |
+| "App not found (HTTP 404)"                  | The App ID is incorrect or the App has been deleted. Verify that `github.app_id` is correct.                                                                                              |
+| "GitHub API unavailable (HTTP 5xx)"         | GitHub is experiencing an outage or maintenance. Check <https://www.githubstatus.com> for service status. Retry after the service recovers.                                               |
+| "failed to validate GitHub App credentials" | A network error occurred or the API returned an unexpected status. Check network connectivity and DNS resolution. Review the detailed error message for the specific cause.               |
+
 ### Environment variables
 
 All configuration options can be set via environment variables using the

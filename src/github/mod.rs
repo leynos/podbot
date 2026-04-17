@@ -10,6 +10,7 @@
 //! **Stability:** This module is internal to the library and subject to
 //! change as the GitHub integration stabilizes.
 
+mod classify;
 mod pem_validation;
 
 use std::future::Future;
@@ -25,6 +26,7 @@ use octocrab::Octocrab;
 use octocrab::models::AppId;
 
 use crate::error::GitHubError;
+use classify::classify_github_api_error;
 use pem_validation::parse_rsa_pem;
 
 /// A boxed future for async trait methods.
@@ -143,9 +145,7 @@ impl GitHubAppClient for OctocrabAppClient {
             self.client
                 .get::<(), _, ()>("/app", None)
                 .await
-                .map_err(|error| GitHubError::AuthenticationFailed {
-                    message: format!("failed to validate GitHub App credentials: {error}"),
-                })?;
+                .map_err(classify_github_api_error)?;
             Ok(())
         })
     }
@@ -292,5 +292,28 @@ fn read_key_file(
     Ok(contents)
 }
 
+/// Test helper: format a classified error message for a given HTTP status code.
+///
+/// This is a public wrapper around the internal `classify::classify_by_status`
+/// function for use by integration tests that need to construct mock error
+/// messages matching the production classifier's output.
+///
+/// # Arguments
+///
+/// * `code` - HTTP status code (e.g., 401, 403, 404, 503)
+/// * `full_error` - The complete error message text
+///
+/// # Returns
+///
+/// A formatted error message with remediation hints matching the production
+/// error classifier.
+#[doc(hidden)]
+#[must_use]
+pub fn test_classify_error_message(code: u16, full_error: &str) -> String {
+    classify::classify_by_status(code, full_error)
+}
+
+#[cfg(test)]
+mod credential_error_tests;
 #[cfg(test)]
 mod tests;

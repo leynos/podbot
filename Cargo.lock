@@ -2077,6 +2077,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "smart-default",
+ "snafu",
  "tar",
  "tempfile",
  "thiserror 2.0.18",
