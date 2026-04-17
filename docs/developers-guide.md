@@ -49,6 +49,17 @@ src/engine/connection/exec/
 |                        #   SIGWINCH handling, stdin echo forwarding
 +-- terminal.rs          # Terminal size detection (stty), resize helpers,
 |                        #   TerminalSizeProvider trait
++-- helpers.rs           # Shared exec-option builders and validation
+|                        #   helpers (build_create_exec_options,
+|                        #   build_start_exec_options, validate_command,
+|                        #   validate_required_field, error mappers)
++-- host_io.rs           # Host-stdio boundary helpers; default_host_stdin
+|                        #   returns tokio::io::stdin() in production and
+|                        #   tokio::io::empty() in tests
++-- session.rs           # ExecSessionOptions struct and
+|                        #   protocol_session_options helper; controls
+|                        #   per-call session knobs (e.g. stdin forwarding
+|                        #   disable seam for tests)
 +-- tests.rs             # Test module root
 +-- tests/
     +-- protocol_proxy_bdd.rs         # BDD Gherkin scenarios
@@ -88,6 +99,15 @@ terminal framing.
   Programming Interface (API) calls for unit testability.
 - **`ProtocolProxyIo<HostStdin, HostStdout, HostStderr>`**: generic
   host-IO bundle injected into the protocol proxy for testing.
+- **`ExecContext`**: stable public embedding handle created via
+  `ExecContext::connect(config, runtime_handle)`; caches the resolved engine
+  connector so embedders can issue repeated `ExecContext::exec(&request)` calls
+  without reconnecting on each invocation. Lives in `src/api/exec.rs`.
+- **`ExecSessionOptions`**: internal (crate-visible) knob struct used by test
+  harnesses to disable protocol stdin forwarding without modifying production
+  code paths. Constructed via `ExecSessionOptions::new()` and configured with
+  `with_protocol_stdin_forwarding_disabled(bool)`. Lives in
+  `src/engine/connection/exec/session.rs`.
 
 ## 4. Stdout purity contract
 
@@ -239,11 +259,10 @@ When adding a new execution mode:
 - `ProtocolProxyIo::new(stdin, stdout, stderr)`: injects host-IO
   handles so tests can supply in-memory readers and writers.
 - `run_lifecycle_session(runtime, stdin_bytes, output)`: convenience
-  wrapper around `run_session` for lifecycle purity tests that only
-  need to inspect stdout. It creates `RecordingWriter` handles
-  internally and returns `(Result<(), PodbotError>,
-  Arc<Mutex<Vec<u8>>>)` — the session result paired with captured
-  stdout bytes.
+  wrapper around `run_session` for lifecycle purity tests that only need to
+  inspect stdout. It creates `RecordingWriter` handles internally and returns
+  `(Result<(), PodbotError>, Arc<Mutex<Vec<u8>>>)` — the session result paired
+  with captured stdout bytes.
 - `ContainerExecClient` mock implementations for unit testing without a
   live daemon.
 
@@ -278,6 +297,77 @@ The exec subsystem maps failures to `PodbotError` via the `exec_failed` helper,
 which produces `ContainerError::ExecFailed { container_id, message }`. Callers
 receive semantic errors they can inspect and handle. The CLI boundary converts
 these to `eyre::Report` for operator-facing display.
+
+## 10. Cargo feature gating
+
+The `cli` feature (enabled by default) gates the `clap` dependency and the
+`podbot::cli` module. Library embedders that do not need the command-line
+interface should disable it:
+
+```toml
+[dependencies]
+podbot = { version = "...", default-features = false }
+```
+
+The binary target in `Cargo.toml` carries `required-features = ["cli"]`, so
+`cargo build` without the `cli` feature will skip the binary and produce only
+the library crate.
+
+The `experimental` feature is currently a stub with no associated code; it
+exists as a forward-compatible extension point for features that are not yet
+ready for stable embedding contracts.
+
+### 10.1. Feature matrix
+
+| Feature        | Default | Enables                          |
+| -------------- | ------- | -------------------------------- |
+| `cli`          | Yes     | `clap` dependency; `podbot::cli` |
+| `experimental` | No      | (reserved; currently no-op)      |
+
+### 10.2. Adding a new feature-gated item
+
+1. Declare the feature in `Cargo.toml` under `[features]`.
+2. Gate the module or dependency with `#[cfg(feature = "your-feature")]` or
+   `optional = true` plus `your-feature = ["dep:your-dep"]`.
+3. Add a trybuild test in `tests/cli_feature_gating/` that compiles a minimal
+   consumer without the feature and asserts the expected compile error.
+4. Update this table.
+
+## 11. Stable public library boundary
+
+The semver-stable surface for library embedders is limited to three modules:
+
+| Module           | Contents                                               |
+| ---------------- | ------------------------------------------------------ |
+| `podbot::api`    | `exec`, `ExecRequest`, `ExecMode`, `ExecContext`,      |
+|                  | `run_agent`, `run_token_daemon`, `CommandOutcome`      |
+| `podbot::config` | `AppConfig`, `GitHubConfig`, and related configuration |
+|                  | types                                                  |
+| `podbot::error`  | `PodbotError`, `PodbotResult`, error variant enums     |
+
+Embedders must not import `podbot::cli`, `podbot::engine`, or `podbot::github`.
+Those modules are annotated with `#[doc(hidden)]` or gated behind the `cli`
+feature and carry no stability guarantee.
+
+For the design rationale and full constraint set, see
+[docs/execplans/5-3-1-stabilize-public-library-boundaries.md](execplans/5-3-1-stabilize-public-library-boundaries.md)
+ and Architecture Decision Record (ADR) 001
+([adr-001-define-the-stable-public-library-boundary.md](adr-001-define-the-stable-public-library-boundary.md)).
+
+### 11.1. Adding a new stable item
+
+1. Add the item to `src/api/`, `src/config/`, or `src/error/`.
+2. Re-export it from `src/api/mod.rs` (or the appropriate stable module).
+3. Add or update documentation in `docs/users-guide.md`.
+4. Update the table in this section.
+5. Do not re-export engine, GitHub, or CLI internals from stable modules.
+
+### 11.2. Experimental items
+
+Items not yet ready for stable embedding must be gated behind the
+`experimental` Cargo feature and annotated with
+`#[doc(cfg(feature = "experimental"))]`. Do not expose them via the three
+stable modules without a corresponding ADR update.
 
 See [podbot-design.md, Error handling](podbot-design.md#error-handling) for the
 full error hierarchy.

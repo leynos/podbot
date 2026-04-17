@@ -799,6 +799,48 @@ The following modules are public but gated behind Cargo features:
 - `podbot::cli` — Clap parse types (requires the `cli` feature, enabled by
   default)
 
+### `run_agent`
+
+```rust,no_run
+use podbot::api::run_agent;
+use podbot::config::AppConfig;
+
+fn start_agent() -> Result<(), podbot::error::PodbotError> {
+    let config = AppConfig::default();
+    run_agent(&config)?;
+    Ok(())
+}
+```
+
+`run_agent(config: &AppConfig)` validates the GitHub credential fields in
+`AppConfig` and starts the AI agent loop. If any GitHub credential field is
+set, all required fields (`app_id`, `installation_id`, `private_key_path`) must
+be present; the function returns a `PodbotError` if validation fails. Call this
+function when you want to embed the full agent orchestration path rather than
+issuing individual exec commands.
+
+> **Note:** The agent runtime is currently a stub; the function validates
+> credentials and returns `CommandOutcome::Success` without launching a
+> persistent agent loop.
+
+### `run_token_daemon`
+
+```rust,no_run
+use podbot::api::run_token_daemon;
+
+fn start_token_refresh(container_id: &str) -> Result<(), podbot::error::PodbotError> {
+    run_token_daemon(container_id)?;
+    Ok(())
+}
+```
+
+`run_token_daemon(container_id: &str)` starts the token-refresh daemon for the
+named container. Supply the container identifier or name as returned by the
+container engine. The daemon periodically refreshes authentication tokens
+required by the agent.
+
+> **Note:** The token daemon is currently a stub and returns
+> `CommandOutcome::Success` immediately.
 ## Development
 
 ### Running tests

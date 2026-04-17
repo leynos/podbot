@@ -1,7 +1,8 @@
 //! Root configuration types for podbot.
 
 use camino::Utf8PathBuf;
-use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
+use ortho_config::declarative::{from_value_merge, merge_value};
+use ortho_config::{MergeLayer, MergeProvenance, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
 
@@ -123,8 +124,7 @@ impl Default for CredsConfig {
 }
 
 /// Root application configuration.
-#[derive(Debug, Clone, Default, Deserialize, Serialize, OrthoConfig)]
-#[ortho_config(prefix = "PODBOT", post_merge_hook)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct AppConfig {
     /// The container engine socket path or URL.
     pub engine_socket: Option<String>,
@@ -134,32 +134,26 @@ pub struct AppConfig {
 
     /// `GitHub` App configuration.
     #[serde(default)]
-    #[ortho_config(skip_cli)]
     pub github: GitHubConfig,
 
     /// Sandbox security configuration.
     #[serde(default)]
-    #[ortho_config(skip_cli)]
     pub sandbox: SandboxConfig,
 
     /// Agent configuration.
     #[serde(default)]
-    #[ortho_config(skip_cli)]
     pub agent: AgentConfig,
 
     /// Workspace configuration.
     #[serde(default)]
-    #[ortho_config(skip_cli)]
     pub workspace: WorkspaceConfig,
 
     /// Credential copying configuration.
     #[serde(default)]
-    #[ortho_config(skip_cli)]
     pub creds: CredsConfig,
 
     /// Defaults for hosted MCP bridge behaviour.
     #[serde(default)]
-    #[ortho_config(skip_cli)]
     pub mcp: McpConfig,
 }
 
@@ -167,4 +161,76 @@ impl PostMergeHook for AppConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
         Ok(())
     }
+}
+
+impl AppConfig {
+    /// Merge application configuration from declarative layers.
+    ///
+    /// This mirrors the `ortho_config` derive-generated `merge_from_layers`
+    /// constructor without pulling `clap` into non-CLI library builds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an `OrthoError` when the accumulated JSON layers cannot be
+    /// deserialized into `Self` or when the post-merge hook fails.
+    pub fn merge_from_layers<'a, I>(layers: I) -> ortho_config::OrthoResult<Self>
+    where
+        I: IntoIterator<Item = MergeLayer<'a>>,
+    {
+        let mut merged =
+            ortho_config::serde_json::Value::Object(ortho_config::serde_json::Map::new());
+        let mut ctx = PostMergeContext::new(Self::prefix());
+        let mut saw_defaults_layer = false;
+
+        for layer in layers {
+            if layer.provenance() == MergeProvenance::Defaults {
+                saw_defaults_layer = true;
+                ensure_defaults_layer_is_not_empty(&layer)?;
+            }
+            if let Some(path) = layer.path() {
+                ctx.with_file(path.to_owned());
+            }
+            if layer.provenance() == MergeProvenance::Cli {
+                ctx.with_cli_input();
+            }
+            merge_value(&mut merged, layer.into_value());
+        }
+
+        if !saw_defaults_layer {
+            return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
+                key: String::from("defaults"),
+                message: String::from(
+                    "merge_from_layers requires a serialized AppConfig::default() layer",
+                ),
+            }));
+        }
+
+        let mut result = from_value_merge(merged)?;
+        Self::post_merge(&mut result, &ctx)?;
+        Ok(result)
+    }
+
+    /// Prefix used for `PODBOT_*` environment variables.
+    #[must_use]
+    pub const fn prefix() -> &'static str {
+        "PODBOT"
+    }
+}
+
+fn ensure_defaults_layer_is_not_empty(layer: &MergeLayer<'_>) -> ortho_config::OrthoResult<()> {
+    let defaults_value = layer.clone().into_value();
+    let is_empty_object = matches!(
+        defaults_value,
+        ortho_config::serde_json::Value::Object(ref fields) if fields.is_empty()
+    );
+    if is_empty_object {
+        return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
+            key: String::from("defaults"),
+            message: String::from(
+                "merge_from_layers requires a serialized AppConfig::default() layer",
+            ),
+        }));
+    }
+
+    Ok(())
 }

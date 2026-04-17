@@ -76,3 +76,81 @@ pub(super) fn map_start_exec_error(
 ) -> PodbotError {
     exec_failed(container_id, format!("start exec failed: {error}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_command_rejects_empty_vec() {
+        let err = validate_command(vec![]).expect_err("empty command should be rejected");
+        assert!(
+            matches!(
+                err,
+                crate::error::PodbotError::Config(
+                    crate::error::ConfigError::MissingRequired { ref field }
+                ) if field == "command"
+            ),
+            "unexpected error: {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_command_rejects_blank_executable() {
+        let err = validate_command(vec![String::from("  ")])
+            .expect_err("blank executable should be rejected");
+        assert!(
+            matches!(
+                err,
+                crate::error::PodbotError::Config(
+                    crate::error::ConfigError::InvalidValue { ref field, .. }
+                ) if field == "command"
+            ),
+            "unexpected error: {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_command_accepts_non_blank_executable() {
+        let cmd = vec![String::from("echo"), String::from("hello")];
+        let result = validate_command(cmd.clone()).expect("valid command should be accepted");
+        assert_eq!(result, cmd);
+    }
+
+    #[test]
+    fn validate_required_field_rejects_empty_string() {
+        let err =
+            validate_required_field("container", "").expect_err("empty field should be rejected");
+        assert!(
+            matches!(
+                err,
+                crate::error::PodbotError::Config(
+                    crate::error::ConfigError::MissingRequired { ref field }
+                ) if field == "container"
+            ),
+            "unexpected error: {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_required_field_rejects_whitespace_only() {
+        let err = validate_required_field("container", "   ")
+            .expect_err("whitespace-only field should be rejected");
+        assert!(
+            matches!(
+                err,
+                crate::error::PodbotError::Config(
+                    crate::error::ConfigError::MissingRequired { ref field }
+                ) if field == "container"
+            ),
+            "unexpected error: {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_required_field_accepts_non_blank_value() {
+        let result = validate_required_field("container", "  sandbox  ")
+            .expect("valid field should be accepted");
+        assert_eq!(result, "sandbox");
+    }
+}
