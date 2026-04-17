@@ -341,7 +341,7 @@ To add a new HTTP status code classification:
 
 1. Add a new match arm in `classify_by_status` in `src/github/classify.rs`.
 2. Follow the existing message format with classification, hint, and raw error.
-3. Add a parameterised test case to `classify_error_messages` in
+3. Add a parameterized test case to `classify_error_messages` in
    `src/github/credential_error_tests.rs`.
 4. Add a BDD scenario to `tests/features/github_credential_errors.feature` if
    the classification affects user-visible orchestration behaviour.
