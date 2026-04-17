@@ -10,10 +10,13 @@ use bollard::container::LogOutput;
 use futures_util::stream;
 use mockable::MockEnv;
 use mockall::mock;
-use podbot::api::{ExecParams, exec, list_containers, run_agent, run_token_daemon, stop_container};
+use podbot::api::{
+    CommandOutcome, ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon,
+    stop_container,
+};
 use podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config_with_env};
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, ExecMode, InspectExecFuture, ResizeExecFuture,
+    ContainerExecClient, CreateExecFuture, EngineConnector, InspectExecFuture, ResizeExecFuture,
     StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
@@ -153,14 +156,15 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
     let runtime =
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
 
-    let result = exec(ExecParams {
-        connector: &client,
-        container: "lib-sandbox",
-        command: vec![String::from("echo"), String::from("hello")],
-        mode: ExecMode::Attached,
-        tty: false,
-        runtime_handle: runtime.handle(),
-    });
+    let request = ExecRequest::new(
+        "lib-sandbox",
+        vec![String::from("echo"), String::from("hello")],
+    )
+    .map_err(|e| format!("failed to build exec request: {e}"))?
+    .with_mode(ExecMode::Attached)
+    .with_tty(false);
+
+    let result = exec_outcome_with_client(&client, runtime.handle(), &request);
 
     match result {
         Ok(outcome) => library_boundary_state
@@ -171,6 +175,28 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
             .set(LibraryResult::Err(Arc::new(e))),
     }
     Ok(())
+}
+
+fn exec_outcome_with_client<C: ContainerExecClient + Sync>(
+    client: &C,
+    runtime: &tokio::runtime::Handle,
+    request: &ExecRequest,
+) -> podbot::error::Result<CommandOutcome> {
+    let engine_request = podbot::engine::ExecRequest::new(
+        request.container(),
+        request.command().to_vec(),
+        request.mode().into(),
+    )?
+    .with_tty(request.tty());
+    let result = EngineConnector::exec(runtime, client, &engine_request)?;
+
+    if result.exit_code() == 0 {
+        Ok(CommandOutcome::Success)
+    } else {
+        Ok(CommandOutcome::CommandExit {
+            code: result.exit_code(),
+        })
+    }
 }
 
 #[when("each stub orchestration function is called")]

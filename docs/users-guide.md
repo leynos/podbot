@@ -841,6 +841,7 @@ required by the agent.
 
 > **Note:** The token daemon is currently a stub and returns
 > `CommandOutcome::Success` immediately.
+>
 ## Development
 
 ### Running tests
@@ -915,8 +916,8 @@ purposes:
   `cargo clean -p podbot` to invalidate incremental compilation caches.
 - **Parametrized integration tests** (`tests/library_embedding.rs` and
   others) use `rstest` fixtures and `#[case]` parameters directly, without
-  feature files. These tests exercise the library API from a
-  host-application perspective.
+  feature files. These tests exercise the library API from a host-application
+  perspective.
 
 The BDD helper module layout follows a consistent pattern:
 

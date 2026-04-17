@@ -12,11 +12,12 @@ use mockall::mock;
 use rstest::{fixture, rstest};
 
 use podbot::api::{
-    CommandOutcome, ExecParams, exec, list_containers, run_agent, run_token_daemon, stop_container,
+    CommandOutcome, ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon,
+    stop_container,
 };
 use podbot::config::{AppConfig, CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, ExecMode, InspectExecFuture, ResizeExecFuture,
+    ContainerExecClient, CreateExecFuture, EngineConnector, InspectExecFuture, ResizeExecFuture,
     StartExecFuture,
 };
 use podbot::error::{ConfigError, ContainerError, PodbotError};
@@ -116,14 +117,10 @@ fn exec_via_library_api_returns_expected_outcome(
     let mut client = MockEmbedClient::new();
     configure_successful_exec(&mut client, test_case.exit_code, test_case.mode);
 
-    let result = exec(ExecParams {
-        connector: &client,
-        container: "embed-sandbox",
-        command: test_case.command,
-        mode: test_case.mode,
-        tty: false,
-        runtime_handle: rt.handle(),
-    });
+    let request = ExecRequest::new("embed-sandbox", test_case.command)?
+        .with_mode(test_case.mode)
+        .with_tty(false);
+    let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
     assert_exec_outcome_matches(&result, test_case.check, test_case.description);
     Ok(())
@@ -146,14 +143,13 @@ fn exec_failure_returns_container_error(
     let mut client = MockEmbedClient::new();
     let mode = configure_failing_exec(&mut client, fail_at);
 
-    let result = exec(ExecParams {
-        connector: &client,
-        container: "embed-sandbox",
-        command: vec![String::from("echo"), String::from("fail")],
-        mode,
-        tty: false,
-        runtime_handle: rt.handle(),
-    });
+    let request = ExecRequest::new(
+        "embed-sandbox",
+        vec![String::from("echo"), String::from("fail")],
+    )?
+    .with_mode(mode)
+    .with_tty(false);
+    let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
     assert_exec_failed_with_container_error(&result, fail_at);
     Ok(())
@@ -232,6 +228,28 @@ enum FailAt {
     Start,
     Inspect,
     InspectMissingExitCode,
+}
+
+fn exec_outcome_with_client<C: ContainerExecClient + Sync>(
+    client: &C,
+    runtime: &tokio::runtime::Handle,
+    request: &ExecRequest,
+) -> podbot::error::Result<CommandOutcome> {
+    let engine_request = podbot::engine::ExecRequest::new(
+        request.container(),
+        request.command().to_vec(),
+        request.mode().into(),
+    )?
+    .with_tty(request.tty());
+    let result = EngineConnector::exec(runtime, client, &engine_request)?;
+
+    if result.exit_code() == 0 {
+        Ok(CommandOutcome::Success)
+    } else {
+        Ok(CommandOutcome::CommandExit {
+            code: result.exit_code(),
+        })
+    }
 }
 
 fn expect_create_exec_ok(client: &mut MockEmbedClient) {
