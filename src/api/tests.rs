@@ -192,6 +192,17 @@ fn run_agent_requires_complete_github_config() {
 }
 
 #[rstest]
+fn credential_validation_thread_panic_maps_to_github_error() {
+    let error = super::credential_validation_thread_panicked();
+
+    assert!(matches!(
+        error,
+        PodbotError::GitHub(crate::error::GitHubError::AuthenticationFailed { message })
+            if message == "GitHub credential validation thread panicked"
+    ));
+}
+
+#[rstest]
 #[case(r#"{"container":"   ","command":["echo"]}"#, "container")]
 #[case(r#"{"container":"sandbox","command":[]}"#, "command")]
 #[case(r#"{"container":"sandbox","command":["   "]}"#, "command[0]")]

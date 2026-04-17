@@ -7,6 +7,7 @@ mod attached;
 mod helpers;
 mod host_io;
 mod protocol;
+mod runtime_helpers;
 mod session;
 mod terminal;
 
@@ -22,10 +23,11 @@ use self::helpers::{
     map_start_exec_error, validate_command, validate_required_field,
 };
 use self::protocol::run_protocol_session_async_with_options;
+use self::runtime_helpers::{block_on_runtime, exec_failed};
 use self::session::{ExecSessionOptions, protocol_session_options};
 use self::terminal::{SystemTerminalSizeProvider, TerminalSizeProvider};
 use super::EngineConnector;
-use crate::error::{ContainerError, PodbotError};
+use crate::error::PodbotError;
 
 pub(super) const EXEC_INSPECT_POLL_INTERVAL_MS: u64 = 100;
 
@@ -364,41 +366,6 @@ impl EngineConnector {
         let exit_code = wait_for_exit_code_async(client, request.container_id(), &exec_id).await?;
         Ok(ExecResult { exec_id, exit_code })
     }
-}
-
-fn block_on_runtime<F>(runtime: &tokio::runtime::Handle, future: F) -> F::Output
-where
-    F: std::future::Future + Send,
-    F::Output: Send,
-{
-    if tokio::runtime::Handle::try_current().is_ok() {
-        std::thread::scope(|scope| {
-            let blocking_task = scope.spawn(|| create_blocking_exec_runtime().block_on(future));
-
-            match blocking_task.join() {
-                Ok(output) => output,
-                Err(panic) => std::panic::resume_unwind(panic),
-            }
-        })
-    } else {
-        runtime.block_on(future)
-    }
-}
-
-fn create_blocking_exec_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap_or_else(|error| {
-            panic!("failed to create Tokio runtime for blocking exec wrapper: {error}")
-        })
-}
-
-pub(super) fn exec_failed(container_id: &str, message: impl Into<String>) -> PodbotError {
-    PodbotError::from(ContainerError::ExecFailed {
-        container_id: String::from(container_id),
-        message: message.into(),
-    })
 }
 
 #[cfg(test)]

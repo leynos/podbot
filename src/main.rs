@@ -17,6 +17,7 @@ use eyre::{Report, Result as EyreResult};
 use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
 use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, RunArgs, StopArgs, TokenDaemonArgs};
 use podbot::config::{AppConfig, load_config};
+use podbot::error::ConfigError;
 use podbot::error::Result as PodbotResult;
 
 /// Application entry point.
@@ -50,7 +51,17 @@ fn main() -> EyreResult<()> {
 fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
     match &cli.command {
         Commands::Run(args) => run_agent_cli(config, args),
-        Commands::Host(args) => Ok(host_agent_cli(config, args)),
+        Commands::Host(_args) => {
+            // TODO: Re-enable `host_agent_cli` once it emits diagnostics to
+            // stderr only and cannot corrupt stdout protocol traffic.
+            Err(ConfigError::InvalidValue {
+                field: String::from("command"),
+                reason: String::from(
+                    "the host subcommand is temporarily disabled until host_agent_cli writes diagnostics to stderr only",
+                ),
+            }
+            .into())
+        }
         Commands::TokenDaemon(args) => run_token_daemon_cli(args),
         Commands::Ps => list_containers_cli(),
         Commands::Stop(args) => stop_container_cli(args),
@@ -77,6 +88,10 @@ fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutc
 }
 
 /// CLI adapter for hosted app-server execution.
+#[expect(
+    dead_code,
+    reason = "temporarily disabled until stdout-safe diagnostics are implemented"
+)]
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
     println!(
@@ -152,7 +167,10 @@ fn normalize_process_exit_code(code: i64) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_process_exit_code;
+    use podbot::cli::{Cli, Commands, HostArgs};
+    use podbot::config::AppConfig;
+
+    use super::{normalize_process_exit_code, run};
 
     #[test]
     fn normalize_process_exit_code_preserves_valid_range() {
@@ -171,5 +189,27 @@ mod tests {
     fn normalize_process_exit_code_clamps_oversized_values() {
         assert_eq!(normalize_process_exit_code(256), 255);
         assert_eq!(normalize_process_exit_code(i64::MAX), 255);
+    }
+
+    #[test]
+    fn run_rejects_host_subcommand_until_stdout_is_safe() {
+        let cli = Cli {
+            command: Commands::Host(HostArgs {
+                agent: None,
+                mode: None,
+            }),
+            config: None,
+            engine_socket: None,
+            image: None,
+        };
+
+        let error = run(&cli, &AppConfig::default()).expect_err("host command should be disabled");
+
+        assert!(
+            error
+                .to_string()
+                .contains("host subcommand is temporarily disabled"),
+            "unexpected error: {error}",
+        );
     }
 }
