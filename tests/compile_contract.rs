@@ -8,11 +8,8 @@ fn stable_exec_context_signatures_compile() {
 }
 
 #[test]
+#[cfg(not(feature = "cli"))]
 fn stable_api_without_cli_compiles() {
-    if cfg!(feature = "cli") {
-        return;
-    }
-
     let test_cases = trybuild::TestCases::new();
     test_cases.pass("tests/ui/stable_exec_context_no_cli.rs");
 }

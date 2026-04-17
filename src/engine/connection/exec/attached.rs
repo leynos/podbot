@@ -269,7 +269,8 @@ where
     HostStdin: AsyncRead + Unpin,
 {
     tokio::io::copy(&mut host_stdin, &mut input).await?;
-    input.flush().await
+    input.flush().await?;
+    input.shutdown().await
 }
 
 #[cfg(unix)]

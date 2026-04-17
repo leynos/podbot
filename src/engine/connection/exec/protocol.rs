@@ -162,7 +162,7 @@ async fn settle_stdin_forwarding_task(
         // timeout here still indicates that stdin forwarding did not complete
         // cleanly before shutdown, so protocol mode must surface that failure
         // instead of reporting success with potentially truncated input.
-        abort_stdin_forwarding_task(stdin_task).await;
+        abort_stdin_forwarding_task(stdin_task);
         return Err(exec_failed(
             container_id,
             "stdin forwarding did not complete before protocol session shutdown",
@@ -190,13 +190,13 @@ fn classify_stdin_forwarding_task_result(
     }
 }
 
-async fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
+fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     if !stdin_task.is_finished() {
         stdin_task.abort();
-        // `abort_stdin_forwarding_task` intentionally uses
-        // `drop(stdin_task.await)` to consume and ignore the aborted task's
-        // `JoinHandle` result while still satisfying the must-use contract.
-        drop(stdin_task.await);
+        // Avoid awaiting the aborted task here because host stdin may be
+        // blocked in a non-cancellable read. Dropping the handle mirrors the
+        // attached-session shutdown path and keeps teardown bounded.
+        drop(stdin_task);
     }
 }
 

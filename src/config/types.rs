@@ -1,5 +1,7 @@
 //! Root configuration types for podbot.
 
+use std::{borrow::Cow, sync::Arc};
+
 use camino::Utf8PathBuf;
 use ortho_config::declarative::{from_value_merge, merge_value};
 use ortho_config::{MergeLayer, MergeProvenance, OrthoResult, PostMergeContext, PostMergeHook};
@@ -180,11 +182,13 @@ impl AppConfig {
         let mut merged =
             ortho_config::serde_json::Value::Object(ortho_config::serde_json::Map::new());
         let mut ctx = PostMergeContext::new(Self::prefix());
-        let mut saw_defaults_layer = false;
+
+        let defaults_layer = serialized_defaults_layer()?;
+        ensure_defaults_layer_is_not_empty(&defaults_layer)?;
+        merge_value(&mut merged, defaults_layer.into_value());
 
         for layer in layers {
             if layer.provenance() == MergeProvenance::Defaults {
-                saw_defaults_layer = true;
                 ensure_defaults_layer_is_not_empty(&layer)?;
             }
             if let Some(path) = layer.path() {
@@ -194,15 +198,6 @@ impl AppConfig {
                 ctx.with_cli_input();
             }
             merge_value(&mut merged, layer.into_value());
-        }
-
-        if !saw_defaults_layer {
-            return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
-                key: String::from("defaults"),
-                message: String::from(
-                    "merge_from_layers requires a serialized AppConfig::default() layer",
-                ),
-            }));
         }
 
         let mut result = from_value_merge(merged)?;
@@ -233,4 +228,15 @@ fn ensure_defaults_layer_is_not_empty(layer: &MergeLayer<'_>) -> ortho_config::O
     }
 
     Ok(())
+}
+
+fn serialized_defaults_layer() -> ortho_config::OrthoResult<MergeLayer<'static>> {
+    let value = ortho_config::serde_json::to_value(AppConfig::default()).map_err(|error| {
+        Arc::new(ortho_config::OrthoError::Validation {
+            key: String::from("defaults"),
+            message: format!("failed to serialize AppConfig::default(): {error}"),
+        })
+    })?;
+
+    Ok(MergeLayer::defaults(Cow::Owned(value)))
 }

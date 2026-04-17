@@ -1,3 +1,9 @@
+//! Compile-pass lock for the stable `ExecContext` API when the `cli` feature
+//! is disabled.
+//!
+//! This fixture ensures the stable embedding surface remains available in
+//! library-only builds that omit `podbot::cli`.
+
 use podbot::api::{CommandOutcome, ExecContext, ExecMode, ExecRequest};
 use podbot::config::AppConfig;
 use podbot::error::PodbotError;

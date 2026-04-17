@@ -37,6 +37,11 @@ fn detached_execution_mode_selected(interactive_exec_state: &InteractiveExecStat
     interactive_exec_state.mode.set(ExecMode::Detached);
 }
 
+#[given("protocol execution mode is selected")]
+fn protocol_execution_mode_selected(interactive_exec_state: &InteractiveExecState) {
+    interactive_exec_state.mode.set(ExecMode::Protocol);
+}
+
 #[given("tty allocation is enabled")]
 fn tty_allocation_enabled(interactive_exec_state: &InteractiveExecState) {
     interactive_exec_state.tty_enabled.set(true);

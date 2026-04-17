@@ -439,8 +439,9 @@ Expected evidence for completion:
 - the user's guide matches the implemented embedding contract, and
 - Step 5.3 is marked complete in the roadmap.
 
-## Approval checkpoint
+## Approval history
 
-Implementation must not start until the user explicitly approves this plan or
-requests revisions. The first implementation action after approval should be to
-add the red tests for the intended stable boundary, then proceed stage by stage.
+This plan was approved on 2026-03-30. The implementation, validation gates, and
+follow-up test coverage described above were completed after that approval, so
+the original pre-implementation checkpoint is now historical rather than
+actionable guidance.

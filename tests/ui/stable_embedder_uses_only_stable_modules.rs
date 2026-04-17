@@ -9,13 +9,12 @@ use podbot::api::{ExecContext, ExecMode, ExecRequest};
 use podbot::config::AppConfig;
 use podbot::error::Result;
 
-fn _assert_exec_surface_is_importable() -> Result<ExecContext> {
+fn _assert_exec_surface_is_importable(handle: &tokio::runtime::Handle) -> Result<ExecContext> {
     let _request = ExecRequest::new("c", vec![String::from("cmd")])?
         .with_mode(ExecMode::Attached)
         .with_tty(false);
     let config = AppConfig::default();
-    let runtime = tokio::runtime::Runtime::new().expect("runtime");
-    ExecContext::connect(&config, runtime.handle())
+    ExecContext::connect(&config, handle)
 }
 
 fn main() {}

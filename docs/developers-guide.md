@@ -300,8 +300,8 @@ these to `eyre::Report` for operator-facing display.
 
 ## 10. Cargo feature gating
 
-The `cli` feature (enabled by default) gates the `clap` dependency and the
-`podbot::cli` module. Library embedders that do not need the command-line
+The `cli` feature (enabled by default) gates the `podbot::cli` module and the
+`podbot` binary target. Library embedders that do not need the command-line
 interface should disable it:
 
 ```toml
@@ -311,7 +311,14 @@ podbot = { version = "...", default-features = false }
 
 The binary target in `Cargo.toml` carries `required-features = ["cli"]`, so
 `cargo build` without the `cli` feature will skip the binary and produce only
-the library crate.
+the library crate. Disabling the feature also removes `podbot::cli` from the
+library surface.
+
+That feature gate does not guarantee that the `clap` crate disappears from the
+dependency graph entirely. Other dependencies may still pull `clap`
+transitively. At the time of writing, `ortho_config` remains one such path, so
+the guarantee is about Podbot's CLI module and binary, not global absence of
+`clap`.
 
 The `experimental` feature is currently a stub with no associated code; it
 exists as a forward-compatible extension point for features that are not yet

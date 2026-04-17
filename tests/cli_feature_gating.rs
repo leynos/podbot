@@ -8,8 +8,8 @@
 #[test]
 fn cli_module_unavailable_without_feature() {
     // This assertion is only meaningful under `cargo test --no-default-features`.
-    // With the default `cli` feature enabled, `podbot::cli` is expected to
-    // exist and this compile-fail fixture would compile successfully.
+    // CI must exercise this mode explicitly because the default `cli` feature
+    // makes `podbot::cli` available.
     if cfg!(feature = "cli") {
         return;
     }
