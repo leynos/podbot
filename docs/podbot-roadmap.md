@@ -177,8 +177,8 @@ Provide non-TTY execution for app-server hosting protocols.
 - [x] Add lifecycle stream-purity tests for startup, steady-state, shutdown, and
   error paths. See podbot-design.md "Execution flow" (stream contract).
 - [x] Add a regression test asserting zero stdout bytes before the first proxied
-  protocol byte and after the final proxied byte. See podbot-design.md "Execution
-  flow" (stdout purity contract).
+  protocol byte and after the final proxied byte. See podbot-design.md
+  "Execution flow" (stdout purity contract).
 
 **Completion criteria:** Hosting sessions run without TTY framing, preserve
 protocol byte streams, and keep stdout free from Podbot diagnostics. ✓
