@@ -604,22 +604,27 @@ or calling `std::process::exit`.
 
 ### Available functions
 
-| Function                                   | Description                                     |
-| ------------------------------------------ | ----------------------------------------------- |
-| `podbot::api::exec(params)`                | Execute a command in a running container        |
-| `podbot::api::run_agent(config)`           | Run an AI agent in a sandboxed container (stub) |
-| `podbot::api::stop_container(container)`   | Stop a running container (stub)                 |
-| `podbot::api::list_containers()`           | List running podbot containers (stub)           |
-| `podbot::api::run_token_daemon(container)` | Run the token refresh daemon (stub)             |
-| `podbot::api::configure_container_git_identity(params)` | Configure Git identity inside a container from host Git config |
+| Function                                                | Description                                                     |
+| ------------------------------------------------------- | --------------------------------------------------------------- |
+| `podbot::api::exec(params)`                             | Execute a command in a running container                        |
+| `podbot::api::run_agent(config)`                        | Run an AI agent in a sandboxed container (stub)                 |
+| `podbot::api::stop_container(container)`                | Stop a running container (stub)                                 |
+| `podbot::api::list_containers()`                        | List running podbot containers (stub)                           |
+| `podbot::api::run_token_daemon(container)`              | Run the token refresh daemon (stub)                             |
+| `podbot::api::configure_container_git_identity(params)` | Configure Git identity inside a container from host Git config  |
 
-### Return type
+### Return types
 
-All orchestration functions return `podbot::error::Result<CommandOutcome>`:
+Most orchestration functions return `podbot::error::Result<CommandOutcome>`:
 
 - `CommandOutcome::Success` indicates a zero exit code.
 - `CommandOutcome::CommandExit { code }` carries the non-zero exit code
   reported by the container engine.
+
+The `configure_container_git_identity` function returns
+`podbot::error::Result<GitIdentityResult>` instead, which provides structured
+information about the Git identity configuration outcome. See the "Git identity
+configuration" section below for details.
 
 ### Example usage
 
@@ -680,7 +685,7 @@ pub struct GitIdentityParams<'a, C: ContainerExecClient, R: HostCommandRunner> {
 Container-side exec failures (e.g. `git` not present in the container image)
 propagate as `PodbotError::Container(ContainerError::ExecFailed { .. })`.
 
-#### Example usage
+#### Example: configuring Git identity
 
 ```rust,no_run
 use podbot::api::{GitIdentityParams, configure_container_git_identity};
