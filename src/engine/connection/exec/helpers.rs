@@ -1,6 +1,12 @@
 //! Shared helpers for exec request validation and Bollard option building.
 
+use std::future::Future;
+use std::io;
+use std::pin::Pin;
+
 use bollard::exec::{CreateExecOptions, StartExecOptions};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::task::JoinHandle;
 
 use super::{ExecRequest, exec_failed};
 use crate::error::{ConfigError, PodbotError};
@@ -75,6 +81,19 @@ pub(super) fn map_start_exec_error(
     error: impl std::fmt::Display,
 ) -> PodbotError {
     exec_failed(container_id, format!("start exec failed: {error}"))
+}
+
+pub(super) fn spawn_stdin_forwarding_task<HostStdin, Forward, ForwardFuture>(
+    host_stdin: HostStdin,
+    input: Pin<Box<dyn AsyncWrite + Send>>,
+    forward: Forward,
+) -> JoinHandle<io::Result<()>>
+where
+    HostStdin: AsyncRead + Send + Unpin + 'static,
+    Forward: FnOnce(HostStdin, Pin<Box<dyn AsyncWrite + Send>>) -> ForwardFuture + Send + 'static,
+    ForwardFuture: Future<Output = io::Result<()>> + Send + 'static,
+{
+    tokio::spawn(async move { forward(host_stdin, input).await })
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
+use super::helpers::spawn_stdin_forwarding_task;
 use super::host_io::default_host_stdin;
 use super::terminal::{TerminalSizeProvider, resize_exec_to_current_terminal_async};
 #[cfg(unix)]
@@ -78,7 +79,8 @@ where
     P: TerminalSizeProvider,
     HostStdin: AsyncRead + Send + Unpin + 'static,
 {
-    let stdin_task = spawn_stdin_forwarding_task(host_stdin, input);
+    let stdin_task =
+        spawn_stdin_forwarding_task(host_stdin, input, forward_host_stdin_to_exec_async);
     let session_result = run_output_session_with_resize_init_async(
         client,
         request,
@@ -91,16 +93,6 @@ where
     .await;
     stop_stdin_forwarding_task(stdin_task);
     session_result
-}
-
-fn spawn_stdin_forwarding_task<HostStdin>(
-    host_stdin: HostStdin,
-    input: Pin<Box<dyn AsyncWrite + Send>>,
-) -> JoinHandle<io::Result<()>>
-where
-    HostStdin: AsyncRead + Send + Unpin + 'static,
-{
-    tokio::spawn(async move { forward_host_stdin_to_exec_async(host_stdin, input).await })
 }
 
 fn stop_stdin_forwarding_task(mut stdin_task: JoinHandle<io::Result<()>>) {

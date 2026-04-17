@@ -185,11 +185,13 @@ impl AppConfig {
 
         let defaults_layer = serialized_defaults_layer()?;
         ensure_defaults_layer_is_not_empty(&defaults_layer)?;
+        let expected_defaults_value = defaults_layer.clone().into_value();
         merge_value(&mut merged, defaults_layer.into_value());
 
         for layer in layers {
             if layer.provenance() == MergeProvenance::Defaults {
                 ensure_defaults_layer_is_not_empty(&layer)?;
+                ensure_defaults_layer_matches_expected(&layer, &expected_defaults_value)?;
             }
             if let Some(path) = layer.path() {
                 ctx.with_file(path.to_owned());
@@ -223,6 +225,24 @@ fn ensure_defaults_layer_is_not_empty(layer: &MergeLayer<'_>) -> ortho_config::O
             key: String::from("defaults"),
             message: String::from(
                 "merge_from_layers requires a serialized AppConfig::default() layer",
+            ),
+        }));
+    }
+
+    Ok(())
+}
+
+fn ensure_defaults_layer_matches_expected(
+    layer: &MergeLayer<'_>,
+    expected_defaults_value: &ortho_config::serde_json::Value,
+) -> ortho_config::OrthoResult<()> {
+    let defaults_value = layer.clone().into_value();
+    if defaults_value != *expected_defaults_value {
+        return Err(Arc::new(ortho_config::OrthoError::Validation {
+            key: String::from("defaults"),
+            message: String::from(
+                "merge_from_layers only accepts caller-supplied defaults layers when they match \
+                 the serialized AppConfig::default() value",
             ),
         }));
     }

@@ -187,6 +187,22 @@ fn layer_precedence_empty_json_defaults_still_fail() {
     );
 }
 
+/// Test that caller-supplied defaults must match `AppConfig::default()`.
+#[rstest]
+fn layer_precedence_noncanonical_defaults_fail() {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(json!({
+        "engine_socket": "unix:///custom.sock"
+    }));
+
+    let result = AppConfig::merge_from_layers(composer.layers());
+
+    assert!(
+        result.is_err(),
+        "non-canonical defaults layers should be rejected"
+    );
+}
+
 /// Test that serialised `AppConfig::default()` works correctly as a defaults layer.
 ///
 /// This remains a valid explicit caller input, even though `merge_from_layers`

@@ -31,6 +31,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
+use super::helpers::spawn_stdin_forwarding_task;
 use super::host_io::default_host_stdin;
 use super::{ExecRequest, exec_failed};
 use crate::error::PodbotError;
@@ -129,7 +130,8 @@ where
         stdout: mut host_stdout,
         stderr: mut host_stderr,
     } = stdio;
-    let stdin_task = spawn_stdin_forwarding_task(host_stdin, input);
+    let stdin_task =
+        spawn_stdin_forwarding_task(host_stdin, input, forward_host_stdin_to_exec_async);
     let output_result = run_output_loop_async(
         request.container_id(),
         &mut output,
@@ -140,16 +142,6 @@ where
     let stdin_result = settle_stdin_forwarding_task(request.container_id(), stdin_task).await;
     output_result?;
     stdin_result
-}
-
-fn spawn_stdin_forwarding_task<HostStdin>(
-    host_stdin: HostStdin,
-    input: Pin<Box<dyn AsyncWrite + Send>>,
-) -> JoinHandle<io::Result<()>>
-where
-    HostStdin: AsyncRead + Send + Unpin + 'static,
-{
-    tokio::spawn(async move { forward_host_stdin_to_exec_async(host_stdin, input).await })
 }
 
 async fn settle_stdin_forwarding_task(
