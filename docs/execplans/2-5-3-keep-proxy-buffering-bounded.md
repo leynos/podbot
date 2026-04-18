@@ -246,9 +246,9 @@ value for `ExecMode::Protocol` sessions, bounding the maximum bytes per
 Target changes:
 
 - Add a constant `PROTOCOL_OUTPUT_CAPACITY: usize` in the exec module
-  (suggested value: 65_536 / 64 KiB). This matches common JSON-RPC frame buffer
-  sizes and keeps per-chunk memory bounded while reducing overhead compared to
-  the 8 KiB default for large protocol messages.
+  (suggested value: 65,536 bytes (64 KiB)). This matches common JSON-RPC frame
+  buffer sizes and keeps per-chunk memory bounded while reducing overhead
+  compared to the 8 KiB default for large protocol messages.
 
 - Modify `build_start_exec_options()` to set `output_capacity` conditionally:
   - `ExecMode::Protocol`: `Some(PROTOCOL_OUTPUT_CAPACITY)`
@@ -368,10 +368,9 @@ Update `docs/users-guide.md` to document:
 
 - that protocol mode uses bounded buffering so hosted protocols can apply
   backpressure;
-- any observable behaviour difference from the buffering changes (in practice
-  there should be none for users, since the underlying semantics are preserved,
-  but the section on protocol mode execution behaviour should mention bounded
-  buffering).
+- any observable behaviour difference from the buffering changes (in practice:
+  preserve semantics for users and mention bounded buffering in the
+  protocol-mode execution behaviour section).
 
 After all gates pass, mark the four remaining Step 2.5 roadmap checkboxes done
 in `docs/podbot-roadmap.md`.

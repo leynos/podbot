@@ -7,9 +7,9 @@
 
 use std::sync::{Mutex, MutexGuard};
 
-use podbot::api::{CommandOutcome, ExecRequest};
+use podbot::api::{CommandOutcome, ExecRequest, exec_with_client_for_tests};
 use podbot::config::env_var_names;
-use podbot::engine::{ContainerExecClient, EngineConnector};
+use podbot::engine::ContainerExecClient;
 use rstest::{fixture, rstest};
 
 /// Global mutex protecting environment variable access.
@@ -142,21 +142,7 @@ pub fn exec_outcome_with_client<C: ContainerExecClient + Sync>(
     runtime: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> podbot::error::Result<CommandOutcome> {
-    let engine_request = podbot::engine::ExecRequest::new(
-        request.container(),
-        request.command().to_vec(),
-        request.mode().into(),
-    )?
-    .with_tty(request.tty());
-    let result = EngineConnector::exec(runtime, client, &engine_request)?;
-
-    if result.exit_code() == 0 {
-        Ok(CommandOutcome::Success)
-    } else {
-        Ok(CommandOutcome::CommandExit {
-            code: result.exit_code(),
-        })
-    }
+    exec_with_client_for_tests(client, runtime, request)
 }
 
 const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";

@@ -254,7 +254,7 @@ fn serialized_defaults_layer() -> ortho_config::OrthoResult<MergeLayer<'static>>
     let value = ortho_config::serde_json::to_value(AppConfig::default()).map_err(|error| {
         Arc::new(ortho_config::OrthoError::Validation {
             key: String::from("defaults"),
-            message: format!("failed to serialize AppConfig::default(): {error}"),
+            message: format!("failed to serialise AppConfig::default(): {error}"),
         })
     })?;
 

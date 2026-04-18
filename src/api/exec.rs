@@ -218,7 +218,10 @@ impl ExecContext {
 ///
 /// # Errors
 ///
-/// Returns `PodbotError` variants:
+/// Returns non-exhaustive `PodbotError` variants from both
+/// [`ExecContext::connect`] and command execution, including:
+/// - connection and runtime setup failures returned while creating the
+///   per-call [`ExecContext`]
 /// - `ContainerError::ExecFailed` if command execution fails.
 /// - `ConfigError::MissingRequired` if required fields are empty.
 ///
@@ -269,4 +272,15 @@ pub(crate) fn exec_with_client<C: ContainerExecClient + Sync>(
             code: exec_result.exit_code(),
         })
     }
+}
+
+/// Execute a command using a pre-connected engine client during internal tests.
+#[cfg(feature = "internal")]
+#[doc(hidden)]
+pub fn exec_with_client_for_tests<C: ContainerExecClient + Sync>(
+    connector: &C,
+    runtime_handle: &tokio::runtime::Handle,
+    request: &ExecRequest,
+) -> PodbotResult<CommandOutcome> {
+    exec_with_client(connector, runtime_handle, request)
 }
