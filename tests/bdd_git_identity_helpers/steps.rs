@@ -67,44 +67,38 @@ fn failure_output() -> Output {
     }
 }
 
+/// Register an `expect_run_command` expectation on `runner` that matches
+/// commands containing `config_key` and returns `success_output` when a
+/// value is present or `failure_output` when absent.
+fn register_user_config(
+    runner: &mut MockHostRunner,
+    config_key: &'static str,
+    value: Option<&String>,
+) {
+    match value {
+        Some(v) => {
+            let owned = v.clone();
+            runner
+                .expect_run_command()
+                .withf(move |_, args| args.contains(&config_key))
+                .returning(move |_, _| Ok(success_output(&format!("{owned}\n"))));
+        }
+        None => {
+            runner
+                .expect_run_command()
+                .withf(move |_, args| args.contains(&config_key))
+                .returning(|_, _| Ok(failure_output()));
+        }
+    }
+}
+
 fn setup_mock_host_runner(
     host_name: Option<&String>,
     host_email: Option<&String>,
 ) -> MockHostRunner {
     let mut host_runner = MockHostRunner::new();
-
-    match host_name {
-        Some(name) => {
-            let name_clone = name.clone();
-            host_runner
-                .expect_run_command()
-                .withf(|_, args| args.contains(&"user.name"))
-                .returning(move |_, _| Ok(success_output(&format!("{name_clone}\n"))));
-        }
-        None => {
-            host_runner
-                .expect_run_command()
-                .withf(|_, args| args.contains(&"user.name"))
-                .returning(|_, _| Ok(failure_output()));
-        }
-    }
-
-    match host_email {
-        Some(email) => {
-            let email_clone = email.clone();
-            host_runner
-                .expect_run_command()
-                .withf(|_, args| args.contains(&"user.email"))
-                .returning(move |_, _| Ok(success_output(&format!("{email_clone}\n"))));
-        }
-        None => {
-            host_runner
-                .expect_run_command()
-                .withf(|_, args| args.contains(&"user.email"))
-                .returning(|_, _| Ok(failure_output()));
-        }
-    }
-
+    register_user_config(&mut host_runner, "user.name", host_name);
+    register_user_config(&mut host_runner, "user.email", host_email);
     host_runner
 }
 
