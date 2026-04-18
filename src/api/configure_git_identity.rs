@@ -48,12 +48,13 @@ pub fn configure_container_git_identity<C: ContainerExecClient, R: HostCommandRu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::test_helpers::{failure_output, success_output};
     use crate::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
 
     use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
     use mockall::mock;
     use std::io;
-    use std::process::{ExitStatus, Output};
+    use std::process::Output;
 
     mock! {
         HostRunner {}
@@ -85,35 +86,6 @@ mod tests {
                 exec_id: &str,
                 options: ResizeExecOptions,
             ) -> ResizeExecFuture<'_>;
-        }
-    }
-
-    /// Platform-independent exit status construction.
-    #[cfg(unix)]
-    fn exit_status(code: i32) -> ExitStatus {
-        use std::os::unix::process::ExitStatusExt;
-        ExitStatus::from_raw(code << 8)
-    }
-
-    #[cfg(windows)]
-    fn exit_status(code: i32) -> ExitStatus {
-        use std::os::windows::process::ExitStatusExt;
-        ExitStatus::from_raw(code as u32)
-    }
-
-    fn success_output(stdout: &str) -> Output {
-        Output {
-            status: exit_status(0),
-            stdout: stdout.as_bytes().to_vec(),
-            stderr: Vec::new(),
-        }
-    }
-
-    fn failure_output() -> Output {
-        Output {
-            status: exit_status(1),
-            stdout: Vec::new(),
-            stderr: b"error".to_vec(),
         }
     }
 
@@ -165,25 +137,33 @@ mod tests {
         client
     }
 
+    /// Shared test plumbing: creates a Tokio runtime, builds
+    /// `GitIdentityParams`, and calls `configure_container_git_identity`.
+    fn invoke(
+        host_runner: &MockHostRunner,
+        exec_client: &MockExecClient,
+        container_id: &str,
+    ) -> PodbotResult<GitIdentityResult> {
+        let runtime = tokio::runtime::Runtime::new().expect("test requires a Tokio runtime");
+        let handle = runtime.handle().clone();
+        let params = GitIdentityParams {
+            client: exec_client,
+            host_runner,
+            container_id,
+            runtime_handle: &handle,
+        };
+        configure_container_git_identity(&params)
+    }
+
     #[test]
     fn returns_configured_when_both_fields_present() {
         let mut host_runner = MockHostRunner::new();
         register_host_config(&mut host_runner, "user.name", Some("Alice"));
         register_host_config(&mut host_runner, "user.email", Some("alice@example.com"));
-
         let exec_client = make_exec_client(0);
-        let runtime = tokio::runtime::Runtime::new().expect("test requires a Tokio runtime");
-        let handle = runtime.handle().clone();
 
-        let params = GitIdentityParams {
-            client: &exec_client,
-            host_runner: &host_runner,
-            container_id: "sandbox-unit",
-            runtime_handle: &handle,
-        };
-
-        let result =
-            configure_container_git_identity(&params).expect("should succeed with Configured");
+        let result = invoke(&host_runner, &exec_client, "sandbox-unit")
+            .expect("should succeed with Configured");
 
         assert!(
             matches!(result, GitIdentityResult::Configured { .. }),
@@ -196,21 +176,10 @@ mod tests {
         let mut host_runner = MockHostRunner::new();
         register_host_config(&mut host_runner, "user.name", None);
         register_host_config(&mut host_runner, "user.email", None);
+        let exec_client = MockExecClient::new(); // no exec calls expected
 
-        // No exec calls expected when both fields are absent.
-        let exec_client = MockExecClient::new();
-        let runtime = tokio::runtime::Runtime::new().expect("test requires a Tokio runtime");
-        let handle = runtime.handle().clone();
-
-        let params = GitIdentityParams {
-            client: &exec_client,
-            host_runner: &host_runner,
-            container_id: "sandbox-unit-2",
-            runtime_handle: &handle,
-        };
-
-        let result =
-            configure_container_git_identity(&params).expect("should succeed with NoneConfigured");
+        let result = invoke(&host_runner, &exec_client, "sandbox-unit-2")
+            .expect("should succeed with NoneConfigured");
 
         assert!(
             matches!(result, GitIdentityResult::NoneConfigured { .. }),

@@ -8,7 +8,9 @@
 //! embedders.
 //!
 //! All functions accept library-owned types (not clap types) and return
-//! [`crate::error::Result<CommandOutcome>`]. They do not print to
+//! [`crate::error::Result<T>`] — for example, [`run_token_daemon`] returns
+//! `PodbotResult<CommandOutcome>` while [`configure_container_git_identity`]
+//! returns `PodbotResult<GitIdentityResult>`. They do not print to
 //! stdout/stderr or call `std::process::exit`.
 
 mod configure_git_identity;

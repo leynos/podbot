@@ -194,6 +194,7 @@ mod tests {
 
     use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
     use mockall::mock;
+    use rstest::rstest;
 
     mock! {
         ExecClient {}
@@ -292,13 +293,19 @@ mod tests {
         }
     }
 
-    #[test]
-    fn returns_partial_when_only_name_present() {
+    #[rstest]
+    #[case(Some("Bob"), None, "user.email")]
+    #[case(None, Some("carol@example.com"), "user.name")]
+    fn returns_partial_when_one_field_present(
+        #[case] name: Option<&str>,
+        #[case] email: Option<&str>,
+        #[case] missing_warning: &str,
+    ) {
         let (_rt, handle) = make_runtime();
         let client = make_exec_client(0);
         let identity = HostGitIdentity {
-            name: Some(String::from("Bob")),
-            email: None,
+            name: name.map(String::from),
+            email: email.map(String::from),
         };
 
         let result = configure_git_identity(&handle, &client, "c3", &identity)
@@ -309,42 +316,17 @@ mod tests {
             "Expected Partial, got {result:?}"
         );
         if let GitIdentityResult::Partial {
-            name,
-            email,
+            name: actual_name,
+            email: actual_email,
             warnings,
         } = result
         {
-            assert_eq!(name.as_deref(), Some("Bob"));
-            assert!(email.is_none());
-            assert!(warnings.iter().any(|w| w.contains("user.email")));
-        }
-    }
-
-    #[test]
-    fn returns_partial_when_only_email_present() {
-        let (_rt, handle) = make_runtime();
-        let client = make_exec_client(0);
-        let identity = HostGitIdentity {
-            name: None,
-            email: Some(String::from("carol@example.com")),
-        };
-
-        let result = configure_git_identity(&handle, &client, "c4", &identity)
-            .expect("should succeed with Partial");
-
-        assert!(
-            matches!(result, GitIdentityResult::Partial { .. }),
-            "Expected Partial, got {result:?}"
-        );
-        if let GitIdentityResult::Partial {
-            name,
-            email,
-            warnings,
-        } = result
-        {
-            assert!(name.is_none());
-            assert_eq!(email.as_deref(), Some("carol@example.com"));
-            assert!(warnings.iter().any(|w| w.contains("user.name")));
+            assert_eq!(actual_name.as_deref(), name);
+            assert_eq!(actual_email.as_deref(), email);
+            assert!(
+                warnings.iter().any(|w| w.contains(missing_warning)),
+                "Expected warning containing '{missing_warning}', got {warnings:?}"
+            );
         }
     }
 

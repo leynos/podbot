@@ -56,7 +56,8 @@ escalation, not workarounds.
 - No new external crate dependencies may be added.
 - `rstest` for unit tests; `rstest-bdd` v0.5.0 for behavioural tests.
 - BDD step function parameter names must match fixture names exactly.
-- BDD feature files must use unquoted text for `{param}` captures.
+- BDD feature files must use quoted values with `{string}` captures
+  (e.g., `Given host git user.name is "Alice"`).
 - BDD tests must use `StepResult<T> = Result<T, String>` pattern (no
   `expect`/`panic`).
 - `make check-fmt`, `make lint`, `make test` must pass before any commit.

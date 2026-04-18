@@ -22,3 +22,6 @@ pub use connection::{
     SocketResolver, StartExecFuture, SystemCommandRunner, UploadToContainerFuture,
     configure_git_identity, read_host_git_identity,
 };
+
+#[cfg(test)]
+pub(crate) use connection::test_helpers;

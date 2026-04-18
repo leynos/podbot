@@ -1,12 +1,13 @@
 //! Unit tests for Git identity configuration.
 
 use std::io;
-use std::process::{ExitStatus, Output};
+use std::process::Output;
 
 use mockall::mock;
 use rstest::rstest;
 
 use super::host_reader::{HostCommandRunner, read_host_git_identity};
+use super::test_helpers::{failure_output, success_output};
 
 // -- Host reader tests --
 
@@ -18,35 +19,6 @@ mock! {
             program: &'a str,
             args: &'a [&'a str],
         ) -> io::Result<Output>;
-    }
-}
-
-/// Create an exit status with the given exit code in a platform-independent way.
-#[cfg(unix)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::unix::process::ExitStatusExt;
-    ExitStatus::from_raw(code << 8)
-}
-
-#[cfg(windows)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-    ExitStatus::from_raw(code as u32)
-}
-
-fn success_output(stdout: &str) -> Output {
-    Output {
-        status: exit_status(0),
-        stdout: stdout.as_bytes().to_vec(),
-        stderr: Vec::new(),
-    }
-}
-
-fn failure_output() -> Output {
-    Output {
-        status: exit_status(1),
-        stdout: Vec::new(),
-        stderr: b"error".to_vec(),
     }
 }
 

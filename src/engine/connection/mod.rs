@@ -357,4 +357,7 @@ impl EngineConnector {
 }
 
 #[cfg(test)]
+pub(crate) use git_identity::test_helpers;
+
+#[cfg(test)]
 mod tests;

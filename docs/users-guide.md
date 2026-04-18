@@ -611,7 +611,7 @@ or calling `std::process::exit`.
 | `podbot::api::stop_container(container)`                | Stop a running container (stub)                                 |
 | `podbot::api::list_containers()`                        | List running podbot containers (stub)                           |
 | `podbot::api::run_token_daemon(container)`              | Run the token refresh daemon (stub)                             |
-| `podbot::api::configure_container_git_identity(params)` | Configure Git identity inside a container from host Git config  |
+| `podbot::api::configure_container_git_identity(params)` | Configure Git identity from host Git config                     |
 
 ### Return types
 

@@ -214,11 +214,11 @@ fn warnings_include_warning(
                 Err(e) => return Err(format!("Expected success, got error: {e}")),
             };
 
-            if warnings.contains(&warning) {
+            if warnings.iter().any(|w| w.contains(&warning)) {
                 Ok(())
             } else {
                 Err(format!(
-                    "Expected warning '{warning}' not found in {warnings:?}"
+                    "No warning containing '{warning}' found in {warnings:?}"
                 ))
             }
         })

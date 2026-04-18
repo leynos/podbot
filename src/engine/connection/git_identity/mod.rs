@@ -22,4 +22,7 @@ fn git_identity_exec_failed(container_id: &str, message: impl Into<String>) -> P
 }
 
 #[cfg(test)]
+pub(crate) mod test_helpers;
+
+#[cfg(test)]
 mod tests;

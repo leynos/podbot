@@ -1,7 +1,7 @@
 //! Given/when step definitions for Git identity behavioural scenarios.
 
 use std::io;
-use std::process::{ExitStatus, Output};
+use std::process::Output;
 
 use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
 use mockall::mock;
@@ -13,6 +13,7 @@ use podbot::engine::{
 use rstest_bdd_macros::{given, when};
 
 use super::state::{GitIdentityState, StepResult};
+use super::test_helpers::{failure_output, success_output};
 
 mock! {
     #[derive(Debug)]
@@ -35,35 +36,6 @@ mock! {
         fn start_exec(&self, exec_id: &str, options: Option<StartExecOptions>) -> StartExecFuture<'_>;
         fn inspect_exec(&self, exec_id: &str) -> InspectExecFuture<'_>;
         fn resize_exec(&self, exec_id: &str, options: ResizeExecOptions) -> ResizeExecFuture<'_>;
-    }
-}
-
-/// Create an exit status with the given exit code in a platform-independent way.
-#[cfg(unix)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::unix::process::ExitStatusExt;
-    ExitStatus::from_raw(code << 8)
-}
-
-#[cfg(windows)]
-fn exit_status(code: i32) -> ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-    ExitStatus::from_raw(code as u32)
-}
-
-fn success_output(stdout: &str) -> Output {
-    Output {
-        status: exit_status(0),
-        stdout: stdout.as_bytes().to_vec(),
-        stderr: Vec::new(),
-    }
-}
-
-fn failure_output() -> Output {
-    Output {
-        status: exit_status(1),
-        stdout: Vec::new(),
-        stderr: b"error".to_vec(),
     }
 }
 
