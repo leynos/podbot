@@ -158,8 +158,10 @@ fn setup_mock_exec_client(should_fail: bool) -> MockExecClient {
 
 /// Sets host git user.name from feature file.
 /// "missing" is treated specially to indicate None.
-#[given("host git user.name is {word}")]
-fn host_git_name_is(git_identity_state: &GitIdentityState, word: String) {
+#[given("host git user.name is {string}")]
+fn host_git_name_is(git_identity_state: &GitIdentityState, string: String) {
+    // rstest-bdd {string} captures include the surrounding quotes, so strip them
+    let word = string.trim_matches('"').to_owned();
     if word == "missing" {
         git_identity_state.host_name.set(None);
     } else {
@@ -169,8 +171,10 @@ fn host_git_name_is(git_identity_state: &GitIdentityState, word: String) {
 
 /// Sets host git user.email from feature file.
 /// "missing" is treated specially to indicate None.
-#[given("host git user.email is {word}")]
-fn host_git_email_is(git_identity_state: &GitIdentityState, word: String) {
+#[given("host git user.email is {string}")]
+fn host_git_email_is(git_identity_state: &GitIdentityState, string: String) {
+    // rstest-bdd {string} captures include the surrounding quotes, so strip them
+    let word = string.trim_matches('"').to_owned();
     if word == "missing" {
         git_identity_state.host_email.set(None);
     } else {
