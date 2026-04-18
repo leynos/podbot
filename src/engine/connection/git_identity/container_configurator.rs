@@ -185,3 +185,183 @@ fn set_git_config<C: ContainerExecClient>(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::connection::git_identity::host_reader::HostGitIdentity;
+    use crate::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
+
+    use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
+    use mockall::mock;
+
+    mock! {
+        ExecClient {}
+        impl ContainerExecClient for ExecClient {
+            fn create_exec(
+                &self,
+                container_id: &str,
+                options: CreateExecOptions<String>,
+            ) -> CreateExecFuture<'_>;
+            fn start_exec(
+                &self,
+                exec_id: &str,
+                options: Option<StartExecOptions>,
+            ) -> StartExecFuture<'_>;
+            fn inspect_exec(&self, exec_id: &str) -> InspectExecFuture<'_>;
+            fn resize_exec(
+                &self,
+                exec_id: &str,
+                options: ResizeExecOptions,
+            ) -> ResizeExecFuture<'_>;
+        }
+    }
+
+    fn make_runtime() -> (tokio::runtime::Runtime, tokio::runtime::Handle) {
+        let rt = tokio::runtime::Runtime::new().expect("test requires a Tokio runtime");
+        let handle = rt.handle().clone();
+        (rt, handle)
+    }
+
+    fn make_exec_client(exit_code: i64) -> MockExecClient {
+        let mut client = MockExecClient::new();
+        client.expect_create_exec().returning(|_, _| {
+            Box::pin(async {
+                Ok(bollard::exec::CreateExecResults {
+                    id: String::from("exec-1"),
+                })
+            })
+        });
+        client
+            .expect_start_exec()
+            .returning(|_, _| Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) }));
+        client.expect_inspect_exec().returning(move |_| {
+            Box::pin(async move {
+                Ok(bollard::models::ExecInspectResponse {
+                    exit_code: Some(exit_code),
+                    running: Some(false),
+                    ..Default::default()
+                })
+            })
+        });
+        client
+    }
+
+    #[test]
+    fn returns_none_configured_when_both_fields_absent() {
+        let (_rt, handle) = make_runtime();
+        // No exec expectations — no container commands should be issued.
+        let client = MockExecClient::new();
+        let identity = HostGitIdentity {
+            name: None,
+            email: None,
+        };
+
+        let result = configure_git_identity(&handle, &client, "c1", &identity)
+            .expect("should succeed with NoneConfigured");
+
+        assert!(
+            matches!(result, GitIdentityResult::NoneConfigured { .. }),
+            "Expected NoneConfigured, got {result:?}"
+        );
+        if let GitIdentityResult::NoneConfigured { warnings } = result {
+            assert!(warnings.iter().any(|w| w.contains("user.name")));
+            assert!(warnings.iter().any(|w| w.contains("user.email")));
+        }
+    }
+
+    #[test]
+    fn returns_configured_when_both_fields_present() {
+        let (_rt, handle) = make_runtime();
+        let client = make_exec_client(0);
+        let identity = HostGitIdentity {
+            name: Some(String::from("Alice")),
+            email: Some(String::from("alice@example.com")),
+        };
+
+        let result = configure_git_identity(&handle, &client, "c2", &identity)
+            .expect("should succeed with Configured");
+
+        assert!(
+            matches!(result, GitIdentityResult::Configured { .. }),
+            "Expected Configured, got {result:?}"
+        );
+        if let GitIdentityResult::Configured { name, email } = result {
+            assert_eq!(name, "Alice");
+            assert_eq!(email, "alice@example.com");
+        }
+    }
+
+    #[test]
+    fn returns_partial_when_only_name_present() {
+        let (_rt, handle) = make_runtime();
+        let client = make_exec_client(0);
+        let identity = HostGitIdentity {
+            name: Some(String::from("Bob")),
+            email: None,
+        };
+
+        let result = configure_git_identity(&handle, &client, "c3", &identity)
+            .expect("should succeed with Partial");
+
+        assert!(
+            matches!(result, GitIdentityResult::Partial { .. }),
+            "Expected Partial, got {result:?}"
+        );
+        if let GitIdentityResult::Partial {
+            name,
+            email,
+            warnings,
+        } = result
+        {
+            assert_eq!(name.as_deref(), Some("Bob"));
+            assert!(email.is_none());
+            assert!(warnings.iter().any(|w| w.contains("user.email")));
+        }
+    }
+
+    #[test]
+    fn returns_partial_when_only_email_present() {
+        let (_rt, handle) = make_runtime();
+        let client = make_exec_client(0);
+        let identity = HostGitIdentity {
+            name: None,
+            email: Some(String::from("carol@example.com")),
+        };
+
+        let result = configure_git_identity(&handle, &client, "c4", &identity)
+            .expect("should succeed with Partial");
+
+        assert!(
+            matches!(result, GitIdentityResult::Partial { .. }),
+            "Expected Partial, got {result:?}"
+        );
+        if let GitIdentityResult::Partial {
+            name,
+            email,
+            warnings,
+        } = result
+        {
+            assert!(name.is_none());
+            assert_eq!(email.as_deref(), Some("carol@example.com"));
+            assert!(warnings.iter().any(|w| w.contains("user.name")));
+        }
+    }
+
+    #[test]
+    fn propagates_exec_failure_as_error() {
+        let (_rt, handle) = make_runtime();
+        let client = make_exec_client(1);
+        let identity = HostGitIdentity {
+            name: Some(String::from("Alice")),
+            email: Some(String::from("alice@example.com")),
+        };
+
+        let result = configure_git_identity(&handle, &client, "c5", &identity);
+
+        match result {
+            Err(PodbotError::Container(crate::error::ContainerError::ExecFailed { .. })) => {}
+            other => panic!("Expected Err(ExecFailed), got {other:?}"),
+        }
+    }
+}
