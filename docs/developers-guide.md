@@ -339,6 +339,39 @@ ready for stable embedding contracts.
    consumer without the feature and asserts the expected compile error.
 4. Update this table.
 
+### 10.3. Feature gate verification
+
+The `cli` Cargo feature gates the `podbot::cli` module and the `podbot` binary
+target. When modifying library code, verify that the crate compiles without the
+CLI feature to ensure the library boundary remains self-contained:
+
+```bash
+cargo check --no-default-features
+```
+
+This confirms that library consumers who depend on podbot with
+`default-features = false` will not encounter compilation errors caused by
+unconditional imports of CLI types. The full feature matrix tested during
+development is:
+
+| Command                             | What it verifies                 |
+| ----------------------------------- | -------------------------------- |
+| `cargo check --no-default-features` | Library compiles without CLI     |
+| `cargo check --all-features`        | Everything compiles together     |
+| `make test`                         | All tests pass with all features |
+
+### 10.4. Feature gate maintenance
+
+When adding new public modules or dependencies:
+
+- If the module is part of the stable library boundary (`api`, `config`,
+  `error`), it must compile without the `cli` feature.
+- If the module depends on `clap` or other CLI-only crates, gate it behind
+  `#[cfg(feature = "cli")]` in `src/lib.rs` and mark the dependency as
+  `optional = true` in `Cargo.toml`.
+- Run `cargo check --no-default-features` after any change to the public
+  module structure to verify the boundary is intact.
+
 ## 11. Stable public library boundary
 
 The semver-stable surface for library embedders is limited to three modules:
@@ -377,39 +410,6 @@ stable modules without a corresponding ADR update.
 
 See [podbot-design.md, Error handling](podbot-design.md#error-handling) for the
 full error hierarchy.
-
-### 11.3. Feature gate verification
-
-The `cli` Cargo feature gates the `podbot::cli` module and the `podbot` binary
-target. When modifying library code, verify that the crate compiles without the
-CLI feature to ensure the library boundary remains self-contained:
-
-```bash
-cargo check --no-default-features
-```
-
-This confirms that library consumers who depend on podbot with
-`default-features = false` will not encounter compilation errors caused by
-unconditional imports of CLI types. The full feature matrix tested during
-development is:
-
-| Command                             | What it verifies                 |
-| ----------------------------------- | -------------------------------- |
-| `cargo check --no-default-features` | Library compiles without CLI     |
-| `cargo check --all-features`        | Everything compiles together     |
-| `make test`                         | All tests pass with all features |
-
-### 11.4. Feature gate maintenance
-
-When adding new public modules or dependencies:
-
-- If the module is part of the stable library boundary (`api`, `config`,
-  `error`), it must compile without the `cli` feature.
-- If the module depends on `clap` or other CLI-only crates, gate it behind
-  `#[cfg(feature = "cli")]` in `src/lib.rs` and mark the dependency as
-  `optional = true` in `Cargo.toml`.
-- Run `cargo check --no-default-features` after any change to the public
-  module structure to verify the boundary is intact.
 
 ## 12. GitHub error classification module
 
@@ -550,6 +550,46 @@ purpose. This applies to:
 - Integration test harnesses in `tests/`
 - Helper submodules under `tests/`
 
+### 15.3. Rustdoc and missing_docs compliance
+
+The project uses `#![deny(missing_docs)]` at the crate level. All public items
+require `///` rustdoc comments. Use `#[doc(hidden)]` for items that must be
+public for technical reasons (such as cross-crate test helpers) but should not
+appear in generated documentation.
+
+### 15.4. Clippy pedantic and denied lints
+
+The project enforces clippy pedantic mode with additional denied lints:
+
+- `expect_used` — use `.ok_or_else()` or `?` instead
+- `unwrap_used` — use `.ok_or_else()` or `?` instead
+- `indexing_slicing` — use `.get()` with bounds checks
+- `print_stdout` / `print_stderr` — use logging or dedicated output functions
+
+When a lint cannot be satisfied due to API constraints, use `#[expect]` (not
+`#[allow]`) with a clear reason:
+
+```rust
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "required by map_err signature; error is consumed to extract status"
+)]
+fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
+    // ...
+}
+```
+
+### 15.5. En-GB-oxendict spelling
+
+Documentation uses British English with Oxford spelling (`en-GB-oxendict`):
+
+- Use `-ize` suffixes: contextualized, subclassification
+- Use `-our` suffixes: behaviour, colour
+- Use `-re` suffixes: centre, fibre
+- Capitalize proper nouns: Markdown, GitHub, Rust
+
+The words "outwith" and "caveat" are acceptable.
+
 ## 16. Behavioural test infrastructure
 
 Podbot uses [rstest-bdd](https://crates.io/crates/rstest-bdd) for
@@ -584,46 +624,6 @@ comment explaining its purpose.
 Module docs should be concise (2–4 lines) and focus on what the module does,
 not how it works. Implementation details belong in function-level `///` docs.
 
-### 13.3. Rustdoc and missing_docs compliance
-
-The project uses `#![deny(missing_docs)]` at the crate level. All public items
-require `///` rustdoc comments. Use `#[doc(hidden)]` for items that must be
-public for technical reasons (such as cross-crate test helpers) but should not
-appear in generated documentation.
-
-### 13.4. Clippy pedantic and denied lints
-
-The project enforces clippy pedantic mode with additional denied lints:
-
-- `expect_used` — use `.ok_or_else()` or `?` instead
-- `unwrap_used` — use `.ok_or_else()` or `?` instead
-- `indexing_slicing` — use `.get()` with bounds checks
-- `print_stdout` / `print_stderr` — use logging or dedicated output functions
-
-When a lint cannot be satisfied due to API constraints, use `#[expect]` (not
-`#[allow]`) with a clear reason:
-
-```rust
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "required by map_err signature; error is consumed to extract status"
-)]
-fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
-    // ...
-}
-```
-
-### 13.5. En-GB-oxendict spelling
-
-Documentation uses British English with Oxford spelling (`en-GB-oxendict`):
-
-- Use `-ize` suffixes: contextualized, subclassification
-- Use `-our` suffixes: behaviour, colour
-- Use `-re` suffixes: centre, fibre
-- Capitalize proper nouns: Markdown, GitHub, Rust
-
-The words "outwith" and "caveat" are acceptable.
-
 ## 14. Git identity subsystem
 
 The `git_identity` subsystem propagates host Git identity (`user.name` and
@@ -641,7 +641,7 @@ This subsystem spans three internal layers:
   that library callers use when they need podbot to apply the host identity to
   a specific container.
 
-### 14.1. Module layout
+### 17.1. Module layout
 
 ```plaintext
 src/api/
@@ -782,6 +782,7 @@ This yields three testing seams:
   but an explicit attempt to write the Git config inside the container must fail
   loudly when the container environment cannot honour it.
 
+### 14.8. Extending the subsystem
 ### 14.8. Extending the subsystem
 
 When adding another identity field or related Git setting:

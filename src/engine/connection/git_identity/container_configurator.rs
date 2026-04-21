@@ -71,7 +71,7 @@ const fn classify_identity(identity: &HostGitIdentity) -> IdentityCompleteness {
 ///
 /// Returns `ContainerError::ExecFailed` if a `git config` command
 /// fails inside the container.
-pub fn configure_git_identity<C: ContainerExecClient>(
+pub fn configure_git_identity<C: ContainerExecClient + Sync>(
     runtime: &tokio::runtime::Handle,
     client: &C,
     container_id: &str,
@@ -93,7 +93,7 @@ pub fn configure_git_identity<C: ContainerExecClient>(
     }
 }
 
-fn configure_complete_identity<C: ContainerExecClient>(
+fn configure_complete_identity<C: ContainerExecClient + Sync>(
     runtime: &tokio::runtime::Handle,
     client: &C,
     container_id: &str,
@@ -120,7 +120,7 @@ fn configure_complete_identity<C: ContainerExecClient>(
     })
 }
 
-fn configure_partial_identity<C: ContainerExecClient>(
+fn configure_partial_identity<C: ContainerExecClient + Sync>(
     runtime: &tokio::runtime::Handle,
     client: &C,
     container_id: &str,
@@ -152,13 +152,13 @@ fn configure_partial_identity<C: ContainerExecClient>(
     })
 }
 
-struct GitConfigParams<'a, C: ContainerExecClient> {
+struct GitConfigParams<'a, C: ContainerExecClient + Sync> {
     runtime: &'a tokio::runtime::Handle,
     client: &'a C,
     container_id: &'a str,
 }
 
-fn set_git_config<C: ContainerExecClient>(
+fn set_git_config<C: ContainerExecClient + Sync>(
     params: &GitConfigParams<'_, C>,
     key: &str,
     value: &str,

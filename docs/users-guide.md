@@ -620,15 +620,15 @@ supported semver contract for embedders.
 
 ### Available functions
 
-| Function                                      | Description                                     |
-| --------------------------------------------- | ----------------------------------------------- |
-| `podbot::api::exec(config, request)`          | Execute a command in a running container        |
-| `podbot::api::ExecContext::connect(…)`        | Reuse a runtime handle and engine connection    |
-| `podbot::api::run_agent(config)`              | Run an AI agent in a sandboxed container (stub) |
-| `podbot::api::stop_container(container)`      | Stop a running container (stub)                 |
-| `podbot::api::list_containers()`              | List running podbot containers (stub)           |
-| `podbot::api::run_token_daemon(container_id)` | Run the token refresh daemon (stub)             |
-| `podbot::api::configure_container_git_identity(params)` | Configure Git identity from host Git config |
+| Function                                                | Description                                     |
+| ------------------------------------------------------- | ----------------------------------------------- |
+| `podbot::api::exec(config, request)`                    | Execute a command in a running container        |
+| `podbot::api::ExecContext::connect(…)`                  | Reuse a runtime handle and engine connection    |
+| `podbot::api::run_agent(config)`                        | Run an AI agent in a sandboxed container (stub) |
+| `podbot::api::stop_container(container)`                | Stop a running container (stub)                 |
+| `podbot::api::list_containers()`                        | List running podbot containers (stub)           |
+| `podbot::api::run_token_daemon(container_id)`           | Run the token refresh daemon (stub)             |
+| `podbot::api::configure_container_git_identity(params)` | Configure Git identity from host Git config     |
 
 ### Return type
 
@@ -686,8 +686,8 @@ fn run_command() -> Result<(), podbot::error::PodbotError> {
 
 ### Git identity configuration
 
-`configure_container_git_identity` reads `user.name` and `user.email` from
-the host Git configuration and applies them inside a running container via
+`configure_container_git_identity` reads `user.name` and `user.email` from the
+host Git configuration and applies them inside a running container via
 `git config --global`. Missing fields produce warnings rather than errors.
 
 #### Parameters: `GitIdentityParams`
@@ -703,13 +703,14 @@ pub struct GitIdentityParams<'a, C: ContainerExecClient, R: HostCommandRunner> {
 
 #### Return type: `GitIdentityResult`
 
-`configure_container_git_identity` returns `podbot::error::Result<GitIdentityResult>`:
+`configure_container_git_identity` returns
+`podbot::error::Result<GitIdentityResult>`:
 
-| Variant | Meaning |
-| ------- | ------- |
-| `GitIdentityResult::Configured { name, email }` | Both `user.name` and `user.email` were set in the container. |
-| `GitIdentityResult::Partial { name, email, warnings }` | One field was set; `warnings` explains the missing field. |
-| `GitIdentityResult::NoneConfigured { warnings }` | Neither field was present on the host; container Git config unchanged. |
+| Variant                                                | Meaning                                                                |
+| ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `GitIdentityResult::Configured { name, email }`        | Both `user.name` and `user.email` were set in the container.           |
+| `GitIdentityResult::Partial { name, email, warnings }` | One field was set; `warnings` explains the missing field.              |
+| `GitIdentityResult::NoneConfigured { warnings }`       | Neither field was present on the host; container Git config unchanged. |
 
 Container-side exec failures (e.g. `git` not present in the container image)
 propagate as `PodbotError::Container(ContainerError::ExecFailed { .. })`.

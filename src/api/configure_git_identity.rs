@@ -12,7 +12,7 @@ use crate::engine::{
 use crate::error::Result as PodbotResult;
 
 /// Parameters for Git identity configuration.
-pub struct GitIdentityParams<'a, C: ContainerExecClient, R: HostCommandRunner> {
+pub struct GitIdentityParams<'a, C: ContainerExecClient + Sync, R: HostCommandRunner> {
     /// Pre-connected container engine client.
     pub client: &'a C,
     /// Host command runner for reading Git config.
@@ -33,7 +33,7 @@ pub struct GitIdentityParams<'a, C: ContainerExecClient, R: HostCommandRunner> {
 ///
 /// Returns `ContainerError::ExecFailed` if a `git config` command
 /// fails to execute within the container.
-pub fn configure_container_git_identity<C: ContainerExecClient, R: HostCommandRunner>(
+pub fn configure_container_git_identity<C: ContainerExecClient + Sync, R: HostCommandRunner>(
     params: &GitIdentityParams<'_, C, R>,
 ) -> PodbotResult<GitIdentityResult> {
     let identity = read_host_git_identity(params.host_runner);

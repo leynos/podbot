@@ -9,12 +9,12 @@ Status: COMPLETED
 
 ## Purpose and big picture
 
-Complete roadmap Step 4.1 ("Git identity configuration") by reading
-`user.name` and `user.email` from the host Git configuration and executing
+Complete roadmap Step 4.1 ("Git identity configuration") by reading `user.name`
+and `user.email` from the host Git configuration and executing
 `git config --global` within the container to propagate that identity.
 
-After this change, the container lifecycle will support a deterministic
-Git identity configuration step that:
+After this change, the container lifecycle will support a deterministic Git
+identity configuration step that:
 
 - reads `user.name` from the host via `git config --get user.name`;
 - reads `user.email` from the host via `git config --get user.email`;
@@ -23,11 +23,11 @@ Git identity configuration step that:
 - warns but does not fail when either identity field is missing on the
   host.
 
-Observable success: `make check-fmt && make lint && make test` all pass.
-Git identity configuration is testable in isolation with mock host
-command runners and mock container exec clients. Missing identity on the
-host produces a warning-level result rather than a hard error. This is
-Step 4.1 of Phase 4 in the roadmap (`docs/podbot-roadmap.md`).
+Observable success: `make check-fmt && make lint && make test` all pass. Git
+identity configuration is testable in isolation with mock host command runners
+and mock container exec clients. Missing identity on the host produces a
+warning-level result rather than a hard error. This is Step 4.1 of Phase 4 in
+the roadmap (`docs/podbot-roadmap.md`).
 
 Required documentation outcomes:
 
@@ -80,21 +80,19 @@ escalation, not workarounds.
 ## Risks
 
 - Risk: host `git` binary may not be installed or may not have identity
-  configured. Severity: medium. Likelihood: medium. Mitigation: treat
-  missing identity as a warning (`GitIdentityResult::Partial` or
-  `::NoneConfigured`), not a hard error. Log the missing fields and
-  continue.
+  configured. Severity: medium. Likelihood: medium. Mitigation: treat missing
+  identity as a warning (`GitIdentityResult::Partial` or `::NoneConfigured`),
+  not a hard error. Log the missing fields and continue.
 
 - Risk: shelling out to `git config` from the host introduces a
   dependency on host tooling. Severity: low. Likelihood: low. Mitigation:
-  abstract host command execution behind a trait (`HostCommandRunner`)
-  that can be mocked in tests. Production implementation uses
-  `std::process::Command`.
+  abstract host command execution behind a trait (`HostCommandRunner`) that can
+  be mocked in tests. Production implementation uses `std::process::Command`.
 
 - Risk: container exec for `git config --global` could fail if the
-  container image does not have `git` installed. Severity: medium.
-  Likelihood: low. Mitigation: propagate the exec error; the operator
-  must ensure the container image includes `git`.
+  container image does not have `git` installed. Severity: medium. Likelihood:
+  low. Mitigation: propagate the exec error; the operator must ensure the
+  container image includes `git`.
 
 ## Progress
 
@@ -123,32 +121,32 @@ escalation, not workarounds.
   convention (`docs/reliable-testing-in-rust-via-dependency-injection.md`).
   Tests can inject a mock that returns configurable identity values without
   requiring `git` to be installed. The trait has a single method
-  `run_command(&self, program: &str, args: &[&str]) -> io::Result<Output>`
-  with a production implementation wrapping `std::process::Command`.
+  `run_command(&self, program: &str, args: &[&str]) -> io::Result<Output>` with
+  a production implementation wrapping `std::process::Command`.
 
 - Decision: place the engine-level Git identity module at
   `src/engine/connection/git_identity/mod.rs`, following the pattern
   established by `upload_credentials/`, `create_container/`, and `exec/`.
-  Rationale: Git identity configuration uses the same
-  `ContainerExecClient` trait seam to execute commands in the container,
-  making it a peer of the existing connection submodules.
+  Rationale: Git identity configuration uses the same `ContainerExecClient`
+  trait seam to execute commands in the container, making it a peer of the
+  existing connection submodules.
 
 - Decision: return a `GitIdentityResult` enum with three variants:
   `Configured { name, email }`, `Partial { name, email, warnings }`, and
   `NoneConfigured { warnings }`. Rationale: the roadmap explicitly states
-  missing identity should produce a warning rather than failure. Callers
-  can inspect the result to decide how to surface warnings.
+  missing identity should produce a warning rather than failure. Callers can
+  inspect the result to decide how to surface warnings.
 
 - Decision: Git identity configuration does not add new config fields to
   `AppConfig`. Rationale: the identity is read dynamically from the host
-  `git config` at runtime, not from podbot's own configuration. This
-  avoids configuration sprawl and follows the design doc which says
-  "reading from the host".
+  `git config` at runtime, not from podbot's own configuration. This avoids
+  configuration sprawl and follows the design doc which says "reading from the
+  host".
 
 - Decision: use `ExecMode::Detached` for `git config --global` commands
-  within the container. Rationale: these are non-interactive commands
-  that do not need stdin/stdout streaming. Detached mode is simpler and
-  avoids the attached-session lifecycle.
+  within the container. Rationale: these are non-interactive commands that do
+  not need stdin/stdout streaming. Detached mode is simpler and avoids the
+  attached-session lifecycle.
 
 ## Outcomes and retrospective
 
@@ -156,9 +154,9 @@ escalation, not workarounds.
 
 ## Context and orientation
 
-Podbot is a Rust application that runs AI coding agents (Claude Code,
-Codex) in sandboxed containers. It provides two delivery surfaces: a
-command-line interface (CLI) binary and a Rust library. The project lives at
+Podbot is a Rust application that runs AI coding agents (Claude Code, Codex) in
+sandboxed containers. It provides two delivery surfaces: a command-line
+interface (CLI) binary and a Rust library. The project lives at
 `/home/user/project`.
 
 The design document (`docs/podbot-design.md`, line 100) specifies:
@@ -166,8 +164,8 @@ The design document (`docs/podbot-design.md`, line 100) specifies:
 > **Configure Git identity** by reading `user.name` and `user.email`
 > from the host and executing `git config --global` within the container.
 
-This is step 3 in the container lifecycle, after credential injection
-(step 2) and before GitHub token creation (step 4).
+This is step 3 in the container lifecycle, after credential injection (step 2)
+and before GitHub token creation (step 4).
 
 Key files:
 
@@ -185,28 +183,26 @@ Key files:
 Existing patterns to follow:
 
 - **Trait seam for DI**: `ContainerExecClient` for container commands;
-  `ContainerUploader` for archive upload; `ContainerCreator` for
-  container creation. Each trait has a `Docker` impl and a `mock!` for
-  testing.
+  `ContainerUploader` for archive upload; `ContainerCreator` for container
+  creation. Each trait has a `Docker` impl and a `mock!` for testing.
 - **Module structure**: `src/engine/connection/<feature>/mod.rs` with
   submodules for internals and `tests/`.
 - **BDD tests**: `tests/bdd_<name>.rs` + `tests/bdd_<name>_helpers/` +
   `tests/features/<name>.feature`.
 - **Error handling**: `thiserror` enums in library; `eyre` at CLI
-  boundary. Use `ContainerError::ExecFailed` for git config exec
-  failures.
+  boundary. Use `ContainerError::ExecFailed` for git config exec failures.
 
 ## Plan of work
 
 ### Stage A: Engine-level Git identity module
 
-Create the engine submodule that handles both host-side Git config
-reading and container-side Git config setting.
+Create the engine submodule that handles both host-side Git config reading and
+container-side Git config setting.
 
 #### A.1: Create `src/engine/connection/git_identity/host_reader.rs`
 
-This file defines the trait for running commands on the host and the
-function to read Git identity from the host.
+This file defines the trait for running commands on the host and the function
+to read Git identity from the host.
 
 ```rust
 //! Host-side Git identity reading.
@@ -652,8 +648,8 @@ pub use connection::{
 
 #### B.1: Create `src/api/configure_git_identity.rs`
 
-API-level orchestration function that composes host reading and
-container configuration.
+API-level orchestration function that composes host reading and container
+configuration.
 
 ```rust
 //! Git identity configuration orchestration.
@@ -780,25 +776,24 @@ Feature: Git identity configuration
 
 #### C.2: Create `tests/bdd_git_identity_helpers/state.rs`
 
-State struct with `Slot<T>` fields for host identity, container ID,
-engine availability, and result.
+State struct with `Slot<T>` fields for host identity, container ID, engine
+availability, and result.
 
 #### C.3: Create `tests/bdd_git_identity_helpers/steps.rs`
 
-Given/when step definitions using `mock!` for both `HostCommandRunner`
-and `ContainerExecClient`. The `when` step creates a tokio runtime,
-builds `GitIdentityParams`, and invokes
-`configure_container_git_identity()`.
+Given/when step definitions using `mock!` for both `HostCommandRunner` and
+`ContainerExecClient`. The `when` step creates a tokio runtime, builds
+`GitIdentityParams`, and invokes `configure_container_git_identity()`.
 
 #### C.4: Create `tests/bdd_git_identity_helpers/assertions.rs`
 
-Then step definitions for verifying `GitIdentityResult` variants,
-configured values, warnings, and error outcomes.
+Then step definitions for verifying `GitIdentityResult` variants, configured
+values, warnings, and error outcomes.
 
 #### C.5: Create `tests/bdd_git_identity_helpers/mod.rs`
 
-Re-export hub with `StepResult<T>` type alias and
-`#[expect(unused_imports)]` on step/assertion imports.
+Re-export hub with `StepResult<T>` type alias and `#[expect(unused_imports)]`
+on step/assertion imports.
 
 #### C.6: Create `tests/bdd_git_identity.rs`
 
@@ -810,14 +805,14 @@ Scenario bindings using `#[scenario]` macros, one function per scenario.
 
 #### D.1: Update `docs/podbot-design.md`
 
-No structural changes needed; the design doc already describes step 3
-(Git identity configuration). If the module structure section exists,
-add the `git_identity/` entry under `engine/connection/`.
+No structural changes needed; the design doc already describes step 3 (Git
+identity configuration). If the module structure section exists, add the
+`git_identity/` entry under `engine/connection/`.
 
 #### D.2: Update `docs/users-guide.md`
 
-Add a "Git identity configuration" section under "Container creation
-behaviour" (or similar):
+Add a "Git identity configuration" section under "Container creation behaviour"
+(or similar):
 
 ```markdown
 ### Git identity configuration
@@ -925,30 +920,30 @@ No new external crate dependencies are required.
 
 ## Files to create
 
-| File | Purpose |
-| --- | --- |
-| `src/engine/connection/git_identity/mod.rs` | Module hub and re-exports |
-| `src/engine/connection/git_identity/host_reader.rs` | Host Git config reader trait and impl |
-| `src/engine/connection/git_identity/container_configurator.rs` | Container `git config` executor |
-| `src/engine/connection/git_identity/tests.rs` | Unit tests for host reader |
-| `src/api/configure_git_identity.rs` | API orchestration function |
-| `tests/features/git_identity.feature` | BDD scenarios |
-| `tests/bdd_git_identity.rs` | Scenario bindings |
-| `tests/bdd_git_identity_helpers/mod.rs` | Re-exports |
-| `tests/bdd_git_identity_helpers/state.rs` | State + fixture |
-| `tests/bdd_git_identity_helpers/steps.rs` | Given/when steps |
-| `tests/bdd_git_identity_helpers/assertions.rs` | Then assertions |
+| File                                                           | Purpose                               |
+| -------------------------------------------------------------- | ------------------------------------- |
+| `src/engine/connection/git_identity/mod.rs`                    | Module hub and re-exports             |
+| `src/engine/connection/git_identity/host_reader.rs`            | Host Git config reader trait and impl |
+| `src/engine/connection/git_identity/container_configurator.rs` | Container `git config` executor       |
+| `src/engine/connection/git_identity/tests.rs`                  | Unit tests for host reader            |
+| `src/api/configure_git_identity.rs`                            | API orchestration function            |
+| `tests/features/git_identity.feature`                          | BDD scenarios                         |
+| `tests/bdd_git_identity.rs`                                    | Scenario bindings                     |
+| `tests/bdd_git_identity_helpers/mod.rs`                        | Re-exports                            |
+| `tests/bdd_git_identity_helpers/state.rs`                      | State + fixture                       |
+| `tests/bdd_git_identity_helpers/steps.rs`                      | Given/when steps                      |
+| `tests/bdd_git_identity_helpers/assertions.rs`                 | Then assertions                       |
 
 ## Files to modify
 
-| File | Change |
-| --- | --- |
-| `src/engine/connection/mod.rs` | Add `mod git_identity;` and re-exports |
-| `src/engine/mod.rs` | Add Git identity types to `pub use` block |
-| `src/api/mod.rs` | Add `mod configure_git_identity;` and re-export |
-| `docs/podbot-design.md` | Add `git_identity/` module entry if needed |
-| `docs/users-guide.md` | Add Git identity configuration section |
-| `docs/podbot-roadmap.md` | Mark Step 4.1 tasks as done |
+| File                           | Change                                          |
+| ------------------------------ | ----------------------------------------------- |
+| `src/engine/connection/mod.rs` | Add `mod git_identity;` and re-exports          |
+| `src/engine/mod.rs`            | Add Git identity types to `pub use` block       |
+| `src/api/mod.rs`               | Add `mod configure_git_identity;` and re-export |
+| `docs/podbot-design.md`        | Add `git_identity/` module entry if needed      |
+| `docs/users-guide.md`          | Add Git identity configuration section          |
+| `docs/podbot-roadmap.md`       | Mark Step 4.1 tasks as done                     |
 
 ## Validation and acceptance
 
@@ -978,11 +973,11 @@ make test 2>&1 | tee /tmp/test-4-1-1.log
 
 ## Idempotence and recovery
 
-All stages are additive and can be rerun safely. If partial edits leave
-the tree failing, revert only incomplete hunks and replay the current
-stage. `cargo clean -p podbot` may be needed after modifying feature
-files (rstest-bdd reads them at compile time). Gate logs stored under
-`/tmp` with unique names per run.
+All stages are additive and can be rerun safely. If partial edits leave the
+tree failing, revert only incomplete hunks and replay the current stage.
+`cargo clean -p podbot` may be needed after modifying feature files (rstest-bdd
+reads them at compile time). Gate logs stored under `/tmp` with unique names
+per run.
 
 ## Implementation order
 

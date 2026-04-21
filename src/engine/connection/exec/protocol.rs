@@ -78,6 +78,10 @@ impl ProtocolSessionOptions {
 }
 
 struct HeldOpenStdin {
+    // `tokio::io::duplex(1)` gives us the smallest possible in-memory pipe to
+    // keep `reader` and `_writer_guard` alive without producing an immediate
+    // EOF. No bytes are ever written through this seam; the 1-byte buffer just
+    // satisfies Tokio's duplex constructor while avoiding wasted memory.
     reader: tokio::io::DuplexStream,
     _writer_guard: tokio::io::DuplexStream,
 }

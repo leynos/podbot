@@ -19,15 +19,6 @@ pub use configure_git_identity::{GitIdentityParams, configure_container_git_iden
 #[doc(hidden)]
 pub use exec::exec_with_client_for_tests;
 pub use exec::{ExecContext, ExecMode, ExecRequest, exec};
-/// Advanced exec helper for callers that already manage engine connections.
-///
-/// This function exists for low-level embedders and test harnesses that need
-/// to inject or reuse a [`crate::engine::ContainerExecClient`]. Because it
-/// depends directly on the engine trait surface, it is more coupled to
-/// internals than the small stable embedding boundary centred on
-/// [`ExecRequest`], [`ExecContext`], and [`exec`].
-#[doc(hidden)]
-pub use exec::exec_with_client;
 
 use crate::config::AppConfig;
 use crate::error::Result as PodbotResult;

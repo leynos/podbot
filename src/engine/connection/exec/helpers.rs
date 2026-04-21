@@ -253,9 +253,13 @@ mod tests {
         assert_eq!(options.output_capacity, case.expected_output_capacity);
     }
 
-    #[test]
-    fn map_create_exec_error_includes_container_id_and_context() {
-        let err = map_create_exec_error("sandbox", "boom");
+    #[rstest::rstest]
+    #[case::create("create exec failed: boom", map_create_exec_error("sandbox", "boom"))]
+    #[case::start("start exec failed: boom", map_start_exec_error("sandbox", "boom"))]
+    fn exec_error_mappers_include_container_id_and_prefix(
+        #[case] expected_message: &str,
+        #[case] err: crate::error::PodbotError,
+    ) {
         assert!(
             matches!(
                 err,
@@ -265,25 +269,7 @@ mod tests {
                         ref message,
                     }
                 ) if container_id == "sandbox"
-                    && message == "create exec failed: boom"
-            ),
-            "unexpected error: {err:?}",
-        );
-    }
-
-    #[test]
-    fn map_start_exec_error_includes_container_id_and_context() {
-        let err = map_start_exec_error("sandbox", "boom");
-        assert!(
-            matches!(
-                err,
-                crate::error::PodbotError::Container(
-                    crate::error::ContainerError::ExecFailed {
-                        ref container_id,
-                        ref message,
-                    }
-                ) if container_id == "sandbox"
-                    && message == "start exec failed: boom"
+                    && message == expected_message
             ),
             "unexpected error: {err:?}",
         );
@@ -403,25 +389,12 @@ mod tests {
         assert_eq!(result, cmd);
     }
 
-    #[test]
-    fn validate_required_field_rejects_empty_string() {
-        let err =
-            validate_required_field("container", "").expect_err("empty field should be rejected");
-        assert!(
-            matches!(
-                err,
-                crate::error::PodbotError::Config(
-                    crate::error::ConfigError::MissingRequired { ref field }
-                ) if field == "container"
-            ),
-            "unexpected error: {err:?}",
-        );
-    }
-
-    #[test]
-    fn validate_required_field_rejects_whitespace_only() {
-        let err = validate_required_field("container", "   ")
-            .expect_err("whitespace-only field should be rejected");
+    #[rstest::rstest]
+    #[case::empty("")]
+    #[case::whitespace_only("   ")]
+    fn validate_required_field_rejects_blank_input(#[case] input: &str) {
+        let err = validate_required_field("container", input)
+            .expect_err("blank field should be rejected");
         assert!(
             matches!(
                 err,

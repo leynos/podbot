@@ -54,6 +54,20 @@ pub(super) fn exec_failed(container_id: &str, message: impl Into<String>) -> Pod
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::{fixture, rstest};
+
+    enum OutsideTokioOutcome {
+        Ok,
+        Err,
+    }
+
+    #[fixture]
+    fn current_thread_runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should be created")
+    }
 
     #[test]
     fn exec_failed_produces_container_exec_failed_error() {
@@ -87,41 +101,38 @@ mod tests {
         );
     }
 
-    #[test]
-    fn block_on_runtime_returns_ok_result_outside_tokio() {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("runtime should be created");
-        let handle = rt.handle().clone();
+    #[rstest]
+    #[case::ok(OutsideTokioOutcome::Ok)]
+    #[case::err(OutsideTokioOutcome::Err)]
+    fn block_on_runtime_maps_outcomes_outside_tokio(
+        current_thread_runtime: tokio::runtime::Runtime,
+        #[case] outcome: OutsideTokioOutcome,
+    ) {
+        let handle = current_thread_runtime.handle().clone();
 
-        let result: Result<u32, crate::error::PodbotError> =
-            block_on_runtime(&handle, async { Ok(42_u32) });
+        match outcome {
+            OutsideTokioOutcome::Ok => {
+                let result: Result<u32, crate::error::PodbotError> =
+                    block_on_runtime(&handle, async { Ok(42_u32) });
 
-        assert_eq!(result.expect("future should resolve to Ok(42)"), 42);
-    }
+                assert_eq!(result.expect("future should resolve to Ok(42)"), 42);
+            }
+            OutsideTokioOutcome::Err => {
+                let result: Result<(), crate::error::PodbotError> =
+                    block_on_runtime(&handle, async { Err(exec_failed("c", "injected error")) });
 
-    #[test]
-    fn block_on_runtime_propagates_err_result_outside_tokio() {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("runtime should be created");
-        let handle = rt.handle().clone();
-
-        let result: Result<(), crate::error::PodbotError> =
-            block_on_runtime(&handle, async { Err(exec_failed("c", "injected error")) });
-
-        let err = result.expect_err("future should resolve to Err");
-        assert!(
-            matches!(
-                err,
-                crate::error::PodbotError::Container(
-                    crate::error::ContainerError::ExecFailed { ref message, .. }
-                ) if message == "injected error"
-            ),
-            "unexpected error: {err:?}",
-        );
+                let err = result.expect_err("future should resolve to Err");
+                assert!(
+                    matches!(
+                        err,
+                        crate::error::PodbotError::Container(
+                            crate::error::ContainerError::ExecFailed { ref message, .. }
+                        ) if message == "injected error"
+                    ),
+                    "unexpected error: {err:?}",
+                );
+            }
+        }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
