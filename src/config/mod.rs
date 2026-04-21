@@ -53,6 +53,8 @@ pub use env_vars::env_var_names;
 pub use hosting::{McpAllowedOriginPolicy, McpAuthTokenPolicy, McpBindStrategy, McpConfig};
 pub use load_options::{ConfigLoadOptions, ConfigOverrides};
 pub use loader::{load_config, load_config_with_env};
+#[cfg(feature = "internal")]
+pub use types::merge_from_layers_for_tests;
 pub use types::{AppConfig, CredsConfig, GitHubConfig, SandboxConfig, SelinuxLabelMode};
 pub use validation::CommandIntent;
 pub(crate) use workspace::default_host_mount_container_path;

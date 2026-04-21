@@ -22,6 +22,7 @@
 
 use std::io;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bollard::container::LogOutput;
@@ -41,6 +42,7 @@ pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     stdin: HostStdin,
     stdout: HostStdout,
     stderr: HostStderr,
+    options: ProtocolSessionOptions,
 }
 
 /// Allow a short grace period for EOF- and flush-driven completion paths to
@@ -58,7 +60,7 @@ const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
 /// low while preventing unbounded accumulation during high-throughput scenarios.
 const STDIN_BUFFER_CAPACITY: usize = 65_536;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct ProtocolSessionOptions {
     disable_stdin_forwarding: bool,
 }
@@ -76,6 +78,21 @@ impl ProtocolSessionOptions {
     }
 }
 
+struct HeldOpenStdin {
+    reader: tokio::io::DuplexStream,
+    _writer_guard: tokio::io::DuplexStream,
+}
+
+impl tokio::io::AsyncRead for HeldOpenStdin {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.reader).poll_read(cx, buf)
+    }
+}
+
 impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     /// Create a host-IO bundle for a protocol proxy session.
     pub(super) const fn new(
@@ -87,7 +104,13 @@ impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, H
             stdin: host_stdin,
             stdout: host_stdout,
             stderr: host_stderr,
+            options: ProtocolSessionOptions::new(),
         }
+    }
+
+    pub(super) const fn with_options(mut self, options: ProtocolSessionOptions) -> Self {
+        self.options = options;
+        self
     }
 }
 
@@ -101,13 +124,18 @@ pub(super) async fn run_protocol_session_async_with_options(
         protocol_host_stdin(options),
         tokio::io::stdout(),
         tokio::io::stderr(),
-    );
+    )
+    .with_options(options);
     run_protocol_session_with_io_async(request, output, input, stdio).await
 }
 
 fn protocol_host_stdin(options: ProtocolSessionOptions) -> Pin<Box<dyn AsyncRead + Send>> {
     if options.disable_stdin_forwarding {
-        Box::pin(tokio::io::empty())
+        let (writer_guard, reader) = tokio::io::duplex(1);
+        Box::pin(HeldOpenStdin {
+            reader,
+            _writer_guard: writer_guard,
+        })
     } else {
         default_host_stdin()
     }
@@ -129,6 +157,7 @@ where
         stdin: host_stdin,
         stdout: mut host_stdout,
         stderr: mut host_stderr,
+        options,
     } = stdio;
     let stdin_task =
         spawn_stdin_forwarding_task(host_stdin, input, forward_host_stdin_to_exec_async);
@@ -139,7 +168,8 @@ where
         &mut host_stderr,
     )
     .await;
-    let stdin_result = settle_stdin_forwarding_task(request.container_id(), stdin_task).await;
+    let stdin_result =
+        settle_stdin_forwarding_task(request.container_id(), stdin_task, options).await;
     output_result?;
     stdin_result
 }
@@ -147,6 +177,7 @@ where
 async fn settle_stdin_forwarding_task(
     container_id: &str,
     mut stdin_task: JoinHandle<io::Result<()>>,
+    options: ProtocolSessionOptions,
 ) -> Result<(), PodbotError> {
     let Ok(join_result) = timeout(STDIN_SETTLE_TIMEOUT, &mut stdin_task).await else {
         // The container output path has already completed, so stdin can be
@@ -155,6 +186,9 @@ async fn settle_stdin_forwarding_task(
         // cleanly before shutdown, so protocol mode must surface that failure
         // instead of reporting success with potentially truncated input.
         abort_stdin_forwarding_task(stdin_task);
+        if options.disable_stdin_forwarding {
+            return Ok(());
+        }
         return Err(exec_failed(
             container_id,
             "stdin forwarding did not complete before protocol session shutdown",

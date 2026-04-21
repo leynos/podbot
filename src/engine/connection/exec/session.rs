@@ -79,10 +79,13 @@ mod tests {
         let enabled_proto = protocol_session_options(enabled_opts);
         let disabled_proto = protocol_session_options(disabled_opts);
 
-        assert_ne!(
-            format!("{enabled_proto:?}"),
-            format!("{disabled_proto:?}"),
-            "protocol session options should differ when the flag differs",
+        assert_eq!(
+            enabled_proto,
+            ProtocolSessionOptions::new().with_stdin_forwarding_disabled(false),
+        );
+        assert_eq!(
+            disabled_proto,
+            ProtocolSessionOptions::new().with_stdin_forwarding_disabled(true),
         );
     }
 }

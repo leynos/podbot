@@ -269,8 +269,7 @@ When adding a new execution mode:
 ### 8.3. Parameterized tests
 
 Use `#[rstest(...)]` to eliminate duplicated test cases. Group related
-parameters in structs when the parameter list exceeds three items. For
-example:
+parameters in structs when the parameter list exceeds three items. For example:
 
 ```rust
 #[rstest]
@@ -379,13 +378,46 @@ stable modules without a corresponding ADR update.
 See [podbot-design.md, Error handling](podbot-design.md#error-handling) for the
 full error hierarchy.
 
-## 10. GitHub error classification module
+### 10.3. Feature gate verification
+
+The `cli` Cargo feature gates the `podbot::cli` module and the `podbot` binary
+target. When modifying library code, verify that the crate compiles without the
+CLI feature to ensure the library boundary remains self-contained:
+
+```bash
+cargo check --no-default-features
+```
+
+This confirms that library consumers who depend on podbot with
+`default-features = false` will not encounter compilation errors caused by
+unconditional imports of CLI types. The full feature matrix tested during
+development is:
+
+| Command                             | What it verifies                 |
+| ----------------------------------- | -------------------------------- |
+| `cargo check --no-default-features` | Library compiles without CLI     |
+| `cargo check --all-features`        | Everything compiles together     |
+| `make test`                         | All tests pass with all features |
+
+### 10.4. Feature gate maintenance
+
+When adding new public modules or dependencies:
+
+- If the module is part of the stable library boundary (`api`, `config`,
+  `error`), it must compile without the `cli` feature.
+- If the module depends on `clap` or other CLI-only crates, gate it behind
+  `#[cfg(feature = "cli")]` in `src/lib.rs` and mark the dependency as
+  `optional = true` in `Cargo.toml`.
+- Run `cargo check --no-default-features` after any change to the public
+  module structure to verify the boundary is intact.
+
+## 12. GitHub error classification module
 
 The GitHub App credential validation system uses a layered error classification
 architecture to transform HTTP status codes and error messages into actionable
 user-facing diagnostics.
 
-### 10.1. Module structure
+### 12.1. Module structure
 
 Error classification logic is separated into `src/github/classify.rs` to keep
 the main `src/github/mod.rs` file under the 400-line budget. The classify
@@ -398,7 +430,7 @@ module provides:
 - `is_rate_limited(message: &str) -> bool` — distinguishes rate-limit 403s
   from permission 403s using case-insensitive substring matching
 
-### 10.2. Visibility and testing
+### 12.2. Visibility and testing
 
 The classification functions use Rust's visibility controls to maintain a clean
 public API surface:
@@ -414,7 +446,7 @@ import `pub(crate)` items. The `test_classify_error_message` function in
 `src/github/mod.rs` provides a `#[doc(hidden)]` public wrapper for BDD tests
 that need to construct mock error messages matching production output.
 
-### 10.3. Error message format
+### 12.3. Error message format
 
 All classified error messages follow this template:
 
@@ -432,7 +464,7 @@ classifications as follows:
 - **500–599** — GitHub API unavailable
 - **other** — unexpected response
 
-### 10.4. Extending the classifier
+### 12.4. Extending the classifier
 
 To add a new HTTP status code classification:
 
@@ -443,14 +475,14 @@ To add a new HTTP status code classification:
 4. Add a BDD scenario to `tests/features/github_credential_errors.feature` if
    the classification affects user-visible orchestration behaviour.
 
-### 10.5. Rate-limit detection
+### 12.5. Rate-limit detection
 
 The `is_rate_limited` function uses ASCII case-insensitive byte comparison to
 avoid allocating a lowercased string on the error path. It scans for the
 substring "rate limit" using `as_bytes().windows().eq_ignore_ascii_case()`.
 This is safe because GitHub's error messages are ASCII.
 
-## 11. BDD testing patterns for credential validation
+## 13. BDD testing patterns for credential validation
 
 Credential validation scenarios use the rstest-bdd framework with a four-file
 helper structure:
@@ -464,7 +496,7 @@ helper structure:
 - `tests/bdd_github_credential_errors_helpers/assertions.rs` — Then step
   assertions
 
-### 11.1. Mock client construction
+### 13.1. Mock client construction
 
 BDD tests use `mockall::mock!` to define a local `MockGitHubAppClient` because
 `#[cfg_attr(test, mockall::automock)]` on the trait is only available within
@@ -472,14 +504,14 @@ the main crate's test configuration. The `configure_mock_client` helper
 constructs mock responses by calling `test_classify_error_message` to ensure
 test expectations match production output exactly.
 
-### 11.2. Step result pattern
+### 13.2. Step result pattern
 
 All step functions return `StepResult<()>` (a type alias for
 `Result<(), String>`) to satisfy clippy's `expect_used` lint. Use
 `.ok_or_else(|| String::from("error message"))` instead of `.expect()` when
 extracting `Slot` values from scenario state.
 
-## 12. Dev-dependencies for test construction
+## 14. Dev-dependencies for test construction
 
 The `Cargo.toml` `[dev-dependencies]` section includes:
 
@@ -492,9 +524,9 @@ The unit tests do not directly import `http` types despite octocrab's use of
 `http::StatusCode`, because the tests access status codes through octocrab's
 public API rather than constructing HTTP responses directly.
 
-## 13. Code style conventions
+## 15. Code style conventions
 
-### 13.1. File length budgets
+### 15.1. File length budgets
 
 The codebase enforces a 400-line limit per file to maintain readability. When a
 module approaches this budget:
@@ -508,7 +540,7 @@ The GitHub module demonstrates this pattern: classification functions were
 extracted from `src/github/mod.rs` into `src/github/classify.rs` when `mod.rs`
 exceeded 400 lines.
 
-### 13.2. Module-level documentation
+### 15.2. Module-level documentation
 
 All Rust modules must begin with `//!` doc comments describing the module's
 purpose. This applies to:
@@ -517,6 +549,37 @@ purpose. This applies to:
 - Test modules in `src/` (e.g., `credential_error_tests.rs`)
 - Integration test harnesses in `tests/`
 - Helper submodules under `tests/`
+
+## 16. Behavioural test infrastructure
+
+Podbot uses [rstest-bdd](https://crates.io/crates/rstest-bdd) for
+behaviour-driven development (BDD) tests alongside standard `rstest`
+parameterized integration tests. The two test styles serve complementary
+purposes:
+
+- **BDD scenario tests** (`tests/bdd_*.rs`) are driven by Gherkin feature
+  files in `tests/features/`. Each scenario test file declares a helper module
+  (`tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
+  `then`), shared state, and assertion helpers. Feature files are read at
+  compile time; changes to `.feature` content may require
+  `cargo clean -p podbot` to invalidate incremental compilation caches.
+- **Parameterized integration tests** (`tests/library_embedding.rs` and
+  others) use `rstest` fixtures and `#[case]` parameters directly, without
+  feature files. These tests exercise the library API from a host-application
+  perspective.
+
+The BDD helper module layout follows a consistent pattern:
+
+```plaintext
+tests/bdd_<domain>_helpers/
+  mod.rs          -- re-exports and shared types
+  state.rs        -- ScenarioState struct and fixture
+  steps.rs        -- Given/When step definitions
+  assertions.rs   -- Then step definitions
+```
+
+Every test module and helper file must begin with a module-level (`//!`) doc
+comment explaining its purpose.
 
 Module docs should be concise (2–4 lines) and focus on what the module does,
 not how it works. Implementation details belong in function-level `///` docs.

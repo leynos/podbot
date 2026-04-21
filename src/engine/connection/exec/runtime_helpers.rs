@@ -1,5 +1,7 @@
 //! Blocking runtime helpers for synchronous exec wrappers.
 
+use tokio::runtime::RuntimeFlavor;
+
 use crate::error::{ContainerError, PodbotError};
 
 pub(super) fn block_on_runtime<F, T>(
@@ -10,7 +12,11 @@ where
     F: std::future::Future<Output = Result<T, PodbotError>> + Send,
     T: Send,
 {
-    if tokio::runtime::Handle::try_current().is_ok() {
+    if let Ok(current_runtime) = tokio::runtime::Handle::try_current() {
+        if current_runtime.runtime_flavor() == RuntimeFlavor::MultiThread {
+            return tokio::task::block_in_place(|| runtime.block_on(future));
+        }
+
         std::thread::scope(|scope| {
             let blocking_task = scope.spawn(|| -> Result<T, PodbotError> {
                 let blocking_runtime = create_blocking_exec_runtime()?;

@@ -223,7 +223,6 @@ impl ExecContext {
 /// - connection and runtime setup failures returned while creating the
 ///   per-call [`ExecContext`]
 /// - `ContainerError::ExecFailed` if command execution fails.
-/// - `ConfigError::MissingRequired` if required fields are empty.
 ///
 /// # Examples
 ///

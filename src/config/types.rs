@@ -175,7 +175,7 @@ impl AppConfig {
     ///
     /// Returns an `OrthoError` when the accumulated JSON layers cannot be
     /// deserialized into `Self` or when the post-merge hook fails.
-    pub fn merge_from_layers<'a, I>(layers: I) -> ortho_config::OrthoResult<Self>
+    pub(crate) fn merge_from_layers<'a, I>(layers: I) -> ortho_config::OrthoResult<Self>
     where
         I: IntoIterator<Item = MergeLayer<'a>>,
     {
@@ -183,7 +183,7 @@ impl AppConfig {
             ortho_config::serde_json::Value::Object(ortho_config::serde_json::Map::new());
         let mut ctx = PostMergeContext::new(Self::prefix());
 
-        let defaults_layer = serialized_defaults_layer()?;
+        let defaults_layer = serialised_defaults_layer()?;
         ensure_defaults_layer_is_not_empty(&defaults_layer)?;
         let expected_defaults_value = defaults_layer.clone().into_value();
         merge_value(&mut merged, defaults_layer.into_value());
@@ -250,7 +250,16 @@ fn ensure_defaults_layer_matches_expected(
     Ok(())
 }
 
-fn serialized_defaults_layer() -> ortho_config::OrthoResult<MergeLayer<'static>> {
+#[cfg(feature = "internal")]
+#[doc(hidden)]
+pub fn merge_from_layers_for_tests<'a, I>(layers: I) -> ortho_config::OrthoResult<AppConfig>
+where
+    I: IntoIterator<Item = MergeLayer<'a>>,
+{
+    AppConfig::merge_from_layers(layers)
+}
+
+fn serialised_defaults_layer() -> ortho_config::OrthoResult<MergeLayer<'static>> {
     let value = ortho_config::serde_json::to_value(AppConfig::default()).map_err(|error| {
         Arc::new(ortho_config::OrthoError::Validation {
             key: String::from("defaults"),

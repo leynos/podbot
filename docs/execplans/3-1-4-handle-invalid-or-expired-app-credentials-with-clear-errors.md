@@ -27,10 +27,9 @@ for a GitHub outage to resolve.
 Observable outcome: running `make test` passes and the following new tests
 exist: unit tests in `src/github/credential_error_tests.rs` covering HTTP error
 classification and error message formatting, and behaviour-driven development
-(BDD) scenarios
-in `tests/features/github_credential_errors.feature` verifying that distinct
-credential failure modes produce the correct actionable error messages with
-remediation hints.
+(BDD) scenarios in `tests/features/github_credential_errors.feature` verifying
+that distinct credential failure modes produce the correct actionable error
+messages with remediation hints.
 
 User-visible behaviour: when GitHub credential validation fails, the user sees
 contextualized error messages such as:
@@ -59,12 +58,12 @@ Retry after the service recovers.
 - Do not modify `src/error.rs` enum variants. The existing
   `GitHubError::AuthenticationFailed { message: String }` variant is
   sufficiently expressive for all error classes because the `message` field
-  carries the classification, context, and remediation hint as a
-  human-readable string. Adding new variants would break exhaustive match
-  sites and is not justified for subclassification of a single API call.
+  carries the classification, context, and remediation hint as a human-readable
+  string. Adding new variants would break exhaustive match sites and is not
+  justified for subclassification of a single API call.
 - Keep all files under 400 lines. Current budgets: `src/github/mod.rs` is
-  296 lines (104 remaining), `src/github/tests.rs` is 398 lines (2
-  remaining — a new test submodule will be needed).
+  296 lines (104 remaining), `src/github/tests.rs` is 398 lines (2 remaining —
+  a new test submodule will be needed).
 - Use `?` operator for error propagation; no `.expect()` or `.unwrap()` in
   production code.
 - Maintain `missing_docs = "deny"` compliance. All public items require `///`
@@ -76,8 +75,9 @@ Retry after the service recovers.
 - The validation function must remain async because it makes a network call to
   GitHub.
 - Preserve the existing `GitHubAppClient` trait interface. The trait method
-  signature `fn validate_credentials(&self) -> BoxFuture<'_, Result<(),
-  GitHubError>>` must not change.
+  signature
+  `fn validate_credentials(&self) -> BoxFuture<'_, Result<(), GitHubError>>`
+  must not change.
 
 ## Tolerances (exception triggers)
 
@@ -119,14 +119,15 @@ Retry after the service recovers.
 - Risk: GitHub's App JWT has a 10-minute maximum lifetime. If the host clock
   is significantly skewed, JWTs will be rejected with a 401. The error
   classifier cannot distinguish clock skew from a genuinely wrong private key.
-  Severity: low. Likelihood: low. Mitigation: include a clock-skew hint in
-  the 401 error message as a secondary suggestion: "If the system clock is
+  Severity: low. Likelihood: low. Mitigation: include a clock-skew hint in the
+  401 error message as a secondary suggestion: "If the system clock is
   significantly skewed, JWT validation will also fail."
 
 - Risk: The test file `src/github/tests.rs` is at 398 lines, leaving only 2
   lines of budget. New tests cannot be added without splitting. Severity: low.
-  Likelihood: certain. Mitigation: create `src/github/credential_error_tests.rs`
-  as a new test submodule before adding any new unit tests.
+  Likelihood: certain. Mitigation: create
+  `src/github/credential_error_tests.rs` as a new test submodule before adding
+  any new unit tests.
 
 ## Progress
 
@@ -146,27 +147,24 @@ Retry after the service recovers.
 ## Surprises and discoveries
 
 - Octocrab v0.49.5's `Error::GitHub` variant wraps a `Box<GitHubError>`
-  with a **public** `status_code: http::StatusCode` field. No string
-  parsing is needed — status codes are directly accessible via pattern
-  matching.
+  with a **public** `status_code: http::StatusCode` field. No string parsing is
+  needed — status codes are directly accessible via pattern matching.
 
 ## Decision log
 
 - **2026-04-07 — Status code extraction strategy:** Use direct pattern
   matching on `octocrab::Error::GitHub { source, .. }` to access
-  `source.status_code`. This is type-safe, idiomatic, and robust
-  against display format changes. The `#[non_exhaustive]` attribute
-  means a wildcard arm is needed, which aligns with the "Other /
-  unexpected" classification category. String parsing rejected as
-  unnecessary.
+  `source.status_code`. This is type-safe, idiomatic, and robust against
+  display format changes. The `#[non_exhaustive]` attribute means a wildcard
+  arm is needed, which aligns with the "Other / unexpected" classification
+  category. String parsing rejected as unnecessary.
 - **2026-04-07 — Dev-dependency for test construction:** `snafu` was
-  added as an explicit dev-dependency to construct `octocrab::Error`
-  variants in unit tests (specifically, to supply
-  `snafu::Backtrace::generate()` for the `Service` variant). `http` is
-  used transitively via octocrab but was **not** added as an explicit
-  dev-dependency — the unit tests do not directly import `http` types.
-  This is strictly for test support and does not affect production
-  dependencies.
+  added as an explicit dev-dependency to construct `octocrab::Error` variants
+  in unit tests (specifically, to supply `snafu::Backtrace::generate()` for the
+  `Service` variant). `http` is used transitively via octocrab but was **not**
+  added as an explicit dev-dependency — the unit tests do not directly import
+  `http` types. This is strictly for test support and does not affect
+  production dependencies.
 
 ## Context and orientation
 
@@ -196,24 +194,22 @@ infrastructure:
 ### Key files for this task
 
 `src/github/mod.rs` (296 lines) — the GitHub module. Contains the
-`OctocrabAppClient::validate_credentials` implementation at lines 140–152.
-This is the primary target: the `map_err` closure on line 146 currently
-produces a generic message. It needs to classify the `octocrab::Error` by
-HTTP status code and produce a specific error message with remediation hints.
+`OctocrabAppClient::validate_credentials` implementation at lines 140–152. This
+is the primary target: the `map_err` closure on line 146 currently produces a
+generic message. It needs to classify the `octocrab::Error` by HTTP status code
+and produce a specific error message with remediation hints.
 
-`src/github/tests.rs` (398 lines) — unit tests. At the 400-line budget
-limit. New tests must go in a separate submodule.
+`src/github/tests.rs` (398 lines) — unit tests. At the 400-line budget limit.
+New tests must go in a separate submodule.
 
 `src/github/pem_validation.rs` (150 lines) — PEM format validation. Not
 modified by this task.
 
-`src/error.rs` (466 lines) — error type definitions. Not modified by this
-task. `GitHubError::AuthenticationFailed { message: String }` is the target
-variant.
+`src/error.rs` (466 lines) — error type definitions. Not modified by this task.
+`GitHubError::AuthenticationFailed { message: String }` is the target variant.
 
-`src/main.rs` (217 lines) — CLI entry point. Calls
-`validate_app_credentials` at lines 77–84 in `run_agent_cli`. Not modified
-by this task.
+`src/main.rs` (217 lines) — CLI entry point. Calls `validate_app_credentials`
+at lines 77–84 in `run_agent_cli`. Not modified by this task.
 
 `tests/bdd_github_credential_validation*` — existing BDD test harness for
 credential validation. The new BDD tests for error classification will follow
@@ -222,10 +218,10 @@ directory.
 
 ### How `octocrab::Error` works
 
-Octocrab v0.49.5 defines its error type in `octocrab::Error` using `snafu`.
-The enum is `#[non_exhaustive]`. When `GET /app` returns an HTTP error,
-Octocrab wraps the response in an error variant. The `Display` implementation
-includes the HTTP status code and response body. For example:
+Octocrab v0.49.5 defines its error type in `octocrab::Error` using `snafu`. The
+enum is `#[non_exhaustive]`. When `GET /app` returns an HTTP error, Octocrab
+wraps the response in an error variant. The `Display` implementation includes
+the HTTP status code and response body. For example:
 
 - 401: `"GitHub API returned error"` with status and body details
 - 404: `"GitHub API returned error"` with 404 status
@@ -257,16 +253,15 @@ determines the error classification strategy.
 Investigation steps:
 
 1. Examine the `octocrab::Error` enum definition in the octocrab source
-   (version 0.49.5). Look for variants that carry HTTP status codes or
-   response metadata.
+   (version 0.49.5). Look for variants that carry HTTP status codes or response
+   metadata.
 2. Check whether `octocrab::Error` implements `std::error::Error::source()`
-   and whether the source chain contains `http::StatusCode` or
-   `hyper::Error`.
+   and whether the source chain contains `http::StatusCode` or `hyper::Error`.
 3. Examine the `Display` output format for HTTP errors to determine if status
    codes can be reliably extracted via string matching as a fallback.
 
-Based on the investigation, design a `classify_github_api_error` function
-that accepts an `octocrab::Error` and returns a `GitHubError::AuthenticationFailed`
+Based on the investigation, design a `classify_github_api_error` function that
+accepts an `octocrab::Error` and returns a `GitHubError::AuthenticationFailed`
 with a classified message. The classifier should distinguish at minimum:
 
 **Error classification table:**
@@ -299,13 +294,12 @@ fn classify_github_api_error(error: octocrab::Error) -> GitHubError
 
 This function is private to the `github` module.
 
-Validation: investigation results recorded in Decision Log section of this
-plan.
+Validation: investigation results recorded in Decision Log section of this plan.
 
 ### Stage B: Split test file (if needed)
 
-`src/github/tests.rs` is at 398 lines. Before adding any new unit tests,
-check whether a split is needed.
+`src/github/tests.rs` is at 398 lines. Before adding any new unit tests, check
+whether a split is needed.
 
 If the file is at or near the 400-line limit:
 
@@ -322,8 +316,8 @@ Validation: `cargo check --tests` compiles without errors.
 ### Stage C: Implement error classifier in `src/github/mod.rs`
 
 Add the `classify_github_api_error` function to `src/github/mod.rs`. This
-function is called by `OctocrabAppClient::validate_credentials` instead of
-the current inline `map_err` closure.
+function is called by `OctocrabAppClient::validate_credentials` instead of the
+current inline `map_err` closure.
 
 Update the `validate_credentials` implementation from:
 
@@ -369,9 +363,9 @@ Validation: `make check-fmt && make lint` pass.
 
 ### Stage D: Unit tests for error classifier
 
-Add unit tests to the new `src/github/credential_error_tests.rs` submodule
-(or `src/github/tests.rs` if space allows). Tests exercise the classifier
-directly with constructed error values.
+Add unit tests to the new `src/github/credential_error_tests.rs` submodule (or
+`src/github/tests.rs` if space allows). Tests exercise the classifier directly
+with constructed error values.
 
 Test cases:
 
@@ -451,8 +445,8 @@ Feature: GitHub App credential error classification
     And the error includes a settings URL hint
 ```
 
-Create `tests/bdd_github_credential_errors.rs` as the BDD harness following
-the pattern of `tests/bdd_github_credential_validation.rs`.
+Create `tests/bdd_github_credential_errors.rs` as the BDD harness following the
+pattern of `tests/bdd_github_credential_validation.rs`.
 
 Create `tests/bdd_github_credential_errors_helpers/` with four files:
 
@@ -467,16 +461,15 @@ Create `tests/bdd_github_credential_errors_helpers/` with four files:
 - `mock_response: Slot<MockHttpResponse>`
 - `outcome: Slot<ValidationOutcome>`
 
-Where `MockHttpResponse` is an enum:
-`Unauthorized401`, `Forbidden403`, `NotFound404`, `ServerError503`.
-And `ValidationOutcome` reuses the same pattern:
-`Success`, `Failed { message: String }`.
+Where `MockHttpResponse` is an enum: `Unauthorized401`, `Forbidden403`,
+`NotFound404`, `ServerError503`. And `ValidationOutcome` reuses the same
+pattern: `Success`, `Failed { message: String }`.
 
-`steps.rs` defines Given and When step functions. The Given steps set up
-mock responses with specific HTTP status codes, RSA key files, and App IDs.
-The When step creates a mock `GitHubAppClient`, configures it to return
-the classified error message (matching the classifier's output for each HTTP
-status), and calls `validate_with_factory`.
+`steps.rs` defines Given and When step functions. The Given steps set up mock
+responses with specific HTTP status codes, RSA key files, and App IDs. The When
+step creates a mock `GitHubAppClient`, configures it to return the classified
+error message (matching the classifier's output for each HTTP status), and
+calls `validate_with_factory`.
 
 `assertions.rs` defines Then step functions that verify the error messages
 contain the expected classification keywords and remediation hints.
@@ -490,8 +483,8 @@ Important BDD patterns enforced (from project conventions):
 - Feature files are read at compile time; `cargo clean -p podbot` is needed
   after modifying them.
 - Local `mockall::mock!` for `GitHubAppClient` since `#[cfg_attr(test,
-  mockall::automock)]` is only available within the main crate's test
-  configuration.
+  mockall::automock)]
+  ` is only available within the main crate's test configuration.
 
 Estimated additions: approximately 200 lines across all BDD files.
 
@@ -501,10 +494,10 @@ Validation: `make test` passes with BDD scenarios green.
 
 #### `docs/users-guide.md`
 
-Add a "Credential validation errors" subsection after the existing "Private
-key file requirements" section (after the current error table at line 274).
-The new subsection documents the error messages produced during credential
-validation against the GitHub API:
+Add a "Credential validation errors" subsection after the existing "Private key
+file requirements" section (after the current error table at line 274). The new
+subsection documents the error messages produced during credential validation
+against the GitHub API:
 
 **Credential validation error messages:**
 
@@ -572,9 +565,9 @@ set -o pipefail; make nixie 2>&1 | tee /tmp/nixie-3-1-4.out
 
 ## Interfaces and dependencies
 
-No new production dependencies. `snafu` was added as an explicit
-dev-dependency (already in the transitive dependency graph via octocrab)
-for unit test construction only. The implementation uses:
+No new production dependencies. `snafu` was added as an explicit dev-dependency
+(already in the transitive dependency graph via octocrab) for unit test
+construction only. The implementation uses:
 
 - `octocrab::Octocrab` (the client type, already a dependency).
 - `octocrab::Error` (the error type, already a transitive type).
@@ -587,7 +580,8 @@ for unit test construction only. The implementation uses:
 No changes to public interfaces. The `GitHubAppClient` trait signature is
 unchanged. The `validate_app_credentials`, `validate_with_client`, and
 `validate_with_factory` function signatures are unchanged. The improvement is
-entirely in the error messages produced by `OctocrabAppClient::validate_credentials`.
+entirely in the error messages produced by
+`OctocrabAppClient::validate_credentials`.
 
 Internal addition:
 
@@ -643,8 +637,7 @@ reset to the previous commit and the stage re-attempted.
 The following clippy lints may trigger and require attention:
 
 `missing_const_for_fn`: the `classify_github_api_error` function calls
-`format!` and `String::from`, which are not `const`. This lint should not
-fire.
+`format!` and `String::from`, which are not `const`. This lint should not fire.
 
 `must_use_candidate`: the function returns `GitHubError`, not `Result`. Clippy
 may flag it. If so, add `#[must_use]` or suppress with reason.
@@ -680,17 +673,17 @@ All acceptance criteria met:
   402
 - ✓ `docs/podbot-roadmap.md` marks task complete
 
-User-visible improvement: GitHub App credential validation failures now
-produce specific, actionable error messages with remediation hints instead of
-generic "authentication failed" messages.
+User-visible improvement: GitHub App credential validation failures now produce
+specific, actionable error messages with remediation hints instead of generic
+"authentication failed" messages.
 
 ### Retrospective
 
 **What went well:**
 
 - The investigation phase correctly identified that `octocrab::Error::GitHub`
-  exposes `status_code` as a public field, enabling type-safe pattern
-  matching without string parsing.
+  exposes `status_code` as a public field, enabling type-safe pattern matching
+  without string parsing.
 - The decision to split test files before adding new tests avoided exceeding
   the 400-line budget.
 - The `#[expect]` attribute with a clear reason satisfied clippy's strict lint
@@ -701,12 +694,12 @@ generic "authentication failed" messages.
 **Challenges:**
 
 - Markdown table alignment required manual calculation to satisfy
-  markdownlint's strict column alignment rules. The existing `make fmt`
-  command failed due to missing `fd` dependency, necessitating manual
-  alignment with Python script assistance.
+  markdownlint's strict column alignment rules. The existing `make fmt` command
+  failed due to missing `fd` dependency, necessitating manual alignment with
+  Python script assistance.
 - The `needless_pass_by_value` lint required suppression because the function
-  signature is dictated by `map_err` usage. The lint tooling correctly
-  required `#[expect]` with a reason instead of `#[allow]`.
+  signature is dictated by `map_err` usage. The lint tooling correctly required
+  `#[expect]` with a reason instead of `#[allow]`.
 
 **Deviations from plan:**
 

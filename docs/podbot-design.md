@@ -526,7 +526,10 @@ The implemented library configuration API is:
 When the `cli` feature is enabled, the CLI adapter uses
 `podbot::cli::Cli::config_load_options()` to convert parsed flags into the
 library `ConfigLoadOptions`. Library embedders can disable default features to
-avoid the Clap dependency entirely.
+remove Podbot's CLI surface, but that does not guarantee that the `clap`
+dependency disappears entirely. `clap` may still be pulled in transitively via
+`ortho_config`, so embedders that must avoid Clap also need to consider
+`ortho_config`'s feature set and dependency choices.
 
 Configuration file resolution uses the following order (first match wins):
 
