@@ -2,11 +2,14 @@
 //!
 //! This module provides functionality to resolve container engine socket endpoints
 //! from multiple sources (environment variables, configuration, platform defaults)
-//! and establish connections using the `Bollard` library.
+//! and establish connections using the `Bollard` library. It also re-exports Git
+//! identity configuration utilities for propagating host Git credentials into
+//! containers.
 
 mod create_container;
 mod error_classification;
 mod exec;
+mod git_identity;
 mod health_check;
 mod upload_credentials;
 
@@ -24,6 +27,10 @@ pub use create_container::{
 pub use exec::{
     ContainerExecClient, CreateExecFuture, ExecMode, ExecRequest, ExecResult, InspectExecFuture,
     ResizeExecFuture, StartExecFuture,
+};
+pub use git_identity::{
+    GitIdentityResult, HostCommandRunner, HostGitIdentity, SystemCommandRunner,
+    configure_git_identity, read_host_git_identity,
 };
 pub use upload_credentials::{
     ContainerUploader, CredentialUploadRequest, CredentialUploadResult, UploadToContainerFuture,
@@ -348,6 +355,9 @@ impl EngineConnector {
             .unwrap_or_else(|| SocketResolver::<E>::default_socket().to_owned())
     }
 }
+
+#[cfg(test)]
+pub(crate) use git_identity::test_helpers;
 
 #[cfg(test)]
 mod tests;

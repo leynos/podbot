@@ -463,3 +463,100 @@ Documentation uses British English with Oxford spelling (`en-GB-oxendict`):
 - Capitalize proper nouns: Markdown, GitHub, Rust
 
 The words "outwith" and "caveat" are acceptable.
+
+## 14. Git identity configuration subsystem
+
+The `git_identity` module (`src/engine/connection/git_identity/`) propagates
+host Git identity (`user.name`, `user.email`) into a running container via
+`git config --global`. It is exposed through the `engine/connection` module
+and orchestrated by `src/api/configure_git_identity.rs`.
+
+### 14.1. Module layout
+
+```plaintext
+src/engine/connection/git_identity/
++-- mod.rs                   # Re-exports, git_identity_exec_failed helper
++-- host_reader.rs           # HostCommandRunner trait, SystemCommandRunner,
+|                            #   HostGitIdentity, read_host_git_identity
++-- container_configurator.rs# configure_git_identity, GitIdentityResult,
+|                            #   IdentityCompleteness classifier
++-- tests.rs                 # Unit tests for host_reader
+```
+
+### 14.2. Key types and traits
+
+- **`HostCommandRunner`**: trait abstracting `std::process::Command` execution
+  so tests can inject a mock runner without spawning a real process. Implement
+  `run_command(&self, program: &str, args: &[&str]) -> io::Result<Output>`.
+- **`SystemCommandRunner`**: production implementation that delegates to
+  `std::process::Command`.
+- **`HostGitIdentity`**: struct holding `name: Option<String>` and
+  `email: Option<String>` read from the host.
+- **`GitIdentityResult`**: enum representing the configuration outcome:
+  - `Configured { name, email }` — both fields set in the container.
+  - `Partial { name, email, warnings }` — one field set; `warnings` names
+    the missing field.
+  - `NoneConfigured { warnings }` — neither field present on the host;
+    container Git config unchanged.
+- **`GitIdentityParams`**: Application Programming Interface (API) layer
+  struct bundling the container exec client, host command runner, container
+  identifier (ID), and Tokio runtime handle for the orchestration entry
+  point.
+
+### 14.3. Execution flow
+
+For screen readers: The following flowchart shows how
+`configure_container_git_identity` reads host identity, classifies
+completeness, and delegates to the appropriate configuration path.
+
+```mermaid
+flowchart TD
+    A["configure_container_git_identity(params)"] --> B["read_host_git_identity(host_runner)"]
+    B --> C["classify_identity(identity)"]
+    C -->|Complete| D["configure_complete_identity"]
+    C -->|Partial| E["configure_partial_identity"]
+    C -->|None| F["GitIdentityResult::NoneConfigured"]
+    D --> G["set_git_config user.name"]
+    D --> H["set_git_config user.email"]
+    E --> I["set_git_config for present fields only"]
+    G & H --> J["GitIdentityResult::Configured"]
+    I --> K["GitIdentityResult::Partial"]
+```
+
+_Figure 2: Git identity configuration execution flow._
+
+### 14.4. Dependency injection (DI) pattern
+
+Following the project's dependency injection (DI) convention (see
+[reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md)),
+all external process calls are abstracted behind `HostCommandRunner`. The
+`configure_git_identity` function accepts a `ContainerExecClient` for the
+same reason. Neither function spawns processes or calls the container engine
+directly; callers inject the concrete implementations.
+
+### 14.5. Error handling
+
+- Missing host fields are not errors; they produce `Partial` or
+  `NoneConfigured` results with warning strings drawn from the
+  `MISSING_NAME_WARNING` and `MISSING_EMAIL_WARNING` constants in
+  `container_configurator.rs`.
+- Container-side failures (non-zero `git config` exit code) map to
+  `PodbotError::Container(ContainerError::ExecFailed { container_id,
+  message })` via the `git_identity_exec_failed` helper in `mod.rs`.
+- Host-side input/output (IO) failures (e.g. `git` not installed) are
+  silently treated as `None` for the affected field; only a `Partial` or
+  `NoneConfigured` result is returned.
+
+### 14.6. Adding a new identity field
+
+1. Add the field to `HostGitIdentity` in `host_reader.rs`.
+2. Update `read_host_git_identity` to populate the new field.
+3. Add the field to `GitIdentityResult` variants as needed.
+4. Update `classify_identity` and `configure_complete_identity` /
+   `configure_partial_identity` in `container_configurator.rs`.
+5. Add a `MISSING_<FIELD>_WARNING` constant and include it in the warning
+   vectors for `Partial` and `NoneConfigured` paths.
+6. Add a `#[case]` row to `read_identity_with_ok_responses` in `tests.rs`.
+7. Add Behaviour-Driven Development (BDD) scenarios in
+   `tests/features/git_identity.feature` and matching step definitions.
+8. Update this section and `docs/users-guide.md`.

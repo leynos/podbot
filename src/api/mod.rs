@@ -2,16 +2,21 @@
 //!
 //! This module provides public orchestration functions for each podbot
 //! command: [`exec`], [`run_agent`], [`stop_container`], [`list_containers`],
-//! and [`run_token_daemon`]. These functions contain the business logic that
-//! was previously embedded in the CLI binary, making it available to both
-//! the CLI adapter and library embedders.
+//! [`run_token_daemon`], and [`configure_container_git_identity`]. These
+//! functions contain the business logic that was previously embedded in the
+//! CLI binary, making it available to both the CLI adapter and library
+//! embedders.
 //!
 //! All functions accept library-owned types (not clap types) and return
-//! [`crate::error::Result<CommandOutcome>`]. They do not print to
+//! [`crate::error::Result<T>`] — for example, [`run_token_daemon`] returns
+//! `PodbotResult<CommandOutcome>` while [`configure_container_git_identity`]
+//! returns `PodbotResult<GitIdentityResult>`. They do not print to
 //! stdout/stderr or call `std::process::exit`.
 
+mod configure_git_identity;
 mod exec;
 
+pub use configure_git_identity::{GitIdentityParams, configure_container_git_identity};
 pub use exec::{ExecParams, exec};
 
 use crate::config::AppConfig;
