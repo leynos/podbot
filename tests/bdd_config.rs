@@ -2,6 +2,7 @@
 //!
 //! These tests validate the configuration loading and default behaviour using
 //! rstest-bdd.
+#![cfg(feature = "internal")]
 
 mod bdd_config_helpers;
 

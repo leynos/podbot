@@ -33,7 +33,6 @@ use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
 use super::helpers::spawn_stdin_forwarding_task;
-use super::host_io::default_host_stdin;
 use super::{ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
@@ -137,7 +136,7 @@ fn protocol_host_stdin(options: ProtocolSessionOptions) -> Pin<Box<dyn AsyncRead
             _writer_guard: writer_guard,
         })
     } else {
-        default_host_stdin()
+        Box::pin(tokio::io::stdin())
     }
 }
 

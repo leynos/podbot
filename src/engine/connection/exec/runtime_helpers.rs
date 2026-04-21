@@ -136,4 +136,17 @@ mod tests {
             99,
         );
     }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn block_on_runtime_resolves_future_inside_current_thread_tokio_context() {
+        let handle = tokio::runtime::Handle::current();
+
+        let result: Result<u32, crate::error::PodbotError> =
+            block_on_runtime(&handle, async { Ok(42_u32) });
+
+        assert_eq!(
+            result.expect("future should resolve to Ok(42) inside current-thread Tokio"),
+            42,
+        );
+    }
 }

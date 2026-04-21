@@ -349,7 +349,7 @@ The semver-stable surface for library embedders is limited to three modules:
 |                  | `run_agent`, `run_token_daemon`, `CommandOutcome`      |
 | `podbot::config` | `AppConfig`, `GitHubConfig`, and related configuration |
 |                  | types                                                  |
-| `podbot::error`  | `PodbotError`, `PodbotResult`, error variant enums     |
+| `podbot::error`  | `PodbotError`, `Result<T>`, error variant enums        |
 
 Embedders must not import `podbot::cli`, `podbot::engine`, or `podbot::github`.
 Those modules are annotated with `#[doc(hidden)]` or gated behind the `cli`
@@ -378,7 +378,7 @@ stable modules without a corresponding ADR update.
 See [podbot-design.md, Error handling](podbot-design.md#error-handling) for the
 full error hierarchy.
 
-### 10.3. Feature gate verification
+### 11.3. Feature gate verification
 
 The `cli` Cargo feature gates the `podbot::cli` module and the `podbot` binary
 target. When modifying library code, verify that the crate compiles without the
@@ -399,7 +399,7 @@ development is:
 | `cargo check --all-features`        | Everything compiles together     |
 | `make test`                         | All tests pass with all features |
 
-### 10.4. Feature gate maintenance
+### 11.4. Feature gate maintenance
 
 When adding new public modules or dependencies:
 
