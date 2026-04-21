@@ -257,6 +257,70 @@ That mismatch is the main design decision for this step. Podbot must preserve
 expiry metadata for the roadmap, but Octocrab's convenience helper returns only
 the secret.
 
+## Documentation signposts
+
+The implementing agent should keep the following repository documents open while
+working through this plan:
+
+- `docs/podbot-roadmap.md`
+  - the authoritative scope and completion criteria for Step 3.2 and the
+    boundary with Step 3.3 and Step 3.4.
+- `docs/podbot-design.md`
+  - the token-management design, the security boundary around host-side token
+    handling, and the expectation that refresh work follows later.
+- `docs/users-guide.md`
+  - the place where user-visible configuration requirements and token-related
+    troubleshooting must be updated once implementation lands.
+- `docs/rust-testing-with-rstest-fixtures.md`
+  - the preferred `rstest` fixture and parameterization patterns for unit
+    coverage.
+- `docs/rstest-bdd-users-guide.md`
+  - the required structure for BDD scenarios, helper modules, and synchronous
+    step definitions.
+- `docs/reliable-testing-in-rust-via-dependency-injection.md`
+  - the testing rule that clock and environment dependencies should be
+    injected rather than read directly.
+- `docs/rust-doctest-dry-guide.md`
+  - guidance for any new public Rustdoc examples on the helper or token value
+    object.
+- `docs/complexity-antipatterns-and-refactoring-strategies.md`
+  - the repository’s guidance for keeping token acquisition, expiry policy, and
+    error mapping out of one large “bumpy road” function.
+- `docs/ortho-config-users-guide.md`
+  - the reference for layered configuration precedence and merge behaviour if
+    this work touches how `GitHubConfig` is consumed or validated.
+
+The implementing agent should also refer back to
+`docs/execplans/3-1-3-validate-credentials-on-startup.md` and
+`docs/execplans/3-1-4-handle-invalid-or-expired-app-credentials-with-clear-errors.md`
+because Step 3.2 builds directly on those seams and should preserve their error
+quality bar.
+
+## Skills to load
+
+Before implementation starts, the agent should load the smallest relevant skill
+set rather than freehanding the work:
+
+- `execplans`
+  - this plan is the governing document and must stay current as implementation
+    progresses.
+- `rust-router`
+  - use it first to route any Rust design, API, dependency, or test-shape
+    question to the right deeper skill.
+- `rust-errors`
+  - use it when mapping Octocrab failures into `GitHubError::TokenAcquisitionFailed`
+    and `GitHubError::TokenExpired`.
+- `rust-types-and-apis`
+  - use it when shaping the token value object, helper signatures, and any test
+    seam types.
+- `en-gb-oxendict-style`
+  - use it when editing the design document, user guide, or this ExecPlan so
+    documentation stays aligned with repository language rules.
+
+If the implementation grows into orchestration wiring or async lifecycle work,
+load additional skills only when the change actually needs them. Do not expand
+the skill set speculatively.
+
 ## Agent team and ownership
 
 Implementation should use a three-agent team once this draft is approved:
