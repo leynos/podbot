@@ -63,6 +63,11 @@ This subcommand is temporarily unavailable in the current release. If you run
 session. Use `podbot run` or the library exec API for now; the release notes
 will call out when hosted mode becomes available.
 
+When hosted mode uses ACP, podbot masks host-delegated `terminal/*` and `fs/*`
+capabilities from the initial ACP `initialize` request before forwarding it to
+the sandboxed agent. This keeps the default trust boundary aligned with the
+container sandbox even when the hosting client advertises broader ACP support.
+
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |
 | `--agent`      | No       | Config/defaults | Agent type: `claude`, `codex`, or `custom` |
@@ -124,7 +129,11 @@ Execution behaviour:
   host stderr without terminal framing or interactive echo injection. Protocol
   mode uses bounded buffering (64 KiB buffers for stdin forwarding and output
   chunks) so hosted protocols can apply backpressure; if the host stdout writer
-  blocks, the proxy yields and backpressure propagates to the container.
+  blocks, the proxy yields and backpressure propagates to the container. When
+  the proxied protocol is ACP, podbot rewrites the first `initialize` request
+  to remove `clientCapabilities.terminal` and `clientCapabilities.fs` before
+  the bytes reach the container. If that first frame is malformed or belongs to
+  another protocol, podbot forwards it unchanged.
 - TTY allocation is enabled only when attached mode is selected and both local
   stdin and stdout are terminals.
 - When TTY is enabled, podbot sends an initial resize to the daemon. On Unix

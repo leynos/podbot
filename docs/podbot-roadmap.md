@@ -189,7 +189,7 @@ Prevent ACP client-side delegation from bypassing container sandbox boundaries.
 
 **Tasks:**
 
-- [ ] Intercept ACP initialization and mask `terminal/*` and `fs/*` capabilities
+- [x] Intercept ACP initialization and mask `terminal/*` and `fs/*` capabilities
   by default before forwarding capability metadata.
 - [ ] Enforce a runtime denylist for blocked ACP methods after initialization.
 - [ ] Return protocol errors for blocked methods and record denials on stderr.
