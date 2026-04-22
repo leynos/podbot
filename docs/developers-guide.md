@@ -759,15 +759,14 @@ The subsystem has one Application Programming Interface (API)-level entry point
 and several engine-level collaborators:
 
 - **API entry point**:
-  `configure_container_git_identity(&GitIdentityParams<'_, C, R>) ->
-  PodbotResult<GitIdentityResult>` in
-`src/api/configure_git_identity.rs`. This is the top-level function that
-callers use when they already have a container identifier, a connected exec
-client, and a host command runner.
+  `configure_container_git_identity(&GitIdentityParams<'_, C, R>) -> PodbotResult<GitIdentityResult>`
+   in `src/api/configure_git_identity.rs`. This is the top-level function that
+  callers use when they already have a container identifier, a connected exec
+  client, and a host command runner.
 - **Engine entry points**:
-  `read_host_git_identity(&impl HostCommandRunner) -> HostGitIdentity` and
-  `configure_git_identity(runtime, client, container_id, identity) ->
-  Result<GitIdentityResult, PodbotError>`.
+  - `read_host_git_identity(&impl HostCommandRunner) -> HostGitIdentity`
+  - `configure_git_identity(runtime, client, container_id, identity) ->
+    Result<GitIdentityResult, PodbotError>`
 - **Error boundary**: missing host identity does not cross the boundary as an
   error. Only container exec failure is promoted to
   `PodbotError::Container(ContainerError::ExecFailed { .. })`.
@@ -846,7 +845,7 @@ The subsystem integrates with the rest of podbot at these boundaries:
 
 Following the project's dependency injection convention (see
 [reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md)),
-all external process calls are abstracted behind `HostCommandRunner`. The
+ all external process calls are abstracted behind `HostCommandRunner`. The
 container side similarly depends on the `ContainerExecClient` trait rather than
 on a concrete Bollard client.
 
@@ -869,12 +868,11 @@ This yields three testing seams:
 - Container-side failures are strict. If `git config --global` returns a
   non-zero exit code, the subsystem raises
   `PodbotError::Container(ContainerError::ExecFailed { container_id, message })`
-  via the `git_identity_exec_failed` helper in `mod.rs`.
+   via the `git_identity_exec_failed` helper in `mod.rs`.
 - This asymmetry is intentional: missing identity should not block execution,
-  but an explicit attempt to write the Git config inside the container must fail
-  loudly when the container environment cannot honour it.
+  but an explicit attempt to write the Git config inside the container must
+  fail loudly when the container environment cannot honour it.
 
-### 14.8. Extending the subsystem
 ### 14.8. Extending the subsystem
 
 When adding another identity field or related Git setting:
@@ -887,8 +885,8 @@ When adding another identity field or related Git setting:
 5. Add a `MISSING_<FIELD>_WARNING` constant and include it in the relevant
    warning vectors.
 6. Add or update unit-test cases in
-   `src/engine/connection/git_identity/tests.rs`
-   and `container_configurator.rs`.
+   `src/engine/connection/git_identity/tests.rs` and
+   `container_configurator.rs`.
 7. Add BDD scenarios in `tests/features/git_identity.feature` and matching
    step definitions under `tests/bdd_git_identity_helpers/`.
 8. Update this section and the user-facing contract in `docs/users-guide.md`.
