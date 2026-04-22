@@ -469,7 +469,7 @@ The words "outwith" and "caveat" are acceptable.
 The `git_identity` subsystem propagates host Git identity (`user.name` and
 `user.email`) into a running container before repository operations need to
 create commits. The implementation deliberately splits host inspection from
-container mutation so each side can be tested independently and reused by the
+container mutation, so each side can be tested independently and reused by the
 API orchestration layer.
 
 This subsystem spans three internal layers:
@@ -521,7 +521,7 @@ and several engine-level collaborators:
   `PodbotError::Container(ContainerError::ExecFailed { .. })`.
 
 This separation matters because the host-reading logic is synchronous and
-side-effect free outwith process spawning, while the container configuration
+side-effect-free outwith process spawning, while the container configuration
 logic depends on the container engine and Tokio runtime ownership.
 
 ### 14.3. Key types and traits
@@ -538,7 +538,7 @@ logic depends on the container engine and Tokio runtime ownership.
   entry points.
   - `Configured { name, email }` means both fields were written into the
     container.
-  - `Partial { name, email, warnings }` means one field was written and the
+  - `Partial { name, email, warnings }` means one field was written, and the
     warnings explain the missing host field.
   - `NoneConfigured { warnings }` means neither field was available on the
     host and the container was left unchanged.
@@ -619,7 +619,7 @@ This yields three testing seams:
   `PodbotError::Container(ContainerError::ExecFailed { container_id, message })`
   via the `git_identity_exec_failed` helper in `mod.rs`.
 - This asymmetry is intentional: missing identity should not block execution,
-  but an explicit attempt to write Git config inside the container must fail
+  but an explicit attempt to write the Git config inside the container must fail
   loudly when the container environment cannot honour it.
 
 ### 14.8. Extending the subsystem
