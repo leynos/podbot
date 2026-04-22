@@ -716,7 +716,7 @@ comment explaining its purpose.
 Module docs should be concise (2–4 lines) and focus on what the module does,
 not how it works. Implementation details belong in function-level `///` docs.
 
-## 14. Git identity subsystem
+## 17. Git identity subsystem
 
 The `git_identity` subsystem propagates host Git identity (`user.name` and
 `user.email`) into a running container before repository operations need to
@@ -753,7 +753,7 @@ tests/
 +-- bdd_git_identity_helpers/                # Steps, assertions, and state
 ```
 
-### 14.2. Boundary and public entry points
+### 17.2. Boundary and public entry points
 
 The subsystem has one Application Programming Interface (API)-level entry point
 and several engine-level collaborators:
@@ -775,7 +775,7 @@ This separation matters because the host-reading logic is synchronous and
 side-effect-free outwith process spawning, while the container configuration
 logic depends on the container engine and Tokio runtime ownership.
 
-### 14.3. Key types and traits
+### 17.3. Key types and traits
 
 - **`HostCommandRunner`**: trait abstracting `std::process::Command`
   execution, so tests can inject a mock runner without spawning a real process.
@@ -797,7 +797,7 @@ logic depends on the container engine and Tokio runtime ownership.
   exec client, host command runner, target container identifier, and Tokio
   runtime handle needed by the synchronous exec helper.
 
-### 14.4. Execution flow
+### 17.4. Execution flow
 
 For screen readers: The following flowchart shows how
 `configure_container_git_identity` reads host identity, classifies completeness
@@ -820,7 +820,7 @@ flowchart TD
 
 _Figure 3: Git identity configuration execution flow._
 
-### 14.5. Integration points
+### 17.5. Integration points
 
 The subsystem integrates with the rest of podbot at these boundaries:
 
@@ -841,7 +841,7 @@ The subsystem integrates with the rest of podbot at these boundaries:
   scenarios verify the end-to-end orchestration contract, including multi-word
   names and failure propagation.
 
-### 14.6. Dependency injection pattern
+### 17.6. Dependency injection pattern
 
 Following the project's dependency injection convention (see
 [reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md)),
@@ -856,7 +856,7 @@ This yields three testing seams:
 - orchestration can be exercised end-to-end through the BDD harness without a
   real Git binary or live container daemon.
 
-### 14.7. Error handling and warning semantics
+### 17.7. Error handling and warning semantics
 
 - Missing host fields are not treated as errors. They produce `Partial` or
   `NoneConfigured` results with warning strings drawn from the
@@ -873,7 +873,7 @@ This yields three testing seams:
   but an explicit attempt to write the Git config inside the container must
   fail loudly when the container environment cannot honour it.
 
-### 14.8. Extending the subsystem
+### 17.8. Extending the subsystem
 
 When adding another identity field or related Git setting:
 
