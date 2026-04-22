@@ -1,5 +1,7 @@
 //! Behavioural test helpers for podbot configuration.
 
+#![cfg(feature = "internal")]
+
 use camino::Utf8PathBuf;
 use ortho_config::MergeComposer;
 use ortho_config::serde_json::json;

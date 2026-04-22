@@ -1,0 +1,16 @@
+error[E0425]: cannot find value `merge_from_layers_for_tests` in module `podbot::config`
+ --> tests/ui/config_internal_reexport_unavailable.rs:5:29
+  |
+5 |     let _ = podbot::config::merge_from_layers_for_tests;
+  |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^ not found in `podbot::config`
+  |
+note: found an item that was configured out
+ --> src/config/mod.rs
+  |
+  | pub use types::merge_from_layers_for_tests;
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+note: the item is gated behind the `internal` feature
+ --> src/config/mod.rs
+  |
+  | #[cfg(feature = "internal")]
+  |       ^^^^^^^^^^^^^^^^^^^^

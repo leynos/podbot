@@ -58,17 +58,10 @@ podbot run --repo owner/name --branch main --agent claude
 
 Host an app-server protocol for a long-lived agent runtime.
 
-```bash
-podbot host --agent codex --agent-mode codex_app_server
-```
-
-For custom agents, you must configure `agent.command` via config file or
-environment variable:
-
-```bash
-export PODBOT_AGENT_COMMAND=/usr/local/bin/my-agent
-podbot host --agent custom --agent-mode acp
-```
+This subcommand is temporarily unavailable in the current release.
+`src/main.rs` rejects `Commands::Host` and returns an error until
+`host_agent_cli` writes diagnostics to stderr only, so `podbot host` should be
+treated as disabled for now.
 
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |
@@ -247,7 +240,9 @@ allowed_origin_policy = "same_origin"
 Semantic validation rules:
 
 - `podbot run` accepts only `agent.mode = "podbot"`.
-- `podbot host` accepts only `agent.mode = "codex_app_server"` or `"acp"`.
+- `podbot host` remains temporarily disabled in this release, even though the
+  configuration model still reserves `agent.mode = "codex_app_server"` and
+  `"acp"` for the hosted protocol path.
 - `agent.kind = "custom"` requires a non-empty `agent.command`.
 - Built-in agent kinds reject `agent.command` and `agent.args`.
 - `workspace.source = "host_mount"` requires `workspace.host_path` and
@@ -620,28 +615,23 @@ supported semver contract for embedders.
 
 ### Available functions
 
-| Function                                                | Description                                     |
-| ------------------------------------------------------- | ----------------------------------------------- |
-| `podbot::api::exec(config, request)`                    | Execute a command in a running container        |
-| `podbot::api::ExecContext::connect(…)`                  | Reuse a runtime handle and engine connection    |
-| `podbot::api::run_agent(config)`                        | Run an AI agent in a sandboxed container (stub) |
-| `podbot::api::stop_container(container)`                | Stop a running container (stub)                 |
-| `podbot::api::list_containers()`                        | List running podbot containers (stub)           |
-| `podbot::api::run_token_daemon(container_id)`           | Run the token refresh daemon (stub)             |
-| `podbot::api::configure_container_git_identity(params)` | Configure Git identity from host Git config     |
+| Function                                      | Description                                     |
+| --------------------------------------------- | ----------------------------------------------- |
+| `podbot::api::exec(config, request)`          | Execute a command in a running container        |
+| `podbot::api::ExecContext::connect(…)`        | Reuse a runtime handle and engine connection    |
+| `podbot::api::run_agent(config)`              | Run an AI agent in a sandboxed container (stub) |
+| `podbot::api::stop_container(container)`      | Stop a running container (stub)                 |
+| `podbot::api::list_containers()`              | List running podbot containers (stub)           |
+| `podbot::api::run_token_daemon(container_id)` | Run the token refresh daemon (stub)             |
 
 ### Return type
 
-All orchestration functions return `podbot::error::Result<CommandOutcome>`:
+All stable orchestration functions return
+`podbot::error::Result<CommandOutcome>`:
 
 - `CommandOutcome::Success` indicates a zero exit code.
 - `CommandOutcome::CommandExit { code }` carries the non-zero exit code
   reported by the container engine.
-
-The `configure_container_git_identity` function returns
-`podbot::error::Result<GitIdentityResult>` instead, which provides structured
-information about the Git identity configuration outcome. See the "Git identity
-configuration" section below for details.
 
 For repeated exec calls, embedders can cache engine state:
 
@@ -686,71 +676,11 @@ fn run_command() -> Result<(), podbot::error::PodbotError> {
 
 ### Git identity configuration
 
-`configure_container_git_identity` reads `user.name` and `user.email` from the
-host Git configuration and applies them inside a running container via
-`git config --global`. Missing fields produce warnings rather than errors.
-
-#### Parameters: `GitIdentityParams`
-
-```rust,no_run
-pub struct GitIdentityParams<'a, C: ContainerExecClient, R: HostCommandRunner> {
-    pub client: &'a C,
-    pub host_runner: &'a R,
-    pub container_id: &'a str,
-    pub runtime_handle: &'a tokio::runtime::Handle,
-}
-```
-
-#### Return type: `GitIdentityResult`
-
-`configure_container_git_identity` returns
-`podbot::error::Result<GitIdentityResult>`:
-
-| Variant                                                | Meaning                                                                |
-| ------------------------------------------------------ | ---------------------------------------------------------------------- |
-| `GitIdentityResult::Configured { name, email }`        | Both `user.name` and `user.email` were set in the container.           |
-| `GitIdentityResult::Partial { name, email, warnings }` | One field was set; `warnings` explains the missing field.              |
-| `GitIdentityResult::NoneConfigured { warnings }`       | Neither field was present on the host; container Git config unchanged. |
-
-Container-side exec failures (e.g. `git` not present in the container image)
-propagate as `PodbotError::Container(ContainerError::ExecFailed { .. })`.
-
-#### Example: configuring Git identity
-
-```rust,no_run
-use podbot::api::{GitIdentityParams, configure_container_git_identity};
-use podbot::engine::{GitIdentityResult, SystemCommandRunner};
-
-fn configure_identity(
-    client: &impl podbot::engine::ContainerExecClient,
-    runtime_handle: &tokio::runtime::Handle,
-) {
-    let host_runner = SystemCommandRunner;
-    let params = GitIdentityParams {
-        client,
-        host_runner: &host_runner,
-        container_id: "my-container",
-        runtime_handle,
-    };
-
-    match configure_container_git_identity(&params) {
-        Ok(GitIdentityResult::Configured { name, email }) => {
-            println!("Git identity set: {name} <{email}>");
-        }
-        Ok(GitIdentityResult::Partial { warnings, .. }) => {
-            for w in &warnings {
-                eprintln!("warning: {w}");
-            }
-        }
-        Ok(GitIdentityResult::NoneConfigured { warnings }) => {
-            for w in &warnings {
-                eprintln!("warning: {w}");
-            }
-        }
-        Err(e) => eprintln!("Error configuring Git identity: {e}"),
-    }
-}
-```
+`configure_container_git_identity` remains available as a compatibility helper,
+but it is not part of the stable embedding contract described here because its
+parameters and results depend on internal engine-owned traits and types.
+Library embedders should treat it as an internal shim rather than a semver
+stable API.
 
 ### Library embedding
 
@@ -777,8 +707,7 @@ feature flag controls module visibility, not the `clap` dependency itself.
 The following modules are part of the stable public API:
 
 - `podbot::api` — orchestration functions (`exec`, `run_agent`,
-  `list_containers`, `stop_container`, `run_token_daemon`,
-  `configure_container_git_identity`)
+  `list_containers`, `stop_container`, `run_token_daemon`)
 - `podbot::config` — configuration types and loaders (`AppConfig`,
   `ConfigLoadOptions`, `load_config`)
 - `podbot::error` — semantic error hierarchy (`PodbotError`, `ConfigError`,

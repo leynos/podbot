@@ -1,8 +1,10 @@
-//! Integration tests proving Podbot can be embedded as a library dependency.
+//! Internal-feature integration suite for embedding and compatibility paths.
 //!
-//! These tests exercise the public API surface from a host-application
-//! perspective, without importing `podbot::cli` or depending on Clap types
-//! directly. This proves that the library boundary is self-contained.
+//! These tests run only with `feature = "internal"` because they exercise
+//! internal shims such as `podbot::engine`. The stable public embedding
+//! boundary remains `podbot::api`, `podbot::config`, and `podbot::error`;
+//! `podbot::engine` and `podbot::github` are internal compatibility modules,
+//! while `podbot::cli` visibility is controlled by the `cli` feature.
 
 #![cfg(feature = "internal")]
 

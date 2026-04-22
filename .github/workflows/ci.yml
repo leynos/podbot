@@ -28,6 +28,8 @@ jobs:
             !**/dist/**
       - name: Lint
         run: make lint
+      - name: No-CLI compile check
+        run: cargo check --no-default-features
       - name: No-CLI boundary tests
         run: cargo test --no-default-features --test cli_feature_gating --test compile_contract
       - name: Internal compatibility tests

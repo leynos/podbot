@@ -253,18 +253,20 @@ The implementer should begin by reading the following files in this order:
 9. `docs/mcp-server-hosting-design.md`, especially section 8.3.
 10. `docs/users-guide.md`, especially the current "Library API" section.
 
-Current repository state that matters:
+Historical repository state at planning time that mattered:
 
-- `src/lib.rs` exports every major module publicly.
-- `src/main.rs` is a thin adapter in principle, but it still depends directly
-  on `engine` and `github` (the GitHub integration) public modules.
+- At planning time, `src/lib.rs` exported every major module publicly.
+- At planning time, `src/main.rs` was a thin adapter in principle, but it
+  still depended directly on `engine` and `github` (the GitHub integration)
+  public modules.
 - `src/api/mod.rs` and `src/api/exec.rs` provide the current orchestration
   surface.
 - `src/error.rs` already defines `PodbotError` correctly, so this step should
   preserve that pattern rather than invent a new error boundary.
-- `src/cli/mod.rs` carries `clap`-derived parse types and is currently public.
-- `tests/bdd_orchestration.rs` covers the current orchestration API; this is a
-  useful starting point but not the finished embedding proof.
+- At planning time, `src/cli/mod.rs` carried `clap`-derived parse types and
+  was public.
+- `tests/bdd_orchestration.rs` covered the orchestration API and provided a
+  useful starting point, but it was not the finished embedding proof.
 
 The key technical tension is that the current stable-looking surface leaks
 engine implementation details. A genuine stable boundary must let embedders use

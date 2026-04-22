@@ -54,12 +54,16 @@ src/engine/connection/exec/
 |                        #   build_start_exec_options, validate_command,
 |                        #   validate_required_field, error mappers)
 +-- host_io.rs           # Host-stdio boundary helpers; default_host_stdin
-|                        #   returns tokio::io::stdin() in production and
-|                        #   tokio::io::empty() in tests
+|                        #   returns tokio::io::stdin() in production,
+|                        #   tokio::io::empty() in tests, and an empty
+|                        #   reader in non-test builds when
+|                        #   PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS=1
 +-- session.rs           # ExecSessionOptions struct and
 |                        #   protocol_session_options helper; controls
 |                        #   per-call session knobs (e.g. stdin forwarding
-|                        #   disable seam for tests)
+|                        #   disable seam for tests;
+|                        #   with_protocol_stdin_forwarding_disabled(bool)
+|                        #   is compiled only for #[cfg(test)] builds
 +-- tests.rs             # Test module root
 +-- tests/
     +-- protocol_proxy_bdd.rs         # BDD Gherkin scenarios
@@ -108,6 +112,94 @@ terminal framing.
   code paths. Constructed via `ExecSessionOptions::new()` and configured with
   `with_protocol_stdin_forwarding_disabled(bool)`. Lives in
   `src/engine/connection/exec/session.rs`.
+
+For screen readers: The following class diagram summarizes the stable exec
+Application Programming Interface (API) request and outcome types, the cached
+`ExecContext` embedding handle, and the internal test seam used to drive exec
+through an injected engine client.
+
+```mermaid
+classDiagram
+    direction LR
+
+    class ExecMode {
+        <<enumeration>>
+        +Attached
+        +Detached
+        +Protocol
+    }
+
+    class ExecRequest {
+        +String container
+        +Vec~String~ command
+        +ExecMode mode
+        +bool tty
+        +new(container, command) Result~ExecRequest, PodbotError~
+        +with_mode(mode) ExecRequest
+        +with_tty(tty) ExecRequest
+        -validate() Result~(), PodbotError~
+    }
+
+    class ExecContext {
+        +connect(config, runtime_handle) Result~ExecContext, PodbotError~
+        +exec(request) Result~CommandOutcome, PodbotError~
+    }
+
+    class ExecApi {
+        +exec(config, request) Result~CommandOutcome, PodbotError~
+        +exec_with_client_for_tests(connector, runtime_handle, request) Result~CommandOutcome, PodbotError~
+        -create_runtime() Result~tokio::runtime::Runtime, PodbotError~
+    }
+
+    class AgentApi {
+        +run_agent(config) Result~CommandOutcome, PodbotError~
+    }
+
+    class AppConfig {
+        +Option~String~ engine_socket
+        +GitHubConfig github
+    }
+
+    class GitHubConfig {
+        +Option~u64~ app_id
+        +Option~u64~ installation_id
+        +Option~Utf8PathBuf~ private_key_path
+        +validate() Result~(), PodbotError~
+    }
+
+    class CommandOutcome {
+        <<enumeration>>
+        +Success
+        +CommandExit
+        +code i64
+    }
+
+    class PodbotError
+
+    class ContainerExecClient {
+        <<interface>>
+    }
+
+    class EngineConnector
+
+    ExecRequest --> ExecMode : uses
+    ExecContext ..> ExecRequest : executes
+    ExecContext ..> ContainerExecClient : delegates through
+    ExecApi ..> ExecRequest : parameter
+    ExecApi ..> ExecContext : constructs
+    ExecApi ..> AppConfig : parameter
+    ExecApi ..> CommandOutcome : result
+    ExecApi ..> PodbotError : error
+    ExecApi ..> ContainerExecClient : internal test seam
+    AgentApi ..> AppConfig : parameter
+    AgentApi ..> CommandOutcome : result
+    AgentApi ..> PodbotError : error
+    AppConfig --> GitHubConfig : contains
+    EngineConnector ..> ContainerExecClient : drives
+```
+
+_Figure 2: Stable exec API types, orchestration entry points, and the internal
+test seam for injected engine clients._
 
 ## 4. Stdout purity contract
 
@@ -727,7 +819,7 @@ flowchart TD
     J --> L["GitIdentityResult::Partial"]
 ```
 
-_Figure 2: Git identity configuration execution flow._
+_Figure 3: Git identity configuration execution flow._
 
 ### 14.5. Integration points
 

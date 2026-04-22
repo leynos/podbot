@@ -139,8 +139,8 @@ escalation, not workarounds.
 
 - Decision: Git identity configuration does not add new config fields to
   `AppConfig`. Rationale: the identity is read dynamically from the host
-  `git config` at runtime, not from podbot's own configuration. This avoids
-  configuration sprawl and follows the design doc which says "reading from the
+  `git config` at runtime, not from podbot's own configuration; this avoids
+  configuration sprawl and follows the design doc, which says "reading from the
   host".
 
 - Decision: use `ExecMode::Detached` for `git config --global` commands

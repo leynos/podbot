@@ -13,13 +13,23 @@ use tokio::io::AsyncRead;
 const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
 
 #[cfg(test)]
+pub(super) const fn stdin_forwarding_disabled_for_tests() -> bool {
+    false
+}
+
+#[cfg(not(test))]
+pub(super) fn stdin_forwarding_disabled_for_tests() -> bool {
+    std::env::var(DISABLE_STDIN_FORWARDING_ENV).is_ok_and(|value| value == "1")
+}
+
+#[cfg(test)]
 pub(super) fn default_host_stdin() -> Pin<Box<dyn AsyncRead + Send>> {
     Box::pin(tokio::io::empty())
 }
 
 #[cfg(not(test))]
 pub(super) fn default_host_stdin() -> Pin<Box<dyn AsyncRead + Send>> {
-    if std::env::var(DISABLE_STDIN_FORWARDING_ENV).is_ok_and(|value| value == "1") {
+    if stdin_forwarding_disabled_for_tests() {
         return Box::pin(tokio::io::empty());
     }
     Box::pin(tokio::io::stdin())

@@ -33,6 +33,7 @@ use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
 use super::helpers::spawn_stdin_forwarding_task;
+use super::host_io::stdin_forwarding_disabled_for_tests;
 use super::{ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
@@ -133,7 +134,7 @@ pub(super) async fn run_protocol_session_async_with_options(
 }
 
 fn protocol_host_stdin(options: ProtocolSessionOptions) -> Pin<Box<dyn AsyncRead + Send>> {
-    if options.disable_stdin_forwarding {
+    if options.disable_stdin_forwarding || stdin_forwarding_disabled_for_tests() {
         let (writer_guard, reader) = tokio::io::duplex(1);
         Box::pin(HeldOpenStdin {
             reader,
@@ -189,7 +190,7 @@ async fn settle_stdin_forwarding_task(
         // cleanly before shutdown, so protocol mode must surface that failure
         // instead of reporting success with potentially truncated input.
         abort_stdin_forwarding_task(stdin_task);
-        if options.disable_stdin_forwarding {
+        if options.disable_stdin_forwarding || stdin_forwarding_disabled_for_tests() {
             return Ok(());
         }
         return Err(exec_failed(
