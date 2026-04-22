@@ -222,6 +222,7 @@ pub async fn validate_with_client(client: &dyn GitHubAppClient) -> Result<(), Gi
 /// Returns [`GitHubError::PrivateKeyLoadFailed`] if the key cannot be loaded.
 /// Returns [`GitHubError::AuthenticationFailed`] if the client cannot be
 /// built or if GitHub rejects the credentials.
+#[cfg(any(feature = "internal", test))]
 pub async fn validate_with_factory<F, C>(
     app_id: u64,
     private_key_path: &Utf8Path,
@@ -310,6 +311,7 @@ fn read_key_file(
 ///
 /// A formatted error message with remediation hints matching the production
 /// error classifier.
+#[cfg(any(feature = "internal", test))]
 #[doc(hidden)]
 #[must_use]
 pub fn test_classify_error_message(code: u16, full_error: &str) -> String {

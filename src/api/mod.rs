@@ -2,18 +2,22 @@
 //!
 //! This module provides the stable public orchestration functions for each
 //! supported command: [`exec`], [`run_agent`], [`stop_container`],
-//! [`list_containers`], [`run_token_daemon`], and
-//! [`configure_container_git_identity`]. These functions contain the business
-//! logic that was previously embedded in the CLI binary, making it available to
-//! both the CLI adapter and library embedders.
+//! [`list_containers`], and [`run_token_daemon`]. These functions contain the
+//! business logic that was previously embedded in the CLI binary, making it
+//! available to both the CLI adapter and library embedders.
+//!
+//! Internal-feature builds also expose additional compatibility helpers for
+//! Git identity configuration.
 //!
 //! All functions accept library-owned types (not clap types) and return
 //! [`crate::error::Result<T>`]. They do not print to stdout/stderr or call
 //! `std::process::exit`.
 
+#[cfg(any(feature = "internal", test))]
 mod configure_git_identity;
 mod exec;
 
+#[cfg(any(feature = "internal", test))]
 pub use configure_git_identity::{GitIdentityParams, configure_container_git_identity};
 #[cfg(feature = "internal")]
 #[doc(hidden)]

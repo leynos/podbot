@@ -6,11 +6,15 @@
 //! identity configuration utilities for propagating host Git credentials into
 //! containers.
 
+#[cfg(any(feature = "internal", test))]
 mod create_container;
 mod error_classification;
 mod exec;
+#[cfg(any(feature = "internal", test))]
 mod git_identity;
+#[cfg(any(feature = "internal", test))]
 mod health_check;
+#[cfg(any(feature = "internal", test))]
 mod upload_credentials;
 
 use std::fmt;
@@ -20,18 +24,24 @@ use error_classification::classify_connection_error;
 
 use crate::error::PodbotError;
 
+#[cfg(any(feature = "internal", test))]
 pub use create_container::{
     ContainerCreator, ContainerSecurityOptions, CreateContainerFuture, CreateContainerRequest,
     SelinuxLabelMode,
 };
+#[cfg(any(feature = "internal", test))]
 pub use exec::{
     ContainerExecClient, CreateExecFuture, ExecMode, ExecRequest, ExecResult, InspectExecFuture,
     ResizeExecFuture, StartExecFuture,
 };
+#[cfg(not(any(feature = "internal", test)))]
+pub(crate) use exec::{ContainerExecClient, ExecMode, ExecRequest};
+#[cfg(any(feature = "internal", test))]
 pub use git_identity::{
     GitIdentityResult, HostCommandRunner, HostGitIdentity, SystemCommandRunner,
     configure_git_identity, read_host_git_identity,
 };
+#[cfg(any(feature = "internal", test))]
 pub use upload_credentials::{
     ContainerUploader, CredentialUploadRequest, CredentialUploadResult, UploadToContainerFuture,
 };
@@ -116,6 +126,7 @@ const FALLBACK_ENV_VARS: &[&str] = &["DOCKER_HOST", "CONTAINER_HOST", "PODMAN_HO
 /// Connection timeout in seconds for Docker/Podman API connections.
 const CONNECTION_TIMEOUT_SECS: u64 = 120;
 
+#[cfg(any(feature = "internal", test))]
 /// Timeout in seconds for health check operations.
 pub(super) const HEALTH_CHECK_TIMEOUT_SECS: u64 = 10;
 

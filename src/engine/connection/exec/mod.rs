@@ -124,6 +124,7 @@ impl ExecMode {
 
     /// Return true when this mode is protocol-safe (streams attached, tty
     /// permanently disabled).
+    #[cfg(any(feature = "internal", test))]
     #[must_use]
     pub const fn is_protocol(self) -> bool {
         matches!(self, Self::Protocol)
@@ -166,6 +167,7 @@ impl ExecRequest {
     }
 
     /// Set environment variables in `KEY=value` form.
+    #[cfg(any(feature = "internal", test))]
     #[must_use]
     pub fn with_env(mut self, env: Option<Vec<String>>) -> Self {
         self.env = env.filter(|entries| !entries.is_empty());
@@ -221,6 +223,7 @@ pub struct ExecResult {
 
 impl ExecResult {
     /// Return daemon-assigned exec identifier.
+    #[cfg(any(feature = "internal", test))]
     #[must_use]
     pub fn exec_id(&self) -> &str {
         &self.exec_id
