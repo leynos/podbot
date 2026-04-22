@@ -130,10 +130,10 @@ classDiagram
     }
 
     class ExecRequest {
-        +String container
-        +Vec~String~ command
-        +ExecMode mode
-        +bool tty
+        String container
+        Vec~String~ command
+        ExecMode mode
+        bool tty
         +new(container, command) Result~ExecRequest, PodbotError~
         +with_mode(mode) ExecRequest
         +with_tty(tty) ExecRequest
@@ -147,7 +147,7 @@ classDiagram
 
     class ExecApi {
         +exec(config, request) Result~CommandOutcome, PodbotError~
-        +exec_with_client_for_tests(connector, runtime_handle, request) Result~CommandOutcome, PodbotError~
+        -exec_with_client(connector, runtime_handle, request) Result~CommandOutcome, PodbotError~
         -create_runtime() Result~tokio::runtime::Runtime, PodbotError~
     }
 

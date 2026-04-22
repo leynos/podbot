@@ -58,10 +58,10 @@ podbot run --repo owner/name --branch main --agent claude
 
 Host an app-server protocol for a long-lived agent runtime.
 
-This subcommand is temporarily unavailable in the current release.
-`src/main.rs` rejects `Commands::Host` and returns an error until
-`host_agent_cli` writes diagnostics to stderr only, so `podbot host` should be
-treated as disabled for now.
+This subcommand is temporarily unavailable in the current release. If you run
+`podbot host`, Podbot will return an error rather than starting a hosted
+session. Use `podbot run` or the library exec API for now; the release notes
+will call out when hosted mode becomes available.
 
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |
@@ -626,12 +626,19 @@ supported semver contract for embedders.
 
 ### Return type
 
-All stable orchestration functions return
+The execution entry points `podbot::api::exec(config, request)`,
+`podbot::api::run_agent(config)`, `podbot::api::stop_container(container)`,
+`podbot::api::list_containers()`, and
+`podbot::api::run_token_daemon(container_id)` return
 `podbot::error::Result<CommandOutcome>`:
 
 - `CommandOutcome::Success` indicates a zero exit code.
 - `CommandOutcome::CommandExit { code }` carries the non-zero exit code
   reported by the container engine.
+
+`podbot::api::ExecContext::connect(…)` returns
+`podbot::error::Result<ExecContext>`, which embedders can cache and reuse for
+repeated exec calls.
 
 For repeated exec calls, embedders can cache engine state:
 

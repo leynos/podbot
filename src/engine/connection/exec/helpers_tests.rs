@@ -247,33 +247,42 @@ async fn spawn_stdin_forwarding_task_forwards_bytes_and_returns_ok() {
     );
 }
 
-#[test]
-fn validate_command_rejects_empty_vec() {
-    let err = validate_command(vec![]).expect_err("empty command should be rejected");
-    assert!(
-        matches!(
-            err,
-            crate::error::PodbotError::Config(
-                crate::error::ConfigError::MissingRequired { ref field }
-            ) if field == "command"
-        ),
-        "unexpected error: {err:?}",
-    );
+fn rejects_as_missing_required_command(err: &crate::error::PodbotError) -> bool {
+    matches!(
+        err,
+        crate::error::PodbotError::Config(
+            crate::error::ConfigError::MissingRequired { field }
+        ) if field == "command"
+    )
 }
 
-#[test]
-fn validate_command_rejects_blank_executable() {
-    let err = validate_command(vec![String::from("  ")])
-        .expect_err("blank executable should be rejected");
-    assert!(
-        matches!(
-            err,
-            crate::error::PodbotError::Config(
-                crate::error::ConfigError::InvalidValue { ref field, .. }
-            ) if field == "command"
-        ),
-        "unexpected error: {err:?}",
-    );
+fn rejects_as_invalid_value_command(err: &crate::error::PodbotError) -> bool {
+    matches!(
+        err,
+        crate::error::PodbotError::Config(
+            crate::error::ConfigError::InvalidValue { field, .. }
+        ) if field == "command"
+    )
+}
+
+#[rstest::rstest]
+#[case(
+    vec![],
+    "empty command should be rejected",
+    rejects_as_missing_required_command as fn(&crate::error::PodbotError) -> bool,
+)]
+#[case(
+    vec![String::from("  ")],
+    "blank executable should be rejected",
+    rejects_as_invalid_value_command as fn(&crate::error::PodbotError) -> bool,
+)]
+fn validate_command_rejects_invalid_input(
+    #[case] input: Vec<String>,
+    #[case] expectation_message: &str,
+    #[case] is_expected_error: fn(&crate::error::PodbotError) -> bool,
+) {
+    let err = validate_command(input).expect_err(expectation_message);
+    assert!(is_expected_error(&err), "unexpected error: {err:?}");
 }
 
 #[test]
