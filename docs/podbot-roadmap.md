@@ -271,20 +271,20 @@ Operations continue working after token refresh without intervention.
 Wire together the complete execution flow from container creation through agent
 startup.
 
-### Step 4.1: Git identity configuration
+### Step 4.1: Git identity configuration ✓
 
 Configure Git identity within the container using host settings.
 
 **Tasks:**
 
-- [ ] Read user.name from host Git configuration.
-- [ ] Read user.email from host Git configuration.
-- [ ] Execute git config --global user.name within the container.
-- [ ] Execute git config --global user.email within the container.
-- [ ] Handle missing Git identity with a warning rather than failure.
+- [x] Read user.name from host Git configuration.
+- [x] Read user.email from host Git configuration.
+- [x] Execute git config --global user.name within the container.
+- [x] Execute git config --global user.email within the container.
+- [x] Handle missing Git identity with a warning rather than failure.
 
 **Completion criteria:** Git commits within the container use the configured
-identity. Missing identity produces a warning but does not block execution.
+identity. Missing identity produces a warning but does not block execution. ✓
 
 ### Step 4.2: Repository cloning
 
