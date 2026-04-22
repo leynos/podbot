@@ -464,99 +464,178 @@ Documentation uses British English with Oxford spelling (`en-GB-oxendict`):
 
 The words "outwith" and "caveat" are acceptable.
 
-## 14. Git identity configuration subsystem
+## 14. Git identity subsystem
 
-The `git_identity` module (`src/engine/connection/git_identity/`) propagates
-host Git identity (`user.name`, `user.email`) into a running container via
-`git config --global`. It is exposed through the `engine/connection` module
-and orchestrated by `src/api/configure_git_identity.rs`.
+The `git_identity` subsystem propagates host Git identity (`user.name` and
+`user.email`) into a running container before repository operations need to
+create commits. The implementation deliberately splits host inspection from
+container mutation so each side can be tested independently and reused by the
+API orchestration layer.
+
+This subsystem spans three internal layers:
+
+- `src/engine/connection/git_identity/host_reader.rs` reads host Git config.
+- `src/engine/connection/git_identity/container_configurator.rs` converts the
+  host values into `git config --global` exec calls inside the container.
+- `src/api/configure_git_identity.rs` provides the orchestration entry point
+  that library callers use when they need podbot to apply the host identity to
+  a specific container.
 
 ### 14.1. Module layout
 
 ```plaintext
+src/api/
++-- configure_git_identity.rs    # API orchestration entry point and API params
+
 src/engine/connection/git_identity/
-+-- mod.rs                   # Re-exports, git_identity_exec_failed helper
-+-- host_reader.rs           # HostCommandRunner trait, SystemCommandRunner,
-|                            #   HostGitIdentity, read_host_git_identity
-+-- container_configurator.rs# configure_git_identity, GitIdentityResult,
-|                            #   IdentityCompleteness classifier
-+-- tests.rs                 # Unit tests for host_reader
++-- mod.rs                       # Re-exports and git_identity_exec_failed helper
++-- host_reader.rs               # HostCommandRunner, SystemCommandRunner,
+|                                #   HostGitIdentity, read_host_git_identity
++-- container_configurator.rs    # configure_git_identity, GitIdentityResult,
+|                                #   IdentityCompleteness, set_git_config
++-- tests.rs                     # Unit tests for host-side Git config reading
+
+tests/
++-- features/git_identity.feature            # Behavioural scenarios
++-- bdd_git_identity.rs                      # Scenario harness
++-- bdd_git_identity_helpers/                # Steps, assertions and state
 ```
 
-### 14.2. Key types and traits
+### 14.2. Boundary and public entry points
 
-- **`HostCommandRunner`**: trait abstracting `std::process::Command` execution
-  so tests can inject a mock runner without spawning a real process. Implement
+The subsystem has one Application Programming Interface (API)-level entry point
+and several engine-level collaborators:
+
+- **API entry point**:
+  `configure_container_git_identity(&GitIdentityParams<'_, C, R>) ->
+  PodbotResult<GitIdentityResult>` in
+  `src/api/configure_git_identity.rs`. This is the top-level function that
+  callers use when they already have a container identifier, a connected exec
+  client and a host command runner.
+- **Engine entry points**:
+  `read_host_git_identity(&impl HostCommandRunner) -> HostGitIdentity` and
+  `configure_git_identity(runtime, client, container_id, identity) ->
+  Result<GitIdentityResult, PodbotError>`.
+- **Error boundary**: missing host identity does not cross the boundary as an
+  error. Only container exec failure is promoted to
+  `PodbotError::Container(ContainerError::ExecFailed { .. })`.
+
+This separation matters because the host-reading logic is synchronous and
+side-effect free outwith process spawning, while the container configuration
+logic depends on the container engine and Tokio runtime ownership.
+
+### 14.3. Key types and traits
+
+- **`HostCommandRunner`**: trait abstracting `std::process::Command`
+  execution, so tests can inject a mock runner without spawning a real process.
+  It defines
   `run_command(&self, program: &str, args: &[&str]) -> io::Result<Output>`.
 - **`SystemCommandRunner`**: production implementation that delegates to
   `std::process::Command`.
-- **`HostGitIdentity`**: struct holding `name: Option<String>` and
+- **`HostGitIdentity`**: value object holding `name: Option<String>` and
   `email: Option<String>` read from the host.
-- **`GitIdentityResult`**: enum representing the configuration outcome:
-  - `Configured { name, email }` — both fields set in the container.
-  - `Partial { name, email, warnings }` — one field set; `warnings` names
-    the missing field.
-  - `NoneConfigured { warnings }` — neither field present on the host;
-    container Git config unchanged.
-- **`GitIdentityParams`**: Application Programming Interface (API) layer
-  struct bundling the container exec client, host command runner, container
-  identifier (ID), and Tokio runtime handle for the orchestration entry
-  point.
+- **`GitIdentityResult`**: outcome enum returned by both the engine and API
+  entry points.
+  - `Configured { name, email }` means both fields were written into the
+    container.
+  - `Partial { name, email, warnings }` means one field was written and the
+    warnings explain the missing host field.
+  - `NoneConfigured { warnings }` means neither field was available on the
+    host and the container was left unchanged.
+- **`GitIdentityParams`**: API-layer parameter object bundling the container
+  exec client, host command runner, target container identifier, and Tokio
+  runtime handle needed by the synchronous exec helper.
 
-### 14.3. Execution flow
+### 14.4. Execution flow
 
 For screen readers: The following flowchart shows how
-`configure_container_git_identity` reads host identity, classifies
-completeness, and delegates to the appropriate configuration path.
+`configure_container_git_identity` reads host identity, classifies completeness
+and delegates to the appropriate configuration path.
 
 ```mermaid
 flowchart TD
     A["configure_container_git_identity(params)"] --> B["read_host_git_identity(host_runner)"]
-    B --> C["classify_identity(identity)"]
-    C -->|Complete| D["configure_complete_identity"]
-    C -->|Partial| E["configure_partial_identity"]
-    C -->|None| F["GitIdentityResult::NoneConfigured"]
-    D --> G["set_git_config user.name"]
-    D --> H["set_git_config user.email"]
-    E --> I["set_git_config for present fields only"]
-    G & H --> J["GitIdentityResult::Configured"]
-    I --> K["GitIdentityResult::Partial"]
+    B --> C["configure_git_identity(runtime, client, container_id, identity)"]
+    C --> D["classify_identity(identity)"]
+    D -->|Complete| E["configure_complete_identity"]
+    D -->|Partial| F["configure_partial_identity"]
+    D -->|None| G["GitIdentityResult::NoneConfigured"]
+    E --> H["set_git_config user.name"]
+    E --> I["set_git_config user.email"]
+    F --> J["set_git_config for present fields only"]
+    H & I --> K["GitIdentityResult::Configured"]
+    J --> L["GitIdentityResult::Partial"]
 ```
 
 _Figure 2: Git identity configuration execution flow._
 
-### 14.4. Dependency injection (DI) pattern
+### 14.5. Integration points
 
-Following the project's dependency injection (DI) convention (see
+The subsystem integrates with the rest of podbot at these boundaries:
+
+- **Container exec subsystem**: `set_git_config` builds an `ExecRequest` with
+  `ExecMode::Detached` and delegates to `EngineConnector::exec`. That keeps Git
+  configuration on the same execution path as other container commands and
+  centralizes exit-code handling.
+- **API orchestration layer**: `configure_container_git_identity` composes the
+  host-reading and container-writing halves. This keeps the public call surface
+  small and prevents library callers from manually stitching together the
+  engine pieces.
+- **Repository orchestration sequence**: callers should invoke the subsystem
+  after the target container exists and before repository operations need to
+  create commits. The subsystem does not clone repositories or configure
+  authentication; it only ensures commit attribution inside the container.
+- **Test harnesses**: unit tests validate host Git config parsing and
+  container-side classification, while the Behaviour-Driven Development (BDD)
+  scenarios verify the end-to-end orchestration contract, including multi-word
+  names and failure propagation.
+
+### 14.6. Dependency injection pattern
+
+Following the project's dependency injection convention (see
 [reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md)),
 all external process calls are abstracted behind `HostCommandRunner`. The
-`configure_git_identity` function accepts a `ContainerExecClient` for the
-same reason. Neither function spawns processes or calls the container engine
-directly; callers inject the concrete implementations.
+container side similarly depends on the `ContainerExecClient` trait rather than
+on a concrete Bollard client.
 
-### 14.5. Error handling
+This yields three testing seams:
 
-- Missing host fields are not errors; they produce `Partial` or
+- host Git reads can be unit tested with a mocked `HostCommandRunner`;
+- container mutation can be unit tested with a mocked `ContainerExecClient`;
+- orchestration can be exercised end-to-end through the BDD harness without a
+  real Git binary or live container daemon.
+
+### 14.7. Error handling and warning semantics
+
+- Missing host fields are not treated as errors. They produce `Partial` or
   `NoneConfigured` results with warning strings drawn from the
   `MISSING_NAME_WARNING` and `MISSING_EMAIL_WARNING` constants in
   `container_configurator.rs`.
-- Container-side failures (non-zero `git config` exit code) map to
-  `PodbotError::Container(ContainerError::ExecFailed { container_id,
-  message })` via the `git_identity_exec_failed` helper in `mod.rs`.
-- Host-side input/output (IO) failures (e.g. `git` not installed) are
-  silently treated as `None` for the affected field; only a `Partial` or
-  `NoneConfigured` result is returned.
+- Host-side input/output errors, such as `git` not being installed on the host
+  or `git config --get` returning a non-zero status, are normalized to `None`
+  for the affected field.
+- Container-side failures are strict. If `git config --global` returns a
+  non-zero exit code, the subsystem raises
+  `PodbotError::Container(ContainerError::ExecFailed { container_id, message })`
+  via the `git_identity_exec_failed` helper in `mod.rs`.
+- This asymmetry is intentional: missing identity should not block execution,
+  but an explicit attempt to write Git config inside the container must fail
+  loudly when the container environment cannot honour it.
 
-### 14.6. Adding a new identity field
+### 14.8. Extending the subsystem
+
+When adding another identity field or related Git setting:
 
 1. Add the field to `HostGitIdentity` in `host_reader.rs`.
 2. Update `read_host_git_identity` to populate the new field.
-3. Add the field to `GitIdentityResult` variants as needed.
-4. Update `classify_identity` and `configure_complete_identity` /
+3. Extend `GitIdentityResult` if callers need to observe the new field.
+4. Update `classify_identity`, `configure_complete_identity`, and
    `configure_partial_identity` in `container_configurator.rs`.
-5. Add a `MISSING_<FIELD>_WARNING` constant and include it in the warning
-   vectors for `Partial` and `NoneConfigured` paths.
-6. Add a `#[case]` row to `read_identity_with_ok_responses` in `tests.rs`.
-7. Add Behaviour-Driven Development (BDD) scenarios in
-   `tests/features/git_identity.feature` and matching step definitions.
-8. Update this section and `docs/users-guide.md`.
+5. Add a `MISSING_<FIELD>_WARNING` constant and include it in the relevant
+   warning vectors.
+6. Add or update unit-test cases in
+   `src/engine/connection/git_identity/tests.rs`
+   and `container_configurator.rs`.
+7. Add BDD scenarios in `tests/features/git_identity.feature` and matching
+   step definitions under `tests/bdd_git_identity_helpers/`.
+8. Update this section and the user-facing contract in `docs/users-guide.md`.
