@@ -498,7 +498,7 @@ src/engine/connection/git_identity/
 tests/
 +-- features/git_identity.feature            # Behavioural scenarios
 +-- bdd_git_identity.rs                      # Scenario harness
-+-- bdd_git_identity_helpers/                # Steps, assertions and state
++-- bdd_git_identity_helpers/                # Steps, assertions, and state
 ```
 
 ### 14.2. Boundary and public entry points
@@ -509,9 +509,9 @@ and several engine-level collaborators:
 - **API entry point**:
   `configure_container_git_identity(&GitIdentityParams<'_, C, R>) ->
   PodbotResult<GitIdentityResult>` in
-  `src/api/configure_git_identity.rs`. This is the top-level function that
-  callers use when they already have a container identifier, a connected exec
-  client and a host command runner.
+`src/api/configure_git_identity.rs`. This is the top-level function that
+callers use when they already have a container identifier, a connected exec
+client, and a host command runner.
 - **Engine entry points**:
   `read_host_git_identity(&impl HostCommandRunner) -> HostGitIdentity` and
   `configure_git_identity(runtime, client, container_id, identity) ->
