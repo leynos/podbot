@@ -428,6 +428,7 @@ During implementation, capture evidence in this order.
 3. Run the required Rust quality gates:
 
    ```bash
+   set -o pipefail && cargo check --no-default-features 2>&1 | tee /tmp/podbot-check-no-cli.log
    set -o pipefail && make check-fmt 2>&1 | tee /tmp/podbot-check-fmt.log
    set -o pipefail && make lint 2>&1 | tee /tmp/podbot-lint.log
    set -o pipefail && make test 2>&1 | tee /tmp/podbot-test.log
@@ -438,6 +439,8 @@ Expected evidence for completion:
 - the stable import examples compile from outside the crate,
 - no public library signature returns `eyre`,
 - the binary still builds through the intended CLI path,
+- the crate compiles with `--no-default-features` (no-CLI compile gate
+  verified),
 - the user's guide matches the implemented embedding contract, and
 - Step 5.3 is marked complete in the roadmap.
 

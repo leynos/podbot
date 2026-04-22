@@ -244,9 +244,9 @@ pub fn exec(config: &AppConfig, request: &ExecRequest) -> PodbotResult<CommandOu
 
 /// Execute a command using a pre-connected engine client and runtime handle.
 ///
-/// This helper is intended for advanced embedders and test harnesses that
-/// already own a connector implementation and Tokio runtime. Callers that want
-/// the simpler stable surface should prefer [`exec`] or [`ExecContext`].
+/// Use this helper from crate-internal adapters and test harnesses that
+/// already own a connector implementation and `Tokio` runtime handle.
+/// External embedders should prefer [`exec`] or [`ExecContext`].
 ///
 /// # Errors
 ///

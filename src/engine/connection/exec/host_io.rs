@@ -12,21 +12,34 @@ use tokio::io::AsyncRead;
 #[cfg(not(test))]
 const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
 
+/// Returns `false` in test builds; stdin forwarding is always treated as
+/// enabled at this layer so that `default_host_stdin()` returns the
+/// appropriate empty reader via its own `#[cfg(test)]` variant.
 #[cfg(test)]
 pub(super) const fn stdin_forwarding_disabled_for_tests() -> bool {
     false
 }
 
+/// Returns `true` when the `PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS`
+/// environment variable is set to `"1"`, allowing integration tests to
+/// suppress real stdin forwarding without a rebuild.
 #[cfg(not(test))]
 pub(super) fn stdin_forwarding_disabled_for_tests() -> bool {
     std::env::var(DISABLE_STDIN_FORWARDING_ENV).is_ok_and(|value| value == "1")
 }
 
+/// Returns a deterministic empty stdin reader for unit tests.
+///
+/// Ensures unit tests never block on or consume the test runner's real stdin.
 #[cfg(test)]
 pub(super) fn default_host_stdin() -> Pin<Box<dyn AsyncRead + Send>> {
     Box::pin(tokio::io::empty())
 }
 
+/// Returns host stdin unless stdin forwarding is explicitly disabled.
+///
+/// When `PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS=1` is set, returns
+/// `tokio::io::empty()` instead of the real `tokio::io::stdin()`.
 #[cfg(not(test))]
 pub(super) fn default_host_stdin() -> Pin<Box<dyn AsyncRead + Send>> {
     if stdin_forwarding_disabled_for_tests() {

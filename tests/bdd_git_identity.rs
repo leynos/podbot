@@ -1,5 +1,7 @@
 //! Behavioural tests for Git identity configuration.
 
+#![cfg(feature = "internal")]
+
 mod bdd_git_identity_helpers;
 
 pub use bdd_git_identity_helpers::{GitIdentityState, git_identity_state};

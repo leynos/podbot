@@ -615,21 +615,15 @@ supported semver contract for embedders.
 
 ### Available functions
 
-| Function                                      | Description                                     |
-| --------------------------------------------- | ----------------------------------------------- |
-| `podbot::api::exec(config, request)`          | Execute a command in a running container        |
-| `podbot::api::ExecContext::connect(…)`        | Reuse a runtime handle and engine connection    |
-| `podbot::api::run_agent(config)`              | Run an AI agent in a sandboxed container (stub) |
-| `podbot::api::stop_container(container)`      | Stop a running container (stub)                 |
-| `podbot::api::list_containers()`              | List running podbot containers (stub)           |
-| `podbot::api::run_token_daemon(container_id)` | Run the token refresh daemon (stub)             |
+| Function                                 | Description                                  |
+| ---------------------------------------- | -------------------------------------------- |
+| `podbot::api::exec(config, request)`     | Execute a command in a running container     |
+| `podbot::api::ExecContext::connect(…)`   | Reuse a runtime handle and engine connection |
 
 ### Return type
 
-The execution entry points `podbot::api::exec(config, request)`,
-`podbot::api::run_agent(config)`, `podbot::api::stop_container(container)`,
-`podbot::api::list_containers()`, and
-`podbot::api::run_token_daemon(container_id)` return
+The stable execution entry points `podbot::api::exec(config, request)` and
+`podbot::api::ExecContext::exec(request)` return
 `podbot::error::Result<CommandOutcome>`:
 
 - `CommandOutcome::Success` indicates a zero exit code.
@@ -713,8 +707,8 @@ feature flag controls module visibility, not the `clap` dependency itself.
 
 The following modules are part of the stable public API:
 
-- `podbot::api` — orchestration functions (`exec`, `run_agent`,
-  `list_containers`, `stop_container`, `run_token_daemon`)
+- `podbot::api` — orchestration types and exec entry points (`exec`,
+  `ExecContext`, `ExecRequest`, `ExecMode`, `CommandOutcome`)
 - `podbot::config` — configuration types and loaders (`AppConfig`,
   `ConfigLoadOptions`, `load_config`)
 - `podbot::error` — semantic error hierarchy (`PodbotError`, `ConfigError`,
@@ -736,7 +730,36 @@ The following modules are public but gated behind Cargo features:
 - `podbot::cli` — Clap parse types (requires the `cli` feature, enabled by
   default)
 
+### Experimental API
+
+The following functions remain available under `podbot::api`, but they are not
+part of the stable semver contract described in this guide. Podbot reserves the
+`experimental` Cargo feature for unstable library surfaces, but these stub
+entry points are not yet gated by that feature in the current release, so treat
+them as unstable compatibility shims whose signatures may change.
+
+- `podbot::api::run_agent(config)` — validates GitHub credentials and returns a
+  stub success outcome.
+- `podbot::api::stop_container(container)` — placeholder stop operation that
+  currently returns a stub success outcome.
+- `podbot::api::list_containers()` — placeholder list operation that currently
+  returns a stub success outcome.
+- `podbot::api::run_token_daemon(container_id)` — placeholder token-refresh
+  daemon entry point that currently returns a stub success outcome.
+
+If and when these functions move behind the reserved experimental gate, the
+dependency declaration will look like this:
+
+```toml
+[dependencies]
+podbot = { version = "0.1.0", features = ["experimental"] }
+```
+
 ### `run_agent`
+
+> **Experimental:** This function is not part of the stable API contract.
+> Podbot reserves `feature = "experimental"` for unstable library surfaces,
+> but this stub is not yet gated by that feature in the current release.
 
 ```rust,no_run
 use podbot::api::run_agent;
@@ -761,6 +784,10 @@ issuing individual exec commands.
 > persistent agent loop.
 
 ### `run_token_daemon`
+
+> **Experimental:** This function is not part of the stable API contract.
+> Podbot reserves `feature = "experimental"` for unstable library surfaces,
+> but this stub is not yet gated by that feature in the current release.
 
 ```rust,no_run
 use podbot::api::run_token_daemon;
