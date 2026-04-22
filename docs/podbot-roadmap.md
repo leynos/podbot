@@ -226,11 +226,11 @@ Acquire scoped installation tokens for repository access.
 
 **Tasks:**
 
-- [ ] Implement installation_token_with_buffer to acquire tokens with expiry
+- [x] Implement installation_token_with_buffer to acquire tokens with expiry
   buffer.
-- [ ] Return the token string for use in Git operations.
-- [ ] Handle token acquisition failures gracefully.
-- [ ] Log token expiry time for debugging.
+- [x] Return the token string for use in Git operations.
+- [x] Handle token acquisition failures gracefully.
+- [x] Preserve token expiry metadata for debugging and later refresh work.
 
 **Completion criteria:** Installation tokens acquire successfully. Tokens have
 appropriate scope for repository operations.

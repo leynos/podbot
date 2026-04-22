@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose and big picture
 
@@ -150,16 +150,31 @@ work.
   `docs/podbot-design.md`, `docs/users-guide.md`, and the Rust testing guides.
 - [x] 2026-04-20 UTC: Surveyed the current GitHub auth code, test seams, and
   Octocrab source for `installation_token_with_buffer`.
-- [ ] Confirm the final acquisition seam and the expiry-preservation strategy.
-- [ ] Add the new token-acquisition module and value object.
-- [ ] Add unit tests covering happy path, unhappy path, and edge cases.
-- [ ] Add BDD scenarios covering observable behaviour.
-- [ ] Update `docs/podbot-design.md` and `docs/users-guide.md`.
-- [ ] Mark the Step 3.2 roadmap task as done once implementation is complete.
-- [ ] Run documentation gates.
-- [ ] Run `make check-fmt`, `make lint`, and `make test`.
-- [ ] Finalize `Surprises & Discoveries`, `Decision Log`, and
-  `Outcomes & Retrospective`.
+- [x] 2026-04-22 UTC: Confirmed the acquisition seam. Podbot now calls
+  Octocrab's typed `POST /app/installations/{installation_id}/access_tokens`
+  path instead of the convenience helper so expiry metadata is preserved.
+- [x] 2026-04-22 UTC: Added `src/github/installation_token.rs` with
+  `InstallationAccessToken`, `installation_token_with_buffer`, and the injected
+  `installation_token_with_factory` test seam.
+- [x] 2026-04-22 UTC: Added focused unit tests in
+  `src/github/installation_token_tests.rs` for expiry validation, metadata
+  failures, debug redaction, and client error propagation.
+- [x] 2026-04-22 UTC: Added behavioural coverage in
+  `tests/bdd_github_installation_token.rs` and
+  `tests/features/github_installation_token.feature`.
+- [x] 2026-04-22 UTC: Updated `docs/podbot-design.md`,
+  `docs/users-guide.md`, and `docs/podbot-roadmap.md` to reflect the
+  implemented Step 3.2 contract.
+- [x] 2026-04-22 UTC: Marked the Step 3.2 roadmap task as done.
+- [x] 2026-04-22 UTC: Ran documentation validation. `make markdownlint` and
+  `make nixie` passed. `make fmt` still fails because the pre-existing
+  `mdtablefix` / markdownlint table breakage in `docs/podbot-design.md` and
+  `docs/execplans/5-3-1-stabilize-public-library-boundaries.md` remains
+  unresolved.
+- [x] 2026-04-22 UTC: Ran `make check-fmt`, `make lint`, and `make test`
+  successfully after the implementation and test fixes landed.
+- [x] 2026-04-22 UTC: Finalized `Surprises & Discoveries`, `Decision Log`,
+  and `Outcomes & Retrospective`.
 
 ## Surprises & Discoveries
 
@@ -182,6 +197,22 @@ work.
   directory, `ScenarioState` with `Slot<T>`, and one scenario file per
   behaviour slice.
 
+- Octocrab's generic `post` method is sufficient for the installation-token
+  path, but the generic parameter order is `post::<Body, Response>`, not the
+  more common response-first pattern. The implementation now uses
+  `post::<_, InstallationToken>(...)`.
+
+- Octocrab marks `InstallationToken` as `#[non_exhaustive]`, so tests cannot
+  build it with a struct literal. Unit and BDD tests instead deserialize a
+  minimal JSON payload into `InstallationToken`.
+
+- `make fmt` still is not idempotent for the repository’s existing Markdown
+  tables. Re-running it on this branch reproduces the previously observed
+  MD056 and MD060 failures in `docs/podbot-design.md` and
+  `docs/execplans/5-3-1-stabilize-public-library-boundaries.md`, even though
+  `make markdownlint` passes once those files are restored to their checked-in
+  table layout.
+
 ## Decision Log
 
 - 2026-04-20 UTC: Treat the Step 3.2 roadmap entry as authoritative for this
@@ -197,6 +228,58 @@ work.
   overloading the existing `validate_with_factory` helper. Credential
   validation and installation-token acquisition are adjacent but not identical
   behaviours, and separate helpers keep the code and tests easier to read.
+
+- 2026-04-22 UTC: Implement the production path with a podbot-owned
+  `InstallationAccessToken` value object and an injected
+  `GitHubInstallationTokenClient` seam. This keeps the public helper narrow,
+  preserves expiry metadata, and lets tests exercise the orchestration path
+  without live network access.
+
+- 2026-04-22 UTC: Use `chrono` as a direct dependency for RFC 3339 parsing and
+  UTC buffer comparison. The standard library alone would have required either
+  a larger bespoke parser or weaker expiry handling.
+
+- 2026-04-22 UTC: Keep the public production helper signature at the
+  four-argument shape requested by the roadmap, but collapse the injected test
+  seam into `InstallationTokenRequest` so Clippy’s argument-count rule is
+  satisfied without suppressions.
+
+## Outcomes & Retrospective
+
+Completed on 2026-04-22 UTC.
+
+Step 3.2 now ships a real installation-token acquisition path in
+`src/github/installation_token.rs`. The public helper
+`installation_token_with_buffer(app_id, installation_id, private_key_path,
+buffer)` loads the RSA private key, builds an App-authenticated Octocrab
+client, requests `POST /app/installations/{installation_id}/access_tokens`,
+parses `expires_at`, enforces the expiry buffer, and returns a podbot-owned
+`InstallationAccessToken` value object. Tokens that expire within the buffer
+raise `GitHubError::TokenExpired`; malformed or missing expiry metadata fails
+closed with `GitHubError::TokenAcquisitionFailed`.
+
+The implementation preserved the existing library boundary. Error mapping stays
+semantic in `src/github/classify.rs`, secrets are redacted in `Debug`, and the
+test seam is explicit via `GitHubInstallationTokenClient` plus
+`installation_token_with_factory(InstallationTokenRequest, factory)`. Focused
+unit tests and a new BDD feature now cover the success case, within-buffer
+expiry rejection, GitHub API rejection, and missing expiry metadata.
+
+Validation evidence:
+
+- `set -o pipefail && make check-fmt 2>&1 | tee /tmp/3-2-1-check-fmt.log`
+  exited 0.
+- `set -o pipefail && make lint 2>&1 | tee /tmp/3-2-1-lint.log`
+  exited 0.
+- `set -o pipefail && make test 2>&1 | tee /tmp/3-2-1-test.log`
+  exited 0.
+- `set -o pipefail && MDLINT=/root/.bun/bin/markdownlint-cli2 make markdownlint
+  2>&1 | tee /tmp/3-2-1-markdownlint.log` exited 0.
+- `set -o pipefail && make nixie 2>&1 | tee /tmp/3-2-1-nixie.log`
+  exited 0.
+- `set -o pipefail && make fmt 2>&1 | tee /tmp/3-2-1-fmt.log`
+  still exits non-zero because of the pre-existing table-formatting bug noted
+  above; no new formatter issue was introduced by this step.
 
 ## Context and orientation
 
@@ -259,8 +342,8 @@ the secret.
 
 ## Documentation signposts
 
-The implementing agent should keep the following repository documents open while
-working through this plan:
+The implementing agent should keep the following repository documents open
+while working through this plan:
 
 - `docs/podbot-roadmap.md`
   - the authoritative scope and completion criteria for Step 3.2 and the
@@ -293,8 +376,8 @@ working through this plan:
 The implementing agent should also refer back to
 `docs/execplans/3-1-3-validate-credentials-on-startup.md` and
 `docs/execplans/3-1-4-handle-invalid-or-expired-app-credentials-with-clear-errors.md`
-because Step 3.2 builds directly on those seams and should preserve their error
-quality bar.
+ because Step 3.2 builds directly on those seams and should preserve their
+error quality bar.
 
 ## Skills to load
 
@@ -308,7 +391,8 @@ set rather than freehanding the work:
   - use it first to route any Rust design, API, dependency, or test-shape
     question to the right deeper skill.
 - `rust-errors`
-  - use it when mapping Octocrab failures into `GitHubError::TokenAcquisitionFailed`
+  - use it when mapping Octocrab failures into
+    `GitHubError::TokenAcquisitionFailed`
     and `GitHubError::TokenExpired`.
 - `rust-types-and-apis`
   - use it when shaping the token value object, helper signatures, and any test
@@ -567,15 +651,3 @@ The implementation is complete only when all of the following are true:
 7. `docs/podbot-roadmap.md` marks the relevant Step 3.2 task as done.
 8. `make check-fmt`, `make lint`, and `make test` all succeed, and the
    documentation gates succeed as well.
-
-## Outcomes & Retrospective
-
-Pending implementation approval.
-
-When this plan is executed, replace this section with:
-
-- what shipped,
-- what changed from the original plan,
-- which risks materialized,
-- which commands proved success, and
-- what future implementers should remember before starting Step 3.3.

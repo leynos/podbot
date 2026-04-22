@@ -314,9 +314,10 @@ The token strategy works as follows:
 3. The container receives a read-only bind mount:
    `<token_path>:/run/secrets/ghapp_token:ro`.
 
-4. The token daemon refreshes the token with a time buffer using Octocrab's
-   `installation_token_with_buffer` method,[^2] writing atomically via rename
-   from a temporary file.
+4. The token daemon refreshes the token with a time buffer using podbot's
+   `github::installation_token_with_buffer` helper, which preserves both the
+   token string and the parsed expiry timestamp before the daemon writes the
+   refreshed secret atomically via rename from a temporary file.
 
 5. Inside the container, `GIT_ASKPASS` reads the mounted file, ensuring Git
    operations continue working after token refresh.
@@ -325,18 +326,17 @@ The token strategy works as follows:
 
 ```rust,no_run
 // Token refresh pseudocode
-let octocrab = Octocrab::builder()
-    .app(app_id, private_key)
-    .build()?;
-
-let installation = octocrab.installation(installation_id);
-let token = installation
-    .installation_token_with_buffer(Duration::from_secs(300))
-    .await?;
+let token = podbot::github::installation_token_with_buffer(
+    app_id,
+    installation_id,
+    private_key_path,
+    Duration::from_secs(300),
+)
+.await?;
 
 // Atomic write: create temporary, then rename
 let temp_path = token_path.with_extension("new");
-std::fs::write(&temp_path, token.as_str())?;
+std::fs::write(&temp_path, token.token())?;
 std::fs::rename(&temp_path, &token_path)?;
 ```
 
@@ -357,9 +357,11 @@ Key methods include:
 
 ### Octocrab
 
-Octocrab handles GitHub App authentication and token management.[^2] The
-`OctocrabBuilder::app(app_id, key)` constructor establishes App identity, and
-the installation method acquires scoped tokens with automatic caching.
+Octocrab handles GitHub App authentication and the low-level token
+exchange.[^2] Podbot wraps that client in a narrower helper,
+`github::installation_token_with_buffer`, so the library can preserve
+`expires_at`, enforce its own expiry buffer policy, and return semantic
+`GitHubError` variants rather than leaking Octocrab-specific failure details.
 
 #### Private key loading contract
 
@@ -401,6 +403,30 @@ three cases: missing Tokio runtime, HTTP client initialization failure (for
 example, TLS backend failure), or other builder errors. The App ID is not
 validated at construction time; GitHub validates it when the client attempts to
 acquire a token.
+
+
+#### Installation-token acquisition contract
+
+The helper
+`github::installation_token_with_buffer(app_id, installation_id,
+private_key_path, buffer)` now owns Step 3.2. It:
+
+1. loads the RSA private key with `github::load_private_key`,
+2. builds an App-authenticated Octocrab client with
+   `github::build_app_client`,
+3. calls GitHub's
+   `POST /app/installations/{installation_id}/access_tokens` endpoint through
+   Octocrab's typed response path,
+4. parses `expires_at` as RFC 3339 UTC data,
+5. rejects the token with `GitHubError::TokenExpired` when the expiry is
+   within `buffer`, and
+6. returns a podbot-owned `InstallationAccessToken` value object that exposes
+   the token string for Git operations while preserving expiry metadata for the
+   later token-daemon work.
+
+Missing or malformed `expires_at` metadata fails closed with
+`GitHubError::TokenAcquisitionFailed { message }`. This keeps the token daemon
+from inheriting an unusable secret that cannot be refreshed safely.
 
 ### Credential validation contract
 
@@ -971,14 +997,31 @@ The following modules form the stable public API surface for library consumers.
 Types in these modules are versioned and should not change in breaking ways
 without a major version bump.
 
-| Module   | Stability | Key types and functions                                                                                                                                                                                                                                                     |
-| -------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api`    | Stable    | `CommandOutcome`, `ExecRequest`, `ExecMode`, `ExecContext`, `exec`, `run_agent`, `list_containers`, `stop_container`, `run_token_daemon`                                                                                                                                    |
-| `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`, `load_config`, `load_config_with_env`, `AgentConfig`, `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`, `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`, `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent` |
-| `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`, `GitHubError`, `FilesystemError`, `Result<T>`                                                                                                                                                                               |
-| `engine` | Internal  | Hidden compatibility surface; not part of the supported semver contract for embedders.                                                                                                                                                                                      |
-| `github` | Internal  | Hidden GitHub integration module; not part of the stable integration contract.                                                                                                                                                                                              |
-| `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo feature; library-only consumers can set `default-features = false` to hide module visibility.                                                                                                             |
+| Module   | Stability | Key types and functions                                           |
+| -------- | --------- | ----------------------------------------------------------------- |
+| `api`    | Stable    | `CommandOutcome`, `ExecParams`, `exec`, `run_agent`,              |
+|          |           | `list_containers`, `stop_container`, `run_token_daemon`           |
+| `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`,              |
+|          |           | `load_config`, `load_config_with_env`, `AgentConfig`,             |
+|          |           | `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`,          |
+|          |           | `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`,                 |
+|          |           | `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent`             |
+| `engine` | Stable    | `EngineConnector`, `SocketResolver`, `ExecMode`,                  |
+|          |           | `ExecRequest`, `ExecResult`, `ContainerExecClient`,               |
+|          |           | `ContainerCreator`, `ContainerUploader`,                          |
+|          |           | `CreateContainerRequest`, `ContainerSecurityOptions`,             |
+|          |           | `CredentialUploadRequest`, `CredentialUploadResult`               |
+| `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`,                   |
+|          |           | `GitHubError`, `FilesystemError`, `Result<T>`                     |
+| `github` | Internal  | Subject to change; not part of the stable integration contract.   |
+|          |           | GitHub App support provided by the `podbot::github` module with   |
+|          |           | `load_private_key`, `build_app_client`,                           |
+|          |           | `validate_app_credentials`, `GitHubAppClient` trait.              |
+| `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo |
+|          |           | feature (enabled by default). When enabled, adds `clap` as a      |
+|          |           | direct dependency. Library-only consumers can set                 |
+|          |           | `default-features = false` to hide CLI module visibility.         |
+|          |           | Note: `clap` remains in the dependency tree via `ortho_config`.   |
 
 Table: Module stability and key types for Podbot modules
 

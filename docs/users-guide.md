@@ -291,6 +291,29 @@ actionable error messages with remediation hints:
 | "GitHub API unavailable (HTTP 5xx)"         | GitHub is experiencing an outage or maintenance. Check <https://www.githubstatus.com> for service status. Retry after the service recovers.                                      |
 | "failed to validate GitHub App credentials" | A network error occurred or the API returned an unexpected status. Check network connectivity and DNS resolution. Review the detailed error message for the specific cause.      |
 
+
+### Installation token acquisition
+
+When podbot needs repository access, it exchanges the configured GitHub App
+identity for an installation-scoped token using
+`podbot::github::installation_token_with_buffer(app_id, installation_id,
+private_key_path, buffer)`.
+
+The helper returns both the token string and the parsed expiry timestamp.
+Podbot rejects tokens that are already expired or that expire within the
+requested buffer. In that case the error is reported as
+`installation token expired`.
+
+Common installation-token acquisition failures:
+
+| Message fragment                               | Cause and remediation                                                                                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "GitHub installation not found (HTTP 404)"     | `github.installation_id` does not match the configured App, or the installation has been removed. Verify the installation ID in GitHub App settings.          |
+| "GitHub denied installation token acquisition" | The App installation lacks the required repository permissions, or the App is not installed on the target repository. Review installation permissions.        |
+| "rate-limited installation token acquisition"  | GitHub has rate-limited the installation. Wait and retry after the limit resets. Check <https://www.githubstatus.com> if the problem persists.                |
+| "did not include expires_at"                   | GitHub returned a token response without usable expiry metadata. Podbot refuses the token so later refresh logic does not start from an unsafe state.         |
+| "invalid installation token expiry timestamp"  | GitHub returned malformed expiry metadata. Inspect the detailed error and retry; if the problem persists, treat it as an API anomaly and capture diagnostics. |
+
 ### Environment variables
 
 All configuration options can be set via environment variables using the

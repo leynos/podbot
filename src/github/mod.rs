@@ -11,6 +11,7 @@
 //! change as the GitHub integration stabilizes.
 
 mod classify;
+mod installation_token;
 mod pem_validation;
 
 use std::future::Future;
@@ -27,6 +28,10 @@ use octocrab::models::AppId;
 
 use crate::error::GitHubError;
 use classify::classify_github_api_error;
+pub use installation_token::{
+    GitHubInstallationTokenClient, InstallationAccessToken, InstallationTokenRequest,
+    installation_token_with_buffer, installation_token_with_factory,
+};
 use pem_validation::parse_rsa_pem;
 
 /// A boxed future for async trait methods.
@@ -136,6 +141,12 @@ impl OctocrabAppClient {
     #[must_use]
     pub const fn new(client: Octocrab) -> Self {
         Self { client }
+    }
+
+    /// Expose the wrapped Octocrab client to sibling modules implementing
+    /// additional GitHub operations.
+    pub(crate) const fn client(&self) -> &Octocrab {
+        &self.client
     }
 }
 
@@ -320,5 +331,5 @@ pub fn test_classify_error_message(code: u16, full_error: &str) -> String {
 
 #[cfg(test)]
 mod credential_error_tests;
-#[cfg(test)]
+mod installation_token_tests;
 mod tests;
