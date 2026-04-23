@@ -1,3 +1,7 @@
+//! Detached-session exec lifecycle tests.
+
+use super::*;
+
 #[rstest]
 fn exec_async_detached_returns_exit_code(runtime: RuntimeFixture) -> TestResult {
     let runtime_handle = runtime?;

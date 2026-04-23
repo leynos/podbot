@@ -198,7 +198,7 @@ classDiagram
     EngineConnector ..> ContainerExecClient : drives
 ```
 
-_Figure 2: Stable exec API types, orchestration entry points, and the internal
+_Figure 1: Stable exec API types, orchestration entry points, and the internal
 test seam for injected engine clients._
 
 ## 4. Stdout purity contract
@@ -301,7 +301,7 @@ flowchart LR
     D -->|"stream not polled"| B
 ```
 
-_Figure 1: Backpressure propagation from host stdout to container._
+_Figure 2: Backpressure propagation from host stdout to container._
 
 ## 6. Stdin forwarding lifecycle
 

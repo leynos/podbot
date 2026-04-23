@@ -1,22 +1,23 @@
 //! Unit tests for the orchestration API module.
 
 use bollard::container::LogOutput;
-use camino::Utf8PathBuf;
 use futures_util::stream;
 use mockall::mock;
 use rstest::rstest;
 
 use super::exec::exec_with_client;
-use super::{
-    CommandOutcome, ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon,
-    stop_container,
-};
+use super::{CommandOutcome, ExecMode, ExecRequest};
+#[cfg(feature = "experimental")]
+use super::{list_containers, run_agent, run_token_daemon, stop_container};
+#[cfg(feature = "experimental")]
 use crate::config::{AppConfig, GitHubConfig};
 use crate::engine::{
     ContainerExecClient, CreateExecFuture, ExecMode as EngineExecMode, InspectExecFuture,
     ResizeExecFuture, StartExecFuture,
 };
 use crate::error::{ConfigError, PodbotError};
+#[cfg(feature = "experimental")]
+use camino::Utf8PathBuf;
 
 mock! {
     #[derive(Debug)]
@@ -172,6 +173,7 @@ fn exec_with_client_maps_exit_code_to_outcome(
 }
 
 #[rstest]
+#[cfg(feature = "experimental")]
 fn run_agent_requires_complete_github_config() {
     let config = AppConfig {
         github: GitHubConfig {
@@ -192,6 +194,7 @@ fn run_agent_requires_complete_github_config() {
 }
 
 #[rstest]
+#[cfg(feature = "experimental")]
 fn credential_validation_thread_panic_maps_to_github_error() {
     let error = super::credential_validation_thread_panicked();
 
@@ -246,6 +249,7 @@ fn exec_request_deserialization_normalizes_tty_for_non_attached_modes(
 #[case::list_containers("list_containers")]
 #[case::stop_container("stop_container")]
 #[case::run_token_daemon("run_token_daemon")]
+#[cfg(feature = "experimental")]
 fn stub_returns_success(#[case] stub: &str) {
     let config = AppConfig::default();
     let outcome = match stub {

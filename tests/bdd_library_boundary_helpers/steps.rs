@@ -10,9 +10,9 @@ use bollard::container::LogOutput;
 use futures_util::stream;
 use mockable::MockEnv;
 use mockall::mock;
-use podbot::api::{
-    ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon, stop_container,
-};
+use podbot::api::{ExecMode, ExecRequest};
+#[cfg(feature = "experimental")]
+use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
 use podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config_with_env};
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
@@ -181,6 +181,7 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_stubs_called(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
     let config = AppConfig::default();
     let mut results = Vec::new();

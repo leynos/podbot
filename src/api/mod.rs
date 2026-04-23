@@ -1,10 +1,10 @@
 //! Orchestration API for podbot commands.
 //!
-//! This module provides the stable public orchestration functions for each
-//! supported command: [`exec`], [`run_agent`], [`stop_container`],
-//! [`list_containers`], and [`run_token_daemon`]. These functions contain the
-//! business logic that was previously embedded in the CLI binary, making it
-//! available to both the CLI adapter and library embedders.
+//! This module provides the stable public exec orchestration surface:
+//! [`exec`], [`ExecContext`], [`ExecRequest`], [`ExecMode`], and
+//! [`CommandOutcome`]. Additional compatibility stubs such as `run_agent`,
+//! `stop_container`, `list_containers`, and `run_token_daemon` are available
+//! only with `feature = "experimental"`.
 //!
 //! Internal-feature builds also expose additional compatibility helpers for
 //! Git identity configuration.
@@ -24,6 +24,7 @@ pub use configure_git_identity::{GitIdentityParams, configure_container_git_iden
 pub use exec::exec_with_client_for_tests;
 pub use exec::{ExecContext, ExecMode, ExecRequest, exec};
 
+#[cfg(feature = "experimental")]
 use crate::config::AppConfig;
 use crate::error::Result as PodbotResult;
 
@@ -63,6 +64,7 @@ pub enum CommandOutcome {
 ///
 /// These validation failures are real runtime behaviour, not placeholder
 /// errors deferred until the rest of the orchestration flow is implemented.
+#[cfg(feature = "experimental")]
 pub fn run_agent(config: &AppConfig) -> PodbotResult<CommandOutcome> {
     if config.github.is_partially_configured() {
         config.github.validate()?;
@@ -86,6 +88,7 @@ pub fn run_agent(config: &AppConfig) -> PodbotResult<CommandOutcome> {
     clippy::missing_const_for_fn,
     reason = "FIXME(https://github.com/leynos/podbot/issues/51): stub is const-eligible but will gain runtime logic"
 )]
+#[cfg(feature = "experimental")]
 pub fn list_containers() -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
 }
@@ -99,6 +102,7 @@ pub fn list_containers() -> PodbotResult<CommandOutcome> {
     clippy::missing_const_for_fn,
     reason = "FIXME(https://github.com/leynos/podbot/issues/51): stub is const-eligible but will gain runtime logic"
 )]
+#[cfg(feature = "experimental")]
 pub fn stop_container(_container: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
 }
@@ -112,6 +116,7 @@ pub fn stop_container(_container: &str) -> PodbotResult<CommandOutcome> {
     clippy::missing_const_for_fn,
     reason = "FIXME(https://github.com/leynos/podbot/issues/51): stub is const-eligible but will gain runtime logic"
 )]
+#[cfg(feature = "experimental")]
 pub fn run_token_daemon(_container_id: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
 }
@@ -124,6 +129,7 @@ fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
     })
 }
 
+#[cfg(feature = "experimental")]
 fn validate_agent_github_credentials(
     app_id: u64,
     private_key_path: &camino::Utf8Path,
@@ -154,6 +160,7 @@ fn validate_agent_github_credentials(
     }
 }
 
+#[cfg(feature = "experimental")]
 fn credential_validation_thread_panicked() -> crate::error::PodbotError {
     crate::error::PodbotError::from(crate::error::GitHubError::AuthenticationFailed {
         message: String::from("GitHub credential validation thread panicked"),

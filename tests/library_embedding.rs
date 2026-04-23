@@ -17,10 +17,9 @@ use futures_util::stream;
 use mockall::mock;
 use rstest::{fixture, rstest};
 
-use podbot::api::{
-    CommandOutcome, ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon,
-    stop_container,
-};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
+#[cfg(feature = "experimental")]
+use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
 use podbot::config::{AppConfig, CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
@@ -203,6 +202,7 @@ fn error_types_are_matchable() {
 // -------------------------------------------------------------------------
 
 #[rstest]
+#[cfg(feature = "experimental")]
 fn stub_orchestration_functions_return_success() {
     let config = AppConfig::default();
 

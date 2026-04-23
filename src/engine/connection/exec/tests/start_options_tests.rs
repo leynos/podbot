@@ -1,3 +1,7 @@
+//! Start-exec option mapping tests.
+
+use super::*;
+
 struct StartOptionsCase {
     mode: ExecMode,
     requested_tty: bool,

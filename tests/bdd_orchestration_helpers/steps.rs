@@ -3,10 +3,9 @@
 use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
-use podbot::api::{
-    CommandOutcome, ExecMode, ExecRequest, list_containers, run_agent, run_token_daemon,
-    stop_container,
-};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
+#[cfg(feature = "experimental")]
+use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
 use podbot::config::AppConfig;
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
@@ -114,6 +113,7 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
     let config = AppConfig::default();
     invoke_orchestration(orchestration_state, || run_agent(&config));
@@ -125,6 +125,7 @@ fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> 
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_stop_invoked(
     orchestration_state: &OrchestrationState,
     container: String,
@@ -138,6 +139,7 @@ fn when_stop_invoked(
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_list_containers_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
     invoke_orchestration(orchestration_state, list_containers);
     Ok(())
@@ -148,6 +150,7 @@ fn when_list_containers_invoked(orchestration_state: &OrchestrationState) -> Ste
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_token_daemon_invoked(
     orchestration_state: &OrchestrationState,
     container: String,

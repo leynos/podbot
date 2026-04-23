@@ -1,3 +1,7 @@
+//! Attached-session exec lifecycle tests.
+
+use super::*;
+
 struct AttachedResizeCase {
     tty: bool,
     exec_id: &'static str,
@@ -48,7 +52,15 @@ fn exec_async_attached_resize_behaviour(
     let terminal_size_provider = StubTerminalSizeProvider {
         terminal_size: Some(case.terminal_size),
     };
-    execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider);
+    let result =
+        execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider)?;
+    if result.exit_code() != 0 {
+        return Err(format!(
+            "attached execution should succeed, got exit code {}",
+            result.exit_code()
+        )
+        .into());
+    }
     Ok(())
 }
 

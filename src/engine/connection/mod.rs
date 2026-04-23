@@ -1,10 +1,10 @@
 //! Socket resolution and container engine connection.
 //!
-//! This module provides functionality to resolve container engine socket endpoints
-//! from multiple sources (environment variables, configuration, platform defaults)
-//! and establish connections using the `Bollard` library. It also re-exports Git
-//! identity configuration utilities for propagating host Git credentials into
-//! containers.
+//! This module provides the engine-facing connection and exec surface used by
+//! Podbot's stable API. Normal builds expose the exec path plus socket
+//! resolution; the git identity, health-check, create-container, and
+//! credential-upload utilities are available only when the `internal` feature
+//! or test builds are enabled.
 
 #[cfg(any(feature = "internal", test))]
 mod create_container;

@@ -82,7 +82,7 @@ fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutc
     if let Some(ref image) = config.image {
         println!("Using image: {image}");
     }
-    let result = podbot::api::run_agent(config)?;
+    let result = run_agent_api(config)?;
     println!("Container orchestration not yet implemented.");
     Ok(result)
 }
@@ -106,7 +106,7 @@ fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn run_token_daemon_cli(args: &TokenDaemonArgs) -> PodbotResult<CommandOutcome> {
     println!("Starting token daemon for container {}", args.container_id);
-    let result = podbot::api::run_token_daemon(&args.container_id)?;
+    let result = run_token_daemon_api(&args.container_id)?;
     println!("Token daemon not yet implemented.");
     Ok(result)
 }
@@ -115,7 +115,7 @@ fn run_token_daemon_cli(args: &TokenDaemonArgs) -> PodbotResult<CommandOutcome> 
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn list_containers_cli() -> PodbotResult<CommandOutcome> {
     println!("Listing podbot containers...");
-    let result = podbot::api::list_containers()?;
+    let result = list_containers_api()?;
     println!("Container listing not yet implemented.");
     Ok(result)
 }
@@ -124,7 +124,7 @@ fn list_containers_cli() -> PodbotResult<CommandOutcome> {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn stop_container_cli(args: &StopArgs) -> PodbotResult<CommandOutcome> {
     println!("Stopping container {}", args.container);
-    let result = podbot::api::stop_container(&args.container)?;
+    let result = stop_container_api(&args.container)?;
     println!("Container stop not yet implemented.");
     Ok(result)
 }
@@ -163,6 +163,62 @@ fn normalize_process_exit_code(code: i64) -> i32 {
     }
 
     i32::try_from(code).unwrap_or(1)
+}
+
+#[cfg(feature = "experimental")]
+fn run_agent_api(config: &AppConfig) -> PodbotResult<CommandOutcome> {
+    podbot::api::run_agent(config)
+}
+
+#[cfg(not(feature = "experimental"))]
+fn run_agent_api(_config: &AppConfig) -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: String::from("the run command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
+#[cfg(feature = "experimental")]
+fn run_token_daemon_api(container_id: &str) -> PodbotResult<CommandOutcome> {
+    podbot::api::run_token_daemon(container_id)
+}
+
+#[cfg(not(feature = "experimental"))]
+fn run_token_daemon_api(_container_id: &str) -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: String::from("the token-daemon command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
+#[cfg(feature = "experimental")]
+fn list_containers_api() -> PodbotResult<CommandOutcome> {
+    podbot::api::list_containers()
+}
+
+#[cfg(not(feature = "experimental"))]
+fn list_containers_api() -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: String::from("the ps command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
+#[cfg(feature = "experimental")]
+fn stop_container_api(container: &str) -> PodbotResult<CommandOutcome> {
+    podbot::api::stop_container(container)
+}
+
+#[cfg(not(feature = "experimental"))]
+fn stop_container_api(_container: &str) -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: String::from("the stop command requires feature = \"experimental\""),
+    }
+    .into())
 }
 
 #[cfg(test)]

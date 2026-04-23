@@ -218,10 +218,11 @@ impl ExecContext {
 ///
 /// # Errors
 ///
-/// Returns non-exhaustive `PodbotError` variants from both
-/// [`ExecContext::connect`] and command execution, including:
-/// - connection and runtime setup failures returned while creating the
-///   per-call [`ExecContext`]
+/// Returns non-exhaustive `PodbotError` variants from multiple stages:
+/// - `super::create_runtime()` may return runtime creation failures before any
+///   engine work starts
+/// - [`ExecContext::connect`] may return connection-related failures while
+///   resolving and opening the engine client for the per-call context
 /// - `ContainerError::ExecFailed` if command execution fails.
 ///
 /// # Examples

@@ -1,3 +1,9 @@
+//! Error-path regression tests for exec lifecycle orchestration.
+//!
+//! `ErrorScenario` captures each failure setup and the expected mapped error.
+
+use super::*;
+
 struct ErrorScenario {
     name: &'static str,
     exec_id: &'static str,
@@ -24,7 +30,7 @@ struct ErrorScenario {
     mode: ExecMode::Detached,
     command: vec![String::from("false")],
     setup_failure: setup_missing_exit_code_scenario,
-    expected_container_id: None,
+    expected_container_id: Some("sandbox-123"),
     expected_message_fragment: "without an exit code",
 })]
 #[case(ErrorScenario {
@@ -33,7 +39,7 @@ struct ErrorScenario {
     mode: ExecMode::Attached,
     command: vec![String::from("echo"), String::from("hello")],
     setup_failure: setup_attached_detached_response_scenario,
-    expected_container_id: None,
+    expected_container_id: Some("sandbox-123"),
     expected_message_fragment: "detached start result",
 })]
 fn exec_async_error_scenarios(

@@ -190,16 +190,12 @@ pub(super) fn execute_and_assert_success(
     client: &MockExecClient,
     request: &ExecRequest,
     terminal_size_provider: &StubTerminalSizeProvider,
-) {
-    let result = runtime.block_on(EngineConnector::exec_async_with_terminal_size_provider(
+) -> Result<ExecResult, PodbotError> {
+    runtime.block_on(EngineConnector::exec_async_with_terminal_size_provider(
         client,
         request,
         terminal_size_provider,
-    ));
-    assert!(
-        result.is_ok(),
-        "attached execution should succeed: {result:?}"
-    );
+    ))
 }
 
 pub(super) fn setup_attached_resize_expectation_for_case(
