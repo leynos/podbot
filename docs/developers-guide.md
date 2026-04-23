@@ -411,24 +411,27 @@ transitively. At the time of writing, `ortho_config` remains one such path, so
 the guarantee is about Podbot's CLI module and binary, not global absence of
 `clap`.
 
-The `experimental` feature is currently a stub with no associated code; it
-exists as a forward-compatible extension point for features that are not yet
-ready for stable embedding contracts.
+The `experimental` feature now gates real, non-stable orchestration surfaces.
+It enables experimental API entry points such as `podbot::api::run_agent`,
+`podbot::api::list_containers`, `podbot::api::stop_container`, and
+`podbot::api::run_token_daemon`, together with the matching CLI command paths
+that delegate to those APIs.
 
 ### 10.1. Feature matrix
 
-| Feature        | Default | Enables                          |
-| -------------- | ------- | -------------------------------- |
-| `cli`          | Yes     | `clap` dependency; `podbot::cli` |
-| `experimental` | No      | (reserved; currently no-op)      |
+| Feature        | Default | Enables                                                       |
+| -------------- | ------- | ------------------------------------------------------------- |
+| `cli`          | Yes     | `clap` dependency; `podbot::cli`                              |
+| `experimental` | No      | Experimental orchestration API and matching CLI command paths |
 
 ### 10.2. Adding a new feature-gated item
 
 1. Declare the feature in `Cargo.toml` under `[features]`.
 2. Gate the module or dependency with `#[cfg(feature = "your-feature")]` or
    `optional = true` plus `your-feature = ["dep:your-dep"]`.
-3. Add a trybuild test in `tests/cli_feature_gating/` that compiles a minimal
-   consumer without the feature and asserts the expected compile error.
+3. Add or update the compile-contract proof in `tests/compile_contract.rs`
+   using fixtures under `tests/ui/`, which is the canonical harness for
+   feature-gating and public-surface compile checks.
 4. Update this table.
 
 ### 10.3. Feature gate verification
@@ -471,14 +474,15 @@ The semver-stable surface for library embedders is limited to three modules:
 | Module           | Contents                                               |
 | ---------------- | ------------------------------------------------------ |
 | `podbot::api`    | `exec`, `ExecRequest`, `ExecMode`, `ExecContext`,      |
-|                  | `run_agent`, `run_token_daemon`, `CommandOutcome`      |
+|                  | `CommandOutcome`                                       |
 | `podbot::config` | `AppConfig`, `GitHubConfig`, and related configuration |
 |                  | types                                                  |
 | `podbot::error`  | `PodbotError`, `Result<T>`, error variant enums        |
 
 Embedders must not import `podbot::cli`, `podbot::engine`, or `podbot::github`.
-Those modules are annotated with `#[doc(hidden)]` or gated behind the `cli`
-feature and carry no stability guarantee.
+Those modules are annotated with `#[doc(hidden)]` or gated behind feature flags
+and carry no stability guarantee. Engine-owned traits, connector types, and
+runtime handles are not part of the semver-stable API surface.
 
 For the design rationale and full constraint set, see
 [docs/execplans/5-3-1-stabilize-public-library-boundaries.md](execplans/5-3-1-stabilize-public-library-boundaries.md)
@@ -496,9 +500,9 @@ For the design rationale and full constraint set, see
 ### 11.2. Experimental items
 
 Items not yet ready for stable embedding must be gated behind the
-`experimental` Cargo feature and annotated with
-`#[doc(cfg(feature = "experimental"))]`. Do not expose them via the three
-stable modules without a corresponding ADR update.
+`experimental` Cargo feature. Use `tests/compile_contract.rs` together with
+`tests/ui/` fixtures to prove the gated surface compiles only when intended. Do
+not expose them via the three stable modules without a corresponding ADR update.
 
 See [podbot-design.md, Error handling](podbot-design.md#error-handling) for the
 full error hierarchy.

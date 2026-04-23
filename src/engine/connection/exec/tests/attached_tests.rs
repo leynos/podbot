@@ -2,6 +2,10 @@
 
 use super::*;
 
+fn assert_attached_success_exit_code(result: &ExecResult) {
+    assert_eq!(result.exit_code(), 0);
+}
+
 struct AttachedResizeCase {
     tty: bool,
     exec_id: &'static str,
@@ -54,13 +58,7 @@ fn exec_async_attached_resize_behaviour(
     };
     let result =
         execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider)?;
-    if result.exit_code() != 0 {
-        return Err(format!(
-            "attached execution should succeed, got exit code {}",
-            result.exit_code()
-        )
-        .into());
-    }
+    assert_attached_success_exit_code(&result);
     Ok(())
 }
 

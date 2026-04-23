@@ -20,7 +20,9 @@ use rstest::{fixture, rstest};
 use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
 #[cfg(feature = "experimental")]
 use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
-use podbot::config::{AppConfig, CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
+#[cfg(feature = "experimental")]
+use podbot::config::AppConfig;
+use podbot::config::{CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };

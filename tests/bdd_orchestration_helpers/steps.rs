@@ -6,6 +6,7 @@ use mockall::mock;
 use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
 #[cfg(feature = "experimental")]
 use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
+#[cfg(feature = "experimental")]
 use podbot::config::AppConfig;
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
