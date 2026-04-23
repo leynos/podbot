@@ -147,7 +147,7 @@ classDiagram
 
     class ExecApi {
         +exec(config, request) Result~CommandOutcome, PodbotError~
-        -exec_with_client(connector, runtime_handle, request) Result~CommandOutcome, PodbotError~
+        ~exec_with_client(connector, runtime_handle, request) Result~CommandOutcome, PodbotError~
         -create_runtime() Result~tokio::runtime::Runtime, PodbotError~
     }
 
