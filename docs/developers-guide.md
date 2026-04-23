@@ -150,10 +150,6 @@ classDiagram
         -create_runtime() Result~tokio::runtime::Runtime, PodbotError~
     }
 
-    class AgentApi {
-        +run_agent(config) Result~CommandOutcome, PodbotError~
-    }
-
     class AppConfig {
         +Option~String~ engine_socket
         +GitHubConfig github
@@ -197,8 +193,8 @@ classDiagram
     EngineConnector ..> ContainerExecClient : drives
 ```
 
-_Figure 1: Stable exec API types, orchestration entry points, and the internal
-test seam for injected engine clients._
+_Figure 1: Stable exec API types and the internal test seam for injected engine
+clients._
 
 ## 4. Stdout purity contract
 
@@ -448,11 +444,11 @@ This confirms that library consumers who depend on podbot with
 unconditional imports of CLI types. The full feature matrix tested during
 development is:
 
-| Command                             | What it verifies                 |
-| ----------------------------------- | -------------------------------- |
-| `cargo check --no-default-features` | Library compiles without CLI     |
-| `cargo check --all-features`        | Everything compiles together     |
-| `make test`                         | All tests pass with all features |
+| Command                             | What it verifies                            |
+| ----------------------------------- | ------------------------------------------- |
+| `cargo check --no-default-features` | Library compiles without CLI                |
+| `cargo check --all-features`        | Everything compiles together                |
+| `make test`                         | All workspace tests pass (default features) |
 
 ### 10.4. Feature gate maintenance
 

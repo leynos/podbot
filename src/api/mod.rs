@@ -2,9 +2,10 @@
 //!
 //! This module provides the stable public exec orchestration surface:
 //! [`exec`], [`ExecContext`], [`ExecRequest`], [`ExecMode`], and
-//! [`CommandOutcome`]. Additional compatibility stubs such as `run_agent`,
-//! `stop_container`, `list_containers`, and `run_token_daemon` are available
-//! only with `feature = "experimental"`.
+//! [`CommandOutcome`]. Under `feature = "experimental"`, [`run_agent`]
+//! performs `GitHub` configuration and credential validation, while
+//! `stop_container`, `list_containers`, and `run_token_daemon` remain
+//! compatibility stubs.
 //!
 //! Internal-feature builds also expose additional compatibility helpers for
 //! Git identity configuration.
