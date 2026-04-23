@@ -121,6 +121,7 @@ pub fn run_token_daemon(_container_id: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
 }
 
+#[cfg(feature = "experimental")]
 fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
     tokio::runtime::Runtime::new().map_err(|error| {
         crate::error::PodbotError::from(crate::error::ContainerError::RuntimeCreationFailed {
