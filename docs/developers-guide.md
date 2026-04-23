@@ -137,7 +137,6 @@ classDiagram
         +new(container, command) Result~ExecRequest, PodbotError~
         +with_mode(mode) ExecRequest
         +with_tty(tty) ExecRequest
-        -validate() Result~(), PodbotError~
     }
 
     class ExecContext {
