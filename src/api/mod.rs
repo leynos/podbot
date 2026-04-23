@@ -2,7 +2,7 @@
 //!
 //! This module provides the stable public exec orchestration surface:
 //! [`exec`], [`ExecContext`], [`ExecRequest`], [`ExecMode`], and
-//! [`CommandOutcome`]. Under `feature = "experimental"`, [`run_agent`]
+//! [`CommandOutcome`]. Under `feature = "experimental"`, `run_agent`
 //! performs `GitHub` configuration and credential validation, while
 //! `stop_container`, `list_containers`, and `run_token_daemon` remain
 //! compatibility stubs.
@@ -122,7 +122,6 @@ pub fn run_token_daemon(_container_id: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
 }
 
-#[cfg(feature = "experimental")]
 fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
     tokio::runtime::Runtime::new().map_err(|error| {
         crate::error::PodbotError::from(crate::error::ContainerError::RuntimeCreationFailed {
