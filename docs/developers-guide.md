@@ -64,6 +64,13 @@ src/engine/connection/exec/
 |                        #   disable seam for tests;
 |                        #   with_protocol_stdin_forwarding_disabled(bool)
 |                        #   is compiled only for #[cfg(test)] builds
++-- runtime_helpers.rs   # Blocking runtime helpers for synchronous exec
+|                        #   wrappers; block_on_runtime detects nested
+|                        #   Tokio contexts and routes to block_in_place
+|                        #   (multi-thread) or a scoped thread (current-
+|                        #   thread) to avoid block_on panics; exec_failed
+|                        #   constructs ContainerError::ExecFailed with
+|                        #   container ID and message
 +-- tests.rs             # Test module root
 +-- tests/
     +-- protocol_proxy_bdd.rs         # BDD Gherkin scenarios
@@ -383,6 +390,41 @@ The exec subsystem maps failures to `PodbotError` via the `exec_failed` helper,
 which produces `ContainerError::ExecFailed { container_id, message }`. Callers
 receive semantic errors they can inspect and handle. The CLI boundary converts
 these to `eyre::Report` for operator-facing display.
+
+### 9.1. `run_agent` and `run_token_daemon` validation contracts
+
+#### `run_agent`
+
+`run_agent(config: &AppConfig)` performs credential validation before starting
+the agent loop:
+
+1. If none of `config.github.app_id`, `config.github.installation_id`, or
+   `config.github.private_key_path` is set (`is_partially_configured()` returns
+   `false`), the function returns `CommandOutcome::Success` immediately without
+   performing any network calls.
+2. If any field is set, `config.github.validate()` is called. This returns a
+   `PodbotError::Config(ConfigError::MissingRequired { .. })` if any required
+   field is absent or zero.
+3. If all three credential fields are present and non-zero, the function calls
+   `validate_agent_github_credentials`, which:
+   - Spawns a scoped thread when a Tokio runtime is already active (to avoid a
+     nested `block_on` panic).
+   - Creates its own single-thread Tokio runtime and calls
+     `crate::github::validate_app_credentials` on it.
+   - Maps thread-join failures to
+     `PodbotError::GitHub(GitHubError::AuthenticationFailed { .. })`.
+4. On success, returns `CommandOutcome::Success`.
+
+> **Note:** The agent execution loop beyond credential validation is currently a
+> stub. The function returns `CommandOutcome::Success` after successful
+> validation without launching a persistent process.
+
+#### `run_token_daemon`
+
+`run_token_daemon(container_id: &str)` is currently a stub. It accepts a
+container identifier, performs no validation, and returns
+`CommandOutcome::Success` unconditionally. Future implementations will start a
+token-refresh daemon for the named container.
 
 ## 10. Cargo feature gating
 
