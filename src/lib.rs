@@ -34,7 +34,7 @@ pub mod error;
 #[cfg(any(feature = "internal", test))]
 #[doc(hidden)]
 pub mod github;
-#[cfg(not(any(feature = "internal", test)))]
+#[cfg(all(feature = "experimental", not(any(feature = "internal", test))))]
 mod github;
 
 #[cfg(test)]

@@ -45,6 +45,7 @@ fn library_exec_failure(library_boundary_state: LibraryBoundaryState) {
     path = "tests/features/library_boundary.feature",
     name = "Stub orchestration functions return success"
 )]
+#[cfg(feature = "experimental")]
 fn stub_functions_succeed(library_boundary_state: LibraryBoundaryState) {
     let _ = library_boundary_state;
 }

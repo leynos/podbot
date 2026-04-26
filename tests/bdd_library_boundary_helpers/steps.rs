@@ -22,7 +22,9 @@ use podbot::engine::{
 use rstest_bdd_macros::{given, when};
 
 use super::StepResult;
-use super::state::{ConfigResult, LibraryBoundaryState, LibraryResult, StubOutcomes};
+#[cfg(feature = "experimental")]
+use super::state::StubOutcomes;
+use super::state::{ConfigResult, LibraryBoundaryState, LibraryResult};
 use crate::test_utils::exec_outcome_with_client;
 
 mock! {
