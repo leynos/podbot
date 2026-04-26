@@ -193,9 +193,6 @@ classDiagram
     ExecApi ..> CommandOutcome : result
     ExecApi ..> PodbotError : error
     ExecApi ..> ContainerExecClient : internal test seam
-    AgentApi ..> AppConfig : parameter
-    AgentApi ..> CommandOutcome : result
-    AgentApi ..> PodbotError : error
     AppConfig --> GitHubConfig : contains
     EngineConnector ..> ContainerExecClient : drives
 ```
