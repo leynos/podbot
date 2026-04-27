@@ -1,5 +1,7 @@
 //! Behavioural tests for container creation security profiles.
 
+#![cfg(feature = "internal")]
+
 mod bdd_container_creation_helpers;
 
 pub use bdd_container_creation_helpers::{ContainerCreationState, container_creation_state};

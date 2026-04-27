@@ -4,6 +4,7 @@ use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use futures_util::stream;
 use rstest::rstest;
+use serial_test::serial;
 
 use super::*;
 
@@ -135,33 +136,45 @@ fn protocol_mode_start_options_have_correct_flags() -> TestResult {
     Ok(())
 }
 
-#[rstest]
-fn protocol_exec_succeeds_end_to_end(runtime: RuntimeFixture) -> TestResult {
-    let runtime_handle = runtime?;
-    let mut client = MockExecClient::new();
-    setup_create_exec_expectation(&mut client, "proto-exec-1", false);
-    setup_start_exec_protocol(&mut client, vec![&b"protocol-output"[..]]);
-    client.expect_resize_exec().never();
-    setup_inspect_exec_once(&mut client, Some(0));
-
-    let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
-    let terminal_size_provider = make_terminal_size_provider(80, 24);
-    execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider);
-    Ok(())
+struct ProtocolExecCase {
+    exec_id: &'static str,
+    output_messages: Vec<&'static [u8]>,
+    inspect_exit_code: i64,
+    expected_exit_code: i64,
+    context: &'static str,
 }
 
 #[rstest]
-fn protocol_exec_returns_nonzero_exit_code(runtime: RuntimeFixture) -> TestResult {
+#[case(ProtocolExecCase {
+    exec_id: "proto-exec-1",
+    output_messages: vec![&b"protocol-output"[..]],
+    inspect_exit_code: 0,
+    expected_exit_code: 0,
+    context: "protocol exec should succeed",
+})]
+#[case(ProtocolExecCase {
+    exec_id: "proto-exec-2",
+    output_messages: vec![],
+    inspect_exit_code: 42,
+    expected_exit_code: 42,
+    context: "protocol exec should return non-zero exit code",
+})]
+#[serial]
+fn protocol_exec_maps_exit_code(
+    runtime: RuntimeFixture,
+    #[case] case: ProtocolExecCase,
+) -> TestResult {
     let runtime_handle = runtime?;
     let mut client = MockExecClient::new();
-    setup_create_exec_simple(&mut client, "proto-exec-2");
-    setup_start_exec_protocol(&mut client, vec![]);
+    setup_create_exec_expectation(&mut client, case.exec_id, false);
+    setup_start_exec_protocol(&mut client, case.output_messages);
     client.expect_resize_exec().never();
-    setup_inspect_exec_once(&mut client, Some(42));
+    setup_inspect_exec_once(&mut client, Some(case.inspect_exit_code));
 
     let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
-    let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
-    assert_exit_code(result, 42, "protocol exec should succeed");
+    let result = runtime_handle
+        .block_on(EngineConnector::exec_async_without_protocol_stdin_forwarding(&client, &request));
+    assert_exit_code(result, case.expected_exit_code, case.context);
     Ok(())
 }
 

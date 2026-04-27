@@ -1,5 +1,7 @@
 //! Behavioural test helpers for podbot configuration.
 
+#![cfg(feature = "internal")]
+
 use camino::Utf8PathBuf;
 use ortho_config::MergeComposer;
 use ortho_config::serde_json::json;
@@ -499,8 +501,8 @@ fn configuration_is_merged(config_state: &ConfigState) {
         composer.push_cli(cli_layer);
     }
 
-    let config: AppConfig =
-        AppConfig::merge_from_layers(composer.layers()).expect("merge should succeed");
+    let config: AppConfig = podbot::config::merge_from_layers_for_tests(composer.layers())
+        .expect("merge should succeed");
     config_state.config.set(config);
 }
 

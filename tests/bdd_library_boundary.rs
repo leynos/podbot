@@ -9,7 +9,10 @@
 //! Scenarios are defined in `tests/features/library_boundary.feature` and
 //! step definitions live in the `bdd_library_boundary_helpers` module.
 
+#![cfg(feature = "internal")]
+
 mod bdd_library_boundary_helpers;
+mod test_utils;
 
 use bdd_library_boundary_helpers::{LibraryBoundaryState, library_boundary_state};
 use rstest_bdd_macros::scenario;
@@ -42,6 +45,7 @@ fn library_exec_failure(library_boundary_state: LibraryBoundaryState) {
     path = "tests/features/library_boundary.feature",
     name = "Stub orchestration functions return success"
 )]
+#[cfg(feature = "experimental")]
 fn stub_functions_succeed(library_boundary_state: LibraryBoundaryState) {
     let _ = library_boundary_state;
 }

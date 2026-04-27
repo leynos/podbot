@@ -114,6 +114,27 @@ fn github_config_is_configured_false_when_partial() {
 }
 
 #[rstest]
+#[case(None, None, None, false)]
+#[case(Some(0), None, None, true)]
+#[case(Some(12345), None, None, true)]
+#[case(None, Some(0), None, true)]
+#[case(None, Some(67890), None, true)]
+#[case(None, None, Some(Utf8PathBuf::from("/path/to/key.pem")), true)]
+fn github_config_is_partially_configured_matches_any_present_field(
+    #[case] app_id: Option<u64>,
+    #[case] installation_id: Option<u64>,
+    #[case] private_key_path: Option<Utf8PathBuf>,
+    #[case] expected: bool,
+) {
+    let config = crate::config::GitHubConfig {
+        app_id,
+        installation_id,
+        private_key_path,
+    };
+    assert_eq!(config.is_partially_configured(), expected);
+}
+
+#[rstest]
 #[case(Some(0), Some(67890))]
 #[case(Some(12345), Some(0))]
 fn github_config_is_configured_false_when_id_is_zero(

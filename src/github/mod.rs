@@ -172,6 +172,8 @@ impl GitHubAppClient for OctocrabAppClient {
 /// # Example
 ///
 /// ```rust,no_run
+/// # #[cfg(feature = "internal")]
+/// # {
 /// use podbot::github::validate_app_credentials;
 /// use camino::Utf8Path;
 ///
@@ -181,6 +183,7 @@ impl GitHubAppClient for OctocrabAppClient {
 /// validate_app_credentials(app_id, key_path).await?;
 /// println!("Credentials are valid!");
 /// # Ok(())
+/// # }
 /// # }
 /// ```
 pub async fn validate_app_credentials(
@@ -219,6 +222,7 @@ pub async fn validate_with_client(client: &dyn GitHubAppClient) -> Result<(), Gi
 /// Returns [`GitHubError::PrivateKeyLoadFailed`] if the key cannot be loaded.
 /// Returns [`GitHubError::AuthenticationFailed`] if the client cannot be
 /// built or if GitHub rejects the credentials.
+#[cfg(any(feature = "internal", test))]
 pub async fn validate_with_factory<F, C>(
     app_id: u64,
     private_key_path: &Utf8Path,
@@ -307,6 +311,7 @@ fn read_key_file(
 ///
 /// A formatted error message with remediation hints matching the production
 /// error classifier.
+#[cfg(any(feature = "internal", test))]
 #[doc(hidden)]
 #[must_use]
 pub fn test_classify_error_message(code: u16, full_error: &str) -> String {

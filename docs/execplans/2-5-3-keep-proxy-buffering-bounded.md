@@ -12,8 +12,7 @@ implementation document for this task.
 
 ## Purpose and big picture
 
-Complete the remaining roadmap tasks for Step 2.5 from
-`docs/podbot-roadmap.md`:
+Complete the remaining roadmap tasks for Step 2.5 from `docs/podbot-roadmap.md`:
 
 1. Keep proxy buffering bounded, so hosted protocols can apply backpressure.
 2. Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
@@ -29,10 +28,10 @@ stream proxy loops, `StdIn` echo suppression, and shutdown ordering. That
 implementation relies on `tokio::io::copy()` for the stdin path and a per-chunk
 `write_all()`/`flush()` loop for the output path. While these already avoid
 accumulating the full stream in memory, the design document
-(`docs/podbot-design.md`) explicitly promises _bounded buffering so backpressure
-remains visible to the hosted server_. This step fulfils that promise and adds
-the test coverage necessary to guard stream purity across full process lifecycle
-transitions.
+(`docs/podbot-design.md`) explicitly promises _bounded buffering so
+backpressure remains visible to the hosted server_. This step fulfils that
+promise and adds the test coverage necessary to guard stream purity across full
+process lifecycle transitions.
 
 Observable success for this task:
 
@@ -91,8 +90,8 @@ Observable success for this task:
 ## Risks
 
 - Risk: replacing `tokio::io::copy()` with a bounded copy loop could change
-  backpressure dynamics for stdin forwarding and break the existing EOF shutdown
-  path. Severity: medium. Likelihood: medium. Mitigation: use
+  backpressure dynamics for stdin forwarding and break the existing EOF
+  shutdown path. Severity: medium. Likelihood: medium. Mitigation: use
   `tokio::io::copy_buf()` with a `BufReader` of explicit capacity instead of
   hand-rolling a copy loop, or use `tokio::io::copy()` unchanged while wrapping
   the writer in a `BufWriter` with explicit capacity. Both preserve EOF
@@ -110,8 +109,8 @@ Observable success for this task:
   with no output, steady-state output, then shutdown) through the library seam.
   Constructing realistic multi-phase output streams may add test-helper
   complexity. Severity: low. Likelihood: medium. Mitigation: use `tokio::sync`
-  channels or `futures_util::stream` combinators to create staged output streams
-  that yield chunks in ordered phases.
+  channels or `futures_util::stream` combinators to create staged output
+  streams that yield chunks in ordered phases.
 
 - Risk: the "zero stdout bytes before/after proxied bytes" regression test must
   prove a negative (no bytes outside the proxy window). Severity: low.
@@ -247,7 +246,7 @@ value for `ExecMode::Protocol` sessions, bounding the maximum bytes per
 Target changes:
 
 - Add a constant `PROTOCOL_OUTPUT_CAPACITY: usize` in the exec module
-  (suggested value: 65_536 / 64 KiB). This matches common JSON-RPC frame
+  (suggested value: 65,536 bytes (64 KiB)). This matches common JSON-RPC frame
   buffer sizes and keeps per-chunk memory bounded while reducing overhead
   compared to the 8 KiB default for large protocol messages.
 
@@ -274,15 +273,15 @@ construction:
 
 The enforcement step for this task is to add an explicit documentation-level
 assertion in the code (a module-level comment expansion in `protocol.rs`) and a
-test-level assertion (the Stage E regression test) that together make the purity
-contract provable.
+test-level assertion (the Stage E regression test) that together make the
+purity contract provable.
 
 Target changes:
 
 - Expand the `//!` module-level comment in `protocol.rs` to explicitly state
-  the stdout-purity contract: "The protocol proxy must never write bytes to host
-  stdout that did not originate from container stdout or console output. This
-  means no banners, no progress indicators, no diagnostic messages, and no
+  the stdout-purity contract: "The protocol proxy must never write bytes to
+  host stdout that did not originate from container stdout or console output.
+  This means no banners, no progress indicators, no diagnostic messages, and no
   echoed stdin bytes."
 
 - No structural code changes are needed for purity enforcement itself. The
@@ -301,13 +300,13 @@ Target: create a new test submodule
 Required test cases (unit tests with `rstest`):
 
 1. **Startup purity**: run a protocol proxy session where the container emits a
-   single stdout chunk. Assert that host stdout contains exactly those bytes and
-   nothing else (no prefix bytes from session setup).
+   single stdout chunk. Assert that host stdout contains exactly those bytes
+   and nothing else (no prefix bytes from session setup).
 
 2. **Steady-state purity**: run a protocol proxy session with multiple
    interleaved stdout, stderr, and `StdIn` chunks. Assert that host stdout
-   contains only the concatenated stdout and console bytes in order, host stderr
-   contains only stderr bytes, and no `StdIn` bytes leak to either.
+   contains only the concatenated stdout and console bytes in order, host
+   stderr contains only stderr bytes, and no `StdIn` bytes leak to either.
 
 3. **Shutdown purity**: run a protocol proxy session where the output stream
    ends (daemon closes the stream) after delivering chunks. Assert that host
@@ -359,8 +358,7 @@ banners, diagnostics, or framing bytes to the protocol stdout path.
 Update `docs/podbot-design.md` to record:
 
 - the bounded-buffering constants chosen for stdin forwarding
-  (`STDIN_BUFFER_CAPACITY`) and output chunk size
-  (`PROTOCOL_OUTPUT_CAPACITY`);
+  (`STDIN_BUFFER_CAPACITY`) and output chunk size (`PROTOCOL_OUTPUT_CAPACITY`);
 - the rationale for each buffer size;
 - confirmation that per-chunk `write_all()` + `flush()` provides the
   backpressure contract for the output path;
@@ -370,10 +368,9 @@ Update `docs/users-guide.md` to document:
 
 - that protocol mode uses bounded buffering so hosted protocols can apply
   backpressure;
-- any observable behaviour difference from the buffering changes (in practice
-  there should be none for users, since the underlying semantics are
-  preserved, but the section on protocol mode execution behaviour should
-  mention bounded buffering).
+- any observable behaviour difference from the buffering changes (in practice:
+  preserve semantics for users and mention bounded buffering in the
+  protocol-mode execution behaviour section).
 
 After all gates pass, mark the four remaining Step 2.5 roadmap checkboxes done
 in `docs/podbot-roadmap.md`.

@@ -22,6 +22,7 @@
 
 use std::io;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bollard::container::LogOutput;
@@ -31,6 +32,8 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
+use super::helpers::spawn_stdin_forwarding_task;
+use super::host_io::stdin_forwarding_disabled_for_tests;
 use super::{ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
@@ -39,6 +42,7 @@ pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     stdin: HostStdin,
     stdout: HostStdout,
     stderr: HostStderr,
+    options: ProtocolSessionOptions,
 }
 
 /// Allow a short grace period for EOF- and flush-driven completion paths to
@@ -56,6 +60,43 @@ const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
 /// low while preventing unbounded accumulation during high-throughput scenarios.
 const STDIN_BUFFER_CAPACITY: usize = 65_536;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(super) struct ProtocolSessionOptions {
+    disable_stdin_forwarding: bool,
+}
+
+impl ProtocolSessionOptions {
+    pub(super) const fn new() -> Self {
+        Self {
+            disable_stdin_forwarding: false,
+        }
+    }
+
+    pub(super) const fn with_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
+        self.disable_stdin_forwarding = disable;
+        self
+    }
+}
+
+struct HeldOpenStdin {
+    // `tokio::io::duplex(1)` gives us the smallest possible in-memory pipe to
+    // keep `reader` and `_writer_guard` alive without producing an immediate
+    // EOF. No bytes are ever written through this seam; the 1-byte buffer just
+    // satisfies Tokio's duplex constructor while avoiding wasted memory.
+    reader: tokio::io::DuplexStream,
+    _writer_guard: tokio::io::DuplexStream,
+}
+
+impl tokio::io::AsyncRead for HeldOpenStdin {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.reader).poll_read(cx, buf)
+    }
+}
+
 impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     /// Create a host-IO bundle for a protocol proxy session.
     pub(super) const fn new(
@@ -67,18 +108,41 @@ impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, H
             stdin: host_stdin,
             stdout: host_stdout,
             stderr: host_stderr,
+            options: ProtocolSessionOptions::new(),
         }
+    }
+
+    pub(super) const fn with_options(mut self, options: ProtocolSessionOptions) -> Self {
+        self.options = options;
+        self
     }
 }
 
-/// Run a protocol exec session using the process stdio handles.
-pub(super) async fn run_protocol_session_async(
+pub(super) async fn run_protocol_session_async_with_options(
     request: &ExecRequest,
     output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
     input: Pin<Box<dyn AsyncWrite + Send>>,
+    options: ProtocolSessionOptions,
 ) -> Result<(), PodbotError> {
-    let stdio = ProtocolProxyIo::new(tokio::io::stdin(), tokio::io::stdout(), tokio::io::stderr());
+    let stdio = ProtocolProxyIo::new(
+        protocol_host_stdin(options),
+        tokio::io::stdout(),
+        tokio::io::stderr(),
+    )
+    .with_options(options);
     run_protocol_session_with_io_async(request, output, input, stdio).await
+}
+
+fn protocol_host_stdin(options: ProtocolSessionOptions) -> Pin<Box<dyn AsyncRead + Send>> {
+    if options.disable_stdin_forwarding || stdin_forwarding_disabled_for_tests() {
+        let (writer_guard, reader) = tokio::io::duplex(1);
+        Box::pin(HeldOpenStdin {
+            reader,
+            _writer_guard: writer_guard,
+        })
+    } else {
+        Box::pin(tokio::io::stdin())
+    }
 }
 
 /// Run a protocol exec session using caller-supplied host IO handles.
@@ -97,8 +161,10 @@ where
         stdin: host_stdin,
         stdout: mut host_stdout,
         stderr: mut host_stderr,
+        options,
     } = stdio;
-    let stdin_task = spawn_stdin_forwarding_task(host_stdin, input);
+    let stdin_task =
+        spawn_stdin_forwarding_task(host_stdin, input, forward_host_stdin_to_exec_async);
     let output_result = run_output_loop_async(
         request.container_id(),
         &mut output,
@@ -106,24 +172,16 @@ where
         &mut host_stderr,
     )
     .await;
-    let stdin_result = settle_stdin_forwarding_task(request.container_id(), stdin_task).await;
+    let stdin_result =
+        settle_stdin_forwarding_task(request.container_id(), stdin_task, options).await;
     output_result?;
     stdin_result
-}
-
-fn spawn_stdin_forwarding_task<HostStdin>(
-    host_stdin: HostStdin,
-    input: Pin<Box<dyn AsyncWrite + Send>>,
-) -> JoinHandle<io::Result<()>>
-where
-    HostStdin: AsyncRead + Send + Unpin + 'static,
-{
-    tokio::spawn(async move { forward_host_stdin_to_exec_async(host_stdin, input).await })
 }
 
 async fn settle_stdin_forwarding_task(
     container_id: &str,
     mut stdin_task: JoinHandle<io::Result<()>>,
+    options: ProtocolSessionOptions,
 ) -> Result<(), PodbotError> {
     let Ok(join_result) = timeout(STDIN_SETTLE_TIMEOUT, &mut stdin_task).await else {
         // The container output path has already completed, so stdin can be
@@ -131,7 +189,10 @@ async fn settle_stdin_forwarding_task(
         // timeout here still indicates that stdin forwarding did not complete
         // cleanly before shutdown, so protocol mode must surface that failure
         // instead of reporting success with potentially truncated input.
-        abort_stdin_forwarding_task(stdin_task).await;
+        abort_stdin_forwarding_task(stdin_task);
+        if options.disable_stdin_forwarding || stdin_forwarding_disabled_for_tests() {
+            return Ok(());
+        }
         return Err(exec_failed(
             container_id,
             "stdin forwarding did not complete before protocol session shutdown",
@@ -159,13 +220,13 @@ fn classify_stdin_forwarding_task_result(
     }
 }
 
-async fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
+fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     if !stdin_task.is_finished() {
         stdin_task.abort();
-        // `abort_stdin_forwarding_task` intentionally uses
-        // `drop(stdin_task.await)` to consume and ignore the aborted task's
-        // `JoinHandle` result while still satisfying the must-use contract.
-        drop(stdin_task.await);
+        // Avoid awaiting the aborted task here because host stdin may be
+        // blocked in a non-cancellable read. Dropping the handle mirrors the
+        // attached-session shutdown path and keeps teardown bounded.
+        drop(stdin_task);
     }
 }
 

@@ -14,12 +14,11 @@ use std::io::IsTerminal;
 
 use clap::Parser;
 use eyre::{Report, Result as EyreResult};
-use podbot::api::{CommandOutcome, ExecParams};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
 use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, RunArgs, StopArgs, TokenDaemonArgs};
 use podbot::config::{AppConfig, load_config};
-use podbot::engine::{EngineConnector, ExecMode, SocketResolver};
-use podbot::error::{ContainerError, Result as PodbotResult};
-use podbot::github::validate_app_credentials;
+use podbot::error::ConfigError;
+use podbot::error::Result as PodbotResult;
 
 /// Application entry point.
 ///
@@ -36,9 +35,7 @@ fn main() -> EyreResult<()> {
     // The CLI is passed to extract --config, --engine-socket, and --image.
     let options = cli.config_load_options();
     let config = load_config(&options).map_err(Report::from)?;
-    let runtime = create_runtime().map_err(Report::from)?;
-
-    match run(&cli, &config, runtime.handle()) {
+    match run(&cli, &config) {
         Ok(CommandOutcome::Success) => Ok(()),
         Ok(CommandOutcome::CommandExit { code }) => {
             std::process::exit(normalize_process_exit_code(code))
@@ -51,38 +48,30 @@ fn main() -> EyreResult<()> {
 ///
 /// Keeps semantic errors inside the run loop so the CLI boundary owns
 /// conversion to `eyre::Report`.
-fn run(
-    cli: &Cli,
-    config: &AppConfig,
-    runtime_handle: &tokio::runtime::Handle,
-) -> PodbotResult<CommandOutcome> {
+fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
     match &cli.command {
-        Commands::Run(args) => run_agent_cli(config, args, runtime_handle),
-        Commands::Host(args) => Ok(host_agent_cli(config, args)),
+        Commands::Run(args) => run_agent_cli(config, args),
+        Commands::Host(_args) => {
+            // TODO: Re-enable `host_agent_cli` once it emits diagnostics to
+            // stderr only and cannot corrupt stdout protocol traffic.
+            Err(ConfigError::InvalidValue {
+                field: String::from("command"),
+                reason: String::from(
+                    "the host subcommand is temporarily disabled until host_agent_cli writes diagnostics to stderr only",
+                ),
+            }
+            .into())
+        }
         Commands::TokenDaemon(args) => run_token_daemon_cli(args),
         Commands::Ps => list_containers_cli(),
         Commands::Stop(args) => stop_container_cli(args),
-        Commands::Exec(args) => exec_in_container_cli(config, args, runtime_handle),
+        Commands::Exec(args) => exec_in_container_cli(config, args),
     }
 }
 
 /// CLI adapter for running an AI agent in a sandboxed container.
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn run_agent_cli(
-    config: &AppConfig,
-    args: &RunArgs,
-    runtime_handle: &tokio::runtime::Handle,
-) -> PodbotResult<CommandOutcome> {
-    // Validate GitHub credentials if configured
-    if let (Some(app_id), Some(private_key_path)) = (
-        config.github.app_id,
-        config.github.private_key_path.as_ref(),
-    ) {
-        if app_id != 0 {
-            runtime_handle.block_on(validate_app_credentials(app_id, private_key_path))?;
-        }
-    }
-
+fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutcome> {
     println!(
         "Running {:?} agent in {:?} mode for repository {} on branch {}",
         config.agent.kind, config.agent.mode, args.repo, args.branch
@@ -93,12 +82,16 @@ fn run_agent_cli(
     if let Some(ref image) = config.image {
         println!("Using image: {image}");
     }
-    let result = podbot::api::run_agent(config)?;
+    let result = run_agent_api(config)?;
     println!("Container orchestration not yet implemented.");
     Ok(result)
 }
 
 /// CLI adapter for hosted app-server execution.
+#[expect(
+    dead_code,
+    reason = "temporarily disabled until stdout-safe diagnostics are implemented"
+)]
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
     println!(
@@ -113,7 +106,7 @@ fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn run_token_daemon_cli(args: &TokenDaemonArgs) -> PodbotResult<CommandOutcome> {
     println!("Starting token daemon for container {}", args.container_id);
-    let result = podbot::api::run_token_daemon(&args.container_id)?;
+    let result = run_token_daemon_api(&args.container_id)?;
     println!("Token daemon not yet implemented.");
     Ok(result)
 }
@@ -122,7 +115,7 @@ fn run_token_daemon_cli(args: &TokenDaemonArgs) -> PodbotResult<CommandOutcome> 
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn list_containers_cli() -> PodbotResult<CommandOutcome> {
     println!("Listing podbot containers...");
-    let result = podbot::api::list_containers()?;
+    let result = list_containers_api()?;
     println!("Container listing not yet implemented.");
     Ok(result)
 }
@@ -131,47 +124,27 @@ fn list_containers_cli() -> PodbotResult<CommandOutcome> {
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn stop_container_cli(args: &StopArgs) -> PodbotResult<CommandOutcome> {
     println!("Stopping container {}", args.container);
-    let result = podbot::api::stop_container(&args.container)?;
+    let result = stop_container_api(&args.container)?;
     println!("Container stop not yet implemented.");
     Ok(result)
 }
 
 /// CLI adapter for executing a command in a running container.
 ///
-/// Performs terminal detection (a CLI concern) and engine connection
-/// before delegating to the library orchestration function.
-fn exec_in_container_cli(
-    config: &AppConfig,
-    args: &ExecArgs,
-    runtime_handle: &tokio::runtime::Handle,
-) -> PodbotResult<CommandOutcome> {
+/// Performs terminal detection, builds the library-owned exec request, and
+/// delegates engine connection and execution to `podbot::api::exec`.
+fn exec_in_container_cli(config: &AppConfig, args: &ExecArgs) -> PodbotResult<CommandOutcome> {
     let mode = if args.detach {
         ExecMode::Detached
     } else {
         ExecMode::Attached
     };
     let tty = !args.detach && std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
-    let env = mockable::DefaultEnv::new();
-    let resolver = SocketResolver::new(&env);
-    let docker =
-        EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;
+    let request = ExecRequest::new(&args.container, args.command.clone())?
+        .with_mode(mode)
+        .with_tty(tty);
 
-    podbot::api::exec(ExecParams {
-        connector: &docker,
-        container: &args.container,
-        command: args.command.clone(),
-        mode,
-        tty,
-        runtime_handle,
-    })
-}
-
-fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
-    tokio::runtime::Runtime::new().map_err(|error| {
-        podbot::error::PodbotError::from(ContainerError::RuntimeCreationFailed {
-            message: error.to_string(),
-        })
-    })
+    podbot::api::exec(config, &request)
 }
 
 /// Normalize container exit codes to process exit codes.
@@ -192,9 +165,68 @@ fn normalize_process_exit_code(code: i64) -> i32 {
     i32::try_from(code).unwrap_or(1)
 }
 
+#[cfg(feature = "experimental")]
+fn run_agent_api(config: &AppConfig) -> PodbotResult<CommandOutcome> {
+    podbot::api::run_agent(config)
+}
+
+#[cfg(not(feature = "experimental"))]
+fn run_agent_api(_config: &AppConfig) -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: String::from("the run command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
+#[cfg(feature = "experimental")]
+fn run_token_daemon_api(container_id: &str) -> PodbotResult<CommandOutcome> {
+    podbot::api::run_token_daemon(container_id)
+}
+
+#[cfg(not(feature = "experimental"))]
+fn run_token_daemon_api(_container_id: &str) -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: String::from("the token-daemon command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
+#[cfg(feature = "experimental")]
+fn list_containers_api() -> PodbotResult<CommandOutcome> {
+    podbot::api::list_containers()
+}
+
+#[cfg(not(feature = "experimental"))]
+fn list_containers_api() -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: String::from("the ps command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
+#[cfg(feature = "experimental")]
+fn stop_container_api(container: &str) -> PodbotResult<CommandOutcome> {
+    podbot::api::stop_container(container)
+}
+
+#[cfg(not(feature = "experimental"))]
+fn stop_container_api(_container: &str) -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: String::from("the stop command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::normalize_process_exit_code;
+    use podbot::cli::{Cli, Commands, HostArgs};
+    use podbot::config::AppConfig;
+
+    use super::{normalize_process_exit_code, run};
 
     #[test]
     fn normalize_process_exit_code_preserves_valid_range() {
@@ -213,5 +245,27 @@ mod tests {
     fn normalize_process_exit_code_clamps_oversized_values() {
         assert_eq!(normalize_process_exit_code(256), 255);
         assert_eq!(normalize_process_exit_code(i64::MAX), 255);
+    }
+
+    #[test]
+    fn run_rejects_host_subcommand_until_stdout_is_safe() {
+        let cli = Cli {
+            command: Commands::Host(HostArgs {
+                agent: None,
+                mode: None,
+            }),
+            config: None,
+            engine_socket: None,
+            image: None,
+        };
+
+        let error = run(&cli, &AppConfig::default()).expect_err("host command should be disabled");
+
+        assert!(
+            error
+                .to_string()
+                .contains("host subcommand is temporarily disabled"),
+            "unexpected error: {error}",
+        );
     }
 }

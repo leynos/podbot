@@ -3,18 +3,19 @@
 use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
-use podbot::api::{
-    CommandOutcome, ExecParams, exec, list_containers, run_agent, run_token_daemon, stop_container,
-};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
+#[cfg(feature = "experimental")]
+use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
+#[cfg(feature = "experimental")]
 use podbot::config::AppConfig;
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, ExecMode, InspectExecFuture, ResizeExecFuture,
-    StartExecFuture,
+    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
 
 use super::StepResult;
 use super::state::{OrchestrationResult, OrchestrationState};
+use crate::test_utils::{TestStdinForwardingGuard, exec_outcome_with_client};
 
 /// Invoke an orchestration operation and capture its outcome in state.
 fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F)
@@ -94,18 +95,16 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
     configure_resize(&mut client, mode);
     configure_inspect(&mut client, exit_code);
 
+    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
     let runtime =
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
 
     invoke_orchestration(orchestration_state, || {
-        exec(ExecParams {
-            connector: &client,
-            container: "orc-sandbox",
-            command: command.clone(),
-            mode,
-            tty,
-            runtime_handle: runtime.handle(),
-        })
+        let request = ExecRequest::new("orc-sandbox", command.clone())?
+            .with_mode(mode)
+            .with_tty(tty);
+
+        exec_outcome_with_client(&client, runtime.handle(), &request)
     });
     Ok(())
 }
@@ -115,6 +114,7 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
     let config = AppConfig::default();
     invoke_orchestration(orchestration_state, || run_agent(&config));
@@ -126,6 +126,7 @@ fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> 
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_stop_invoked(
     orchestration_state: &OrchestrationState,
     container: String,
@@ -139,6 +140,7 @@ fn when_stop_invoked(
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_list_containers_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
     invoke_orchestration(orchestration_state, list_containers);
     Ok(())
@@ -149,6 +151,7 @@ fn when_list_containers_invoked(orchestration_state: &OrchestrationState) -> Ste
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_token_daemon_invoked(
     orchestration_state: &OrchestrationState,
     container: String,

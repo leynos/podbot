@@ -160,49 +160,53 @@ fn layer_precedence_nested_config_merges() {
     assert!(!config.sandbox.mount_dev_fuse);
 }
 
-/// Test that missing layers result in defaults being used.
+/// Test that missing layers result in injected defaults being used.
 #[rstest]
 fn layer_precedence_empty_layers_use_defaults() {
-    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
-    // Add empty override layers (no effect on values)
-    composer.push_file(json!({}), None);
-    composer.push_environment(json!({}));
-    composer.push_cli(json!({}));
-
-    let config = merge_config(composer).expect("merge should succeed");
+    let config = AppConfig::merge_from_layers(MergeComposer::new().layers())
+        .expect("merge should inject defaults when callers provide no layers");
 
     assert_config_has_defaults(&config);
 }
 
-/// Test that empty JSON defaults do NOT work - serialised `AppConfig::default()` is required.
+/// Test that explicit empty defaults layers are still rejected.
 ///
-/// This test verifies that using `push_defaults(json!({}))` fails to produce a valid
-/// configuration. OrthoConfig requires fully-specified defaults from the serialized
-/// `AppConfig::default()` value. Empty JSON would result in null/missing fields that
-/// cannot be deserialized into the target struct.
-///
-/// This documents why the production loader MUST use the serialized defaults approach
-/// rather than relying on serde's `#[serde(default)]` during deserialization.
+/// `merge_from_layers` now injects `AppConfig::default()` for callers that omit
+/// defaults entirely, but an explicit defaults layer must still contain the
+/// serialized default value rather than an empty object.
 #[rstest]
-fn layer_precedence_empty_json_defaults_fails() {
-    // Empty JSON defaults should fail to produce a valid config.
+fn layer_precedence_empty_json_defaults_still_fail() {
     let mut empty_composer = MergeComposer::new();
     empty_composer.push_defaults(json!({}));
 
     let result = AppConfig::merge_from_layers(empty_composer.layers());
 
-    // The merge should fail because empty JSON doesn't provide required defaults.
     assert!(
         result.is_err(),
-        "empty JSON defaults should fail; production MUST serialize AppConfig::default()"
+        "explicit empty defaults layers should still be rejected"
+    );
+}
+
+/// Test that caller-supplied defaults must match `AppConfig::default()`.
+#[rstest]
+fn layer_precedence_noncanonical_defaults_fail() {
+    let mut composer = MergeComposer::new();
+    composer.push_defaults(json!({
+        "engine_socket": "unix:///custom.sock"
+    }));
+
+    let result = AppConfig::merge_from_layers(composer.layers());
+
+    assert!(
+        result.is_err(),
+        "non-canonical defaults layers should be rejected"
     );
 }
 
 /// Test that serialised `AppConfig::default()` works correctly as a defaults layer.
 ///
-/// This is the correct approach used by the production `load_config` function.
-/// Contrast with `layer_precedence_empty_json_defaults_fails` which demonstrates
-/// that empty JSON does NOT work.
+/// This remains a valid explicit caller input, even though `merge_from_layers`
+/// now injects the same defaults layer internally.
 #[rstest]
 fn layer_precedence_serialised_defaults_works() {
     // Production approach: serialise AppConfig::default() as the defaults layer.

@@ -3,6 +3,8 @@
 //! These tests validate that podbot correctly validates GitHub App
 //! credentials against the GitHub API using mock clients.
 
+#![cfg(feature = "internal")]
+
 mod bdd_github_credential_validation_helpers;
 
 pub use bdd_github_credential_validation_helpers::{

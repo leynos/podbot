@@ -1,8 +1,14 @@
-//! Integration tests proving Podbot can be embedded as a library dependency.
+//! Internal-feature integration suite for embedding and compatibility paths.
 //!
-//! These tests exercise the public API surface from a host-application
-//! perspective, without importing `podbot::cli` or depending on Clap types
-//! directly. This proves that the library boundary is self-contained.
+//! These tests run only with `feature = "internal"` because they exercise
+//! internal shims such as `podbot::engine`. The stable public embedding
+//! boundary remains `podbot::api`, `podbot::config`, and `podbot::error`;
+//! `podbot::engine` and `podbot::github` are internal compatibility modules,
+//! while `podbot::cli` visibility is controlled by the `cli` feature.
+
+#![cfg(feature = "internal")]
+
+mod test_utils;
 
 use bollard::container::LogOutput;
 use bollard::exec::{CreateExecOptions, CreateExecResults, StartExecOptions, StartExecResults};
@@ -11,15 +17,17 @@ use futures_util::stream;
 use mockall::mock;
 use rstest::{fixture, rstest};
 
-use podbot::api::{
-    CommandOutcome, ExecParams, exec, list_containers, run_agent, run_token_daemon, stop_container,
-};
-use podbot::config::{AppConfig, CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
+#[cfg(feature = "experimental")]
+use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
+#[cfg(feature = "experimental")]
+use podbot::config::AppConfig;
+use podbot::config::{CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, ExecMode, InspectExecFuture, ResizeExecFuture,
-    StartExecFuture,
+    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 use podbot::error::{ConfigError, ContainerError, PodbotError};
+use test_utils::exec_outcome_with_client;
 
 mock! {
     #[derive(Debug)]
@@ -116,14 +124,10 @@ fn exec_via_library_api_returns_expected_outcome(
     let mut client = MockEmbedClient::new();
     configure_successful_exec(&mut client, test_case.exit_code, test_case.mode);
 
-    let result = exec(ExecParams {
-        connector: &client,
-        container: "embed-sandbox",
-        command: test_case.command,
-        mode: test_case.mode,
-        tty: false,
-        runtime_handle: rt.handle(),
-    });
+    let request = ExecRequest::new("embed-sandbox", test_case.command)?
+        .with_mode(test_case.mode)
+        .with_tty(false);
+    let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
     assert_exec_outcome_matches(&result, test_case.check, test_case.description);
     Ok(())
@@ -146,14 +150,13 @@ fn exec_failure_returns_container_error(
     let mut client = MockEmbedClient::new();
     let mode = configure_failing_exec(&mut client, fail_at);
 
-    let result = exec(ExecParams {
-        connector: &client,
-        container: "embed-sandbox",
-        command: vec![String::from("echo"), String::from("fail")],
-        mode,
-        tty: false,
-        runtime_handle: rt.handle(),
-    });
+    let request = ExecRequest::new(
+        "embed-sandbox",
+        vec![String::from("echo"), String::from("fail")],
+    )?
+    .with_mode(mode)
+    .with_tty(false);
+    let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
     assert_exec_failed_with_container_error(&result, fail_at);
     Ok(())
@@ -201,6 +204,7 @@ fn error_types_are_matchable() {
 // -------------------------------------------------------------------------
 
 #[rstest]
+#[cfg(feature = "experimental")]
 fn stub_orchestration_functions_return_success() {
     let config = AppConfig::default();
 

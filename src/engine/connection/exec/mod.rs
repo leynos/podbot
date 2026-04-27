@@ -4,7 +4,11 @@
 //! execution behaviour can be unit-tested without a live daemon.
 
 mod attached;
+mod helpers;
+mod host_io;
 mod protocol;
+mod runtime_helpers;
+mod session;
 mod terminal;
 
 use std::future::Future;
@@ -14,10 +18,16 @@ use bollard::exec::{CreateExecOptions, CreateExecResults, ResizeExecOptions, Sta
 use bollard::{Docker, errors::Error as BollardError};
 
 use self::attached::{run_attached_session_async, wait_for_exit_code_async};
-use self::protocol::run_protocol_session_async;
+use self::helpers::{
+    build_create_exec_options, build_start_exec_options, map_create_exec_error,
+    map_start_exec_error, validate_command, validate_required_field,
+};
+use self::protocol::run_protocol_session_async_with_options;
+use self::runtime_helpers::{block_on_runtime, exec_failed};
+use self::session::{ExecSessionOptions, protocol_session_options};
 use self::terminal::{SystemTerminalSizeProvider, TerminalSizeProvider};
 use super::EngineConnector;
-use crate::error::{ConfigError, ContainerError, PodbotError};
+use crate::error::PodbotError;
 
 pub(super) const EXEC_INSPECT_POLL_INTERVAL_MS: u64 = 100;
 
@@ -114,6 +124,7 @@ impl ExecMode {
 
     /// Return true when this mode is protocol-safe (streams attached, tty
     /// permanently disabled).
+    #[cfg(any(feature = "internal", test))]
     #[must_use]
     pub const fn is_protocol(self) -> bool {
         matches!(self, Self::Protocol)
@@ -156,6 +167,7 @@ impl ExecRequest {
     }
 
     /// Set environment variables in `KEY=value` form.
+    #[cfg(any(feature = "internal", test))]
     #[must_use]
     pub fn with_env(mut self, env: Option<Vec<String>>) -> Self {
         self.env = env.filter(|entries| !entries.is_empty());
@@ -211,6 +223,7 @@ pub struct ExecResult {
 
 impl ExecResult {
     /// Return daemon-assigned exec identifier.
+    #[cfg(any(feature = "internal", test))]
     #[must_use]
     pub fn exec_id(&self) -> &str {
         &self.exec_id
@@ -234,8 +247,40 @@ impl EngineConnector {
         client: &C,
         request: &ExecRequest,
     ) -> Result<ExecResult, PodbotError> {
-        Self::exec_async_with_terminal_size_provider(client, request, &SystemTerminalSizeProvider)
-            .await
+        Self::exec_async_with_options(client, request, ExecSessionOptions::new()).await
+    }
+
+    /// Execute a command in a running container with explicit session options.
+    pub(crate) async fn exec_async_with_options<C: ContainerExecClient>(
+        client: &C,
+        request: &ExecRequest,
+        options: ExecSessionOptions,
+    ) -> Result<ExecResult, PodbotError> {
+        Self::exec_async_with_terminal_size_provider_and_options(
+            client,
+            request,
+            &SystemTerminalSizeProvider,
+            options,
+        )
+        .await
+    }
+
+    /// Execute a protocol request without forwarding inherited stdin.
+    ///
+    /// This hidden seam exists for integration tests that must avoid inheriting
+    /// the harness process stdin while still exercising the production
+    /// protocol-mode flow.
+    #[cfg(test)]
+    pub(crate) async fn exec_async_without_protocol_stdin_forwarding<C: ContainerExecClient>(
+        client: &C,
+        request: &ExecRequest,
+    ) -> Result<ExecResult, PodbotError> {
+        Self::exec_async_with_options(
+            client,
+            request,
+            ExecSessionOptions::new().with_protocol_stdin_forwarding_disabled(true),
+        )
+        .await
     }
 
     /// Execute a command in a running container using a caller runtime handle.
@@ -243,14 +288,15 @@ impl EngineConnector {
     /// # Errors
     ///
     /// Returns the same errors as [`Self::exec_async`].
-    pub fn exec<C: ContainerExecClient>(
+    pub fn exec<C: ContainerExecClient + Sync>(
         runtime: &tokio::runtime::Handle,
         client: &C,
         request: &ExecRequest,
     ) -> Result<ExecResult, PodbotError> {
-        runtime.block_on(Self::exec_async(client, request))
+        block_on_runtime(runtime, async { Self::exec_async(client, request).await })
     }
 
+    #[cfg(test)]
     async fn exec_async_with_terminal_size_provider<
         C: ContainerExecClient,
         P: TerminalSizeProvider,
@@ -259,26 +305,34 @@ impl EngineConnector {
         request: &ExecRequest,
         size_provider: &P,
     ) -> Result<ExecResult, PodbotError> {
+        Self::exec_async_with_terminal_size_provider_and_options(
+            client,
+            request,
+            size_provider,
+            ExecSessionOptions::new(),
+        )
+        .await
+    }
+
+    async fn exec_async_with_terminal_size_provider_and_options<
+        C: ContainerExecClient,
+        P: TerminalSizeProvider,
+    >(
+        client: &C,
+        request: &ExecRequest,
+        size_provider: &P,
+        options: ExecSessionOptions,
+    ) -> Result<ExecResult, PodbotError> {
         let create_result = client
             .create_exec(request.container_id(), build_create_exec_options(request))
             .await
-            .map_err(|error| {
-                exec_failed(
-                    request.container_id(),
-                    format!("create exec failed: {error}"),
-                )
-            })?;
+            .map_err(|error| map_create_exec_error(request.container_id(), error))?;
 
         let exec_id = create_result.id;
         let start_result = client
             .start_exec(&exec_id, Some(build_start_exec_options(request)))
             .await
-            .map_err(|error| {
-                exec_failed(
-                    request.container_id(),
-                    format!("start exec failed: {error}"),
-                )
-            })?;
+            .map_err(|error| map_start_exec_error(request.container_id(), error))?;
 
         match (request.mode(), start_result) {
             (ExecMode::Attached, bollard::exec::StartExecResults::Attached { output, input }) => {
@@ -286,7 +340,13 @@ impl EngineConnector {
                     .await?;
             }
             (ExecMode::Protocol, bollard::exec::StartExecResults::Attached { output, input }) => {
-                run_protocol_session_async(request, output, input).await?;
+                run_protocol_session_async_with_options(
+                    request,
+                    output,
+                    input,
+                    protocol_session_options(options),
+                )
+                .await?;
             }
             (
                 ExecMode::Attached | ExecMode::Protocol,
@@ -309,67 +369,6 @@ impl EngineConnector {
         let exit_code = wait_for_exit_code_async(client, request.container_id(), &exec_id).await?;
         Ok(ExecResult { exec_id, exit_code })
     }
-}
-
-fn build_create_exec_options(request: &ExecRequest) -> CreateExecOptions<String> {
-    let attached = request.mode().is_attached();
-    CreateExecOptions::<String> {
-        attach_stdin: Some(attached),
-        attach_stdout: Some(attached),
-        attach_stderr: Some(attached),
-        tty: Some(attached && request.tty()),
-        env: request.env().map(<[String]>::to_vec),
-        cmd: Some(request.command().to_vec()),
-        ..CreateExecOptions::default()
-    }
-}
-
-const fn build_start_exec_options(request: &ExecRequest) -> StartExecOptions {
-    let output_capacity = match request.mode() {
-        ExecMode::Protocol => Some(PROTOCOL_OUTPUT_CAPACITY),
-        ExecMode::Attached | ExecMode::Detached => None,
-    };
-    StartExecOptions {
-        detach: !request.mode().is_attached(),
-        tty: request.mode().is_attached() && request.tty(),
-        output_capacity,
-    }
-}
-
-fn validate_command(command: Vec<String>) -> Result<Vec<String>, PodbotError> {
-    if command.is_empty() {
-        return Err(PodbotError::from(ConfigError::MissingRequired {
-            field: String::from("command"),
-        }));
-    }
-
-    let executable = command.first().map(String::as_str).unwrap_or_default();
-    if executable.trim().is_empty() {
-        return Err(PodbotError::from(ConfigError::InvalidValue {
-            field: String::from("command"),
-            reason: String::from("command executable must not be empty"),
-        }));
-    }
-
-    Ok(command)
-}
-
-fn validate_required_field<'a>(field: &str, value: &'a str) -> Result<&'a str, PodbotError> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return Err(PodbotError::from(ConfigError::MissingRequired {
-            field: String::from(field),
-        }));
-    }
-
-    Ok(trimmed)
-}
-
-pub(super) fn exec_failed(container_id: &str, message: impl Into<String>) -> PodbotError {
-    PodbotError::from(ContainerError::ExecFailed {
-        container_id: String::from(container_id),
-        message: message.into(),
-    })
 }
 
 #[cfg(test)]

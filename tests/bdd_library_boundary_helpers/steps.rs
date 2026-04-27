@@ -10,16 +10,22 @@ use bollard::container::LogOutput;
 use futures_util::stream;
 use mockable::MockEnv;
 use mockall::mock;
-use podbot::api::{ExecParams, exec, list_containers, run_agent, run_token_daemon, stop_container};
-use podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config_with_env};
+use podbot::api::{ExecMode, ExecRequest};
+#[cfg(feature = "experimental")]
+use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
+#[cfg(feature = "experimental")]
+use podbot::config::AppConfig;
+use podbot::config::{ConfigLoadOptions, ConfigOverrides, load_config_with_env};
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, ExecMode, InspectExecFuture, ResizeExecFuture,
-    StartExecFuture,
+    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 use rstest_bdd_macros::{given, when};
 
 use super::StepResult;
-use super::state::{ConfigResult, LibraryBoundaryState, LibraryResult, StubOutcomes};
+#[cfg(feature = "experimental")]
+use super::state::StubOutcomes;
+use super::state::{ConfigResult, LibraryBoundaryState, LibraryResult};
+use crate::test_utils::exec_outcome_with_client;
 
 mock! {
     #[derive(Debug)]
@@ -153,14 +159,15 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
     let runtime =
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
 
-    let result = exec(ExecParams {
-        connector: &client,
-        container: "lib-sandbox",
-        command: vec![String::from("echo"), String::from("hello")],
-        mode: ExecMode::Attached,
-        tty: false,
-        runtime_handle: runtime.handle(),
-    });
+    let request = ExecRequest::new(
+        "lib-sandbox",
+        vec![String::from("echo"), String::from("hello")],
+    )
+    .map_err(|e| format!("failed to build exec request: {e}"))?
+    .with_mode(ExecMode::Attached)
+    .with_tty(false);
+
+    let result = exec_outcome_with_client(&client, runtime.handle(), &request);
 
     match result {
         Ok(outcome) => library_boundary_state
@@ -178,6 +185,7 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
     clippy::unnecessary_wraps,
     reason = "rstest-bdd step functions must return StepResult"
 )]
+#[cfg(feature = "experimental")]
 fn when_stubs_called(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
     let config = AppConfig::default();
     let mut results = Vec::new();

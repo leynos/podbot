@@ -1,0 +1,24 @@
+error[E0433]: failed to resolve: could not find `cli` in `podbot`
+ --> tests/cli_feature_gating/no_cli_feature.rs:5:21
+  |
+5 |     let _ = podbot::cli::Cli::config_load_options;
+  |                     ^^^ could not find `cli` in `podbot`
+  |
+note: found an item that was configured out
+ --> src/lib.rs
+  |
+  | pub mod cli;
+  |         ^^^
+note: the item is gated behind the `cli` feature
+ --> src/lib.rs
+  |
+  | #[cfg(feature = "cli")]
+  |       ^^^^^^^^^^^^^^^
+help: there is an enum variant `ortho_config::MergeProvenance::Cli` and 1 other; try using the variant's enum
+  |
+5 -     let _ = podbot::cli::Cli::config_load_options;
+5 +     let _ = ortho_config::MergeProvenance::config_load_options;
+  |
+5 -     let _ = podbot::cli::Cli::config_load_options;
+5 +     let _ = ortho_config::SourceKind::config_load_options;
+  |

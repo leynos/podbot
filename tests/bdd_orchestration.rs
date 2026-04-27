@@ -1,14 +1,19 @@
 //! Behavioural tests for command orchestration.
 
+#![cfg(feature = "internal")]
+
 mod bdd_orchestration_helpers;
+mod test_utils;
 
 use bdd_orchestration_helpers::{OrchestrationState, orchestration_state};
 use rstest_bdd_macros::scenario;
+use serial_test::serial;
 
 #[scenario(
     path = "tests/features/orchestration.feature",
     name = "Exec orchestration returns success for zero exit code"
 )]
+#[serial]
 fn exec_orchestration_returns_success(orchestration_state: OrchestrationState) {
     let _ = orchestration_state;
 }
@@ -17,6 +22,7 @@ fn exec_orchestration_returns_success(orchestration_state: OrchestrationState) {
     path = "tests/features/orchestration.feature",
     name = "Exec orchestration returns command exit for non-zero exit code"
 )]
+#[serial]
 fn exec_orchestration_returns_command_exit(orchestration_state: OrchestrationState) {
     let _ = orchestration_state;
 }
@@ -25,6 +31,8 @@ fn exec_orchestration_returns_command_exit(orchestration_state: OrchestrationSta
     path = "tests/features/orchestration.feature",
     name = "Run stub returns success"
 )]
+#[cfg(feature = "experimental")]
+#[serial]
 fn run_stub_returns_success(orchestration_state: OrchestrationState) {
     let _ = orchestration_state;
 }
@@ -33,6 +41,8 @@ fn run_stub_returns_success(orchestration_state: OrchestrationState) {
     path = "tests/features/orchestration.feature",
     name = "Stop stub returns success"
 )]
+#[cfg(feature = "experimental")]
+#[serial]
 fn stop_stub_returns_success(orchestration_state: OrchestrationState) {
     let _ = orchestration_state;
 }
@@ -41,6 +51,8 @@ fn stop_stub_returns_success(orchestration_state: OrchestrationState) {
     path = "tests/features/orchestration.feature",
     name = "List containers stub returns success"
 )]
+#[cfg(feature = "experimental")]
+#[serial]
 fn list_containers_stub_returns_success(orchestration_state: OrchestrationState) {
     let _ = orchestration_state;
 }
@@ -49,6 +61,8 @@ fn list_containers_stub_returns_success(orchestration_state: OrchestrationState)
     path = "tests/features/orchestration.feature",
     name = "Token daemon stub returns success"
 )]
+#[cfg(feature = "experimental")]
+#[serial]
 fn token_daemon_stub_returns_success(orchestration_state: OrchestrationState) {
     let _ = orchestration_state;
 }

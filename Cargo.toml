@@ -10,16 +10,15 @@ repository = "https://github.com/leynos/podbot"
 [features]
 default = ["cli"]
 cli = ["dep:clap"]
-
-[[bin]]
-name = "podbot"
-path = "src/main.rs"
-required-features = ["cli"]
+internal = []
+# Reserved opt-in gate for future unstable library surfaces from ADR 001.
+experimental = []
 
 [dependencies]
 # Async runtime
 tokio = { version = "1.49.0", features = ["full"] }
 futures-util = "0.3.32"
+tracing = "0.1.44"
 
 # Container management
 bollard = "0.20.1"
@@ -59,6 +58,7 @@ serde_json = "1.0.149"
 serial_test = "3.2.0"
 tempfile = "3.25.0"
 toml = "0.9.11"
+trybuild = { version = "1.0.116", features = ["diff"] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
@@ -125,3 +125,8 @@ result_large_err                    = "deny"
 [lints.rust]
 missing_docs                        = "deny"
 missing_crate_level_docs            = "deny"
+
+[[bin]]
+name = "podbot"
+path = "src/main.rs"
+required-features = ["cli"]

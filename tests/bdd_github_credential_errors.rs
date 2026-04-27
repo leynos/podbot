@@ -4,6 +4,8 @@
 //! responses from the GitHub API into distinct, actionable error
 //! messages with remediation hints.
 
+#![cfg(feature = "internal")]
+
 mod bdd_github_credential_errors_helpers;
 
 pub use bdd_github_credential_errors_helpers::{

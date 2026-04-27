@@ -11,6 +11,7 @@ use podbot::engine::{
 use rstest_bdd_macros::{given, when};
 
 use super::state::{ExecutionOutcome, InteractiveExecState};
+use crate::test_utils::TestStdinForwardingGuard;
 
 pub type StepResult<T> = Result<T, String>;
 
@@ -39,7 +40,6 @@ fn detached_execution_mode_selected(interactive_exec_state: &InteractiveExecStat
 #[given("protocol execution mode is selected")]
 fn protocol_execution_mode_selected(interactive_exec_state: &InteractiveExecState) {
     interactive_exec_state.mode.set(ExecMode::Protocol);
-    interactive_exec_state.tty_enabled.set(false);
 }
 
 #[given("tty allocation is enabled")]
@@ -105,6 +105,7 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
 
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| format!("failed to create runtime: {error}"))?;
+    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
     let execution_result = runtime.block_on(EngineConnector::exec_async(&client, &request));
 
     match execution_result {

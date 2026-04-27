@@ -1,14 +1,19 @@
 //! Behavioural tests for interactive container execution.
 
+#![cfg(feature = "internal")]
+
 mod bdd_interactive_exec_helpers;
+mod test_utils;
 
 use bdd_interactive_exec_helpers::{InteractiveExecState, interactive_exec_state};
 use rstest_bdd_macros::scenario;
+use serial_test::serial;
 
 #[scenario(
     path = "tests/features/interactive_exec.feature",
     name = "Attached execution succeeds and returns zero exit code"
 )]
+#[serial]
 fn attached_execution_succeeds(interactive_exec_state: InteractiveExecState) {
     let _ = interactive_exec_state;
 }
@@ -17,6 +22,7 @@ fn attached_execution_succeeds(interactive_exec_state: InteractiveExecState) {
     path = "tests/features/interactive_exec.feature",
     name = "Detached execution returns non-zero exit code"
 )]
+#[serial]
 fn detached_execution_returns_non_zero_exit(interactive_exec_state: InteractiveExecState) {
     let _ = interactive_exec_state;
 }
@@ -25,6 +31,7 @@ fn detached_execution_returns_non_zero_exit(interactive_exec_state: InteractiveE
     path = "tests/features/interactive_exec.feature",
     name = "Execution fails when daemon create-exec call fails"
 )]
+#[serial]
 fn execution_fails_when_create_exec_fails(interactive_exec_state: InteractiveExecState) {
     let _ = interactive_exec_state;
 }
@@ -33,6 +40,7 @@ fn execution_fails_when_create_exec_fails(interactive_exec_state: InteractiveExe
     path = "tests/features/interactive_exec.feature",
     name = "Execution fails when daemon omits exit code"
 )]
+#[serial]
 fn execution_fails_when_exit_code_missing(interactive_exec_state: InteractiveExecState) {
     let _ = interactive_exec_state;
 }
@@ -41,6 +49,7 @@ fn execution_fails_when_exit_code_missing(interactive_exec_state: InteractiveExe
     path = "tests/features/interactive_exec.feature",
     name = "Attached execution with tty disabled still succeeds"
 )]
+#[serial]
 fn attached_execution_with_tty_disabled_succeeds(interactive_exec_state: InteractiveExecState) {
     let _ = interactive_exec_state;
 }
@@ -49,7 +58,8 @@ fn attached_execution_with_tty_disabled_succeeds(interactive_exec_state: Interac
     path = "tests/features/interactive_exec.feature",
     name = "Protocol execution succeeds with tty disabled"
 )]
-fn protocol_execution_succeeds(interactive_exec_state: InteractiveExecState) {
+#[serial]
+fn protocol_execution_succeeds_with_tty_disabled(interactive_exec_state: InteractiveExecState) {
     let _ = interactive_exec_state;
 }
 
@@ -57,6 +67,7 @@ fn protocol_execution_succeeds(interactive_exec_state: InteractiveExecState) {
     path = "tests/features/interactive_exec.feature",
     name = "Protocol execution returns non-zero exit code"
 )]
+#[serial]
 fn protocol_execution_returns_non_zero_exit(interactive_exec_state: InteractiveExecState) {
     let _ = interactive_exec_state;
 }

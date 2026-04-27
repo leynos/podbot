@@ -14,6 +14,7 @@
 
 mod connection;
 
+#[cfg(any(feature = "internal", test))]
 pub use connection::{
     ContainerCreator, ContainerExecClient, ContainerSecurityOptions, ContainerUploader,
     CreateContainerFuture, CreateContainerRequest, CreateExecFuture, CredentialUploadRequest,
@@ -21,6 +22,10 @@ pub use connection::{
     HostCommandRunner, HostGitIdentity, InspectExecFuture, ResizeExecFuture, SelinuxLabelMode,
     SocketResolver, StartExecFuture, SystemCommandRunner, UploadToContainerFuture,
     configure_git_identity, read_host_git_identity,
+};
+#[cfg(not(any(feature = "internal", test)))]
+pub(crate) use connection::{
+    ContainerExecClient, EngineConnector, ExecMode, ExecRequest, SocketResolver,
 };
 
 #[cfg(test)]

@@ -3,6 +3,8 @@
 //! These tests verify that layered configuration resolves `AppConfig.image`
 //! correctly and that `CreateContainerRequest` consumes that resolved value.
 
+#![cfg(feature = "internal")]
+
 mod test_support;
 
 use std::io::Write;

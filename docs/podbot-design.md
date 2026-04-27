@@ -178,8 +178,8 @@ backpressure remains visible to the hosted server:
   limiting how many bytes can be in flight between host stdin reads and
   container input writes.
 - **Container input writes**: the container stdin writer receives
-  unbuffered writes from the copy operation. An explicit flush and
-  shutdown sequence follows copy completion to signal end-of-input.
+  unbuffered writes from the copy operation. An explicit flush and shutdown
+  sequence follows copy completion to signal end-of-input.
 - **Output chunk size**: Bollard's `output_capacity` is set to 64 KiB for
   protocol-mode exec sessions, controlling the maximum bytes per `LogOutput`
   chunk delivered by the daemon. This reduces per-chunk overhead for large
@@ -189,10 +189,10 @@ backpressure remains visible to the hosted server:
   flush, the output loop yields, the Bollard stream stops being polled, and
   backpressure propagates to the container.
 
-The 64 KiB buffer sizes align with common protocol message sizes (such as
-JSON Remote Procedure Call (JSON-RPC) frame buffers) and typical OS pipe
-buffer defaults, keeping latency low while preventing unbounded accumulation
-during high-throughput scenarios.
+The 64 KiB buffer sizes align with common protocol message sizes (such as JSON
+Remote Procedure Call (JSON-RPC) frame buffers) and typical OS pipe buffer
+defaults, keeping latency low while preventing unbounded accumulation during
+high-throughput scenarios.
 
 The dedicated `podbot host` command is protocol-only. Unlike interactive
 operator commands, it must not emit banners, progress lines, or lifecycle
@@ -523,8 +523,13 @@ The implemented library configuration API is:
 - Deterministic test seam that avoids mutating the process environment via:
 `podbot::config::load_config_with_env(&impl mockable::Env, &ConfigLoadOptions)`
 
-The CLI adapter uses `podbot::cli::Cli::config_load_options()` to convert
-parsed flags into the library `ConfigLoadOptions`.
+When the `cli` feature is enabled, the CLI adapter uses
+`podbot::cli::Cli::config_load_options()` to convert parsed flags into the
+library `ConfigLoadOptions`. Library embedders can disable default features to
+remove Podbot's CLI surface, but that does not guarantee that the `clap`
+dependency disappears entirely. `clap` may still be pulled in transitively via
+`ortho_config`, so embedders that must avoid Clap also need to consider
+`ortho_config`'s feature set and dependency choices.
 
 Configuration file resolution uses the following order (first match wins):
 
@@ -925,11 +930,15 @@ acquisition without exposing API details to calling code.
 
 Public versus internal intent:
 
-- Public library modules: `api/`, `config/` (types and loader surfaces),
-  `engine/`, and `error`.
+- Stable public library modules: `api/`, `config/` (types and loader
+  surfaces), and `error`.
+- Optional CLI adapter module: `cli/`, enabled by the `cli` feature for the
+  `podbot` binary.
+- Hidden compatibility modules: `engine/` and `github/`. These remain
+  reachable for tests and short-term compatibility, but they are not part of
+  the documented stable embedding boundary.
 - Internal library modules (subject to refactor): `run_flow.rs`,
-  `host_flow.rs`, `launch_plan.rs`, `token_daemon.rs`, and `github.rs` until
-  the external API is stabilized.
+  `host_flow.rs`, `launch_plan.rs`, and `token_daemon.rs`.
 
 ### Library API boundary requirements
 
@@ -949,55 +958,44 @@ The stable library boundary should follow these constraints:
   code for the CLI to map to a process exit code.
 - Configuration loaders exposed to library consumers must not require `Cli`
   structs or Clap traits.
+- The stable exec surface is
+  `podbot::api::{ExecRequest, ExecMode, ExecContext, exec}` rather than
+  engine-owned traits or runtime handles.
+- Hook, validation, session, and MCP contracts remain experimental until their
+  ADRs and consumer-facing integration notes converge on one request/response
+  taxonomy.
 
 ### Public library API reference
 
-The following modules form the stable public API surface for library
-consumers. Types in these modules are versioned and should not change in
-breaking ways without a major version bump.
+The following modules form the stable public API surface for library consumers.
+Types in these modules are versioned and should not change in breaking ways
+without a major version bump.
 
-| Module   | Stability | Key types and functions                                            |
-| -------- | --------- | ------------------------------------------------------------------ |
-| `api`    | Stable    | `CommandOutcome`, `ExecParams`, `exec`, `run_agent`,               |
-|          |           | `list_containers`, `stop_container`, `run_token_daemon`            |
-| `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`,               |
-|          |           | `load_config`, `load_config_with_env`, `AgentConfig`,              |
-|          |           | `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`,           |
-|          |           | `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`,                  |
-|          |           | `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent`              |
-| `engine` | Stable    | `EngineConnector`, `SocketResolver`, `ExecMode`,                   |
-|          |           | `ExecRequest`, `ExecResult`, `ContainerExecClient`,                |
-|          |           | `ContainerCreator`, `ContainerUploader`,                           |
-|          |           | `CreateContainerRequest`, `ContainerSecurityOptions`,              |
-|          |           | `CredentialUploadRequest`, `CredentialUploadResult`                |
-| `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`,                    |
-|          |           | `GitHubError`, `FilesystemError`, `Result<T>`                      |
-| `github` | Internal  | Subject to change; not part of the stable integration contract.    |
-|          |           | GitHub App support provided by the `podbot::github` module with    |
-|          |           | `load_private_key`, `build_app_client`,                            |
-|          |           | `validate_app_credentials`, `GitHubAppClient` trait.               |
-| `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo  |
-|          |           | feature (enabled by default). When enabled, adds `clap` as a       |
-|          |           | direct dependency. Library-only consumers can set                  |
-|          |           | `default-features = false` to hide CLI module visibility.          |
-|          |           | Note: `clap` remains in the dependency tree via `ortho_config`.    |
+| Module   | Stability | Key types and functions                                                                                                                                                                                                                                                     |
+| -------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api`    | Stable    | `CommandOutcome`, `ExecRequest`, `ExecMode`, `ExecContext`, `exec`, `run_agent`, `list_containers`, `stop_container`, `run_token_daemon`                                                                                                                                    |
+| `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`, `load_config`, `load_config_with_env`, `AgentConfig`, `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`, `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`, `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent` |
+| `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`, `GitHubError`, `FilesystemError`, `Result<T>`                                                                                                                                                                               |
+| `engine` | Internal  | Hidden compatibility surface; not part of the supported semver contract for embedders.                                                                                                                                                                                      |
+| `github` | Internal  | Hidden GitHub integration module; not part of the stable integration contract.                                                                                                                                                                                              |
+| `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo feature; library-only consumers can set `default-features = false` to hide module visibility.                                                                                                             |
 
 Table: Module stability and key types for Podbot modules
 
 ### Planned API surfaces
 
 The following API surfaces are documented in this design but not yet
-implemented. They will be introduced in the referenced roadmap steps.
-Library consumers should not depend on these surfaces until their roadmap
-steps are complete.
+implemented. They will be introduced in the referenced roadmap steps. Library
+consumers should not depend on these surfaces until their roadmap steps are
+complete.
 
-| Surface                 | Roadmap step | Description                          |
-| ----------------------- | ------------ | ------------------------------------ |
-| `LaunchRequest`/`Plan`  | Step 4.5     | Normalized launch contract           |
-| Hook models             | Step 4.9     | Hook execution and acknowledgement   |
-| Prompt/bundle schemas   | Step 4.8     | Prompt validation and bundle surface |
-| MCP wire models         | Step 4.7     | MCP wire provisioning and injection  |
-| `HostedSession`         | Step 4.6     | Hosted session control plane         |
+| Surface                | Roadmap step | Description                          |
+| ---------------------- | ------------ | ------------------------------------ |
+| `LaunchRequest`/`Plan` | Step 4.5     | Normalized launch contract           |
+| Hook models            | Step 4.9     | Hook execution and acknowledgement   |
+| Prompt/bundle schemas  | Step 4.8     | Prompt validation and bundle surface |
+| MCP wire models        | Step 4.7     | MCP wire provisioning and injection  |
+| `HostedSession`        | Step 4.6     | Hosted session control plane         |
 
 Table: Planned API surfaces with roadmap milestones
 

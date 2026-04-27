@@ -6,11 +6,13 @@ use std::time::Duration;
 
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
-use futures_util::{Stream, StreamExt};
-use tokio::io::{AsyncWrite, AsyncWriteExt};
+use futures_util::{FutureExt, Stream, StreamExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
+use super::helpers::spawn_stdin_forwarding_task;
+use super::host_io::default_host_stdin;
 use super::terminal::{TerminalSizeProvider, resize_exec_to_current_terminal_async};
 #[cfg(unix)]
 use super::terminal::{maybe_sigwinch_listener, wait_for_sigwinch};
@@ -43,11 +45,12 @@ pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: Termin
 ) -> Result<(), PodbotError> {
     let mut stdout = tokio::io::stdout();
     let mut stderr = tokio::io::stderr();
-    run_attached_session_with_stdio_async(
+    run_attached_session_with_io_async(
         client,
         request,
         exec_id,
         &mut output,
+        default_host_stdin(),
         input,
         size_provider,
         &mut stdout,
@@ -60,17 +63,24 @@ pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: Termin
     clippy::too_many_arguments,
     reason = "attached-session orchestration needs stream, IO, and resize state together"
 )]
-async fn run_attached_session_with_stdio_async<C: ContainerExecClient, P: TerminalSizeProvider>(
+async fn run_attached_session_with_io_async<C, P, HostStdin>(
     client: &C,
     request: &ExecRequest,
     exec_id: &str,
     output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    host_stdin: HostStdin,
     input: Pin<Box<dyn AsyncWrite + Send>>,
     size_provider: &P,
     stdout: &mut tokio::io::Stdout,
     stderr: &mut tokio::io::Stderr,
-) -> Result<(), PodbotError> {
-    let stdin_task = spawn_stdin_forwarding_task(input);
+) -> Result<(), PodbotError>
+where
+    C: ContainerExecClient,
+    P: TerminalSizeProvider,
+    HostStdin: AsyncRead + Send + Unpin + 'static,
+{
+    let stdin_task =
+        spawn_stdin_forwarding_task(host_stdin, input, forward_host_stdin_to_exec_async);
     let session_result = run_output_session_with_resize_init_async(
         client,
         request,
@@ -81,21 +91,44 @@ async fn run_attached_session_with_stdio_async<C: ContainerExecClient, P: Termin
         stderr,
     )
     .await;
-    stop_stdin_forwarding_task(stdin_task).await;
+    stop_stdin_forwarding_task(stdin_task);
     session_result
 }
 
-fn spawn_stdin_forwarding_task(
-    input: Pin<Box<dyn AsyncWrite + Send>>,
-) -> JoinHandle<io::Result<()>> {
-    tokio::spawn(async move { forward_stdin_to_exec_async(input).await })
+fn stop_stdin_forwarding_task(mut stdin_task: JoinHandle<io::Result<()>>) {
+    if let Some(result) = (&mut stdin_task).now_or_never() {
+        log_completed_stdin_forwarding_task(result);
+        return;
+    }
+
+    stdin_task.abort();
+    // Do not await the aborted task here. `tokio::io::stdin()` may be blocked
+    // in a non-cancellable read, and shutdown should not hang waiting for that
+    // task to observe cancellation.
+    drop(stdin_task);
 }
 
-async fn stop_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
-    stdin_task.abort();
-    // Ignore the join result here because an aborted stdin task is expected
-    // during attached-session shutdown.
-    drop(stdin_task.await);
+fn log_completed_stdin_forwarding_task(result: Result<io::Result<()>, tokio::task::JoinError>) {
+    match result {
+        Ok(io_result) => log_stdin_forwarding_io_result(io_result),
+        Err(error) => log_stdin_forwarding_join_error(&error),
+    }
+}
+
+fn log_stdin_forwarding_io_result(result: io::Result<()>) {
+    if let Err(error) = result {
+        tracing::warn!(
+            error = %error,
+            "stdin forwarding task exited with an I/O error",
+        );
+    }
+}
+
+fn log_stdin_forwarding_join_error(error: &tokio::task::JoinError) {
+    tracing::error!(
+        error = %error,
+        "stdin forwarding task panicked while shutting down",
+    );
 }
 
 #[expect(
@@ -220,10 +253,16 @@ async fn write_exec_output_chunk(
     Ok(true)
 }
 
-async fn forward_stdin_to_exec_async(mut input: Pin<Box<dyn AsyncWrite + Send>>) -> io::Result<()> {
-    let mut stdin = tokio::io::stdin();
-    tokio::io::copy(&mut stdin, &mut input).await?;
-    input.flush().await
+async fn forward_host_stdin_to_exec_async<HostStdin>(
+    mut host_stdin: HostStdin,
+    mut input: Pin<Box<dyn AsyncWrite + Send>>,
+) -> io::Result<()>
+where
+    HostStdin: AsyncRead + Unpin,
+{
+    tokio::io::copy(&mut host_stdin, &mut input).await?;
+    input.flush().await?;
+    input.shutdown().await
 }
 
 #[cfg(unix)]

@@ -13,6 +13,12 @@ Build and install from source:
 cargo install --path .
 ```
 
+Embed as a library without the CLI surface:
+
+```toml
+podbot = { version = "0.1.0", default-features = false }
+```
+
 ## Quick start
 
 Run an AI agent against a GitHub repository:
@@ -52,17 +58,10 @@ podbot run --repo owner/name --branch main --agent claude
 
 Host an app-server protocol for a long-lived agent runtime.
 
-```bash
-podbot host --agent codex --agent-mode codex_app_server
-```
-
-For custom agents, you must configure `agent.command` via config file or
-environment variable:
-
-```bash
-export PODBOT_AGENT_COMMAND=/usr/local/bin/my-agent
-podbot host --agent custom --agent-mode acp
-```
+This subcommand is temporarily unavailable in the current release. If you run
+`podbot host`, Podbot will return an error rather than starting a hosted
+session. Use `podbot run` or the library exec API for now; the release notes
+will call out when hosted mode becomes available.
 
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |
@@ -241,7 +240,9 @@ allowed_origin_policy = "same_origin"
 Semantic validation rules:
 
 - `podbot run` accepts only `agent.mode = "podbot"`.
-- `podbot host` accepts only `agent.mode = "codex_app_server"` or `"acp"`.
+- `podbot host` remains temporarily disabled in this release, even though the
+  configuration model still reserves `agent.mode = "codex_app_server"` and
+  `"acp"` for the hosted protocol path.
 - `agent.kind = "custom"` requires a non-empty `agent.command`.
 - Built-in agent kinds reject `agent.command` and `agent.args`.
 - `workspace.source = "host_mount"` requires `workspace.host_path` and
@@ -282,13 +283,13 @@ against the GitHub API by making an authenticated request to `GET /app`. If
 this validation fails, podbot classifies the failure mode and provides
 actionable error messages with remediation hints:
 
-| Message fragment                            | Cause and remediation                                                                                                                                                                     |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "credentials rejected (HTTP 401)"           | The private key does not match the App, or the App has been suspended. Verify the App ID and regenerate the private key from the GitHub App settings page. Check for clock skew.          |
-| "insufficient permissions (HTTP 403)"       | The App lacks required permissions. Check the App's permission settings in GitHub.                                                                                                        |
-| "App not found (HTTP 404)"                  | The App ID is incorrect or the App has been deleted. Verify that `github.app_id` is correct.                                                                                              |
-| "GitHub API unavailable (HTTP 5xx)"         | GitHub is experiencing an outage or maintenance. Check <https://www.githubstatus.com> for service status. Retry after the service recovers.                                               |
-| "failed to validate GitHub App credentials" | A network error occurred or the API returned an unexpected status. Check network connectivity and DNS resolution. Review the detailed error message for the specific cause.               |
+| Message fragment                            | Cause and remediation                                                                                                                                                            |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "credentials rejected (HTTP 401)"           | The private key does not match the App, or the App has been suspended. Verify the App ID and regenerate the private key from the GitHub App settings page. Check for clock skew. |
+| "insufficient permissions (HTTP 403)"       | The App lacks required permissions. Check the App's permission settings in GitHub.                                                                                               |
+| "App not found (HTTP 404)"                  | The App ID is incorrect or the App has been deleted. Verify that `github.app_id` is correct.                                                                                     |
+| "GitHub API unavailable (HTTP 5xx)"         | GitHub is experiencing an outage or maintenance. Check <https://www.githubstatus.com> for service status. Retry after the service recovers.                                      |
+| "failed to validate GitHub App credentials" | A network error occurred or the API returned an unexpected status. Check network connectivity and DNS resolution. Review the detailed error message for the specific cause.      |
 
 ### Environment variables
 
@@ -602,125 +603,85 @@ CLI tool. The `podbot::api` module exposes orchestration functions that accept
 library-owned types and return typed outcomes without printing to stdout/stderr
 or calling `std::process::exit`.
 
+The supported stable embedding boundary is:
+
+- `podbot::api`
+- `podbot::config`
+- `podbot::error`
+
+The `cli` module is optional behind the `cli` feature. Hidden compatibility
+modules such as `engine` and `GitHub` integration shims are not part of the
+supported semver contract for embedders.
+
 ### Available functions
 
-| Function                                                | Description                                                     |
-| ------------------------------------------------------- | --------------------------------------------------------------- |
-| `podbot::api::exec(params)`                             | Execute a command in a running container                        |
-| `podbot::api::run_agent(config)`                        | Run an AI agent in a sandboxed container (stub)                 |
-| `podbot::api::stop_container(container)`                | Stop a running container (stub)                                 |
-| `podbot::api::list_containers()`                        | List running podbot containers (stub)                           |
-| `podbot::api::run_token_daemon(container)`              | Run the token refresh daemon (stub)                             |
-| `podbot::api::configure_container_git_identity(params)` | Configure Git identity from host Git config                     |
+| Function                                 | Description                                  |
+| ---------------------------------------- | -------------------------------------------- |
+| `podbot::api::exec(config, request)`     | Execute a command in a running container     |
+| `podbot::api::ExecContext::connect(…)`   | Reuse a runtime handle and engine connection |
 
-### Return types
+### Return type
 
-Most orchestration functions return `podbot::error::Result<CommandOutcome>`:
+The stable execution entry points `podbot::api::exec(config, request)` and
+`podbot::api::ExecContext::exec(request)` return
+`podbot::error::Result<CommandOutcome>`:
 
 - `CommandOutcome::Success` indicates a zero exit code.
 - `CommandOutcome::CommandExit { code }` carries the non-zero exit code
   reported by the container engine.
 
-The `configure_container_git_identity` function returns
-`podbot::error::Result<GitIdentityResult>` instead, which provides structured
-information about the Git identity configuration outcome. See the "Git identity
-configuration" section below for details.
+`podbot::api::ExecContext::connect(…)` returns
+`podbot::error::Result<ExecContext>`, which embedders can cache and reuse for
+repeated exec calls.
+
+For repeated exec calls, embedders can cache engine state:
+
+```rust,no_run
+use podbot::api::{ExecContext, ExecRequest};
+use podbot::config::AppConfig;
+
+fn run_many_commands(runtime: &tokio::runtime::Handle) -> Result<(), podbot::error::PodbotError> {
+    let config = AppConfig::default();
+    let context = ExecContext::connect(&config, runtime)?;
+    let request = ExecRequest::new("my-container", vec![String::from("echo")])?;
+    let _ = context.exec(&request)?;
+    Ok(())
+}
+```
 
 ### Example usage
 
 ```rust,no_run
-use podbot::api::{CommandOutcome, ExecParams, exec};
-use podbot::engine::{ContainerExecClient, ExecMode};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest, exec};
+use podbot::config::AppConfig;
 
-fn run_command(
-    connector: &impl ContainerExecClient,
-    runtime_handle: &tokio::runtime::Handle,
-) {
-    let result = exec(ExecParams {
-        connector,
-        container: "my-container",
-        command: vec!["echo".into(), "hello".into()],
-        mode: ExecMode::Attached,
-        tty: false,
-        runtime_handle,
-    });
+fn run_command() -> Result<(), podbot::error::PodbotError> {
+    let config = AppConfig::default();
+    let request = ExecRequest::new(
+        "my-container",
+        vec![String::from("echo"), String::from("hello")],
+    )?
+    .with_mode(ExecMode::Attached)
+    .with_tty(false);
 
-    match result {
-        Ok(CommandOutcome::Success) => println!("Command succeeded"),
-        Ok(CommandOutcome::CommandExit { code }) => {
+    match exec(&config, &request)? {
+        CommandOutcome::Success => println!("Command succeeded"),
+        CommandOutcome::CommandExit { code } => {
             println!("Command exited with code {code}");
         }
-        Err(e) => eprintln!("Error: {e}"),
     }
+
+    Ok(())
 }
 ```
 
 ### Git identity configuration
 
-`configure_container_git_identity` reads `user.name` and `user.email` from
-the host Git configuration and applies them inside a running container via
-`git config --global`. Missing fields produce warnings rather than errors.
-
-#### Parameters: `GitIdentityParams`
-
-```rust,no_run
-pub struct GitIdentityParams<'a, C: ContainerExecClient, R: HostCommandRunner> {
-    pub client: &'a C,
-    pub host_runner: &'a R,
-    pub container_id: &'a str,
-    pub runtime_handle: &'a tokio::runtime::Handle,
-}
-```
-
-#### Return type: `GitIdentityResult`
-
-`configure_container_git_identity` returns `podbot::error::Result<GitIdentityResult>`:
-
-| Variant | Meaning |
-| ------- | ------- |
-| `GitIdentityResult::Configured { name, email }` | Both `user.name` and `user.email` were set in the container. |
-| `GitIdentityResult::Partial { name, email, warnings }` | One field was set; `warnings` explains the missing field. |
-| `GitIdentityResult::NoneConfigured { warnings }` | Neither field was present on the host; container Git config unchanged. |
-
-Container-side exec failures (e.g. `git` not present in the container image)
-propagate as `PodbotError::Container(ContainerError::ExecFailed { .. })`.
-
-#### Example: configuring Git identity
-
-```rust,no_run
-use podbot::api::{GitIdentityParams, configure_container_git_identity};
-use podbot::engine::{GitIdentityResult, SystemCommandRunner};
-
-fn configure_identity(
-    client: &impl podbot::engine::ContainerExecClient,
-    runtime_handle: &tokio::runtime::Handle,
-) {
-    let host_runner = SystemCommandRunner;
-    let params = GitIdentityParams {
-        client,
-        host_runner: &host_runner,
-        container_id: "my-container",
-        runtime_handle,
-    };
-
-    match configure_container_git_identity(&params) {
-        Ok(GitIdentityResult::Configured { name, email }) => {
-            println!("Git identity set: {name} <{email}>");
-        }
-        Ok(GitIdentityResult::Partial { warnings, .. }) => {
-            for w in &warnings {
-                eprintln!("warning: {w}");
-            }
-        }
-        Ok(GitIdentityResult::NoneConfigured { warnings }) => {
-            for w in &warnings {
-                eprintln!("warning: {w}");
-            }
-        }
-        Err(e) => eprintln!("Error configuring Git identity: {e}"),
-    }
-}
-```
+`configure_container_git_identity` remains available as a compatibility helper,
+but it is not part of the stable embedding contract described here because its
+parameters and results depend on internal engine-owned traits and types.
+Library embedders should treat it as an internal shim rather than a semver
+stable API.
 
 ### Library embedding
 
@@ -746,20 +707,20 @@ feature flag controls module visibility, not the `clap` dependency itself.
 
 The following modules are part of the stable public API:
 
-- `podbot::api` — orchestration functions (`exec`, `run_agent`,
-  `list_containers`, `stop_container`, `run_token_daemon`,
-  `configure_container_git_identity`)
+- `podbot::api` — orchestration types and exec entry points (`exec`,
+  `ExecContext`, `ExecRequest`, `ExecMode`, `CommandOutcome`)
 - `podbot::config` — configuration types and loaders (`AppConfig`,
   `ConfigLoadOptions`, `load_config`)
-- `podbot::engine` — container engine types and traits
-  (`ContainerExecClient`, `EngineConnector`, `ExecRequest`)
 - `podbot::error` — semantic error hierarchy (`PodbotError`, `ConfigError`,
   `ContainerError`)
 
 #### Internal modules
 
-The following modules are public but internal and subject to change:
+The following modules are only exported when the crate is built with
+`feature = "internal"` or for podbot's own crate tests. They are not available
+to normal embedders and are not part of the supported semver contract:
 
+- `podbot::engine` — container engine types and traits
 - `podbot::github` — GitHub App authentication types
 
 #### Adapter modules
@@ -769,6 +730,82 @@ The following modules are public but gated behind Cargo features:
 - `podbot::cli` — Clap parse types (requires the `cli` feature, enabled by
   default)
 
+### Experimental API
+
+The following functions remain available under `podbot::api`, but they are not
+part of the stable semver contract described in this guide. Podbot reserves the
+`experimental` Cargo feature for unstable library surfaces, but these stub
+entry points are not yet gated by that feature in the current release, so treat
+them as unstable compatibility shims whose signatures may change.
+
+- `podbot::api::run_agent(config)` — validates GitHub credentials and returns a
+  stub success outcome.
+- `podbot::api::stop_container(container)` — placeholder stop operation that
+  currently returns a stub success outcome.
+- `podbot::api::list_containers()` — placeholder list operation that currently
+  returns a stub success outcome.
+- `podbot::api::run_token_daemon(container_id)` — placeholder token-refresh
+  daemon entry point that currently returns a stub success outcome.
+
+If and when these functions move behind the reserved experimental gate, the
+dependency declaration will look like this:
+
+```toml
+[dependencies]
+podbot = { version = "0.1.0", features = ["experimental"] }
+```
+
+### `run_agent`
+
+> **Experimental:** This function is not part of the stable API contract.
+> Podbot reserves `feature = "experimental"` for unstable library surfaces,
+> but this stub is not yet gated by that feature in the current release.
+
+```rust,no_run
+use podbot::api::run_agent;
+use podbot::config::AppConfig;
+
+fn start_agent() -> Result<(), podbot::error::PodbotError> {
+    let config = AppConfig::default();
+    run_agent(&config)?;
+    Ok(())
+}
+```
+
+`run_agent(config: &AppConfig)` validates the GitHub credential fields in
+`AppConfig` and starts the AI agent loop. If any GitHub credential field is
+set, all required fields (`app_id`, `installation_id`, `private_key_path`) must
+be present; the function returns a `PodbotError` if validation fails. Call this
+function when you want to embed the full agent orchestration path rather than
+issuing individual exec commands.
+
+> **Note:** The agent runtime is currently a stub; the function validates
+> credentials and returns `CommandOutcome::Success` without launching a
+> persistent agent loop.
+
+### `run_token_daemon`
+
+> **Experimental:** This function is not part of the stable API contract.
+> Podbot reserves `feature = "experimental"` for unstable library surfaces,
+> but this stub is not yet gated by that feature in the current release.
+
+```rust,no_run
+use podbot::api::run_token_daemon;
+
+fn start_token_refresh(container_id: &str) -> Result<(), podbot::error::PodbotError> {
+    run_token_daemon(container_id)?;
+    Ok(())
+}
+```
+
+`run_token_daemon(container_id: &str)` starts the token-refresh daemon for the
+named container. Supply the container identifier or name as returned by the
+container engine. The daemon periodically refreshes authentication tokens
+required by the agent.
+
+> **Note:** The token daemon is currently a stub and returns
+> `CommandOutcome::Success` immediately.
+>
 ## Development
 
 ### Running tests
@@ -795,66 +832,6 @@ make check-fmt
 make all
 ```
 
-### Feature gate verification
-
-The `cli` Cargo feature gates the `podbot::cli` module and the `podbot` binary
-target. When modifying library code, verify that the crate compiles without the
-CLI feature to ensure the library boundary remains self-contained:
-
-```bash
-cargo check --no-default-features
-```
-
-This confirms that library consumers who depend on podbot with
-`default-features = false` will not encounter compilation errors caused by
-unconditional imports of CLI or Clap types. The full feature matrix tested
-during development is:
-
-| Command                             | What it verifies                 |
-| ----------------------------------- | -------------------------------- |
-| `cargo check --no-default-features` | Library compiles without CLI     |
-| `cargo check --all-features`        | Everything compiles together     |
-| `make test`                         | All tests pass with all features |
-
-### Feature gate maintenance
-
-When adding new public modules or dependencies:
-
-- If the module is part of the stable library boundary (`api`, `config`,
-  `error`, `engine`), it must compile without the `cli` feature.
-- If the module depends on `clap` or other CLI-only crates, gate it behind
-  `#[cfg(feature = "cli")]` in `src/lib.rs` and mark the dependency as
-  `optional = true` in `Cargo.toml`.
-- Run `cargo check --no-default-features` after any change to the public
-  module structure to verify the boundary is intact.
-
-### Behavioural test infrastructure
-
-Podbot uses [rstest-bdd](https://crates.io/crates/rstest-bdd) for
-behaviour-driven development (BDD) tests alongside standard `rstest`
-parametrized integration tests. The two test styles serve complementary
-purposes:
-
-- **BDD scenario tests** (`tests/bdd_*.rs`) are driven by Gherkin feature
-  files in `tests/features/`. Each scenario test file declares a helper module
-  (`tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
-  `then`), shared state, and assertion helpers. Feature files are read at
-  compile time; changes to `.feature` content may require
-  `cargo clean -p podbot` to invalidate incremental compilation caches.
-- **Parametrized integration tests** (`tests/library_embedding.rs` and
-  others) use `rstest` fixtures and `#[case]` parameters directly, without
-  feature files. These tests exercise the library API from a
-  host-application perspective.
-
-The BDD helper module layout follows a consistent pattern:
-
-```plaintext
-tests/bdd_<domain>_helpers/
-  mod.rs          -- re-exports and shared types
-  state.rs        -- ScenarioState struct and fixture
-  steps.rs        -- Given/When step definitions
-  assertions.rs   -- Then step definitions
-```
-
-Every test module and helper file must begin with a module-level (`//!`) doc
-comment explaining its purpose.
+For maintainer-only feature-gate verification and behavioural test
+infrastructure guidance, see
+[developers-guide.md](developers-guide.md#103-feature-gate-verification).

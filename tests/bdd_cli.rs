@@ -2,6 +2,8 @@
 //!
 //! These tests validate the command-line interface behaviour using rstest-bdd.
 
+#![cfg(feature = "cli")]
+
 use clap::{CommandFactory, Parser};
 use podbot::cli::Cli;
 use rstest::fixture;

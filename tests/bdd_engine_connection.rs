@@ -3,6 +3,8 @@
 //! These tests validate the socket resolution logic for connecting to Docker
 //! or Podman engines using rstest-bdd.
 
+#![cfg(feature = "internal")]
+
 mod bdd_engine_connection_helpers;
 
 pub use bdd_engine_connection_helpers::{EngineConnectionState, engine_connection_state};

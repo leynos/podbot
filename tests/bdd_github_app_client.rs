@@ -3,6 +3,8 @@
 //! These tests validate that podbot correctly builds an authenticated
 //! Octocrab client from App credentials.
 
+#![cfg(feature = "internal")]
+
 mod bdd_github_app_client_helpers;
 
 pub use bdd_github_app_client_helpers::{GitHubAppClientState, github_app_client_state};
