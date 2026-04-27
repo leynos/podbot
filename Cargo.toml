@@ -21,7 +21,7 @@ futures-util = "0.3.32"
 tracing = "0.1.44"
 
 # Container management
-bollard = "0.20.1"
+bollard = "0.20.2"
 tar = "0.4.44"
 
 # GitHub integration
