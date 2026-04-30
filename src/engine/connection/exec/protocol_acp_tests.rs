@@ -6,21 +6,13 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use rstest::rstest;
-use rstest_bdd::Slot;
-use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 use tokio::io::{AsyncWrite, AsyncWriteExt, DuplexStream};
 
+use super::acp_helpers::{
+    ACP_FILE_SYSTEM_CAPABILITY, ACP_TERMINAL_CAPABILITY, MAX_FIRST_FRAME_BYTES,
+    forward_initial_acp_frame_async, mask_acp_initialize_frame, split_frame_line_ending,
+};
 use super::*;
-
-type StepResult<T> = Result<T, String>;
-
-#[derive(Default, ScenarioState)]
-struct AcpMaskingState {
-    host_stdin: Slot<Vec<u8>>,
-    expected_forwarded: Slot<Vec<u8>>,
-    actual_forwarded: Slot<Vec<u8>>,
-    succeeded: Slot<bool>,
-}
 
 struct RecordingInputWriter {
     bytes: Arc<Mutex<Vec<u8>>>,
@@ -91,7 +83,7 @@ fn initialize_frame(line_ending: &str) -> Vec<u8> {
     frame
 }
 
-fn initialize_without_blocked_capabilities() -> Vec<u8> {
+pub(super) fn initialize_without_blocked_capabilities() -> Vec<u8> {
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 0,
@@ -141,7 +133,7 @@ fn session_new_bytes() -> Vec<u8> {
     br#"{"jsonrpc":"2.0","id":1,"method":"session/new","params":{"cwd":"/workspace"}}"#.to_vec()
 }
 
-fn malformed_initialize_bytes() -> Vec<u8> {
+pub(super) fn malformed_initialize_bytes() -> Vec<u8> {
     br#"{"jsonrpc":"2.0","method":"initialize","params":{"clientCapabilities":{"terminal":true}}"#
         .to_vec()
 }
@@ -180,7 +172,14 @@ async fn build_host_stdin(bytes: &[u8]) -> io::Result<DuplexStream> {
     Ok(reader)
 }
 
-fn run_forwarding(host_stdin_bytes: &[u8]) -> (Vec<u8>, bool) {
+pub(super) fn run_forwarding(host_stdin_bytes: &[u8]) -> (Vec<u8>, bool) {
+    run_forwarding_with_rewrite(host_stdin_bytes, true)
+}
+
+fn run_forwarding_with_rewrite(
+    host_stdin_bytes: &[u8],
+    rewrite_acp_initialize: bool,
+) -> (Vec<u8>, bool) {
     let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
     let host_stdin = runtime
         .block_on(build_host_stdin(host_stdin_bytes))
@@ -193,6 +192,7 @@ fn run_forwarding(host_stdin_bytes: &[u8]) -> (Vec<u8>, bool) {
         .block_on(forward_host_stdin_to_exec_async(
             host_stdin,
             Box::pin(container_input),
+            rewrite_acp_initialize,
         ))
         .expect("stdin forwarding should succeed");
 
@@ -205,6 +205,19 @@ fn run_forwarding(host_stdin_bytes: &[u8]) -> (Vec<u8>, bool) {
             .lock()
             .expect("shutdown mutex should not poison"),
     )
+}
+
+#[test]
+fn forwarding_leaves_initialize_unchanged_when_acp_rewrite_is_disabled() {
+    let host_stdin_bytes = initialize_frame("\n");
+
+    let (forwarded, shutdown_called) = run_forwarding_with_rewrite(&host_stdin_bytes, false);
+
+    assert_eq!(
+        forwarded, host_stdin_bytes,
+        "generic protocol sessions should retain raw byte-stream semantics"
+    );
+    assert!(shutdown_called, "stdin forwarding should shut down input");
 }
 
 #[rstest]
@@ -270,7 +283,7 @@ fn mask_acp_initialize_frame_leaves_malformed_input_unchanged() {
 #[test]
 fn forwarding_masks_initialize_and_preserves_trailing_bytes() {
     let mut host_stdin_bytes = initialize_frame("\n");
-    let trailing = session_new_bytes();
+    let trailing = initialize_frame("\n");
     host_stdin_bytes.extend_from_slice(&trailing);
 
     let (forwarded, shutdown_called) = run_forwarding(&host_stdin_bytes);
@@ -298,7 +311,7 @@ fn forwarding_masks_initialize_and_preserves_trailing_bytes() {
 #[test]
 fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
     let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
-    let host_stdin_bytes = vec![b'x'; STDIN_BUFFER_CAPACITY + 1];
+    let host_stdin_bytes = vec![b'x'; MAX_FIRST_FRAME_BYTES + 1];
     let (host_writer, host_reader) = runtime
         .block_on(async {
             let (mut host_writer, host_reader) = tokio::io::duplex(host_stdin_bytes.len());
@@ -317,7 +330,7 @@ fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
         .block_on(async {
             tokio::time::timeout(
                 STDIN_SETTLE_TIMEOUT,
-                forward_initial_protocol_frame_async(&mut buffered_stdin, &mut container_input),
+                forward_initial_acp_frame_async(&mut buffered_stdin, &mut container_input),
             )
             .await
         })
@@ -329,21 +342,17 @@ fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
             .lock()
             .expect("writer mutex should not poison")
             .len(),
-        STDIN_BUFFER_CAPACITY,
+        MAX_FIRST_FRAME_BYTES,
         "only the bounded first-frame buffer should be held before streaming resumes"
     );
 
     drop(host_writer);
 }
 
-#[rstest::fixture]
-fn acp_masking_state() -> AcpMaskingState {
-    AcpMaskingState::default()
-}
-
-fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
+pub(super) fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
     let mut host_stdin_bytes = initialize_frame("\n");
-    host_stdin_bytes.extend_from_slice(&session_new_bytes());
+    let follow_up = initialize_frame("\n");
+    host_stdin_bytes.extend_from_slice(&follow_up);
 
     let expected_initialize = serde_json::json!({
         "jsonrpc": "2.0",
@@ -366,93 +375,10 @@ fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
     let mut expected = serde_json::to_vec(&expected_initialize)
         .expect("expected initialize payload should serialize");
     expected.push(b'\n');
-    expected.extend_from_slice(&session_new_bytes());
+    expected.extend_from_slice(&follow_up);
 
     (host_stdin_bytes, expected)
 }
 
-#[given(
-    "ACP stdin contains an initialize request with blocked capabilities and a follow-up request"
-)]
-fn acp_stdin_contains_blocked_initialize_and_follow_up(acp_masking_state: &AcpMaskingState) {
-    let (host_stdin_bytes, expected) = masked_initialize_with_follow_up();
-    acp_masking_state.host_stdin.set(host_stdin_bytes);
-    acp_masking_state.expected_forwarded.set(expected);
-}
-
-#[given("ACP stdin contains malformed initialize bytes")]
-fn acp_stdin_contains_malformed_initialize(acp_masking_state: &AcpMaskingState) {
-    let malformed = malformed_initialize_bytes();
-    acp_masking_state.host_stdin.set(malformed.clone());
-    acp_masking_state.expected_forwarded.set(malformed);
-}
-
-#[given("ACP stdin contains initialize without blocked capabilities")]
-fn acp_stdin_contains_safe_initialize(acp_masking_state: &AcpMaskingState) {
-    let initialize = initialize_without_blocked_capabilities();
-    acp_masking_state.host_stdin.set(initialize.clone());
-    acp_masking_state.expected_forwarded.set(initialize);
-}
-
-#[when("ACP stdin forwarding runs")]
-fn acp_stdin_forwarding_runs(acp_masking_state: &AcpMaskingState) -> StepResult<()> {
-    let host_stdin_bytes = acp_masking_state
-        .host_stdin
-        .get()
-        .ok_or_else(|| String::from("host stdin should be configured"))?;
-    let (forwarded, _) = run_forwarding(&host_stdin_bytes);
-    acp_masking_state.actual_forwarded.set(forwarded);
-    acp_masking_state.succeeded.set(true);
-    Ok(())
-}
-
-#[then("ACP stdin forwarding succeeds")]
-fn acp_stdin_forwarding_succeeds(acp_masking_state: &AcpMaskingState) -> StepResult<()> {
-    if acp_masking_state.succeeded.get() == Some(true) {
-        Ok(())
-    } else {
-        Err(String::from("expected ACP stdin forwarding to succeed"))
-    }
-}
-
-#[then("the forwarded ACP stdin matches the expected bytes")]
-fn forwarded_acp_stdin_matches_expected(acp_masking_state: &AcpMaskingState) -> StepResult<()> {
-    let actual = acp_masking_state
-        .actual_forwarded
-        .get()
-        .ok_or_else(|| String::from("forwarded bytes should be recorded"))?;
-    let expected = acp_masking_state
-        .expected_forwarded
-        .get()
-        .ok_or_else(|| String::from("expected bytes should be recorded"))?;
-
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(format!("expected {expected:?}, got {actual:?}"))
-    }
-}
-
-#[scenario(
-    path = "tests/features/acp_capability_masking.feature",
-    name = "ACP initialize masks blocked capabilities before forwarding"
-)]
-fn acp_initialize_masks_blocked_capabilities(acp_masking_state: AcpMaskingState) {
-    let _ = acp_masking_state;
-}
-
-#[scenario(
-    path = "tests/features/acp_capability_masking.feature",
-    name = "Malformed ACP initialize is forwarded unchanged"
-)]
-fn malformed_acp_initialize_is_forwarded_unchanged(acp_masking_state: AcpMaskingState) {
-    let _ = acp_masking_state;
-}
-
-#[scenario(
-    path = "tests/features/acp_capability_masking.feature",
-    name = "ACP initialize without blocked capabilities stays unchanged"
-)]
-fn acp_initialize_without_blocked_capabilities_stays_unchanged(acp_masking_state: AcpMaskingState) {
-    let _ = acp_masking_state;
-}
+#[path = "protocol_acp_bdd_tests.rs"]
+mod bdd_tests;

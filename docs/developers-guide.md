@@ -357,6 +357,15 @@ When adding a new execution mode:
 - `ContainerExecClient` mock implementations for unit testing without a
   live daemon.
 
+#### 8.2.1. ACP initialization rewrite contract
+
+When protocol tests wrap `run_session` with `RecordingWriter` handles, they
+must preserve the ACP initialization rewrite contract: inspect only the first
+newline-delimited frame, rewrite only ACP `initialize` requests that expose
+`params.clientCapabilities`, and remove the `terminal` and `fs` capability
+families before the frame reaches the container. Preserve the original line
+endings, and let malformed or non-ACP frames pass through unchanged.
+
 ### 8.3. Parameterized tests
 
 Use `#[rstest(...)]` to eliminate duplicated test cases. Group related
