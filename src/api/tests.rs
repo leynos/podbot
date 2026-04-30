@@ -6,7 +6,7 @@ use mockall::mock;
 use rstest::rstest;
 
 use super::exec::exec_with_client;
-use super::{CommandOutcome, ExecMode, ExecRequest};
+use super::{CommandOutcome, ExecMode, ExecRequest, RunRequest};
 #[cfg(feature = "experimental")]
 use super::{list_containers, run_agent, run_token_daemon, stop_container};
 #[cfg(feature = "experimental")]
@@ -55,6 +55,34 @@ fn command_outcome_is_copy() {
     let outcome = CommandOutcome::CommandExit { code: 7 };
     let copied = outcome;
     assert_eq!(outcome, copied);
+}
+
+#[rstest]
+fn run_request_preserves_repository_and_branch() {
+    let request =
+        RunRequest::new("owner/name", "main").expect("valid run request should be created");
+
+    assert_eq!(request.repository(), "owner/name");
+    assert_eq!(request.branch(), "main");
+}
+
+#[rstest]
+#[case::empty_repository("", "main", "run.repository")]
+#[case::blank_repository("   ", "main", "run.repository")]
+#[case::empty_branch("owner/name", "", "run.branch")]
+#[case::blank_branch("owner/name", "   ", "run.branch")]
+fn run_request_rejects_empty_values(
+    #[case] repository: &str,
+    #[case] branch: &str,
+    #[case] expected_field: &str,
+) {
+    let error =
+        RunRequest::new(repository, branch).expect_err("empty request values should be rejected");
+
+    assert!(
+        error.to_string().contains(expected_field),
+        "expected error to mention {expected_field}, got {error}"
+    );
 }
 
 #[rstest]
@@ -184,7 +212,10 @@ fn run_agent_requires_complete_github_config() {
         ..AppConfig::default()
     };
 
-    let error = run_agent(&config).expect_err("incomplete GitHub config should be rejected");
+    let request = RunRequest::new("owner/name", "main").expect("request should be valid");
+
+    let error =
+        run_agent(&config, &request).expect_err("incomplete GitHub config should be rejected");
 
     assert!(matches!(
         error,
@@ -252,8 +283,9 @@ fn exec_request_deserialization_normalizes_tty_for_non_attached_modes(
 #[cfg(feature = "experimental")]
 fn stub_returns_success(#[case] stub: &str) {
     let config = AppConfig::default();
+    let request = RunRequest::new("owner/name", "main").expect("request should be valid");
     let outcome = match stub {
-        "run_agent" => run_agent(&config),
+        "run_agent" => run_agent(&config, &request),
         "list_containers" => list_containers(),
         "stop_container" => stop_container("test-container"),
         "run_token_daemon" => run_token_daemon("test-container-id"),

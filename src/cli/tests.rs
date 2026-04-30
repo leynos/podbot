@@ -95,6 +95,23 @@ fn run_config_load_options_leave_agent_overrides_unset_when_flags_are_omitted() 
 }
 
 #[rstest]
+fn run_args_convert_to_library_run_request() {
+    let args = super::RunArgs {
+        repo: String::from("owner/name"),
+        branch: String::from("main"),
+        agent: None,
+        mode: None,
+    };
+
+    let request = args
+        .to_run_request()
+        .expect("valid CLI run args should convert to request");
+
+    assert_eq!(request.repository(), "owner/name");
+    assert_eq!(request.branch(), "main");
+}
+
+#[rstest]
 fn host_config_load_options_include_host_intent() {
     let cli = Cli {
         command: Commands::Host(HostArgs {

@@ -5,10 +5,11 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: APPROVED AND IN PROGRESS
 
-Implementation must not begin until this plan is explicitly approved by the
-user.
+Implementation was explicitly approved by the user on 2026-05-01. The
+implementer must keep this plan current as code, tests, and documentation
+change.
 
 ## Purpose / big picture
 
@@ -270,12 +271,15 @@ right companions for the work:
   `docs/podbot-design.md`, `docs/users-guide.md`, the existing CLI adapter, the
   public API boundary, and the current unit and BDD harnesses.
 - [x] 2026-04-21: Drafted this ExecPlan for approval.
-- [ ] Stage A: Introduce the library-owned run request.
-- [ ] Stage B: Route the CLI through the request boundary.
-- [ ] Stage C: Extend `rstest` coverage.
-- [ ] Stage D: Extend `rstest-bdd` coverage.
-- [ ] Stage E: Update design, user, and roadmap documentation.
-- [ ] Stage F: Run format, lint, and test gates successfully.
+- [x] 2026-05-01: User explicitly approved implementation of this plan.
+- [x] 2026-05-01: Stage A: Introduce the library-owned run request.
+- [x] 2026-05-01: Stage B: Route the CLI through the request boundary.
+- [x] 2026-05-01: Stage C: Extend `rstest` coverage.
+- [x] 2026-05-01: Stage D: Extend `rstest-bdd` coverage.
+- [x] 2026-05-01: Stage E: Update design, user, and roadmap documentation.
+- [x] 2026-05-01: Stage F: Run format, lint, and test gates successfully.
+- [x] 2026-05-02: Rebase onto `origin/main` and reconcile the run request with
+  the newer public-library boundary and experimental orchestration gating.
 
 ## Surprises & Discoveries
 
@@ -290,6 +294,19 @@ right companions for the work:
   boundary.
 - Discovery: the repo already pins `rstest-bdd = "0.5.0"` in `Cargo.toml`, so
   no dependency change is needed for the required behavioural coverage.
+- Discovery: `AppConfig::normalize_and_validate(CommandIntent::Run)` already
+  rejects hosted agent modes for `podbot run`, so the run request API can
+  depend on the existing semantic validation layer rather than duplicating
+  hosted-mode checks in the orchestration stub.
+- Discovery: `mdformat-all` rewrites wide continuation-row Markdown tables into
+  shapes that `markdownlint-cli2` rejects. The public API reference and one
+  older ExecPlan example were converted to prose lists so `make fmt` remains
+  stable.
+- Discovery: `origin/main` moved the full agent orchestration stubs behind
+  `feature = "experimental"` while keeping the stable exec boundary public. The
+  rebased run request therefore remains stable, but
+  `run_agent(config, request)` is documented and compiled as an experimental
+  orchestration entry point.
 
 ## Decision Log
 
@@ -308,8 +325,50 @@ right companions for the work:
   blur roadmap boundaries, inflate scope, and make approval less precise.
   Date/Author: 2026-04-21 / Codex
 
+- Decision: expose a concrete `RunRequest` with private fields and accessor
+  methods, and make `run_agent` accept `&RunRequest` alongside `&AppConfig`.
+  Rationale: embedders get a stable, Clap-free request type while later
+  orchestration code can read the repository and branch without depending on
+  CLI structs. Date/Author: 2026-05-01 / Codex
+
+- Decision: keep hosted-mode rejection in configuration normalization for
+  `CommandIntent::Run` instead of adding an additional `run_agent` guard.
+  Rationale: the config layer already owns command-intent legality and provides
+  the existing actionable error message for operators. Date/Author: 2026-05-01
+  / Codex
+
+- Decision: run `make fmt` with a temporary `/tmp` shim that points
+  `markdownlint` to `/home/leynos/.bun/bin/markdownlint-cli2`. Rationale:
+  `/home/leynos/.bun/bin/markdownlint-cli2` is the working Markdown linter in
+  this environment, while `/root/.bun/bin/markdownlint-cli2` is not executable
+  and the unqualified `markdownlint` binary applies incompatible checks.
+  Date/Author: 2026-05-01 / Codex
+- Decision: during the rebase, keep `origin/main`'s feature-gated
+  orchestration model and adapt this branch to it instead of restoring the
+  older always-available stub API. Rationale: this preserves main's narrower
+  stable API contract while still satisfying the Step 6.1 requirement that
+  repository and branch values flow through a library-owned request.
+  Date/Author: 2026-05-02 / Codex
+
 ## Outcomes & Retrospective
 
-No implementation has started. This section must be rewritten after approval
-and completion to record what shipped, what changed from the draft, and what
-follow-up work remains.
+Implemented the Step 6.1 run subcommand boundary. `podbot run` still parses
+`--repo` and `--branch` at the CLI edge, but those values now flow through the
+library-owned `podbot::api::RunRequest` type before reaching
+`podbot::api::run_agent(config, request)`. Library consumers can construct the
+same request directly without importing `podbot::cli`.
+
+Coverage now proves the request constructor, CLI-to-request conversion, BDD CLI
+help and required-argument behaviour, and library embedding through the
+Clap-free run request. Documentation records the boundary in
+`docs/podbot-design.md` and `docs/users-guide.md`, and the roadmap checkbox for
+`Define the run subcommand for launching agent sessions` is marked complete.
+
+Validation passed on 2026-05-01:
+
+- `PATH="/tmp/podbot-markdownlint-shim:$PATH" make fmt`
+- `make check-fmt`
+- `MDLINT=/home/leynos/.bun/bin/markdownlint-cli2 make markdownlint`
+- `make nixie`
+- `make lint`
+- `make test`
