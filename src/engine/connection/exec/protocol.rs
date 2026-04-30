@@ -28,10 +28,12 @@ use std::time::Duration;
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use futures_util::{Stream, StreamExt};
-use ortho_config::serde_json::{self, Value};
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
+
+#[path = "acp_helpers.rs"]
+mod acp_helpers;
 
 use super::helpers::spawn_stdin_forwarding_task;
 use super::host_io::stdin_forwarding_disabled_for_tests;
@@ -60,25 +62,29 @@ const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
 /// protocol message sizes and typical OS pipe buffer defaults, keeping latency
 /// low while preventing unbounded accumulation during high-throughput scenarios.
 const STDIN_BUFFER_CAPACITY: usize = 65_536;
-const ACP_INITIALIZE_METHOD: &str = "initialize";
-const ACP_CLIENT_CAPABILITIES_FIELD: &str = "clientCapabilities";
-const ACP_FILE_SYSTEM_CAPABILITY: &str = "fs";
-const ACP_TERMINAL_CAPABILITY: &str = "terminal";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct ProtocolSessionOptions {
     disable_stdin_forwarding: bool,
+    rewrite_acp_initialize: bool,
 }
 
 impl ProtocolSessionOptions {
     pub(super) const fn new() -> Self {
         Self {
             disable_stdin_forwarding: false,
+            rewrite_acp_initialize: false,
         }
     }
 
     pub(super) const fn with_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
         self.disable_stdin_forwarding = disable;
+        self
+    }
+
+    /// Enable or disable Agentic Control Protocol (ACP) initialisation rewriting for this protocol session.
+    pub(super) const fn with_acp_initialize_rewrite_enabled(mut self, enable: bool) -> Self {
+        self.rewrite_acp_initialize = enable;
         self
     }
 }
@@ -168,8 +174,11 @@ where
         stderr: mut host_stderr,
         options,
     } = stdio;
+    let rewrite_acp_initialize = options.rewrite_acp_initialize;
     let stdin_task =
-        spawn_stdin_forwarding_task(host_stdin, input, forward_host_stdin_to_exec_async);
+        spawn_stdin_forwarding_task(host_stdin, input, move |stdin_reader, exec_input| {
+            forward_host_stdin_to_exec_async(stdin_reader, exec_input, rewrite_acp_initialize)
+        });
     let output_result = run_output_loop_async(
         request.container_id(),
         &mut output,
@@ -238,134 +247,20 @@ fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
 async fn forward_host_stdin_to_exec_async<HostStdin>(
     host_stdin: HostStdin,
     mut input: Pin<Box<dyn AsyncWrite + Send>>,
+    rewrite_acp_initialize: bool,
 ) -> io::Result<()>
 where
     HostStdin: AsyncRead + Unpin,
 {
     let mut buffered_stdin = tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
-    forward_initial_protocol_frame_async(&mut buffered_stdin, &mut input).await?;
+
+    if rewrite_acp_initialize {
+        acp_helpers::forward_initial_acp_frame_async(&mut buffered_stdin, &mut input).await?;
+    }
     tokio::io::copy(&mut buffered_stdin, &mut input).await?;
+
     input.flush().await?;
     input.shutdown().await
-}
-
-async fn forward_initial_protocol_frame_async<HostStdin>(
-    buffered_stdin: &mut tokio::io::BufReader<HostStdin>,
-    input: &mut Pin<Box<dyn AsyncWrite + Send>>,
-) -> io::Result<()>
-where
-    HostStdin: AsyncRead + Unpin,
-{
-    let mut first_frame = Vec::new();
-    loop {
-        if first_frame.len() == STDIN_BUFFER_CAPACITY {
-            input.write_all(&first_frame).await?;
-            return Ok(());
-        }
-
-        let (bytes_to_consume, has_complete_frame) = {
-            let buffered = buffered_stdin.fill_buf().await?;
-            if buffered.is_empty() {
-                return forward_partial_initial_frame(input, &first_frame).await;
-            }
-
-            let remaining_capacity = STDIN_BUFFER_CAPACITY.saturating_sub(first_frame.len());
-            let bytes_to_scan = buffered.len().min(remaining_capacity);
-            let newline_offset = buffered
-                .get(..bytes_to_scan)
-                .and_then(|bytes| bytes.iter().position(|byte| *byte == b'\n'));
-            let bytes_to_consume = newline_offset.map_or(bytes_to_scan, |offset| offset + 1);
-            let Some(bytes) = buffered.get(..bytes_to_consume) else {
-                return Err(io::Error::other(
-                    "buffered stdin slice exceeded available input",
-                ));
-            };
-            first_frame.extend_from_slice(bytes);
-            (bytes_to_consume, newline_offset.is_some())
-        };
-
-        buffered_stdin.consume(bytes_to_consume);
-
-        if has_complete_frame {
-            return input
-                .write_all(&mask_acp_initialize_frame(&first_frame))
-                .await;
-        }
-    }
-}
-
-async fn forward_partial_initial_frame(
-    input: &mut Pin<Box<dyn AsyncWrite + Send>>,
-    first_frame: &[u8],
-) -> io::Result<()> {
-    if first_frame.is_empty() {
-        return Ok(());
-    }
-
-    input.write_all(first_frame).await
-}
-
-fn mask_acp_initialize_frame(frame: &[u8]) -> Vec<u8> {
-    let (payload, line_ending) = split_frame_line_ending(frame);
-
-    let Ok(mut message) = serde_json::from_slice(payload) else {
-        return frame.to_vec();
-    };
-
-    if !remove_masked_acp_capabilities(&mut message) {
-        return frame.to_vec();
-    }
-
-    let Ok(mut serialized) = serde_json::to_vec(&message) else {
-        return frame.to_vec();
-    };
-    serialized.extend_from_slice(line_ending);
-    serialized
-}
-
-fn split_frame_line_ending(frame: &[u8]) -> (&[u8], &[u8]) {
-    if let Some(stripped) = frame.strip_suffix(b"\r\n") {
-        return (stripped, b"\r\n");
-    }
-
-    if let Some(stripped) = frame.strip_suffix(b"\n") {
-        return (stripped, b"\n");
-    }
-
-    (frame, b"")
-}
-
-fn remove_masked_acp_capabilities(message: &mut Value) -> bool {
-    if message.get("method").and_then(Value::as_str) != Some(ACP_INITIALIZE_METHOD) {
-        return false;
-    }
-
-    let Some(params) = message.get_mut("params").and_then(Value::as_object_mut) else {
-        return false;
-    };
-
-    let Some(client_capabilities) = params
-        .get_mut(ACP_CLIENT_CAPABILITIES_FIELD)
-        .and_then(Value::as_object_mut)
-    else {
-        return false;
-    };
-
-    let removed_terminal = client_capabilities
-        .remove(ACP_TERMINAL_CAPABILITY)
-        .is_some();
-    let removed_fs = client_capabilities
-        .remove(ACP_FILE_SYSTEM_CAPABILITY)
-        .is_some();
-    if !removed_terminal && !removed_fs {
-        return false;
-    }
-
-    if client_capabilities.is_empty() {
-        params.remove(ACP_CLIENT_CAPABILITIES_FIELD);
-    }
-
-    true
 }
 
 #[cfg(test)]

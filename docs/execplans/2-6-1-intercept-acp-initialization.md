@@ -179,7 +179,8 @@ Completed result:
 
 ### Stage B: Rewrite only ACP initialize capability metadata
 
-Add a narrow helper pipeline in `protocol.rs` that:
+Add a narrow helper pipeline in
+`src/engine/connection/exec/acp_helpers.rs` that:
 
 - reads the first newline-delimited frame from host stdin;
 - parses it as JSON if possible;
@@ -191,7 +192,8 @@ Add a narrow helper pipeline in `protocol.rs` that:
 
 Completed result:
 
-- Added ACP masking helpers in `src/engine/connection/exec/protocol.rs`.
+- Added ACP masking helpers in
+  `src/engine/connection/exec/acp_helpers.rs`.
 - Kept the rewrite on the first frame only, then resumed the existing raw
   proxy loop for the remainder of stdin.
 
@@ -202,7 +204,7 @@ Add `rstest` unit coverage at two levels:
 - direct helper tests for frame masking and line-ending preservation in
   `src/engine/connection/exec/protocol_acp_tests.rs`;
 - session-level proxy tests in
-  `src/engine/connection/exec/tests/proxy_helpers/acp_masking.rs`.
+  `src/engine/connection/exec/protocol_acp_tests.rs`.
 
 Coverage requirements:
 
@@ -224,8 +226,8 @@ Completed result:
   - blocked-capability masking;
   - malformed initialize pass-through;
   - initialize without blocked capabilities remaining unchanged.
-- `src/engine/connection/exec/protocol_acp_tests.rs` binds those scenarios via
-  `rstest-bdd` v0.5.0.
+- `src/engine/connection/exec/protocol_acp_bdd_tests.rs` binds those scenarios
+  via `rstest-bdd` v0.5.0.
 
 ### Stage E: Update documentation and roadmap state
 
@@ -255,7 +257,7 @@ make test 2>&1 | tee /tmp/podbot-make-test.log
 The task is complete only when all of the following are true:
 
 - ACP `initialize` capability metadata is masked before reaching the
-  containerised agent;
+  containerized agent;
 - malformed and non-ACP first frames remain unchanged;
 - protocol stdout purity, non-TTY behaviour, and exit-code reporting remain
   intact;
@@ -267,8 +269,10 @@ The task is complete only when all of the following are true:
 
 ## Idempotence and recovery
 
-- The masking logic is additive and local to `protocol.rs`. If interrupted,
-  revert only that seam rather than touching interactive exec code.
+- The masking logic is additive and local to
+  `src/engine/connection/exec/acp_helpers.rs`, with regression coverage in
+  `src/engine/connection/exec/protocol_acp_tests.rs`. If interrupted, revert
+  only that seam rather than touching interactive exec code.
 - If `.feature` edits appear to be ignored, do a clean rebuild before retrying
   tests.
 - Keep future Step 2.6 work separate: runtime denylist and explicit delegation
@@ -282,12 +286,13 @@ The task is complete only when all of the following are true:
   separate documentation, code-path, implementation, and validation work.
 - [x] (2026-04-21) Confirmed `protocol.rs` is the correct seam for ACP
   initialization masking.
-- [x] (2026-04-21) Implemented first-frame ACP masking in
-  `src/engine/connection/exec/protocol.rs`.
+- [x] (2026-04-21) Implemented first-frame ACP masking helpers in
+  `src/engine/connection/exec/acp_helpers.rs`.
 - [x] (2026-04-21) Added focused `rstest` coverage in
   `src/engine/connection/exec/protocol_acp_tests.rs`.
 - [x] (2026-04-21) Added `rstest-bdd` coverage in
-  `tests/features/acp_capability_masking.feature`.
+  `tests/features/acp_capability_masking.feature` with bindings in
+  `src/engine/connection/exec/protocol_acp_bdd_tests.rs`.
 - [x] (2026-04-21) Updated `docs/podbot-design.md`, `docs/users-guide.md`, and
   `docs/podbot-roadmap.md`.
 - [x] (2026-04-21) Ran `make fmt`, `make markdownlint`, `make nixie`,
@@ -303,9 +308,12 @@ The task is complete only when all of the following are true:
 
 ## Decision log
 
-- Decision: keep masking in `src/engine/connection/exec/protocol.rs` instead
-  of waiting for `podbot host`. Rationale: that is the narrowest seam through
-  which ACP bytes already flow, and it is fully testable now.
+- Decision: keep the ACP interception seam in
+  `src/engine/connection/exec/protocol.rs` while moving masking helpers into
+  `src/engine/connection/exec/acp_helpers.rs`, instead of waiting for
+  `podbot host`. Rationale: the protocol proxy is the narrowest seam through
+  which ACP bytes already flow, and the helper module keeps that seam fully
+  testable without overloading the proxy loop.
 
 - Decision: rewrite only the first newline-delimited frame. Rationale: ACP
   initialization occurs once at the start of the session, and limiting the

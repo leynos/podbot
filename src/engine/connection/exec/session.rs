@@ -7,6 +7,7 @@ use super::protocol::ProtocolSessionOptions;
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct ExecSessionOptions {
     disable_protocol_stdin_forwarding: bool,
+    rewrite_acp_initialize: bool,
 }
 
 impl ExecSessionOptions {
@@ -15,6 +16,7 @@ impl ExecSessionOptions {
     pub const fn new() -> Self {
         Self {
             disable_protocol_stdin_forwarding: false,
+            rewrite_acp_initialize: false,
         }
     }
 
@@ -26,6 +28,20 @@ impl ExecSessionOptions {
         self.disable_protocol_stdin_forwarding = disable;
         self
     }
+
+    /// Enable ACP initialization rewriting for protocol-mode sessions.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "reserved for production ACP session selection when podbot host is enabled"
+        )
+    )]
+    #[must_use]
+    pub const fn with_acp_initialize_rewrite_enabled(mut self, enable: bool) -> Self {
+        self.rewrite_acp_initialize = enable;
+        self
+    }
 }
 
 pub(super) const fn protocol_session_options(
@@ -33,6 +49,7 @@ pub(super) const fn protocol_session_options(
 ) -> ProtocolSessionOptions {
     ProtocolSessionOptions::new()
         .with_stdin_forwarding_disabled(options.disable_protocol_stdin_forwarding)
+        .with_acp_initialize_rewrite_enabled(options.rewrite_acp_initialize)
 }
 
 #[cfg(test)]
@@ -45,6 +62,10 @@ mod tests {
         assert!(
             !opts.disable_protocol_stdin_forwarding,
             "stdin forwarding should be enabled by default",
+        );
+        assert!(
+            !opts.rewrite_acp_initialize,
+            "ACP initialize rewriting should be opt-in",
         );
     }
 
@@ -86,6 +107,16 @@ mod tests {
         assert_eq!(
             disabled_proto,
             ProtocolSessionOptions::new().with_stdin_forwarding_disabled(true),
+        );
+    }
+
+    #[test]
+    fn protocol_session_options_reflects_acp_rewrite_flag() {
+        let opts = ExecSessionOptions::new().with_acp_initialize_rewrite_enabled(true);
+
+        assert_eq!(
+            protocol_session_options(opts),
+            ProtocolSessionOptions::new().with_acp_initialize_rewrite_enabled(true),
         );
     }
 }
