@@ -7,7 +7,9 @@
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 
+use crate::api::RunRequest;
 use crate::config::{AgentKind, AgentMode, CommandIntent, ConfigLoadOptions, ConfigOverrides};
+use crate::error::Result as PodbotResult;
 
 /// CLI-facing agent kind values.
 ///
@@ -172,6 +174,18 @@ pub struct RunArgs {
     /// Agent execution mode.
     #[arg(long = "agent-mode", value_enum)]
     pub mode: Option<AgentModeArg>,
+}
+
+impl RunArgs {
+    /// Convert parsed CLI arguments into the library-owned run request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the parsed request contains semantically invalid
+    /// values.
+    pub fn to_run_request(&self) -> PodbotResult<RunRequest> {
+        RunRequest::new(self.repo.clone(), self.branch.clone())
+    }
 }
 
 /// Arguments for the `host` subcommand.

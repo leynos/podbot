@@ -47,6 +47,10 @@ Run an AI agent in a sandboxed container.
 podbot run --repo owner/name --branch main --agent claude
 ```
 
+The CLI converts `--repo` and `--branch` into `podbot::api::RunRequest` before
+dispatching to the library orchestration boundary. Rust embedders can construct
+the same request directly without using CLI parse types.
+
 | Option         | Required | Default         | Description                                          |
 | -------------- | -------- | --------------- | ---------------------------------------------------- |
 | `--repo`       | Yes      | -               | Repository in owner/name format                      |
@@ -63,14 +67,13 @@ This subcommand is temporarily unavailable in the current release. If you run
 session. Use `podbot run` or the library exec API for now; the release notes
 will call out when hosted mode becomes available.
 
-When hosted mode uses Agentic Control Protocol (ACP), podbot masks
-`terminal/*` and `fs/*` capabilities from the initial ACP `initialize`
-request before forwarding it to the sandboxed agent. This masking currently
-applies only to the protocol/library path used by hosted mode and ACP until
-`podbot host` is implemented. The scope and behaviour may change when
-`podbot host` ships, but for now it keeps the default trust boundary aligned
-with the container sandbox even when the hosting client advertises broader ACP
-support.
+When hosted mode uses Agentic Control Protocol (ACP), podbot masks `terminal/*`
+and `fs/*` capabilities from the initial ACP `initialize` request before
+forwarding it to the sandboxed agent. This masking currently applies only to
+the protocol/library path used by hosted mode and ACP until `podbot host` is
+implemented. The scope and behaviour may change when `podbot host` ships, but
+for now it keeps the default trust boundary aligned with the container sandbox
+even when the hosting client advertises broader ACP support.
 
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |
@@ -628,10 +631,11 @@ supported semver contract for embedders.
 
 ### Available functions
 
-| Function                                 | Description                                  |
-| ---------------------------------------- | -------------------------------------------- |
-| `podbot::api::exec(config, request)`     | Execute a command in a running container     |
-| `podbot::api::ExecContext::connect(…)`   | Reuse a runtime handle and engine connection |
+| Function                                     | Description                                  |
+| -------------------------------------------- | -------------------------------------------- |
+| `podbot::api::exec(config, request)`         | Execute a command in a running container     |
+| `podbot::api::ExecContext::connect(…)`       | Reuse a runtime handle and engine connection |
+| `podbot::api::RunRequest::new(repo, branch)` | Build the library-owned run request          |
 
 ### Return type
 
@@ -721,7 +725,7 @@ feature flag controls module visibility, not the `clap` dependency itself.
 The following modules are part of the stable public API:
 
 - `podbot::api` — orchestration types and exec entry points (`exec`,
-  `ExecContext`, `ExecRequest`, `ExecMode`, `CommandOutcome`)
+  `ExecContext`, `ExecRequest`, `ExecMode`, `RunRequest`, `CommandOutcome`)
 - `podbot::config` — configuration types and loaders (`AppConfig`,
   `ConfigLoadOptions`, `load_config`)
 - `podbot::error` — semantic error hierarchy (`PodbotError`, `ConfigError`,
@@ -747,12 +751,11 @@ The following modules are public but gated behind Cargo features:
 
 The following functions remain available under `podbot::api`, but they are not
 part of the stable semver contract described in this guide. Podbot reserves the
-`experimental` Cargo feature for unstable library surfaces, but these stub
-entry points are not yet gated by that feature in the current release, so treat
-them as unstable compatibility shims whose signatures may change.
+`experimental` Cargo feature for unstable library surfaces, and these stub
+entry points are available only when that feature is enabled.
 
-- `podbot::api::run_agent(config)` — validates GitHub credentials and returns a
-  stub success outcome.
+- `podbot::api::run_agent(config, request)` — validates GitHub credentials and
+  returns a stub success outcome for a `RunRequest`.
 - `podbot::api::stop_container(container)` — placeholder stop operation that
   currently returns a stub success outcome.
 - `podbot::api::list_containers()` — placeholder list operation that currently
@@ -760,8 +763,7 @@ them as unstable compatibility shims whose signatures may change.
 - `podbot::api::run_token_daemon(container_id)` — placeholder token-refresh
   daemon entry point that currently returns a stub success outcome.
 
-If and when these functions move behind the reserved experimental gate, the
-dependency declaration will look like this:
+Enable the experimental entry points with this dependency declaration:
 
 ```toml
 [dependencies]
@@ -771,24 +773,25 @@ podbot = { version = "0.1.0", features = ["experimental"] }
 ### `run_agent`
 
 > **Experimental:** This function is not part of the stable API contract.
-> Podbot reserves `feature = "experimental"` for unstable library surfaces,
-> but this stub is not yet gated by that feature in the current release.
+> Enable `feature = "experimental"` before importing this function.
 
 ```rust,no_run
-use podbot::api::run_agent;
+use podbot::api::{RunRequest, run_agent};
 use podbot::config::AppConfig;
 
 fn start_agent() -> Result<(), podbot::error::PodbotError> {
     let config = AppConfig::default();
-    run_agent(&config)?;
+    let request = RunRequest::new("owner/name", "main")?;
+    run_agent(&config, &request)?;
     Ok(())
 }
 ```
 
-`run_agent(config: &AppConfig)` validates the GitHub credential fields in
-`AppConfig` and starts the AI agent loop. If any GitHub credential field is
-set, all required fields (`app_id`, `installation_id`, `private_key_path`) must
-be present; the function returns a `PodbotError` if validation fails. Call this
+`run_agent(config: &AppConfig, request: &RunRequest)` validates the GitHub
+credential fields in `AppConfig` and accepts the repository and branch through
+the library-owned request type. If any GitHub credential field is set, all
+required fields (`app_id`, `installation_id`, `private_key_path`) must be
+present; the function returns a `PodbotError` if validation fails. Call this
 function when you want to embed the full agent orchestration path rather than
 issuing individual exec commands.
 
@@ -799,8 +802,7 @@ issuing individual exec commands.
 ### `run_token_daemon`
 
 > **Experimental:** This function is not part of the stable API contract.
-> Podbot reserves `feature = "experimental"` for unstable library surfaces,
-> but this stub is not yet gated by that feature in the current release.
+> Enable `feature = "experimental"` before importing this function.
 
 ```rust,no_run
 use podbot::api::run_token_daemon;

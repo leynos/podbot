@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use podbot::api::CommandOutcome;
+use podbot::api::{CommandOutcome, RunRequest};
 use podbot::config::AppConfig;
 use podbot::error::PodbotError;
 use rstest::fixture;
@@ -46,6 +46,7 @@ pub(crate) struct LibraryBoundaryState {
     pub(crate) engine_socket_override: Slot<String>,
     pub(crate) config_result: Slot<ConfigResult>,
     pub(crate) exec_result: Slot<LibraryResult>,
+    pub(crate) run_request: Slot<RunRequest>,
     pub(crate) create_exec_should_fail: Slot<bool>,
     pub(crate) stub_outcomes: Slot<StubOutcomes>,
 }
