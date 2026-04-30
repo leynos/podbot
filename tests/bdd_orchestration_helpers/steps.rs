@@ -3,7 +3,7 @@
 use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
-use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest, RunRequest};
 #[cfg(feature = "experimental")]
 use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
 #[cfg(feature = "experimental")]
@@ -110,14 +110,11 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
 }
 
 #[when("run orchestration is invoked")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
 #[cfg(feature = "experimental")]
 fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
     let config = AppConfig::default();
-    invoke_orchestration(orchestration_state, || run_agent(&config));
+    let request = RunRequest::new("owner/name", "main").map_err(|e| e.to_string())?;
+    invoke_orchestration(orchestration_state, || run_agent(&config, &request));
     Ok(())
 }
 

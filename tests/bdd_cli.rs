@@ -46,7 +46,15 @@ fn invoke_with_version(cli_state: &CliState) {
     cli_state.success.set(true);
 }
 
-#[given("the CLI is invoked with run")]
+fn invoke_run_with_help(cli_state: &CliState) {
+    let mut cmd = Cli::command();
+    let help_text = cmd.find_subcommand_mut("run").map_or_else(
+        || String::from("run subcommand missing"),
+        |run| run.render_help().to_string(),
+    );
+    cli_state.output.set(help_text);
+    cli_state.success.set(true);
+}
 fn invoke_run_without_args(cli_state: &CliState) {
     // Try to parse "run" without required arguments
     let result: Result<Cli, clap::Error> = Cli::try_parse_from(["podbot", "run"]);
@@ -271,10 +279,9 @@ fn run_succeeds_with_all_args(cli_state: CliState) {
     let _ = cli_state;
 }
 
-#[scenario(
-    path = "tests/features/cli.feature",
-    name = "Ps command succeeds without arguments"
-)]
+fn run_help_documents_required_arguments(cli_state: CliState) {
+    let _ = cli_state;
+}
 fn ps_succeeds(cli_state: CliState) {
     let _ = cli_state;
 }

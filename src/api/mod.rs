@@ -17,6 +17,7 @@
 #[cfg(any(feature = "internal", test))]
 mod configure_git_identity;
 mod exec;
+mod run;
 
 #[cfg(any(feature = "internal", test))]
 pub use configure_git_identity::{GitIdentityParams, configure_container_git_identity};
@@ -24,6 +25,7 @@ pub use configure_git_identity::{GitIdentityParams, configure_container_git_iden
 #[doc(hidden)]
 pub use exec::exec_with_client_for_tests;
 pub use exec::{ExecContext, ExecMode, ExecRequest, exec};
+pub use run::RunRequest;
 
 #[cfg(feature = "experimental")]
 use crate::config::AppConfig;
@@ -66,7 +68,7 @@ pub enum CommandOutcome {
 /// These validation failures are real runtime behaviour, not placeholder
 /// errors deferred until the rest of the orchestration flow is implemented.
 #[cfg(feature = "experimental")]
-pub fn run_agent(config: &AppConfig) -> PodbotResult<CommandOutcome> {
+pub fn run_agent(config: &AppConfig, _request: &RunRequest) -> PodbotResult<CommandOutcome> {
     if config.github.is_partially_configured() {
         config.github.validate()?;
     }
