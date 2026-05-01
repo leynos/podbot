@@ -11,6 +11,43 @@ fn outcome(state: &GitHubInstallationTokenState) -> StepResult<InstallationToken
         .ok_or_else(|| String::from("outcome should be set"))
 }
 
+fn expect_failure_message(
+    github_installation_token_state: &GitHubInstallationTokenState,
+) -> StepResult<String> {
+    match outcome(github_installation_token_state)? {
+        InstallationTokenOutcome::Success { .. } => {
+            Err(String::from("expected token acquisition to fail"))
+        }
+        InstallationTokenOutcome::Failed { message } => Ok(message),
+    }
+}
+
+fn assert_failure_message_contains(
+    github_installation_token_state: &GitHubInstallationTokenState,
+    needle: &str,
+    description: &str,
+) -> StepResult<()> {
+    let message = expect_failure_message(github_installation_token_state)?;
+    if message.contains(needle) {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected error to mention {description}, got: {message}"
+        ))
+    }
+}
+
+fn expect_success_token_fields(
+    github_installation_token_state: &GitHubInstallationTokenState,
+) -> StepResult<(String, String)> {
+    match outcome(github_installation_token_state)? {
+        InstallationTokenOutcome::Success { token, expires_at } => Ok((token, expires_at)),
+        InstallationTokenOutcome::Failed { message } => {
+            Err(format!("expected success, got failure: {message}"))
+        }
+    }
+}
+
 #[then("installation token acquisition succeeds")]
 fn installation_token_acquisition_succeeds(
     github_installation_token_state: &GitHubInstallationTokenState,
@@ -27,17 +64,11 @@ fn installation_token_acquisition_succeeds(
 fn token_is_exposed_for_git_operations(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match outcome(github_installation_token_state)? {
-        InstallationTokenOutcome::Success { token, .. } => {
-            if token == "ghs_valid_bdd" {
-                Ok(())
-            } else {
-                Err(format!("unexpected token value: {token}"))
-            }
-        }
-        InstallationTokenOutcome::Failed { message } => {
-            Err(format!("expected success, got failure: {message}"))
-        }
+    let (token, _) = expect_success_token_fields(github_installation_token_state)?;
+    if token == "ghs_valid_bdd" {
+        Ok(())
+    } else {
+        Err(format!("unexpected token value: {token}"))
     }
 }
 
@@ -45,17 +76,11 @@ fn token_is_exposed_for_git_operations(
 fn expiry_metadata_is_preserved(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match outcome(github_installation_token_state)? {
-        InstallationTokenOutcome::Success { expires_at, .. } => {
-            if expires_at == "2099-01-01T00:10:00+00:00" {
-                Ok(())
-            } else {
-                Err(format!("unexpected expiry timestamp: {expires_at}"))
-            }
-        }
-        InstallationTokenOutcome::Failed { message } => {
-            Err(format!("expected success, got failure: {message}"))
-        }
+    let (_, expires_at) = expect_success_token_fields(github_installation_token_state)?;
+    if expires_at == "2099-01-01T00:10:00+00:00" {
+        Ok(())
+    } else {
+        Err(format!("unexpected expiry timestamp: {expires_at}"))
     }
 }
 
@@ -63,19 +88,13 @@ fn expiry_metadata_is_preserved(
 fn installation_token_acquisition_fails_with_token_expired(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match outcome(github_installation_token_state)? {
-        InstallationTokenOutcome::Success { .. } => {
-            Err(String::from("expected token acquisition to fail"))
-        }
-        InstallationTokenOutcome::Failed { message } => {
-            if message == "installation token expired" {
-                Ok(())
-            } else {
-                Err(format!(
-                    "expected 'installation token expired', got: {message}"
-                ))
-            }
-        }
+    let message = expect_failure_message(github_installation_token_state)?;
+    if message == "installation token expired" {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected 'installation token expired', got: {message}"
+        ))
     }
 }
 
@@ -83,38 +102,20 @@ fn installation_token_acquisition_fails_with_token_expired(
 fn error_mentions_installation_not_found(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match outcome(github_installation_token_state)? {
-        InstallationTokenOutcome::Success { .. } => {
-            Err(String::from("expected token acquisition to fail"))
-        }
-        InstallationTokenOutcome::Failed { message } => {
-            if message.contains("installation not found") {
-                Ok(())
-            } else {
-                Err(format!(
-                    "expected error to mention installation not found, got: {message}"
-                ))
-            }
-        }
-    }
+    assert_failure_message_contains(
+        github_installation_token_state,
+        "installation not found",
+        "'installation not found'",
+    )
 }
 
 #[then("the error mentions missing expires_at metadata")]
 fn error_mentions_missing_expiry_metadata(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match outcome(github_installation_token_state)? {
-        InstallationTokenOutcome::Success { .. } => {
-            Err(String::from("expected token acquisition to fail"))
-        }
-        InstallationTokenOutcome::Failed { message } => {
-            if message.contains("did not include expires_at") {
-                Ok(())
-            } else {
-                Err(format!(
-                    "expected error to mention missing expires_at metadata, got: {message}"
-                ))
-            }
-        }
-    }
+    assert_failure_message_contains(
+        github_installation_token_state,
+        "did not include expires_at",
+        "missing expires_at metadata",
+    )
 }

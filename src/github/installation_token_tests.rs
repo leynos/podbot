@@ -37,6 +37,19 @@ fn assert_token_expired(result: &Result<InstallationAccessToken, GitHubError>) {
     );
 }
 
+fn assert_acquisition_failed_containing(
+    result: Result<InstallationAccessToken, GitHubError>,
+    needle: &str,
+    hint: &str,
+) {
+    match result {
+        Err(GitHubError::TokenAcquisitionFailed { message }) => {
+            assert!(message.contains(needle), "{hint}: {message}");
+        }
+        other => panic!("expected TokenAcquisitionFailed, got: {other:?}"),
+    }
+}
+
 fn test_installation_token(token: &str, expires_at: Option<&str>) -> InstallationToken {
     serde_json::from_value(json!({
         "token": token,
@@ -70,30 +83,22 @@ fn token_response_inside_buffer_returns_token_expired(now: DateTime<Utc>, near_e
 fn missing_expiry_metadata_returns_deterministic_error(now: DateTime<Utc>) {
     let token = test_installation_token("ghs_missing_expiry", None);
     let result = token_from_response(token, Duration::from_secs(300), now);
-    match result {
-        Err(GitHubError::TokenAcquisitionFailed { message }) => {
-            assert!(
-                message.contains("did not include expires_at"),
-                "message should mention missing expiry metadata: {message}"
-            );
-        }
-        other => panic!("expected TokenAcquisitionFailed, got: {other:?}"),
-    }
+    assert_acquisition_failed_containing(
+        result,
+        "did not include expires_at",
+        "message should mention missing expiry metadata",
+    );
 }
 
 #[rstest]
 fn malformed_expiry_metadata_returns_deterministic_error(now: DateTime<Utc>) {
     let token = test_installation_token("ghs_bad_expiry", Some("not-a-timestamp"));
     let result = token_from_response(token, Duration::from_secs(300), now);
-    match result {
-        Err(GitHubError::TokenAcquisitionFailed { message }) => {
-            assert!(
-                message.contains("invalid installation token expiry timestamp"),
-                "message should mention invalid expiry metadata: {message}"
-            );
-        }
-        other => panic!("expected TokenAcquisitionFailed, got: {other:?}"),
-    }
+    assert_acquisition_failed_containing(
+        result,
+        "invalid installation token expiry timestamp",
+        "message should mention invalid expiry metadata",
+    );
 }
 
 #[rstest]
