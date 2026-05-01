@@ -63,14 +63,14 @@ This subcommand is temporarily unavailable in the current release. If you run
 session. Use `podbot run` or the library exec API for now; the release notes
 will call out when hosted mode becomes available.
 
-<!-- markdownlint-disable-next-line MD013 -->
-When hosted mode uses Agentic Control Protocol (ACP), podbot masks `terminal/*` and `fs/*` capabilities
-from the initial ACP `initialize` request before forwarding it to the
-sandboxed agent. This masking currently applies only to the
-protocol/library path used by hosted mode and ACP until `podbot host` is
-implemented. The scope and behaviour may change when `podbot host` ships, but
-for now it keeps the default trust boundary aligned with the container
-sandbox even when the hosting client advertises broader ACP support.
+When hosted mode uses Agentic Control Protocol (ACP), podbot masks
+`terminal/*` and `fs/*` capabilities from the initial ACP `initialize`
+request before forwarding it to the sandboxed agent. This masking currently
+applies only to the protocol/library path used by hosted mode and ACP until
+`podbot host` is implemented. The scope and behaviour may change when
+`podbot host` ships, but for now it keeps the default trust boundary aligned
+with the container sandbox even when the hosting client advertises broader ACP
+support.
 
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |

@@ -46,6 +46,7 @@ fn forwarding_masks_initialize_and_preserves_trailing_bytes() {
 #[test]
 fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
     let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
+    let test_timeout = std::time::Duration::from_secs(1);
     let host_stdin_bytes = vec![b'x'; MAX_FIRST_FRAME_BYTES + 1];
     let (host_writer, host_reader) = runtime
         .block_on(async {
@@ -64,7 +65,7 @@ fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
     runtime
         .block_on(async {
             tokio::time::timeout(
-                STDIN_SETTLE_TIMEOUT,
+                test_timeout,
                 forward_initial_acp_frame_async(&mut buffered_stdin, &mut container_input),
             )
             .await

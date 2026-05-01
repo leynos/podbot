@@ -362,8 +362,10 @@ When adding a new execution mode:
 When protocol tests wrap `run_session` with `RecordingWriter` handles, they
 must preserve the Agentic Control Protocol (ACP) initialization rewrite
 contract: inspect only the first newline-delimited frame, rewrite only ACP
-`initialize` requests that expose `params.clientCapabilities`, and remove the
-`terminal` and `fs` capability families before the frame reaches the container.
+`initialize` requests whose `params.clientCapabilities` contain blocked
+`terminal` and/or `fs` entries, and remove those capability families before the
+frame reaches the container. If masking leaves `params.clientCapabilities` (or
+`clientCapabilities`) empty, drop the entire `clientCapabilities` object.
 Preserve the original line endings, and let malformed or non-ACP frames pass
 through unchanged.
 
