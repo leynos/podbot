@@ -90,7 +90,7 @@ impl GitHubInstallationTokenClient for OctocrabAppClient {
         Box::pin(async move {
             let route = format!("/app/installations/{installation_id}/access_tokens");
             self.client()
-                .post::<_, InstallationToken>(route, Some(&EmptyInstallationTokenRequest))
+                .post::<_, InstallationToken>(route, Some(&EmptyInstallationTokenRequest {}))
                 .await
                 .map_err(classify_installation_token_error)
         })
@@ -243,4 +243,19 @@ fn chrono_duration(buffer: Duration) -> Result<ChronoDuration, GitHubError> {
 }
 
 #[derive(Debug, Serialize)]
-struct EmptyInstallationTokenRequest;
+struct EmptyInstallationTokenRequest {}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::EmptyInstallationTokenRequest;
+
+    #[test]
+    fn empty_installation_token_request_serializes_as_object() {
+        let request = EmptyInstallationTokenRequest {};
+        let serialized =
+            serde_json::to_value(request).expect("empty request should serialize as JSON");
+        assert_eq!(serialized, json!({}));
+    }
+}
