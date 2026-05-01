@@ -14,6 +14,7 @@ mod exec;
 mod git_identity;
 #[cfg(any(feature = "internal", test))]
 mod health_check;
+mod repository_clone;
 #[cfg(any(feature = "internal", test))]
 mod upload_credentials;
 
@@ -40,6 +41,9 @@ pub(crate) use exec::{ContainerExecClient, ExecMode, ExecRequest};
 pub use git_identity::{
     GitIdentityResult, HostCommandRunner, HostGitIdentity, SystemCommandRunner,
     configure_git_identity, read_host_git_identity,
+};
+pub use repository_clone::{
+    RepositoryCloneRequest, RepositoryCloneResult, clone_repository_into_workspace,
 };
 #[cfg(any(feature = "internal", test))]
 pub use upload_credentials::{
@@ -132,7 +136,7 @@ pub(super) const HEALTH_CHECK_TIMEOUT_SECS: u64 = 10;
 
 /// Default socket path for Unix platforms.
 #[cfg(unix)]
-const DEFAULT_SOCKET: &str = "unix:///var/run/docker.sock";
+const DEFAULT_SOCKET: &str = "npipe:////./pipe/docker_engine";
 
 /// Default socket path for Windows platforms.
 #[cfg(windows)]

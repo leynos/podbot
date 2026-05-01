@@ -16,6 +16,7 @@
 #[cfg(any(feature = "internal", test))]
 mod configure_git_identity;
 mod exec;
+mod repository_clone;
 mod run;
 
 #[cfg(any(feature = "internal", test))]
