@@ -1005,7 +1005,7 @@ without a major version bump.
 |          |           | `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`,          |
 |          |           | `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`,                 |
 |          |           | `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent`             |
-| `engine` | Stable    | `EngineConnector`, `SocketResolver`, `ExecMode`,                  |
+| `engine` | Internal  | `EngineConnector`, `SocketResolver`, `ExecMode`,                  |
 |          |           | `ExecRequest`, `ExecResult`, `ContainerExecClient`,               |
 |          |           | `ContainerCreator`, `ContainerUploader`,                          |
 |          |           | `CreateContainerRequest`, `ContainerSecurityOptions`,             |

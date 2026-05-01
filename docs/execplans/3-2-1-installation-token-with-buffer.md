@@ -116,7 +116,8 @@ work.
   `chrono::Duration`, but the crate does not currently declare `chrono` as a
   direct dependency. Severity: medium. Likelihood: high. Mitigation: if the
   final implementation needs `chrono`, add it as a direct dependency using a
-  caret requirement that matches the currently locked version family.
+  implicit semver version that matches the currently locked `chrono` version
+  family and the project's Cargo.toml guidance.
 
 - Risk: `src/github/tests.rs` is already at 398 lines. Adding new tests there
   will violate the repository's 400-line rule. Severity: high. Likelihood:

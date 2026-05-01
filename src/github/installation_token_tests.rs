@@ -14,10 +14,8 @@ use super::installation_token::{
 use super::*;
 
 #[fixture]
-fn now() -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339("2026-04-22T12:00:00Z")
-        .expect("fixture timestamp should parse")
-        .with_timezone(&Utc)
+fn now() -> Result<DateTime<Utc>, chrono::ParseError> {
+    Ok(DateTime::parse_from_rfc3339("2026-04-22T12:00:00Z")?.with_timezone(&Utc))
 }
 
 #[fixture]
@@ -63,51 +61,68 @@ fn test_installation_token(token: &str, expires_at: Option<&str>) -> Installatio
 }
 
 #[rstest]
-fn token_response_beyond_buffer_succeeds(now: DateTime<Utc>, future_expiry: &str) {
+fn token_response_beyond_buffer_succeeds(
+    now: Result<DateTime<Utc>, chrono::ParseError>,
+    future_expiry: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let current_time = now?;
     let token = test_installation_token("ghs_valid", Some(future_expiry));
-    let result = token_from_response(token, Duration::from_secs(300), now);
+    let result = token_from_response(token, Duration::from_secs(300), current_time);
     let access_token = result.expect("token should remain valid outside the buffer");
-    assert_eq!(access_token.token(), "ghs_valid");
-    assert_eq!(
-        access_token.expires_at().to_rfc3339(),
-        "2026-04-22T12:10:00+00:00"
-    );
+    if access_token.token() != "ghs_valid" {
+        return Err(format!("unexpected token: {}", access_token.token()).into());
+    }
+    let expires_at = access_token.expires_at().to_rfc3339();
+    if expires_at != "2026-04-22T12:10:00+00:00" {
+        return Err(format!("unexpected expiry: {expires_at}").into());
+    }
+    Ok(())
 }
 
 #[rstest]
-fn token_response_inside_buffer_returns_token_expired(now: DateTime<Utc>, near_expiry: &str) {
+fn token_response_inside_buffer_returns_token_expired(
+    now: Result<DateTime<Utc>, chrono::ParseError>,
+    near_expiry: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let current_time = now?;
     let token = test_installation_token("ghs_near", Some(near_expiry));
-    let result = token_from_response(token, Duration::from_secs(300), now);
+    let result = token_from_response(token, Duration::from_secs(300), current_time);
     assert_token_expired(&result);
+    Ok(())
 }
 
 #[rstest]
 #[case(None, "did not include expires_at")]
 #[case(Some("not-a-timestamp"), "invalid installation token expiry timestamp")]
 fn bad_expiry_metadata_returns_deterministic_error(
-    now: DateTime<Utc>,
+    now: Result<DateTime<Utc>, chrono::ParseError>,
     #[case] expires_at: Option<&str>,
     #[case] expected_fragment: &str,
-) {
+) -> Result<(), Box<dyn std::error::Error>> {
+    let current_time = now?;
     let token = test_installation_token("ghs_bad_expiry", expires_at);
-    let result = token_from_response(token, Duration::from_secs(300), now);
+    let result = token_from_response(token, Duration::from_secs(300), current_time);
     assert_acquisition_failed(&result, expected_fragment);
+    Ok(())
 }
 
 #[rstest]
-fn access_token_debug_redacts_secret(now: DateTime<Utc>, future_expiry: &str) {
+fn access_token_debug_redacts_secret(
+    now: Result<DateTime<Utc>, chrono::ParseError>,
+    future_expiry: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let current_time = now?;
     let token = test_installation_token("ghs_debug_redaction", Some(future_expiry));
-    let access_token = token_from_response(token, Duration::from_secs(300), now)
+    let access_token = token_from_response(token, Duration::from_secs(300), current_time)
         .expect("token should parse and remain valid");
     let debug = format!("{access_token:?}");
-    assert!(
-        !debug.contains("ghs_debug_redaction"),
-        "debug output should redact the token secret: {debug}"
-    );
-    assert!(
-        debug.contains("[REDACTED]"),
-        "debug output should include an explicit redaction marker: {debug}"
-    );
+    if debug.contains("ghs_debug_redaction") {
+        return Err(format!("debug output should redact the token secret: {debug}").into());
+    }
+    if !debug.contains("[REDACTED]") {
+        return Err(format!("debug output should include redaction marker: {debug}").into());
+    }
+    Ok(())
 }
 
 #[rstest]

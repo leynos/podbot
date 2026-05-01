@@ -294,9 +294,10 @@ actionable error messages with remediation hints:
 ### Installation token acquisition
 
 When podbot needs repository access, it exchanges the configured GitHub App
-identity for an installation-scoped token using
-`podbot::github::installation_token_with_buffer(app_id, installation_id,
-private_key_path, buffer)`.
+identity for an installation-scoped token through its GitHub App
+configuration. Embedders should use the stable `podbot::api`,
+`podbot::config`, and `podbot::error` modules rather than internal GitHub
+helpers.
 
 The helper returns both the token string and the parsed expiry timestamp.
 Podbot rejects tokens that are already expired or that expire within the
@@ -743,7 +744,7 @@ The following modules are only exported when the crate is built with
 to normal embedders and are not part of the supported semver contract:
 
 - `podbot::engine` — container engine types and traits
-- `podbot::github` — GitHub App authentication types
+- GitHub App authentication types
 
 #### Adapter modules
 
