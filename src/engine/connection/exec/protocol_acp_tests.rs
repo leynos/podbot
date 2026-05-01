@@ -83,6 +83,9 @@ fn initialize_frame(line_ending: &str) -> Vec<u8> {
     frame
 }
 
+/// Returns a serialised ACP `initialize` frame whose `clientCapabilities` contains only
+/// entries that are not masked (e.g. `_meta`), so the forwarded bytes should be identical
+/// to the input.
 pub(super) fn initialize_without_blocked_capabilities() -> Vec<u8> {
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
@@ -133,6 +136,8 @@ fn session_new_bytes() -> Vec<u8> {
     br#"{"jsonrpc":"2.0","id":1,"method":"session/new","params":{"cwd":"/workspace"}}"#.to_vec()
 }
 
+/// Returns bytes that look like an ACP `initialize` message but are not valid JSON (the
+/// closing brace is missing). Used to exercise the malformed-frame pass-through path.
 pub(super) fn malformed_initialize_bytes() -> Vec<u8> {
     br#"{"jsonrpc":"2.0","method":"initialize","params":{"clientCapabilities":{"terminal":true}}"#
         .to_vec()
@@ -172,6 +177,11 @@ async fn build_host_stdin(bytes: &[u8]) -> io::Result<DuplexStream> {
     Ok(reader)
 }
 
+/// Runs the full ACP-enabled stdin forwarding pipeline synchronously and returns
+/// `(forwarded_bytes, shutdown_called)`.
+///
+/// Used by BDD scenario steps that need to drive `forward_host_stdin_to_exec_async` with
+/// in-memory byte streams rather than real file descriptors.
 pub(super) fn run_forwarding(host_stdin_bytes: &[u8]) -> (Vec<u8>, bool) {
     run_forwarding_with_rewrite(host_stdin_bytes, true)
 }
@@ -349,10 +359,16 @@ fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
     drop(host_writer);
 }
 
+/// Returns `(host_stdin_bytes, expected_forwarded_bytes)` for an ACP session that begins
+/// with a full `initialize` frame (containing blocked capabilities) followed by a second
+/// frame.
+///
+/// The expected output has the blocked capabilities removed from the first frame while the
+/// second frame is preserved byte-for-byte.
 pub(super) fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
     let mut host_stdin_bytes = initialize_frame("\n");
     let follow_up = initialize_frame("\n");
-    host_stdin_bytes.extend_from_slice(&follow_up);
+
 
     let expected_initialize = serde_json::json!({
         "jsonrpc": "2.0",

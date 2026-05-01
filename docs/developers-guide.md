@@ -357,7 +357,7 @@ When adding a new execution mode:
 - `ContainerExecClient` mock implementations for unit testing without a
   live daemon.
 
-#### 8.2.1. ACP initialization rewrite contract
+#### 8.2.1. Agentic Control Protocol (ACP) initialization rewrite contract
 
 When protocol tests wrap `run_session` with `RecordingWriter` handles, they
 must preserve the ACP initialization rewrite contract: inspect only the first

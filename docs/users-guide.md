@@ -63,7 +63,7 @@ This subcommand is temporarily unavailable in the current release. If you run
 session. Use `podbot run` or the library exec API for now; the release notes
 will call out when hosted mode becomes available.
 
-When hosted mode uses ACP, podbot masks `terminal/*` and `fs/*` capabilities
+When hosted mode uses Agentic Control Protocol (ACP), podbot masks `terminal/*` and `fs/*` capabilities
 from the initial ACP `initialize` request before forwarding it to the
 sandboxed agent. This masking currently applies only to the
 protocol/library path used by hosted mode and ACP until `podbot host` is

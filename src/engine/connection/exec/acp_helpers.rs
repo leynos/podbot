@@ -1,4 +1,10 @@
-//! ACP initialization frame rewriting for protocol-mode stdin forwarding.
+//! Agentic Control Protocol (ACP) initialization frame rewriting for protocol-mode stdin
+//! forwarding.
+//!
+//! This module reads the first newline-delimited frame from host stdin, rewrites the JSON
+//! payload when it is an ACP `initialize` request that advertises `terminal` or `fs`
+//! capabilities, and forwards the result to the container input. All other frames — including
+//! malformed or non-ACP ones — are forwarded unchanged.
 
 use std::io;
 use std::pin::Pin;
@@ -8,12 +14,33 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
 
 use super::STDIN_BUFFER_CAPACITY;
 
+/// Maximum number of bytes buffered when reading the initial ACP frame.
+///
+/// Matches `STDIN_BUFFER_CAPACITY` so the first-frame buffer never exceeds the existing
+/// bounded-buffering guarantee.
 pub(super) const MAX_FIRST_FRAME_BYTES: usize = STDIN_BUFFER_CAPACITY;
+
+/// The ACP method name that triggers capability masking.
 pub(super) const ACP_INITIALIZE_METHOD: &str = "initialize";
+
+/// The JSON field within `params` that advertises client capabilities.
 pub(super) const ACP_CLIENT_CAPABILITIES_FIELD: &str = "clientCapabilities";
+
+/// The `fs` capability family key removed from `clientCapabilities` during masking.
 pub(super) const ACP_FILE_SYSTEM_CAPABILITY: &str = "fs";
+
+/// The `terminal` capability family key removed from `clientCapabilities` during masking.
 pub(super) const ACP_TERMINAL_CAPABILITY: &str = "terminal";
 
+/// Reads and forwards the first newline-delimited frame from `buffered_stdin` to `input`.
+///
+/// When the frame is a valid ACP `initialize` request, `terminal` and `fs` capability entries
+/// are removed from `params.clientCapabilities` before the bytes reach the container. If
+/// `clientCapabilities` becomes empty after removal, the field itself is dropped.
+///
+/// Malformed JSON or frames that do not match the ACP `initialize` shape are forwarded without
+/// modification. When no newline is found within [`MAX_FIRST_FRAME_BYTES`], the buffered bytes
+/// are forwarded as-is so the caller can resume the normal byte-transparent copy loop.
 pub(super) async fn forward_initial_acp_frame_async<HostStdin>(
     buffered_stdin: &mut tokio::io::BufReader<HostStdin>,
     input: &mut Pin<Box<dyn AsyncWrite + Send>>,
@@ -24,6 +51,10 @@ where
     let mut first_frame = Vec::new();
     loop {
         if first_frame.len() == MAX_FIRST_FRAME_BYTES {
+            tracing::debug!(
+                bytes = MAX_FIRST_FRAME_BYTES,
+                "initial ACP frame reached capacity limit; forwarding without masking",
+            );
             input.write_all(&first_frame).await?;
             return Ok(());
         }
@@ -31,6 +62,10 @@ where
         let (bytes_to_consume, has_complete_frame) =
             read_next_bounded_frame_chunk(buffered_stdin, &mut first_frame).await?;
         if bytes_to_consume == 0 {
+            tracing::debug!(
+                bytes = first_frame.len(),
+                "stdin closed before newline; forwarding partial initial frame without masking",
+            );
             input.write_all(&first_frame).await?;
             return Ok(());
         }
@@ -72,24 +107,44 @@ where
     Ok((bytes_to_consume, newline_offset.is_some()))
 }
 
+/// Rewrites an ACP `initialize` frame by removing masked capability entries.
+///
+/// The function splits the frame into a JSON payload and its line ending, attempts to parse
+/// the payload, and — when the message is a valid ACP `initialize` request — removes
+/// `terminal` and `fs` from `params.clientCapabilities`. The original line ending bytes are
+/// restored after re-serialisation.
+///
+/// Returns the original frame unchanged when JSON parsing fails, the message is not an ACP
+/// `initialize` request, no masked capabilities are present, or re-serialisation fails.
 pub(super) fn mask_acp_initialize_frame(frame: &[u8]) -> Vec<u8> {
     let (payload, line_ending) = split_frame_line_ending(frame);
 
     let Ok(mut message) = serde_json::from_slice(payload) else {
+        tracing::warn!(
+            bytes = frame.len(),
+            "ACP initialize frame is not valid JSON; forwarding unchanged",
+        );
         return frame.to_vec();
     };
 
     if !remove_masked_acp_capabilities(&mut message) {
+        tracing::debug!("frame is not an ACP initialize request; forwarding unchanged");
         return frame.to_vec();
     }
 
     let Ok(mut serialized) = serde_json::to_vec(&message) else {
+        tracing::warn!("failed to serialise masked ACP initialize frame; forwarding unchanged");
         return frame.to_vec();
     };
+
+    tracing::debug!("ACP initialize frame masked: terminal and fs capabilities removed");
     serialized.extend_from_slice(line_ending);
     serialized
 }
 
+/// Splits a frame into its JSON payload and trailing line-ending bytes.
+///
+/// Returns `(payload, line_ending)` where `line_ending` is `b"\r\n"`, `b"\n"`, or `b""`.
 pub(super) fn split_frame_line_ending(frame: &[u8]) -> (&[u8], &[u8]) {
     if let Some(stripped) = frame.strip_suffix(b"\r\n") {
         return (stripped, b"\r\n");
