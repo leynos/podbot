@@ -5,10 +5,10 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: DRAFT
+Status: BLOCKED
 
-This plan is draft-only. Implementation must not begin until the user
-explicitly approves this document.
+The user explicitly approved implementation on 2026-05-01 by asking the agent
+to proceed with the planned functionality.
 
 ## Purpose and big picture
 
@@ -121,16 +121,28 @@ escalation, not workarounds.
 
 - [x] 2026-04-22: Drafted the ExecPlan and captured current repository
   constraints, code seams, and prerequisite dependencies.
-- [ ] Await user approval of this plan.
-- [ ] Add library-owned repository and branch request/value types.
-- [ ] Add engine-level repository-cloning helper that uses `GIT_ASKPASS`.
-- [ ] Add API-level wrapper and update any public API tests that cover the new
+- [x] 2026-05-01: User approved implementation and the plan status was moved
+  to IN PROGRESS.
+- [x] 2026-05-01: Added `RepositoryRef` and `BranchName` validation in
+  `src/api/repository_clone.rs`.
+- [x] 2026-05-01: Added engine-level repository cloning through
+  `src/engine/connection/repository_clone/mod.rs` using `GIT_ASKPASS` and
+  `GIT_TERMINAL_PROMPT=0`.
+- [x] 2026-05-01: Added API-level wrapper and public embedding coverage for the
   clone surface.
-- [ ] Add `rstest` unit coverage and `rstest-bdd` behavioural coverage.
-- [ ] Update `docs/podbot-design.md`, `docs/users-guide.md`, and
+- [x] 2026-05-01: Added `rstest` unit coverage and `rstest-bdd` behavioural
+  coverage for clone success, malformed input, clone failure, and branch
+  verification failure.
+- [x] 2026-05-01: Updated `docs/podbot-design.md`, `docs/users-guide.md`, and
   `docs/podbot-roadmap.md`.
-- [ ] Run `make fmt`, `make markdownlint`, `make nixie`, `make check-fmt`,
-  `make lint`, and `make test`.
+- [x] 2026-05-01: Ran `make check-fmt`, `make markdownlint`, `make nixie`,
+  `make lint`, and `make test` successfully.
+- [x] 2026-05-01: Fixed post-turn hook path failures by making Makefile
+  defaults fall back to the installed `cargo` and `markdownlint-cli2` paths
+  when the hook does not provide a login-shell PATH.
+- [ ] Resolve or explicitly waive the `make fmt` failure caused by the
+  repository's `markdownlint --fix` invocation reporting pre-existing
+  line-length and table-format issues across unrelated documentation.
 
 ## Surprises and discoveries
 
@@ -144,6 +156,16 @@ escalation, not workarounds.
   by filling in the existing stub body.
 - No Step 3.2 or Step 3.4 ExecPlan file is present under `docs/execplans/`,
   even though Step 4.2 depends on those contracts being available.
+- The existing container exec result reports exit status but not stdout, so an
+  exact checked-out-branch verification cannot compare command output in Rust
+  without widening the exec result contract.
+- `make fmt` runs Markdown formatting and lint fixing after `cargo fmt`; it
+  failed on pre-existing markdown line-length violations across unrelated docs
+  before final validation. Unrelated generated Markdown churn was removed from
+  this change.
+- The post-turn hook runs Make targets without `/home/leynos/.cargo/bin` or
+  `/home/leynos/.bun/bin` in PATH, so `cargo` and `markdownlint-cli2` were not
+  found even though the checks pass in an interactive shell.
 
 ## Decision log
 
@@ -183,11 +205,47 @@ escalation, not workarounds.
   `run_agent` reshaping to carry repository input, keep that reshaping honest
   and explicitly documented as pre-launch plumbing.
 
+- Decision: use direct argv for `git clone`, but use a small `sh -c` predicate
+  for exact branch verification. Rationale: `ExecResult` currently exposes only
+  the exec identifier and exit code, not stdout. Comparing
+  `git rev-parse --abbrev-ref HEAD` with the requested branch therefore needs
+  the comparison to happen inside the container command. The shell receives the
+  workspace path and branch as positional arguments, not interpolated strings,
+  and no credential material is passed through argv.
+
+- Decision: keep repository cloning as a focused public API named
+  `clone_repository_into_workspace` instead of changing `run_agent`. Rationale:
+  Step 4.2 is repository preparation only. `run_agent` remains a Step 4.3
+  orchestration concern, while embedders can already exercise the clone
+  primitive with validated library-owned inputs.
+
 ## Outcomes and retrospective
 
-To be completed after implementation. Record what landed, which tolerances were
-consumed, whether Step 3.x prerequisites required adjustment, and what should
-be simplified before Step 4.3.
+Implementation landed the repository-preparation slice described by this plan:
+validated `RepositoryRef` and `BranchName` API values, a public
+`clone_repository_into_workspace` wrapper, an engine helper that runs
+credential-free `git clone` with `GIT_ASKPASS`, exact workspace-path semantics,
+and branch verification by exit status. Unit tests, BDD tests, and a library
+embedding test cover success and failure paths.
+
+Validation results on 2026-05-01:
+
+- `make check-fmt` passed.
+- `make markdownlint` passed.
+- `make nixie` passed.
+- `make lint` passed. `cargo doc` emitted an existing warning about the
+  renamed rustdoc lint `missing_crate_level_docs`, but the lint target
+  completed successfully.
+- `make test` passed.
+- `make fmt` failed after `cargo fmt` because its `markdownlint --fix` step
+  reports pre-existing line-length and table-format issues across unrelated
+  documentation. The dedicated `make markdownlint` target passes with
+  `markdownlint-cli2`; no repository-cloning Markdown errors remain.
+
+The implementation stayed under the scope tolerance. No new dependencies were
+added. Step 3.x token acquisition and helper installation remain external
+prerequisites; Step 4.2 consumes the helper path instead of reimplementing that
+work.
 
 ## Context and orientation
 

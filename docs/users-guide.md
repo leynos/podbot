@@ -225,7 +225,10 @@ env_allowlist = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
 [workspace]
 # Workspace source: "github_clone" or "host_mount"
 source = "github_clone"
-# Base directory for cloned repositories inside the container
+
+# Exact clone destination for github_clone workspaces
+base_dir = "/work"
+# Exact clone destination for github_clone workspaces
 base_dir = "/work"
 # Host path mounted into the sandbox when source = "host_mount"
 host_path = "/abs/path/to/project"
@@ -261,6 +264,12 @@ Semantic validation rules:
 - `workspace.source = "host_mount"` requires `workspace.host_path` and
   defaults `workspace.container_path` to `"/workspace"` when omitted.
 - `workspace.source = "github_clone"` rejects host-mount-only fields.
+
+For `podbot run`, `--repo` must use GitHub `owner/name` form, such as
+`leynos/podbot`. The `--branch` flag is required and has no default; Podbot
+does not guess the default branch. When `workspace.source = "github_clone"`,
+Podbot clones that repository directly into `workspace.base_dir` inside the
+container and treats that path as the workspace root.
 
 ### Private key file requirements
 
@@ -628,10 +637,12 @@ supported semver contract for embedders.
 
 ### Available functions
 
-| Function                                 | Description                                  |
-| ---------------------------------------- | -------------------------------------------- |
-| `podbot::api::exec(config, request)`     | Execute a command in a running container     |
-| `podbot::api::ExecContext::connect(…)`   | Reuse a runtime handle and engine connection |
+| Function                                               | Description                                  |
+| ------------------------------------------------------ | -------------------------------------------- |
+| `podbot::api::exec(config, request)`                   | Execute a command in a running container     |
+| `podbot::api::ExecContext::connect(…)`                 | Reuse a runtime handle and engine connection |
+| `podbot::api::clone_repository_into_workspace(params)` | Clone `owner/name` into the sandbox workspace |
+
 
 ### Return type
 
@@ -695,6 +706,16 @@ but it is not part of the stable embedding contract described here because its
 parameters and results depend on internal engine-owned traits and types.
 Library embedders should treat it as an internal shim rather than a semver
 stable API.
+
+### Repository cloning
+
+`clone_repository_into_workspace` returns
+`podbot::error::Result<RepositoryCloneResult>`, which reports the workspace
+path and checked-out branch when cloning succeeds. Embedders construct the
+request via `RepositoryRef::parse` and `BranchName::parse` together with a
+pre-connected `ContainerExecClient` and a Tokio runtime handle. Validation
+failures surface as `ConfigError`, while clone or branch verification failures
+surface as `ContainerError::ExecFailed`.
 
 ### Library embedding
 
