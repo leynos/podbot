@@ -54,33 +54,42 @@ impl AsyncWrite for RecordingInputWriter {
     }
 }
 
-fn initialize_frame(line_ending: &str) -> Vec<u8> {
-    let payload = serde_json::json!({
+fn initialize_frame_with_capabilities(
+    capabilities: serde_json::Value,
+    line_ending: &str,
+) -> Vec<u8> {
+    let mut payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 0,
         "method": "initialize",
         "params": {
             "protocolVersion": 1,
-            "clientCapabilities": {
-                "fs": {
-                    "readTextFile": true,
-                    "writeTextFile": true
-                },
-                "terminal": true,
-                "_meta": {
-                    "custom": true
-                }
-            },
+            "clientCapabilities": null,
             "clientInfo": {
                 "name": "podbot-tests",
                 "version": "1.0.0"
             }
         }
     });
-
-    let mut frame = serde_json::to_vec(&payload).expect("initialize payload should serialize");
+    payload
+        .get_mut("params")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("initialize params should be present")
+        .insert("clientCapabilities".to_owned(), capabilities);
+    let mut frame = serde_json::to_vec(&payload).expect("initialize payload should serialise");
     frame.extend_from_slice(line_ending.as_bytes());
     frame
+}
+
+fn initialize_frame(line_ending: &str) -> Vec<u8> {
+    initialize_frame_with_capabilities(
+        serde_json::json!({
+            "fs": { "readTextFile": true, "writeTextFile": true },
+            "terminal": true,
+            "_meta": { "custom": true }
+        }),
+        line_ending,
+    )
 }
 
 /// Builds a serialised ACP `initialize` frame whose `clientCapabilities`
@@ -106,29 +115,13 @@ pub(super) fn initialize_without_blocked_capabilities() -> Vec<u8> {
 }
 
 fn initialize_with_only_blocked_capabilities(line_ending: &str) -> Vec<u8> {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": 1,
-            "clientCapabilities": {
-                "fs": {
-                    "readTextFile": true,
-                    "writeTextFile": true
-                },
-                "terminal": true
-            },
-            "clientInfo": {
-                "name": "podbot-tests",
-                "version": "1.0.0"
-            }
-        }
-    });
-
-    let mut frame = serde_json::to_vec(&payload).expect("initialize payload should serialize");
-    frame.extend_from_slice(line_ending.as_bytes());
-    frame
+    initialize_frame_with_capabilities(
+        serde_json::json!({
+            "fs": { "readTextFile": true, "writeTextFile": true },
+            "terminal": true
+        }),
+        line_ending,
+    )
 }
 
 fn session_new_bytes() -> Vec<u8> {
@@ -230,19 +223,6 @@ fn run_forwarding_with_rewrite(
     )
 }
 
-#[test]
-fn forwarding_leaves_initialize_unchanged_when_acp_rewrite_is_disabled() {
-    let host_stdin_bytes = initialize_frame("\n");
-
-    let (forwarded, shutdown_called) = run_forwarding_with_rewrite(&host_stdin_bytes, false);
-
-    assert_eq!(
-        forwarded, host_stdin_bytes,
-        "generic protocol sessions should retain raw byte-stream semantics"
-    );
-    assert!(shutdown_called, "stdin forwarding should shut down input");
-}
-
 #[rstest]
 #[case("\n")]
 #[case("\r\n")]
@@ -288,106 +268,62 @@ fn mask_acp_initialize_frame_removes_empty_client_capabilities() {
     );
 }
 
-#[test]
-fn mask_acp_initialize_frame_removes_only_fs_when_terminal_absent() {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": 1,
-            "clientCapabilities": {
-                "fs": { "readTextFile": true },
-                "auth": { "token": true }
-            },
-            "clientInfo": { "name": "podbot-tests", "version": "1.0.0" }
-        }
-    });
-    let mut frame = serde_json::to_vec(&payload).expect("payload should serialise");
-    frame.push(b'\n');
-
+#[rstest]
+#[case(
+    serde_json::json!({
+        "fs": { "readTextFile": true },
+        "auth": { "token": true }
+    }),
+    &["fs"],
+    &["auth"]
+)]
+#[case(
+    serde_json::json!({
+        "terminal": true,
+        "logging": { "level": "info" }
+    }),
+    &["terminal"],
+    &["logging"]
+)]
+#[case(
+    serde_json::json!({
+        "fs": { "readTextFile": true },
+        "terminal": true,
+        "auth": { "token": true },
+        "logging": { "level": "debug" }
+    }),
+    &["fs", "terminal"],
+    &["auth", "logging"]
+)]
+fn mask_acp_initialize_frame_preserves_unrelated_capabilities(
+    #[case] capabilities: serde_json::Value,
+    #[case] removed_capabilities: &[&str],
+    #[case] preserved_capabilities: &[&str],
+) {
+    let frame = initialize_frame_with_capabilities(capabilities, "\n");
     let masked = mask_acp_initialize_frame(&frame);
     let result = parse_frame_payload(&masked);
     let caps = client_capabilities(&result);
 
-    assert!(!caps.contains_key("fs"), "fs should be removed");
-    assert!(caps.contains_key("auth"), "auth should be preserved");
-}
-
-#[test]
-fn mask_acp_initialize_frame_removes_only_terminal_when_fs_absent() {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": 1,
-            "clientCapabilities": {
-                "terminal": true,
-                "logging": { "level": "info" }
-            },
-            "clientInfo": { "name": "podbot-tests", "version": "1.0.0" }
-        }
-    });
-    let mut frame = serde_json::to_vec(&payload).expect("payload should serialise");
-    frame.push(b'\n');
-
-    let masked = mask_acp_initialize_frame(&frame);
-    let result = parse_frame_payload(&masked);
-    let caps = client_capabilities(&result);
-
-    assert!(!caps.contains_key("terminal"), "terminal should be removed");
-    assert!(caps.contains_key("logging"), "logging should be preserved");
-}
-
-#[test]
-fn mask_acp_initialize_frame_preserves_all_unrelated_capabilities() {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": 1,
-            "clientCapabilities": {
-                "fs": { "readTextFile": true },
-                "terminal": true,
-                "auth": { "token": true },
-                "logging": { "level": "debug" }
-            },
-            "clientInfo": { "name": "podbot-tests", "version": "1.0.0" }
-        }
-    });
-    let mut frame = serde_json::to_vec(&payload).expect("payload should serialise");
-    frame.push(b'\n');
-
-    let masked = mask_acp_initialize_frame(&frame);
-    let result = parse_frame_payload(&masked);
-    let caps = client_capabilities(&result);
-
-    assert!(!caps.contains_key("fs"), "fs should be removed");
-    assert!(!caps.contains_key("terminal"), "terminal should be removed");
-    assert!(caps.contains_key("auth"), "auth should be preserved");
-    assert!(caps.contains_key("logging"), "logging should be preserved");
+    for capability in removed_capabilities {
+        assert!(
+            !caps.contains_key(*capability),
+            "{capability} should be removed"
+        );
+    }
+    for capability in preserved_capabilities {
+        assert!(
+            caps.contains_key(*capability),
+            "{capability} should be preserved"
+        );
+    }
 }
 
 #[test]
 fn mask_acp_initialize_frame_passes_through_frame_without_line_ending() {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "method": "initialize",
-        "params": {
-            "clientCapabilities": { "fs": { "readTextFile": true }, "terminal": true }
-        }
-    });
-    // Deliberately omit the trailing newline.
-    let frame = serde_json::to_vec(&payload).expect("payload should serialise");
-
+    let frame = initialize_with_only_blocked_capabilities("");
     let masked = mask_acp_initialize_frame(&frame);
 
-    // Without a line ending the splitter returns the whole slice as payload
-    // with an empty line-ending suffix.  The JSON itself is still rewritten,
-    // but the result must not gain a spurious newline byte.
     assert!(
         !masked.ends_with(b"\n"),
         "masked frame should not gain a trailing newline"
@@ -413,75 +349,6 @@ fn mask_acp_initialize_frame_leaves_malformed_input_unchanged() {
     let frame = malformed_initialize_bytes();
 
     assert_eq!(mask_acp_initialize_frame(&frame), frame);
-}
-
-#[test]
-fn forwarding_masks_initialize_and_preserves_trailing_bytes() {
-    let mut host_stdin_bytes = initialize_frame("\n");
-    let trailing = initialize_frame("\n");
-    host_stdin_bytes.extend_from_slice(&trailing);
-
-    let (forwarded, shutdown_called) = run_forwarding(&host_stdin_bytes);
-    let newline_index = forwarded
-        .iter()
-        .position(|byte| *byte == b'\n')
-        .expect("masked initialize should remain line terminated");
-    let initialize_frame = forwarded
-        .get(..=newline_index)
-        .expect("masked initialize frame should remain addressable");
-    let trailing_forwarded = forwarded
-        .get(newline_index + 1..)
-        .expect("trailing bytes should remain addressable");
-    let payload = parse_frame_payload(initialize_frame);
-
-    assert_masked_client_capabilities(&payload);
-    assert_eq!(
-        trailing_forwarded,
-        trailing.as_slice(),
-        "trailing bytes should pass through unchanged"
-    );
-    assert!(shutdown_called, "stdin forwarding should shut down input");
-}
-
-#[test]
-fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
-    let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
-    let host_stdin_bytes = vec![b'x'; MAX_FIRST_FRAME_BYTES + 1];
-    let (host_writer, host_reader) = runtime
-        .block_on(async {
-            let (mut host_writer, host_reader) = tokio::io::duplex(host_stdin_bytes.len());
-            host_writer.write_all(&host_stdin_bytes).await?;
-            io::Result::Ok((host_writer, host_reader))
-        })
-        .expect("host stdin should accept oversized initial bytes");
-
-    let mut buffered_stdin =
-        tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_reader);
-    let recording_input = RecordingInputWriter::new();
-    let forwarded_bytes = recording_input.bytes.clone();
-    let mut container_input: Pin<Box<dyn AsyncWrite + Send>> = Box::pin(recording_input);
-
-    runtime
-        .block_on(async {
-            tokio::time::timeout(
-                STDIN_SETTLE_TIMEOUT,
-                forward_initial_acp_frame_async(&mut buffered_stdin, &mut container_input),
-            )
-            .await
-        })
-        .expect("initial forwarding should not wait for newline or EOF")
-        .expect("initial forwarding should succeed");
-
-    assert_eq!(
-        forwarded_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .len(),
-        MAX_FIRST_FRAME_BYTES,
-        "only the bounded first-frame buffer should be held before streaming resumes"
-    );
-
-    drop(host_writer);
 }
 
 /// Constructs a host-stdin byte sequence containing a masked `initialize`
@@ -517,6 +384,9 @@ pub(super) fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
 
     (host_stdin_bytes, expected)
 }
+
+#[path = "protocol_acp_forwarding_tests.rs"]
+mod forwarding_tests;
 
 #[path = "protocol_acp_bdd_tests.rs"]
 mod bdd_tests;
