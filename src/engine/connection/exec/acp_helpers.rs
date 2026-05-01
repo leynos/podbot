@@ -1,4 +1,14 @@
 //! ACP initialization frame rewriting for protocol-mode stdin forwarding.
+//!
+//! ## Concurrency model
+//!
+//! Each protocol session runs its own independent forwarding task on a single
+//! Tokio task. The `BufReader` wrapping host stdin is owned exclusively by that
+//! task and is never shared across tasks or threads. All state is stack-local or
+//! moved into the task at spawn time, so there are no shared-mutable references
+//! and no synchronisation primitives are required. If the forwarding task is
+//! cancelled at an `await` point the `BufReader` and container input writer are
+//! both dropped, releasing the underlying pipe handles cleanly.
 
 use std::io;
 use std::pin::Pin;
@@ -177,7 +187,7 @@ pub(super) fn mask_acp_initialize_frame(frame: &[u8]) -> Vec<u8> {
     let mut message: Value = match serde_json::from_slice(payload) {
         Ok(v) => v,
         Err(e) => {
-            tracing::warn!(
+            tracing::debug!(
                 error = %e,
                 "ACP frame JSON deserialization failed; forwarding unchanged"
             );
@@ -193,7 +203,7 @@ pub(super) fn mask_acp_initialize_frame(frame: &[u8]) -> Vec<u8> {
     let mut serialized = match serde_json::to_vec(&message) {
         Ok(v) => v,
         Err(e) => {
-            tracing::warn!(
+            tracing::debug!(
                 error = %e,
                 "ACP frame JSON serialization failed after masking; forwarding unchanged"
             );
