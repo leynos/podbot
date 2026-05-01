@@ -37,14 +37,16 @@ fn assert_token_expired(result: &Result<InstallationAccessToken, GitHubError>) {
     );
 }
 
-fn assert_acquisition_failed_containing(
-    result: Result<InstallationAccessToken, GitHubError>,
-    needle: &str,
-    hint: &str,
+fn assert_acquisition_failed(
+    result: &Result<InstallationAccessToken, GitHubError>,
+    fragment: &str,
 ) {
     match result {
         Err(GitHubError::TokenAcquisitionFailed { message }) => {
-            assert!(message.contains(needle), "{hint}: {message}");
+            assert!(
+                message.contains(fragment),
+                "message should contain {fragment:?}: {message}"
+            );
         }
         other => panic!("expected TokenAcquisitionFailed, got: {other:?}"),
     }
@@ -80,25 +82,16 @@ fn token_response_inside_buffer_returns_token_expired(now: DateTime<Utc>, near_e
 }
 
 #[rstest]
-fn missing_expiry_metadata_returns_deterministic_error(now: DateTime<Utc>) {
-    let token = test_installation_token("ghs_missing_expiry", None);
+#[case(None, "did not include expires_at")]
+#[case(Some("not-a-timestamp"), "invalid installation token expiry timestamp")]
+fn bad_expiry_metadata_returns_deterministic_error(
+    now: DateTime<Utc>,
+    #[case] expires_at: Option<&str>,
+    #[case] expected_fragment: &str,
+) {
+    let token = test_installation_token("ghs_bad_expiry", expires_at);
     let result = token_from_response(token, Duration::from_secs(300), now);
-    assert_acquisition_failed_containing(
-        result,
-        "did not include expires_at",
-        "message should mention missing expiry metadata",
-    );
-}
-
-#[rstest]
-fn malformed_expiry_metadata_returns_deterministic_error(now: DateTime<Utc>) {
-    let token = test_installation_token("ghs_bad_expiry", Some("not-a-timestamp"));
-    let result = token_from_response(token, Duration::from_secs(300), now);
-    assert_acquisition_failed_containing(
-        result,
-        "invalid installation token expiry timestamp",
-        "message should mention invalid expiry metadata",
-    );
+    assert_acquisition_failed(&result, expected_fragment);
 }
 
 #[rstest]
