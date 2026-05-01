@@ -6,7 +6,7 @@
 //! Tokio task. The `BufReader` wrapping host stdin is owned exclusively by that
 //! task and is never shared across tasks or threads. All state is stack-local or
 //! moved into the task at spawn time, so there are no shared-mutable references
-//! and no synchronisation primitives are required. If the forwarding task is
+//! and no synchronization primitives are required. If the forwarding task is
 //! cancelled at an `await` point the `BufReader` and container input writer are
 //! both dropped, releasing the underlying pipe handles cleanly.
 
@@ -22,7 +22,7 @@ use super::STDIN_BUFFER_CAPACITY;
 /// ACP frame. Frames that exceed this limit are forwarded as-is without
 /// attempting JSON rewriting.
 pub(super) const MAX_FIRST_FRAME_BYTES: usize = STDIN_BUFFER_CAPACITY;
-/// The JSON-RPC `method` value that identifies an ACP initialisation request.
+/// The JSON-RPC `method` value that identifies an ACP initialization request.
 pub(super) const ACP_INITIALIZE_METHOD: &str = "initialize";
 /// The `params` field that carries the client's advertised ACP capabilities.
 pub(super) const ACP_CLIENT_CAPABILITIES_FIELD: &str = "clientCapabilities";
@@ -174,12 +174,12 @@ where
 }
 
 /// Rewrites an ACP `initialize` frame by removing `terminal` and `fs` from
-/// `params.clientCapabilities`, then re-serialises the JSON preserving the
+/// `params.clientCapabilities`, then re-serializes the JSON preserving the
 /// original line ending. Returns the original frame unchanged on any parse or
-/// serialisation failure, or if no capabilities were removed.
+/// serialization failure, or if no capabilities were removed.
 #[expect(
     clippy::cognitive_complexity,
-    reason = "inline parse and serialise fallback tracing keeps this review-required flow local"
+    reason = "inline parse and serialize fallback tracing keeps this review-required flow local"
 )]
 pub(super) fn mask_acp_initialize_frame(frame: &[u8]) -> Vec<u8> {
     let (payload, line_ending) = split_frame_line_ending(frame);
