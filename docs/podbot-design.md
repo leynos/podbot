@@ -404,7 +404,6 @@ example, TLS backend failure), or other builder errors. The App ID is not
 validated at construction time; GitHub validates it when the client attempts to
 acquire a token.
 
-
 #### Installation-token acquisition contract
 
 The helper

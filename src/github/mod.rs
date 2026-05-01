@@ -331,5 +331,7 @@ pub fn test_classify_error_message(code: u16, full_error: &str) -> String {
 
 #[cfg(test)]
 mod credential_error_tests;
+#[cfg(test)]
 mod installation_token_tests;
+#[cfg(test)]
 mod tests;
