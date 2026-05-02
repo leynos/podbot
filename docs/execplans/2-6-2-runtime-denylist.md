@@ -778,7 +778,15 @@ and report; they must not write to the working tree.
   reassemble byte-identically, confirming that frames forwarded by
   the assembler are bit-for-bit identical to the original input
   regardless of chunk boundaries.
-- [ ] Stage H documentation updates.
+- [x] (2026-05-02) Stage H documentation updates. The runtime denylist
+  policy, sink-task model, frame ceiling, and `CapabilityPolicy` enum
+  are now described in `docs/podbot-design.md`. The user-facing
+  behaviour (synthesized error response, stderr denial line,
+  byte-identical permitted forwards, opt-in until `podbot host` ships)
+  is in `docs/users-guide.md`. A new section 8.2.2 in
+  `docs/developers-guide.md` documents the four-module split, the
+  `CapabilityPolicy` selector, and the recommended testing pattern.
+  All four touched Markdown files pass `markdownlint`.
 - [ ] Stage I roadmap update and full gate stack.
 
 ## Surprises and discoveries
