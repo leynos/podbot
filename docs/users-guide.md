@@ -65,12 +65,21 @@ will call out when hosted mode becomes available.
 
 When hosted mode uses Agentic Control Protocol (ACP), podbot masks
 `terminal/*` and `fs/*` capabilities from the initial ACP `initialize`
-request before forwarding it to the sandboxed agent. This masking currently
-applies only to the protocol/library path used by hosted mode and ACP until
-`podbot host` is implemented. The scope and behaviour may change when
-`podbot host` ships, but for now it keeps the default trust boundary aligned
-with the container sandbox even when the hosting client advertises broader ACP
-support.
+request before forwarding it to the sandboxed agent. After initialization,
+podbot also enforces a runtime denylist on agent-emitted requests in those
+capability families. If the hosted agent attempts a method such as
+`terminal/create` or `fs/read_text_file`, podbot refuses to forward the
+request and returns a JSON-RPC 2.0 error response carrying the original
+request `id`, error code `-32001`, message `Method blocked by Podbot ACP
+capability policy`, and a structured `data.reason = "podbot_capability_policy"`
+field so the agent can branch on `reason` programmatically. Each denial
+also produces a single warning line on podbot's stderr with the target
+`podbot::acp::policy`, the container identifier, the blocked method name,
+and the request `id` (or `null` for notifications). Permitted methods pass
+through byte-for-byte. Both the initialization-time masking and the
+runtime denylist apply only to the protocol/library path used by hosted
+mode and ACP until `podbot host` is implemented; the operator override to
+opt back in to host-side delegation is tracked in roadmap Step 2.6.4.
 
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |
