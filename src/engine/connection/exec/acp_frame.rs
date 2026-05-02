@@ -97,7 +97,10 @@ impl OutboundFrameAssembler {
     /// produced, in order. When the assembler is in raw-fallback mode every
     /// chunk yields a single [`FrameOutput::Forward`] holding the chunk
     /// verbatim.
-    pub(crate) fn ingest_chunk(&mut self, chunk: &[u8]) -> (Vec<FrameOutput>, Option<FallbackReason>) {
+    pub(crate) fn ingest_chunk(
+        &mut self,
+        chunk: &[u8],
+    ) -> (Vec<FrameOutput>, Option<FallbackReason>) {
         if self.raw_fallback {
             return (
                 if chunk.is_empty() {
@@ -171,7 +174,7 @@ impl OutboundFrameAssembler {
 
     /// Return `true` when the assembler has fallen back to raw forwarding.
     #[cfg(test)]
-    pub(crate) fn is_raw_fallback(&self) -> bool {
+    pub(crate) const fn is_raw_fallback(&self) -> bool {
         self.raw_fallback
     }
 }

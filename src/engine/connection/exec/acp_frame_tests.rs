@@ -8,9 +8,7 @@
 use ortho_config::serde_json::{self, Value};
 use rstest::rstest;
 
-use super::{
-    FallbackReason, FrameOutput, MAX_RUNTIME_FRAME_BYTES, OutboundFrameAssembler,
-};
+use super::{FallbackReason, FrameOutput, MAX_RUNTIME_FRAME_BYTES, OutboundFrameAssembler};
 use crate::engine::connection::exec::protocol::acp_policy::{FrameDecision, MethodDenylist};
 
 fn permitted_frame(method: &str, line_ending: &[u8]) -> Vec<u8> {
@@ -25,7 +23,7 @@ fn permitted_frame(method: &str, line_ending: &[u8]) -> Vec<u8> {
     bytes
 }
 
-fn blocked_request_frame(id: Value, method: &str) -> Vec<u8> {
+fn blocked_request_frame(id: &Value, method: &str) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(&serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -83,7 +81,7 @@ fn multiple_frames_in_one_chunk_split_on_each_newline() {
 fn frame_split_across_two_chunks_reassembles_correctly() {
     let mut framer = assembler();
     let frame = permitted_frame("session/new", b"\n");
-    let split_at = frame.len() / 2;
+    let split_at = frame.len().div_euclid(2);
     let first = frame.get(..split_at).expect("split prefix");
     let second = frame.get(split_at..).expect("split suffix");
 
@@ -91,7 +89,10 @@ fn frame_split_across_two_chunks_reassembles_correctly() {
     let (outputs_b, fallback_b) = framer.ingest_chunk(second);
 
     assert!(fallback_a.is_none() && fallback_b.is_none());
-    assert!(outputs_a.is_empty(), "no frame is complete after first chunk");
+    assert!(
+        outputs_a.is_empty(),
+        "no frame is complete after first chunk"
+    );
     assert_eq!(outputs_b, vec![FrameOutput::Forward(frame)]);
 }
 
@@ -99,8 +100,8 @@ fn frame_split_across_two_chunks_reassembles_correctly() {
 fn frame_split_across_three_chunks_reassembles_correctly() {
     let mut framer = assembler();
     let frame = permitted_frame("session/update", b"\n");
-    let third = frame.len() / 3;
-    let two_thirds = (frame.len() * 2) / 3;
+    let third = frame.len().div_euclid(3);
+    let two_thirds = frame.len().saturating_mul(2).div_euclid(3);
     let parts = [
         frame.get(..third).expect("first third"),
         frame.get(third..two_thirds).expect("middle third"),
@@ -120,7 +121,7 @@ fn frame_split_across_three_chunks_reassembles_correctly() {
 #[test]
 fn blocked_request_emits_decision_with_line_ending() {
     let mut framer = assembler();
-    let frame = blocked_request_frame(serde_json::json!(7), "terminal/create");
+    let frame = blocked_request_frame(&serde_json::json!(7), "terminal/create");
 
     let (outputs, fallback) = framer.ingest_chunk(&frame);
 
@@ -200,7 +201,7 @@ fn frame_with_escaped_newline_in_string_treated_as_single_frame() {
 #[test]
 fn permitted_frame_after_blocked_frame_still_forwards() {
     let mut framer = assembler();
-    let mut chunk = blocked_request_frame(serde_json::json!(1), "terminal/create");
+    let mut chunk = blocked_request_frame(&serde_json::json!(1), "terminal/create");
     let permitted = permitted_frame("session/new", b"\n");
     chunk.extend_from_slice(&permitted);
 
@@ -238,7 +239,10 @@ fn raw_fallback_forwards_subsequent_chunks_unchanged() {
     let (outputs, fallback) = framer.ingest_chunk(b"trailing-bytes\n");
 
     assert!(fallback.is_none());
-    assert_eq!(outputs, vec![FrameOutput::Forward(b"trailing-bytes\n".to_vec())]);
+    assert_eq!(
+        outputs,
+        vec![FrameOutput::Forward(b"trailing-bytes\n".to_vec())]
+    );
 }
 
 #[test]
@@ -294,12 +298,10 @@ fn permitted_stream() -> Vec<u8> {
         permitted_frame("session/new", b"\r\n"),
         permitted_frame("session/update", b"\n"),
     ];
-    frames
-        .into_iter()
-        .fold(Vec::new(), |mut acc, mut frame| {
-            acc.append(&mut frame);
-            acc
-        })
+    frames.into_iter().fold(Vec::new(), |mut acc, mut frame| {
+        acc.append(&mut frame);
+        acc
+    })
 }
 
 fn assemble_with_two_chunks(stream: &[u8], split_at: usize) -> Vec<u8> {
@@ -383,11 +385,11 @@ fn three_way_splits_reassemble_to_original_byte_stream(
     #[case] second_split: usize,
 ) {
     let stream = permitted_stream();
-    let first_split = first_split.min(stream.len());
-    let second_split = second_split.min(stream.len());
-    let reassembled = assemble_with_three_chunks(&stream, first_split, second_split);
+    let first_clamped = first_split.min(stream.len());
+    let second_clamped = second_split.min(stream.len());
+    let reassembled = assemble_with_three_chunks(&stream, first_clamped, second_clamped);
     assert_eq!(
         reassembled, stream,
-        "three-way split at ({first_split}, {second_split}) should reassemble identically",
+        "three-way split at ({first_clamped}, {second_clamped}) should reassemble identically",
     );
 }

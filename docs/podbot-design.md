@@ -220,52 +220,49 @@ ACP masking is an implementation requirement, not a documentation preference:
   Podbot forwards it unchanged rather than guessing another protocol's
   semantics.
 - Podbot enforces a runtime denylist for blocked ACP methods after
-  initialization. The denylist matches every method whose name begins with
-  one of the blocked capability prefixes (`terminal/` or `fs/`) followed by
-  a non-empty operation name, so `terminal/create` and `fs/read_text_file`
-  are blocked while a hypothetical unrelated `terminalize` is not. Each
-  blocked request produces a synthesized JavaScript Object Notation Remote
-  Procedure Call (JSON-RPC) 2.0 error response with the original `id`, the
-  application-defined error code `-32001`, the stable message `Method
-  blocked by Podbot ACP capability policy`, and a structured
-  `data.reason = "podbot_capability_policy"` discriminator so agents can
-  branch on `reason` rather than parsing the message string. The error
-  response code `-32601 Method not found` is deliberately avoided because
-  the method exists; Podbot is refusing to route it. Reserve `-32002` for
-  the future "override required" follow-on. Each denial also emits a
-  single `tracing::warn!` line with `target = "podbot::acp::policy"`
-  carrying the container identifier, the blocked method name, and the
-  request `id` (or `null` for notifications).
+  initialization. The denylist matches every method whose name begins with one
+  of the blocked capability prefixes (`terminal/` or `fs/`) followed by a
+  non-empty operation name, so `terminal/create` and `fs/read_text_file` are
+  blocked while a hypothetical unrelated `terminalize` is not. Each blocked
+  request produces a synthesized JavaScript Object Notation Remote Procedure
+  Call (JSON-RPC) 2.0 error response with the original `id`, the
+  application-defined error code `-32001`, the stable message
+  `Method blocked by Podbot ACP capability policy`, and a structured
+  `data.reason = "podbot_capability_policy"` discriminator so agents can branch
+  on `reason` rather than parsing the message string. The error response code
+  `-32601 Method not found` is deliberately avoided because the method exists;
+  Podbot is refusing to route it. Reserve `-32002` for the future "override
+  required" follow-on. Each denial also emits a single `tracing::warn!` line
+  with `target = "podbot::acp::policy"` carrying the container identifier, the
+  blocked method name, and the request `id` (or `null` for notifications).
 - Runtime enforcement runs alongside initialization-time masking through a
   single `CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` opt-in. The
-  default is `Disabled`, preserving the byte-transparent
-  `ExecMode::Protocol` contract for non-Agentic Control Protocol traffic.
-  `MaskOnly` enables the Step 2.6.1 first-frame rewrite without runtime
-  enforcement; `MaskAndDeny` activates both behaviours together.
+  default is `Disabled`, preserving the byte-transparent `ExecMode::Protocol`
+  contract for non-Agentic Control Protocol traffic. `MaskOnly` enables the
+  Step 2.6.1 first-frame rewrite without runtime enforcement; `MaskAndDeny`
+  activates both behaviours together.
 - When `MaskAndDeny` is selected, container stdin has a single owner: a
   dedicated sink task that drains a bounded `tokio::sync::mpsc` channel of
-  `WriteCmd::{Forward, Synthesised}` values. Both the host-stdin
-  forwarder and the output-direction policy adapter are _senders_. The
-  ordering invariant is established by channel construction: the
-  protocol coordinator drops every sender after the output stream
-  drains, so the sink processes every queued synthesized response before
-  it reads the closed-channel terminator and shuts container stdin. The
-  sink tolerates `BrokenPipe` from container stdin by logging a single
-  warning and continuing to drain the channel, preserving the existing
-  exit-code reporting path.
+  `WriteCmd::{Forward, Synthesised}` values. Both the host-stdin forwarder and
+  the output-direction policy adapter are _senders_. The ordering invariant is
+  established by channel construction: the protocol coordinator drops every
+  sender after the output stream drains, so the sink processes every queued
+  synthesized response before it reads the closed-channel terminator and shuts
+  container stdin. The sink tolerates `BrokenPipe` from container stdin by
+  logging a single warning and continuing to drain the channel, preserving the
+  existing exit-code reporting path.
 - The output-direction frame assembler buffers up to 128 kibibytes of
-  agent-emitted bytes while searching for a frame's terminating newline.
-  On overflow before a newline is observed, the assembler flushes the
-  buffered bytes verbatim, sets a one-shot raw-fallback flag, and
-  forwards every subsequent chunk unchanged. At end of stream, any
-  residual partial frame is **dropped**: an unauthorized partial frame
-  must never reach host stdout. Both the overflow fallback and the
-  partial-frame drop record one stderr `warn!` per session.
+  agent-emitted bytes while searching for a frame's terminating newline. On
+  overflow before a newline is observed, the assembler flushes the buffered
+  bytes verbatim, sets a one-shot raw-fallback flag, and forwards every
+  subsequent chunk unchanged. At end of stream, any residual partial frame is
+  **dropped**: an unauthorized partial frame must never reach host stdout. Both
+  the overflow fallback and the partial-frame drop record one stderr `warn!`
+  per session.
 - Permitted frames are forwarded byte-identically. The policy parses to
-  decide; it never re-serializes. This preserves any agent-side
-  integrity assumptions such as key ordering, whitespace, or embedded
-  hashes, and keeps the proxy correct for ACP extensions that depend on
-  byte-stable frames.
+  decide; it never re-serializes. This preserves any agent-side integrity
+  assumptions such as key ordering, whitespace, or embedded hashes, and keeps
+  the proxy correct for ACP extensions that depend on byte-stable frames.
 - The delegation override must be explicit, disabled by default, and surfaced
   in logs as a trust-boundary change.
 

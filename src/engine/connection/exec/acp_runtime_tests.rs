@@ -40,7 +40,10 @@ impl AsyncWrite for RecordingWriter {
         _cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        self.bytes.lock().expect("writer mutex").extend_from_slice(buf);
+        self.bytes
+            .lock()
+            .expect("writer mutex")
+            .extend_from_slice(buf);
         Poll::Ready(Ok(buf.len()))
     }
 
@@ -64,7 +67,10 @@ impl AsyncWrite for BrokenPipeWriter {
         _cx: &mut Context<'_>,
         _buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        Poll::Ready(Err(io::Error::new(io::ErrorKind::BrokenPipe, "agent exited")))
+        Poll::Ready(Err(io::Error::new(
+            io::ErrorKind::BrokenPipe,
+            "agent exited",
+        )))
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -88,7 +94,7 @@ fn permitted_frame() -> Vec<u8> {
     bytes
 }
 
-fn blocked_request_frame(id: Value) -> Vec<u8> {
+fn blocked_request_frame(id: &Value) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(&serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -153,7 +159,7 @@ async fn blocked_request_skips_host_stdout_and_queues_synthesised_response() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(serde_json::json!(7));
+    let frame = blocked_request_frame(&serde_json::json!(7));
 
     adapter
         .handle_chunk(&frame, &mut writer)
@@ -200,7 +206,10 @@ async fn blocked_notification_drops_silently_without_sink_command() {
 
     assert!(recorder.snapshot().is_empty());
     let received = drain_channel(rx).await;
-    assert!(received.is_empty(), "notifications must not generate a response");
+    assert!(
+        received.is_empty(),
+        "notifications must not generate a response"
+    );
 }
 
 #[tokio::test]
@@ -209,7 +218,7 @@ async fn permitted_frame_after_blocked_frame_still_reaches_host_stdout() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let mut chunk = blocked_request_frame(serde_json::json!(1));
+    let mut chunk = blocked_request_frame(&serde_json::json!(1));
     let permitted = permitted_frame();
     chunk.extend_from_slice(&permitted);
 
@@ -230,13 +239,19 @@ async fn frame_split_across_chunks_is_classified_after_assembly() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(serde_json::json!(2));
-    let split_at = frame.len() / 2;
+    let frame = blocked_request_frame(&serde_json::json!(2));
+    let split_at = frame.len().div_euclid(2);
     let first = frame.get(..split_at).expect("split prefix");
     let second = frame.get(split_at..).expect("split suffix");
 
-    adapter.handle_chunk(first, &mut writer).await.expect("first chunk");
-    adapter.handle_chunk(second, &mut writer).await.expect("second chunk");
+    adapter
+        .handle_chunk(first, &mut writer)
+        .await
+        .expect("first chunk");
+    adapter
+        .handle_chunk(second, &mut writer)
+        .await
+        .expect("second chunk");
     drop(adapter);
 
     assert!(recorder.snapshot().is_empty());
@@ -263,7 +278,9 @@ async fn sink_writes_forwards_then_synthesised_in_send_order() {
         .expect("second forward send");
     drop(tx);
 
-    sink.await.expect("sink task joins").expect("sink runs cleanly");
+    sink.await
+        .expect("sink task joins")
+        .expect("sink runs cleanly");
 
     let bytes = writer_handle.snapshot();
     assert_eq!(bytes, b"forward-one\nsynthesised-one\nforward-two\n");
@@ -306,7 +323,10 @@ async fn synthesised_response_preserves_blocked_frame_line_ending(#[case] line_e
     .expect("blocked request serializes");
     frame.extend_from_slice(line_ending);
 
-    adapter.handle_chunk(&frame, &mut writer).await.expect("chunk");
+    adapter
+        .handle_chunk(&frame, &mut writer)
+        .await
+        .expect("chunk");
     drop(adapter);
 
     let received = drain_channel(rx).await;
@@ -332,9 +352,12 @@ async fn blocked_request_synthesised_before_channel_close_is_flushed() {
     let mut adapter = OutboundPolicyAdapter::new(assembler, tx.clone(), "container-test");
     let host_stdout = RecordingWriter::default();
     let mut host_writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(serde_json::json!(11));
+    let frame = blocked_request_frame(&serde_json::json!(11));
 
-    adapter.handle_chunk(&frame, &mut host_writer).await.expect("chunk");
+    adapter
+        .handle_chunk(&frame, &mut host_writer)
+        .await
+        .expect("chunk");
     adapter.finish();
     drop(adapter);
     drop(tx);
