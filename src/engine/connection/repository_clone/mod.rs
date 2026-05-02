@@ -37,7 +37,7 @@ pub struct RepositoryCloneResult {
 ///
 /// Returns validation errors for missing paths and `ContainerError::ExecFailed`
 /// when either clone or branch verification fails in the container.
-pub fn clone_repository_into_workspace<C: ContainerExecClient>(
+pub fn clone_repository_into_workspace<C: ContainerExecClient + Sync>(
     runtime: &tokio::runtime::Handle,
     client: &C,
     request: &RepositoryCloneRequest<'_>,
@@ -54,7 +54,7 @@ pub fn clone_repository_into_workspace<C: ContainerExecClient>(
     })
 }
 
-fn run_clone<C: ContainerExecClient>(
+fn run_clone<C: ContainerExecClient + Sync>(
     runtime: &tokio::runtime::Handle,
     client: &C,
     request: &RepositoryCloneRequest<'_>,
@@ -72,7 +72,7 @@ fn run_clone<C: ContainerExecClient>(
     run_git_command(&runner, command, "git clone")
 }
 
-fn verify_checked_out_branch<C: ContainerExecClient>(
+fn verify_checked_out_branch<C: ContainerExecClient + Sync>(
     runtime: &tokio::runtime::Handle,
     client: &C,
     request: &RepositoryCloneRequest<'_>,
@@ -89,7 +89,7 @@ fn verify_checked_out_branch<C: ContainerExecClient>(
     run_git_command(&runner, command, "branch verification")
 }
 
-fn run_git_command<C: ContainerExecClient>(
+fn run_git_command<C: ContainerExecClient + Sync>(
     runner: &GitCommandRunner<'_, C>,
     command: Vec<String>,
     label: &str,
@@ -97,13 +97,13 @@ fn run_git_command<C: ContainerExecClient>(
     runner.run(command, label)
 }
 
-struct GitCommandRunner<'a, C: ContainerExecClient> {
+struct GitCommandRunner<'a, C: ContainerExecClient + Sync> {
     runtime: &'a tokio::runtime::Handle,
     client: &'a C,
     request: &'a RepositoryCloneRequest<'a>,
 }
 
-impl<'a, C: ContainerExecClient> GitCommandRunner<'a, C> {
+impl<'a, C: ContainerExecClient + Sync> GitCommandRunner<'a, C> {
     const fn new(
         runtime: &'a tokio::runtime::Handle,
         client: &'a C,
