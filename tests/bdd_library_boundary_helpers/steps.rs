@@ -192,10 +192,6 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
 }
 
 #[when("each stub orchestration function is called")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
 #[cfg(feature = "experimental")]
 fn when_stubs_called(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
     let config = AppConfig::default();
