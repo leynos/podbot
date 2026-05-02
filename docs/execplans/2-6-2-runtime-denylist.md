@@ -745,7 +745,13 @@ and report; they must not write to the working tree.
   `build_method_blocked_error` function returns
   `serde_json::Result<Vec<u8>>` so the production path can avoid
   `expect()` on the (practically infallible) serialization step.
-- [ ] Stage C `acp_frame` assembler and unit tests.
+- [x] (2026-05-02) Stage C `acp_frame` assembler and unit tests
+  (16 cases passing). The assembler is fully synchronous with no
+  channel or `tokio` dependency. `ingest_chunk` returns
+  `(Vec<FrameOutput>, Option<FallbackReason>)` so the adapter can act
+  on per-chunk fallback events. `finish` returns
+  `Option<FallbackReason>` so the adapter logs at most one
+  partial-frame drop per session.
 - [ ] Stage D `acp_runtime` adapter, sink task, and unit tests.
 - [ ] Stage E session-options wiring (`CapabilityPolicy` enum).
 - [ ] Stage F `rstest-bdd` behavioural feature and bindings.

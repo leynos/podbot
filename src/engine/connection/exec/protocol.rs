@@ -69,7 +69,7 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
-#[path = "acp_helpers.rs"]
+#[path = "acp_frame.rs"]
 mod acp_helpers;
 mod acp_policy;
 /// Host-side stdio handles used by the protocol byte proxy.
@@ -391,3 +391,5 @@ where
     })?;
     Ok(())
 }
+
+mod acp_frame;
