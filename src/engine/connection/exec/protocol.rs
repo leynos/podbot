@@ -32,6 +32,8 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
+#[path = "acp_frame.rs"]
+mod acp_frame;
 #[path = "acp_helpers.rs"]
 mod acp_helpers;
 #[path = "acp_policy.rs"]
