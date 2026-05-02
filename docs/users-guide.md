@@ -648,11 +648,11 @@ supported semver contract for embedders.
 
 ### Available functions
 
-| Function                                               | Description                                  |
-| ------------------------------------------------------ | -------------------------------------------- |
-| `podbot::api::exec(config, request)`                   | Execute a command in a running container     |
-| `podbot::api::ExecContext::connect(…)`                 | Reuse a runtime handle and engine connection |
-| `podbot::api::RunRequest::new(repo, branch)`           | Build the library-owned run request          |
+| Function                                               | Description                                   |
+| ------------------------------------------------------ | --------------------------------------------- |
+| `podbot::api::exec(config, request)`                   | Execute a command in a running container      |
+| `podbot::api::ExecContext::connect(…)`                 | Reuse a runtime handle and engine connection  |
+| `podbot::api::RunRequest::new(repo, branch)`           | Build the library-owned run request           |
 | `podbot::api::clone_repository_into_workspace(params)` | Clone `owner/name` into the sandbox workspace |
 
 ### Return type
