@@ -34,6 +34,8 @@ use tokio::time::timeout;
 
 #[path = "acp_helpers.rs"]
 mod acp_helpers;
+#[path = "acp_policy.rs"]
+mod acp_policy;
 
 use super::helpers::spawn_stdin_forwarding_task;
 use super::host_io::stdin_forwarding_disabled_for_tests;
