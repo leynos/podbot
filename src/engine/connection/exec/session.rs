@@ -7,6 +7,9 @@ use super::protocol::ProtocolSessionOptions;
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct ExecSessionOptions {
     disable_protocol_stdin_forwarding: bool,
+    /// When `true`, the first ACP `initialize` frame sent from host stdin is
+    /// rewritten to remove `terminal` and `fs` capabilities before being
+    /// forwarded to the container.
     rewrite_acp_initialize: bool,
 }
 

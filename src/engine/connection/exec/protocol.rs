@@ -66,6 +66,8 @@ const STDIN_BUFFER_CAPACITY: usize = 65_536;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct ProtocolSessionOptions {
     disable_stdin_forwarding: bool,
+    /// When `true`, the first ACP `initialize` frame is rewritten to remove
+    /// `terminal` and `fs` capabilities before being forwarded to the container.
     rewrite_acp_initialize: bool,
 }
 
@@ -77,6 +79,7 @@ impl ProtocolSessionOptions {
         }
     }
 
+    /// Disable or enable protocol stdin forwarding for this session.
     pub(super) const fn with_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
         self.disable_stdin_forwarding = disable;
         self
