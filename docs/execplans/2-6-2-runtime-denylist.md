@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: DRAFT — awaiting user approval before implementation.
+Status: IN PROGRESS — implementation under way (approved 2026-05-02).
 
 No `PLANS.md` file exists in this repository as of 2026-05-02, so this
 ExecPlan is the governing implementation document for this task.
@@ -723,10 +723,28 @@ and report; they must not write to the working tree.
   `Decision log` (sink-task model, `CapabilityPolicy` enum, three-module
   split, byte-identical forwarding, drop-partial-frame, error data
   shape, family matching with `/` boundary).
-- [ ] Stage A landing-zone confirmation.
-- [ ] Stage A.5 architecture spike (sink task vs single bidirectional
-  task) with a recorded decision.
-- [ ] Stage B pure `acp_policy` module and unit tests.
+- [x] (2026-05-02) Stage A landing-zone confirmation. Verified that
+  `attached.rs` is the only other module reading
+  `LogOutput::StdOut`/`Console`, but it serves the attached (TTY) mode
+  rather than `ExecMode::Protocol`. The protocol proxy seam in
+  `src/engine/connection/exec/protocol.rs` remains the only host-stdout
+  forwarder for protocol mode.
+- [x] (2026-05-02) Stage A.5 architecture spike completed. The
+  single-`select!` fold is conceptually cleaner (no channel, no
+  shutdown signalling) but requires restructuring both
+  `forward_host_stdin_to_exec_async` and `spawn_stdin_forwarding_task`
+  to interleave per-chunk reads inside the output loop, losing the
+  current shared cancellation seam. The dedicated sink task preserves
+  the existing host-stdin task structure (one-line change to send into
+  a channel), isolates cancellation under `STDIN_SETTLE_TIMEOUT`, and
+  makes `WriteCmd` ordering explicit. Decision: commit to sink-task
+  model.
+- [x] (2026-05-02) Stage B pure `acp_policy` module and unit tests
+  (25 cases passing). Module declared as a child of `protocol` via
+  `#[path]`, matching the 2.6.1 `acp_helpers` pattern. The
+  `build_method_blocked_error` function returns
+  `serde_json::Result<Vec<u8>>` so the production path can avoid
+  `expect()` on the (practically infallible) serialization step.
 - [ ] Stage C `acp_frame` assembler and unit tests.
 - [ ] Stage D `acp_runtime` adapter, sink task, and unit tests.
 - [ ] Stage E session-options wiring (`CapabilityPolicy` enum).
@@ -861,6 +879,30 @@ and report; they must not write to the working tree.
   to the sink design. A bounded spike costs little and prevents
   re-architecture later if the simpler shape fits inside the 400-line
   guidance.
+- Decision: keep the new ACP modules (`acp_policy`, and the upcoming
+  `acp_frame` and `acp_runtime`) as children of `protocol` via
+  `#[path]` attributes, matching the established 2.6.1 pattern for
+  `acp_helpers`, instead of promoting them to siblings under
+  `src/engine/connection/exec/mod.rs` as the original Logisphere
+  recommendation suggested.
+  Rationale: the existing `protocol_acp_tests.rs` test module relies on
+  `super::acp_helpers::...` paths inherited from the inline-`#[path]`
+  pattern. Promoting modules to `mod.rs` would break those imports
+  without a clear architectural payoff for this step. The runtime
+  enforcement seam still composes naturally as a child of `protocol`,
+  and future Corbusier conformance work can re-export the policy types
+  through a more public path when an actual cross-module consumer
+  arrives.
+- Decision: have `build_method_blocked_error` return
+  `serde_json::Result<Vec<u8>>` instead of `Vec<u8>`.
+  Rationale: AGENTS.md forbids `.expect()` in production code. The
+  serialization step is practically infallible because every component
+  of the synthesized payload is a finite, owned, non-recursive
+  [`serde_json::Value`], but propagating the error keeps the production
+  path panic-free. The runtime adapter handles the (theoretical) error
+  by logging it as a `warn!` and continuing without sending a
+  synthesized response, leaving the agent to time out — strictly
+  better than a hard panic in the proxy.
 
 ## Outcomes and retrospective
 
