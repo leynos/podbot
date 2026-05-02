@@ -40,7 +40,7 @@ fn default_denylist_blocks_terminal_and_fs_only(#[case] method: &str, #[case] ex
     assert_eq!(denylist.is_blocked(method), expected);
 }
 
-fn jsonrpc_request(id: Value, method: &str) -> Vec<u8> {
+fn jsonrpc_request(id: &Value, method: &str) -> Vec<u8> {
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -68,7 +68,7 @@ fn jsonrpc_notification(method: &str) -> Vec<u8> {
 #[case::string_id(serde_json::json!("call-7"))]
 #[case::null_id(serde_json::json!(null))]
 fn evaluate_returns_block_request_with_preserved_id(#[case] id: Value) {
-    let frame = jsonrpc_request(id.clone(), "terminal/create");
+    let frame = jsonrpc_request(&id, "terminal/create");
     let denylist = MethodDenylist::default_families();
 
     let decision = evaluate_agent_outbound_frame(&frame, &denylist);
@@ -102,7 +102,7 @@ fn evaluate_returns_block_notification_for_blocked_method_without_id() {
 
 #[test]
 fn evaluate_forwards_permitted_request() {
-    let frame = jsonrpc_request(serde_json::json!(1), "session/new");
+    let frame = jsonrpc_request(&serde_json::json!(1), "session/new");
     let denylist = MethodDenylist::default_families();
 
     assert_eq!(

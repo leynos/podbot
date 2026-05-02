@@ -371,50 +371,47 @@ through unchanged.
 
 #### 8.2.2. ACP runtime denylist enforcement contract
 
-Step 2.6.2 layers a runtime denylist on top of the initialization-time
-mask. The implementation is split into four sibling modules under
+Step 2.6.2 layers a runtime denylist on top of the initialization-time mask.
+The implementation is split into four sibling modules under
 `src/engine/connection/exec/`:
 
 - `acp_helpers.rs` (Step 2.6.1) owns first-frame `initialize` masking
   and the shared `split_frame_line_ending` and
-  `read_and_mask_initial_acp_frame` helpers; it is unchanged by the
-  runtime work apart from the helper extraction.
+  `read_and_mask_initial_acp_frame` helpers; it is unchanged by the runtime
+  work apart from the helper extraction.
 - `acp_policy.rs` is purely synchronous and depends on neither `tokio`
   nor `tracing`. It exports the `MethodFamily`, `MethodDenylist`,
   `FrameDecision`, `evaluate_agent_outbound_frame`, and
   `build_method_blocked_error` types and functions.
 - `acp_frame.rs` is the streaming newline-bounded assembler with the
   128 kibibyte `MAX_RUNTIME_FRAME_BYTES` ceiling. It returns
-  `(Vec<FrameOutput>, Option<FallbackReason>)` per chunk so the adapter
-  can act on per-chunk fallback events. Permitted frames are returned
-  byte-identical; the assembler never re-serializes them.
+  `(Vec<FrameOutput>, Option<FallbackReason>)` per chunk so the adapter can act
+  on per-chunk fallback events. Permitted frames are returned byte-identical;
+  the assembler never re-serializes them.
 - `acp_runtime.rs` is the only ACP module that owns
   `tokio::sync::mpsc` and `tracing`. It exposes the bounded sink task
-  `run_container_stdin_sink` (capacity `SINK_CHANNEL_CAPACITY = 16`),
-  the `WriteCmd` enum (`Forward`, `Synthesised`), and the
-  `OutboundPolicyAdapter` that translates assembler output into host
-  stdout writes (permitted) or sink-channel sends (synthesized error
-  responses) plus `tracing::warn!` denial lines.
+  `run_container_stdin_sink` (capacity `SINK_CHANNEL_CAPACITY = 16`), the
+  `WriteCmd` enum (`Forward`, `Synthesised`), and the `OutboundPolicyAdapter`
+  that translates assembler output into host stdout writes (permitted) or
+  sink-channel sends (synthesized error responses) plus `tracing::warn!` denial
+  lines.
 
-Selection between the byte-transparent and enforcement paths happens
-through `CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` on
-`session::ExecSessionOptions`. `Disabled` is the default and matches
-the original `ExecMode::Protocol` contract. `MaskOnly` enables only
-the first-frame rewrite. `MaskAndDeny` activates the runtime
-adapter, the sink task, and the channel-based stdin forwarder.
+Selection between the byte-transparent and enforcement paths happens through
+`CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` on
+`session::ExecSessionOptions`. `Disabled` is the default and matches the
+original `ExecMode::Protocol` contract. `MaskOnly` enables only the first-frame
+rewrite. `MaskAndDeny` activates the runtime adapter, the sink task, and the
+channel-based stdin forwarder.
 
-When tests need to drive the runtime adapter directly, they should
-mirror the pattern in `acp_runtime_tests.rs` and
-`acp_runtime_bdd_tests.rs`: build the assembler with
-`MethodDenylist::default_families()`, wire it to a bounded
-`tokio::sync::mpsc` channel, run scenarios with a
-`RecordingWriter`-style host stdout double, and drain the channel
-after dropping all senders to assert both directions
-(byte-identical permitted forwards on host stdout and
-synthesized error frames on container stdin). Synthesized JSON-RPC
-error responses use code `-32001` and the
-`data.reason = "podbot_capability_policy"` discriminator; assertions
-should compare on parsed structure, not on byte equality, since key
+When tests need to drive the runtime adapter directly, they should mirror the
+pattern in `acp_runtime_tests.rs` and `acp_runtime_bdd_tests.rs`: build the
+assembler with `MethodDenylist::default_families()`, wire it to a bounded
+`tokio::sync::mpsc` channel, run scenarios with a `RecordingWriter`-style host
+stdout double, and drain the channel after dropping all senders to assert both
+directions (byte-identical permitted forwards on host stdout and synthesized
+error frames on container stdin). Synthesized JSON-RPC error responses use code
+`-32001` and the `data.reason = "podbot_capability_policy"` discriminator;
+assertions should compare on parsed structure, not on byte equality, since key
 ordering inside the JSON is not stable.
 
 ### 8.3. Parameterized tests

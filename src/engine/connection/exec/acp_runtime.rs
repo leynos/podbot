@@ -40,7 +40,7 @@
 use std::io;
 use std::pin::Pin;
 
-use ortho_config::serde_json::Value;
+use ortho_config::serde_json::{self, Value};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 
@@ -79,43 +79,58 @@ pub(super) async fn run_container_stdin_sink(
     let mut input_alive = true;
 
     while let Some(command) = commands.recv().await {
-        let (WriteCmd::Forward(bytes) | WriteCmd::Synthesised(bytes)) = command;
+        let bytes = command_bytes(command);
         if input_alive {
             input_alive = write_command_bytes(&mut input, &bytes).await?;
         }
     }
 
-    if input_alive {
-        if let Err(error) = input.shutdown().await {
-            tracing::warn!(%error, "container stdin shutdown failed");
-        }
-    }
-
+    finalize_sink_writer(&mut input, input_alive).await;
     Ok(())
+}
+
+fn command_bytes(command: WriteCmd) -> Vec<u8> {
+    match command {
+        WriteCmd::Forward(bytes) | WriteCmd::Synthesised(bytes) => bytes,
+    }
+}
+
+async fn finalize_sink_writer(input: &mut Pin<Box<dyn AsyncWrite + Send>>, input_alive: bool) {
+    if !input_alive {
+        return;
+    }
+    let outcome = input.shutdown().await;
+    log_shutdown_outcome(outcome);
+}
+
+fn log_shutdown_outcome(outcome: io::Result<()>) {
+    if let Err(error) = outcome {
+        tracing::warn!(%error, "container stdin shutdown failed");
+    }
 }
 
 async fn write_command_bytes(
     input: &mut Pin<Box<dyn AsyncWrite + Send>>,
     bytes: &[u8],
 ) -> io::Result<bool> {
-    match input.write_all(bytes).await {
-        Ok(()) => match input.flush().await {
-            Ok(()) => Ok(true),
-            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => {
-                report_broken_pipe(error);
-                Ok(false)
-            }
-            Err(error) => Err(error),
-        },
+    if !classify_pipe_outcome(input.write_all(bytes).await)? {
+        return Ok(false);
+    }
+    classify_pipe_outcome(input.flush().await)
+}
+
+fn classify_pipe_outcome(result: io::Result<()>) -> io::Result<bool> {
+    match result {
+        Ok(()) => Ok(true),
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => {
-            report_broken_pipe(error);
+            report_broken_pipe(&error);
             Ok(false)
         }
         Err(error) => Err(error),
     }
 }
 
-fn report_broken_pipe(error: io::Error) {
+fn report_broken_pipe(error: &io::Error) {
     tracing::warn!(%error, "container stdin closed; subsequent writes dropped");
 }
 
@@ -200,34 +215,44 @@ impl OutboundPolicyAdapter {
             }
             FrameDecision::BlockRequest { id, method } => {
                 self.log_denial(&method, &id, "ACP blocked request denied");
-                self.queue_synthesized_error(&id, &method, line_ending).await;
+                self.queue_synthesized_error(&id, &method, line_ending)
+                    .await;
             }
         }
     }
 
     async fn queue_synthesized_error(&self, id: &Value, method: &str, line_ending: &[u8]) {
         match build_method_blocked_error(id, method, line_ending) {
-            Ok(bytes) => {
-                if let Err(error) = self.sender.send(WriteCmd::Synthesised(bytes)).await {
-                    tracing::warn!(
-                        target = "podbot::acp::policy",
-                        container_id = %self.container_id,
-                        method = %method,
-                        ?error,
-                        "ACP denial response could not be queued; sink already closed",
-                    );
-                }
-            }
-            Err(error) => {
-                tracing::warn!(
-                    target = "podbot::acp::policy",
-                    container_id = %self.container_id,
-                    method = %method,
-                    %error,
-                    "ACP denial response failed to serialize; agent will time out",
-                );
-            }
+            Ok(bytes) => self.send_synthesized_or_log(bytes, method).await,
+            Err(error) => self.log_synthesis_failure(method, &error),
         }
+    }
+
+    async fn send_synthesized_or_log(&self, bytes: Vec<u8>, method: &str) {
+        let outcome = self.sender.send(WriteCmd::Synthesised(bytes)).await;
+        if let Err(error) = outcome {
+            self.log_send_failure(method, &error);
+        }
+    }
+
+    fn log_send_failure(&self, method: &str, error: &mpsc::error::SendError<WriteCmd>) {
+        tracing::warn!(
+            target = "podbot::acp::policy",
+            container_id = %self.container_id,
+            method = %method,
+            ?error,
+            "ACP denial response could not be queued; sink already closed",
+        );
+    }
+
+    fn log_synthesis_failure(&self, method: &str, error: &serde_json::Error) {
+        tracing::warn!(
+            target = "podbot::acp::policy",
+            container_id = %self.container_id,
+            method = %method,
+            %error,
+            "ACP denial response failed to serialize; agent will time out",
+        );
     }
 
     fn log_denial(&self, method: &str, id: &Value, message: &'static str) {
@@ -245,23 +270,33 @@ impl OutboundPolicyAdapter {
             return;
         }
         self.fallback_logged = true;
+        self.emit_fallback_warning(reason);
+    }
+
+    fn emit_fallback_warning(&self, reason: FallbackReason) {
         match reason {
-            FallbackReason::BufferOverflow => {
-                tracing::warn!(
-                    target = "podbot::acp::policy",
-                    container_id = %self.container_id,
-                    "ACP runtime buffer overflowed; remaining bytes forwarded raw",
-                );
-            }
+            FallbackReason::BufferOverflow => self.warn_buffer_overflow(),
             FallbackReason::DroppedPartialFrame { byte_count } => {
-                tracing::warn!(
-                    target = "podbot::acp::policy",
-                    container_id = %self.container_id,
-                    byte_count,
-                    "ACP runtime dropped unauthorized partial frame at end of stream",
-                );
+                self.warn_partial_frame_drop(byte_count);
             }
         }
+    }
+
+    fn warn_buffer_overflow(&self) {
+        tracing::warn!(
+            target = "podbot::acp::policy",
+            container_id = %self.container_id,
+            "ACP runtime buffer overflowed; remaining bytes forwarded raw",
+        );
+    }
+
+    fn warn_partial_frame_drop(&self, byte_count: usize) {
+        tracing::warn!(
+            target = "podbot::acp::policy",
+            container_id = %self.container_id,
+            byte_count,
+            "ACP runtime dropped unauthorized partial frame at end of stream",
+        );
     }
 }
 

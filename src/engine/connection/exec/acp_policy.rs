@@ -46,7 +46,9 @@ impl MethodFamily {
 /// so the runtime denylist closes the symmetric door on agent-emitted method
 /// calls in those families.
 pub(crate) const DEFAULT_BLOCKED_FAMILIES: &[MethodFamily] = &[
-    MethodFamily { prefix: "terminal/" },
+    MethodFamily {
+        prefix: "terminal/",
+    },
     MethodFamily { prefix: "fs/" },
 ];
 

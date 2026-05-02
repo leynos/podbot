@@ -43,7 +43,9 @@ mod acp_runtime;
 
 use self::acp_frame::OutboundFrameAssembler;
 use self::acp_policy::MethodDenylist;
-use self::acp_runtime::{OutboundPolicyAdapter, SINK_CHANNEL_CAPACITY, WriteCmd, run_container_stdin_sink};
+use self::acp_runtime::{
+    OutboundPolicyAdapter, SINK_CHANNEL_CAPACITY, WriteCmd, run_container_stdin_sink,
+};
 use super::helpers::spawn_stdin_forwarding_task;
 use super::host_io::stdin_forwarding_disabled_for_tests;
 use super::session::CapabilityPolicy;
@@ -252,14 +254,13 @@ where
     let assembler = OutboundFrameAssembler::new(MethodDenylist::default_families());
     let mut adapter = OutboundPolicyAdapter::new(assembler, sink_tx, container_id_owned);
 
-    let output_result = run_output_loop_with_adapter(
-        request.container_id(),
-        &mut output,
-        &mut adapter,
-        &mut host_stdout,
-        &mut host_stderr,
-    )
-    .await;
+    let mut adapter_io = AdapterOutputIo {
+        adapter: &mut adapter,
+        host_stdout: &mut host_stdout,
+        host_stderr: &mut host_stderr,
+    };
+    let output_result =
+        run_output_loop_with_adapter(request.container_id(), &mut output, &mut adapter_io).await;
     adapter.finish();
     drop(adapter);
 
@@ -296,8 +297,7 @@ where
 {
     use tokio::io::AsyncReadExt;
 
-    let mut buffered_stdin =
-        tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
+    let mut buffered_stdin = tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
 
     if rewrite_acp_initialize {
         let bytes = acp_helpers::read_and_mask_initial_acp_frame(&mut buffered_stdin).await?;
@@ -323,12 +323,16 @@ where
     Ok(())
 }
 
+struct AdapterOutputIo<'a, HostStdout, HostStderr> {
+    adapter: &'a mut OutboundPolicyAdapter,
+    host_stdout: &'a mut HostStdout,
+    host_stderr: &'a mut HostStderr,
+}
+
 async fn run_output_loop_with_adapter<HostStdout, HostStderr>(
     container_id: &str,
     output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
-    adapter: &mut OutboundPolicyAdapter,
-    host_stdout: &mut HostStdout,
-    host_stderr: &mut HostStderr,
+    io: &mut AdapterOutputIo<'_, HostStdout, HostStderr>,
 ) -> Result<(), PodbotError>
 where
     HostStdout: AsyncWrite + Unpin,
@@ -339,15 +343,19 @@ where
             .map_err(|error| exec_failed(container_id, format!("exec stream failed: {error}")))?;
         match chunk {
             LogOutput::StdOut { message } | LogOutput::Console { message } => {
-                adapter
-                    .handle_chunk(message.as_ref(), host_stdout)
+                io.adapter
+                    .handle_chunk(message.as_ref(), io.host_stdout)
                     .await
                     .map_err(|error| {
-                        exec_failed(container_id, format!("failed writing stdout output: {error}"))
+                        exec_failed(
+                            container_id,
+                            format!("failed writing stdout output: {error}"),
+                        )
                     })?;
             }
             LogOutput::StdErr { message } => {
-                write_output_chunk(container_id, host_stderr, message.as_ref(), "stderr").await?;
+                write_output_chunk(container_id, io.host_stderr, message.as_ref(), "stderr")
+                    .await?;
             }
             LogOutput::StdIn { .. } => {}
         }

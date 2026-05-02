@@ -12,9 +12,7 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 use tokio::io::AsyncWrite;
 use tokio::sync::mpsc;
 
-use super::{
-    OutboundFrameAssembler, OutboundPolicyAdapter, SINK_CHANNEL_CAPACITY, WriteCmd,
-};
+use super::{OutboundFrameAssembler, OutboundPolicyAdapter, SINK_CHANNEL_CAPACITY, WriteCmd};
 use crate::engine::connection::exec::protocol::acp_policy::MethodDenylist;
 
 type StepResult<T> = Result<T, String>;
@@ -39,13 +37,13 @@ impl AsyncWrite for RecordingHostStdout {
         _cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        match self.bytes.lock() {
-            Ok(mut guard) => {
+        self.bytes.lock().map_or_else(
+            |_| Poll::Ready(Err(io::Error::other("recording writer mutex poisoned"))),
+            |mut guard| {
                 guard.extend_from_slice(buf);
                 Poll::Ready(Ok(buf.len()))
-            }
-            Err(_) => Poll::Ready(Err(io::Error::other("recording writer mutex poisoned"))),
-        }
+            },
+        )
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -103,7 +101,11 @@ fn blocked_notification_frame(method: &str) -> Vec<u8> {
     bytes
 }
 
-fn build_runtime() -> (OutboundPolicyAdapter, mpsc::Receiver<WriteCmd>, RecordingHostStdout) {
+fn build_runtime() -> (
+    OutboundPolicyAdapter,
+    mpsc::Receiver<WriteCmd>,
+    RecordingHostStdout,
+) {
     let (sender, receiver) = mpsc::channel::<WriteCmd>(SINK_CHANNEL_CAPACITY);
     let assembler = OutboundFrameAssembler::new(MethodDenylist::default_families());
     let adapter = OutboundPolicyAdapter::new(assembler, sender, "container-bdd");
@@ -119,17 +121,13 @@ async fn drain_sink(mut receiver: mpsc::Receiver<WriteCmd>) -> Vec<WriteCmd> {
     commands
 }
 
-fn run_runtime<F>(
-    state: &DenylistState,
-    chunks: Vec<Vec<u8>>,
-    finalize: F,
-) -> StepResult<()>
+fn run_runtime<F>(state: &DenylistState, chunks: Vec<Vec<u8>>, finalize: F) -> StepResult<()>
 where
     F: FnOnce(),
 {
     finalize();
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|err| format!("could not build runtime: {err}"))?;
+    let runtime =
+        tokio::runtime::Runtime::new().map_err(|err| format!("could not build runtime: {err}"))?;
     let (commands, host_bytes) = runtime.block_on(async move {
         let (mut adapter, receiver, host_stdout) = build_runtime();
         let host_stdout_handle = host_stdout.clone();
@@ -179,7 +177,7 @@ fn emit_blocked_notification(denylist_state: &DenylistState) -> StepResult<()> {
 #[when("the agent emits a blocked frame split across two output chunks")]
 fn emit_blocked_split(denylist_state: &DenylistState) -> StepResult<()> {
     let frame = blocked_request_frame("terminal/create", 2);
-    let split_at = frame.len() / 2;
+    let split_at = frame.len().div_euclid(2);
     let first = frame
         .get(..split_at)
         .ok_or_else(|| String::from("split prefix missing"))?
