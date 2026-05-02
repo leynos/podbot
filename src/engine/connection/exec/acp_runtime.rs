@@ -56,7 +56,7 @@ use super::acp_policy::{FrameDecision, build_method_blocked_error};
 pub(super) const SINK_CHANNEL_CAPACITY: usize = 16;
 
 /// One write destined for container stdin.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum WriteCmd {
     /// Bytes forwarded from host stdin (the operator's keystrokes or the
     /// hosting client's protocol output).
@@ -268,3 +268,7 @@ impl OutboundPolicyAdapter {
 #[cfg(test)]
 #[path = "acp_runtime_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "acp_runtime_bdd_tests.rs"]
+mod bdd_tests;

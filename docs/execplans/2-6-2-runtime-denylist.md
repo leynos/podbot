@@ -763,7 +763,13 @@ and report; they must not write to the working tree.
   splits into `run_session_with_runtime_enforcement` (channel-based
   sink path) and `run_session_without_runtime_enforcement` (existing
   byte-transparent path). All 448 workspace unit tests pass.
-- [ ] Stage F `rstest-bdd` behavioural feature and bindings.
+- [x] (2026-05-02) Stage F `rstest-bdd` behavioural feature
+  (`tests/features/acp_method_denylist.feature`) and bindings
+  (`src/engine/connection/exec/acp_runtime_bdd_tests.rs`). 5 scenarios
+  exercise blocked requests, permitted requests, blocked notifications,
+  multi-chunk reassembly, and blocked-then-permitted ordering, all
+  asserting both host stdout (byte-identical permitted forwards) and
+  container stdin (synthesized error responses with preserved id).
 - [ ] Stage G framer parameterized coverage.
 - [ ] Stage H documentation updates.
 - [ ] Stage I roadmap update and full gate stack.
