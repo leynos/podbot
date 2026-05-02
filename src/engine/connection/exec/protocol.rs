@@ -32,6 +32,9 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
+#[path = "acp_helpers.rs"]
+mod acp_helpers;
+
 use super::helpers::spawn_stdin_forwarding_task;
 use super::host_io::stdin_forwarding_disabled_for_tests;
 use super::{ExecRequest, exec_failed};
@@ -63,17 +66,25 @@ const STDIN_BUFFER_CAPACITY: usize = 65_536;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct ProtocolSessionOptions {
     disable_stdin_forwarding: bool,
+    rewrite_acp_initialize: bool,
 }
 
 impl ProtocolSessionOptions {
     pub(super) const fn new() -> Self {
         Self {
             disable_stdin_forwarding: false,
+            rewrite_acp_initialize: false,
         }
     }
 
     pub(super) const fn with_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
         self.disable_stdin_forwarding = disable;
+        self
+    }
+
+    /// Enable or disable Agentic Control Protocol (ACP) initialisation rewriting for this protocol session.
+    pub(super) const fn with_acp_initialize_rewrite_enabled(mut self, enable: bool) -> Self {
+        self.rewrite_acp_initialize = enable;
         self
     }
 }
@@ -163,8 +174,11 @@ where
         stderr: mut host_stderr,
         options,
     } = stdio;
+    let rewrite_acp_initialize = options.rewrite_acp_initialize;
     let stdin_task =
-        spawn_stdin_forwarding_task(host_stdin, input, forward_host_stdin_to_exec_async);
+        spawn_stdin_forwarding_task(host_stdin, input, move |stdin_reader, exec_input| {
+            forward_host_stdin_to_exec_async(stdin_reader, exec_input, rewrite_acp_initialize)
+        });
     let output_result = run_output_loop_async(
         request.container_id(),
         &mut output,
@@ -233,15 +247,25 @@ fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
 async fn forward_host_stdin_to_exec_async<HostStdin>(
     host_stdin: HostStdin,
     mut input: Pin<Box<dyn AsyncWrite + Send>>,
+    rewrite_acp_initialize: bool,
 ) -> io::Result<()>
 where
     HostStdin: AsyncRead + Unpin,
 {
     let mut buffered_stdin = tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
+
+    if rewrite_acp_initialize {
+        acp_helpers::forward_initial_acp_frame_async(&mut buffered_stdin, &mut input).await?;
+    }
     tokio::io::copy(&mut buffered_stdin, &mut input).await?;
+
     input.flush().await?;
     input.shutdown().await
 }
+
+#[cfg(test)]
+#[path = "protocol_acp_tests.rs"]
+mod acp_tests;
 
 async fn run_output_loop_async<HostStdout, HostStderr>(
     container_id: &str,

@@ -212,6 +212,13 @@ ACP masking is an implementation requirement, not a documentation preference:
 
 - Podbot must parse the ACP initialization handshake and remove blocked
   capability families before forwarding capability data to the hosted agent.
+- The current implementation performs that masking by reading the first
+  newline-delimited ACP frame from host stdin, rewriting an `initialize`
+  request when `params.clientCapabilities` advertises `terminal` or `fs`, and
+  then resuming the normal raw byte proxy for the rest of the session.
+- If the first protocol frame is malformed or not an ACP `initialize` request,
+  Podbot forwards it unchanged rather than guessing another protocol's
+  semantics.
 - Podbot must maintain a runtime denylist for blocked ACP methods and return a
   protocol error if those methods are attempted later in the session.
 - The delegation override must be explicit, disabled by default, and surfaced

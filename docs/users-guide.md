@@ -63,6 +63,15 @@ This subcommand is temporarily unavailable in the current release. If you run
 session. Use `podbot run` or the library exec API for now; the release notes
 will call out when hosted mode becomes available.
 
+When hosted mode uses Agentic Control Protocol (ACP), podbot masks
+`terminal/*` and `fs/*` capabilities from the initial ACP `initialize`
+request before forwarding it to the sandboxed agent. This masking currently
+applies only to the protocol/library path used by hosted mode and ACP until
+`podbot host` is implemented. The scope and behaviour may change when
+`podbot host` ships, but for now it keeps the default trust boundary aligned
+with the container sandbox even when the hosting client advertises broader ACP
+support.
+
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |
 | `--agent`      | No       | Config/defaults | Agent type: `claude`, `codex`, or `custom` |
@@ -125,6 +134,10 @@ Execution behaviour:
   mode uses bounded buffering (64 KiB buffers for stdin forwarding and output
   chunks) so hosted protocols can apply backpressure; if the host stdout writer
   blocks, the proxy yields and backpressure propagates to the container.
+  `ExecMode::Protocol` preserves raw byte-forwards on the default path, so
+  podbot does not alter the first `initialize` frame there and forwards it
+  unchanged. ACP initialize-request rewriting occurs only on the hosted ACP
+  path for opt-in hosting; it is not a general `ExecMode::Protocol` guarantee.
 - TTY allocation is enabled only when attached mode is selected and both local
   stdin and stdout are terminals.
 - When TTY is enabled, podbot sends an initial resize to the daemon. On Unix
