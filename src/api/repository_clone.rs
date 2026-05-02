@@ -137,7 +137,7 @@ pub struct CloneRepositoryParams<'a, C: ContainerExecClient> {
 /// Returns `ContainerError::ExecFailed` when the clone or verification command
 /// exits with a non-zero status, and returns validation errors when required
 /// values are missing.
-pub fn clone_repository_into_workspace<C: ContainerExecClient>(
+pub fn clone_repository_into_workspace<C: ContainerExecClient + Sync>(
     params: &CloneRepositoryParams<'_, C>,
 ) -> PodbotResult<RepositoryCloneResult> {
     let request = RepositoryCloneRequest {

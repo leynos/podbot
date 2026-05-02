@@ -136,7 +136,7 @@ pub(super) const HEALTH_CHECK_TIMEOUT_SECS: u64 = 10;
 
 /// Default socket path for Unix platforms.
 #[cfg(unix)]
-const DEFAULT_SOCKET: &str = "npipe:////./pipe/docker_engine";
+const DEFAULT_SOCKET: &str = "unix:///var/run/docker.sock";
 
 /// Default socket path for Windows platforms.
 #[cfg(windows)]
