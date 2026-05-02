@@ -2,12 +2,54 @@
 
 use super::protocol::ProtocolSessionOptions;
 
+/// Capability-enforcement policy for Agentic Control Protocol (ACP) hosting.
+///
+/// `Disabled` is the default and matches the original
+/// [`super::ExecMode::Protocol`] contract: a byte-transparent stdin/stdout
+/// proxy. `MaskOnly` rewrites the first ACP `initialize` frame to strip
+/// `terminal/*` and `fs/*` capability advertisements but otherwise forwards
+/// every later frame unchanged. `MaskAndDeny` additionally enforces a
+/// runtime denylist on agent-emitted JSON-RPC frames, refusing
+/// `terminal/*` and `fs/*` requests with a synthesized JSON-RPC error
+/// response and recording each denial on stderr.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "MaskOnly and MaskAndDeny remain unused until podbot host wires the opt-in"
+    )
+)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum CapabilityPolicy {
+    /// Pure byte proxy; no ACP-specific behaviour.
+    #[default]
+    Disabled,
+    /// Init-time capability masking only (Step 2.6.1 behaviour).
+    MaskOnly,
+    /// Init-time masking plus runtime method denylist (Step 2.6.2 behaviour).
+    MaskAndDeny,
+}
+
+impl CapabilityPolicy {
+    /// Return `true` when the policy should rewrite the first ACP
+    /// `initialize` frame to mask blocked capabilities.
+    pub(crate) const fn rewrites_initialize(self) -> bool {
+        matches!(self, Self::MaskOnly | Self::MaskAndDeny)
+    }
+
+    /// Return `true` when the policy should enforce the runtime
+    /// method denylist on agent-emitted frames.
+    pub(crate) const fn allows_runtime_enforcement(self) -> bool {
+        matches!(self, Self::MaskAndDeny)
+    }
+}
+
 /// Internal exec-session knobs used by test harnesses that need deterministic
 /// stream behaviour.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct ExecSessionOptions {
     disable_protocol_stdin_forwarding: bool,
-    rewrite_acp_initialize: bool,
+    capability_policy: CapabilityPolicy,
 }
 
 impl ExecSessionOptions {
@@ -16,7 +58,7 @@ impl ExecSessionOptions {
     pub const fn new() -> Self {
         Self {
             disable_protocol_stdin_forwarding: false,
-            rewrite_acp_initialize: false,
+            capability_policy: CapabilityPolicy::Disabled,
         }
     }
 
@@ -29,7 +71,7 @@ impl ExecSessionOptions {
         self
     }
 
-    /// Enable ACP initialization rewriting for protocol-mode sessions.
+    /// Select the [`CapabilityPolicy`] for this protocol-mode session.
     #[cfg_attr(
         not(test),
         expect(
@@ -38,8 +80,8 @@ impl ExecSessionOptions {
         )
     )]
     #[must_use]
-    pub const fn with_acp_initialize_rewrite_enabled(mut self, enable: bool) -> Self {
-        self.rewrite_acp_initialize = enable;
+    pub const fn with_capability_policy(mut self, policy: CapabilityPolicy) -> Self {
+        self.capability_policy = policy;
         self
     }
 }
@@ -49,7 +91,7 @@ pub(super) const fn protocol_session_options(
 ) -> ProtocolSessionOptions {
     ProtocolSessionOptions::new()
         .with_stdin_forwarding_disabled(options.disable_protocol_stdin_forwarding)
-        .with_acp_initialize_rewrite_enabled(options.rewrite_acp_initialize)
+        .with_capability_policy(options.capability_policy)
 }
 
 #[cfg(test)]
@@ -63,10 +105,7 @@ mod tests {
             !opts.disable_protocol_stdin_forwarding,
             "stdin forwarding should be enabled by default",
         );
-        assert!(
-            !opts.rewrite_acp_initialize,
-            "ACP initialize rewriting should be opt-in",
-        );
+        assert_eq!(opts.capability_policy, CapabilityPolicy::Disabled);
     }
 
     #[test]
@@ -111,12 +150,36 @@ mod tests {
     }
 
     #[test]
-    fn protocol_session_options_reflects_acp_rewrite_flag() {
-        let opts = ExecSessionOptions::new().with_acp_initialize_rewrite_enabled(true);
+    fn protocol_session_options_reflects_mask_only_policy() {
+        let opts = ExecSessionOptions::new().with_capability_policy(CapabilityPolicy::MaskOnly);
 
         assert_eq!(
             protocol_session_options(opts),
-            ProtocolSessionOptions::new().with_acp_initialize_rewrite_enabled(true),
+            ProtocolSessionOptions::new().with_capability_policy(CapabilityPolicy::MaskOnly),
         );
+    }
+
+    #[test]
+    fn protocol_session_options_reflects_mask_and_deny_policy() {
+        let opts = ExecSessionOptions::new().with_capability_policy(CapabilityPolicy::MaskAndDeny);
+
+        assert_eq!(
+            protocol_session_options(opts),
+            ProtocolSessionOptions::new().with_capability_policy(CapabilityPolicy::MaskAndDeny),
+        );
+    }
+
+    #[test]
+    fn capability_policy_rewrites_initialize_for_masked_modes() {
+        assert!(!CapabilityPolicy::Disabled.rewrites_initialize());
+        assert!(CapabilityPolicy::MaskOnly.rewrites_initialize());
+        assert!(CapabilityPolicy::MaskAndDeny.rewrites_initialize());
+    }
+
+    #[test]
+    fn capability_policy_runtime_enforcement_only_for_mask_and_deny() {
+        assert!(!CapabilityPolicy::Disabled.allows_runtime_enforcement());
+        assert!(!CapabilityPolicy::MaskOnly.allows_runtime_enforcement());
+        assert!(CapabilityPolicy::MaskAndDeny.allows_runtime_enforcement());
     }
 }

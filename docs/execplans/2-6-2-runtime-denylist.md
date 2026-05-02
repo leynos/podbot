@@ -752,8 +752,17 @@ and report; they must not write to the working tree.
   on per-chunk fallback events. `finish` returns
   `Option<FallbackReason>` so the adapter logs at most one
   partial-frame drop per session.
-- [ ] Stage D `acp_runtime` adapter, sink task, and unit tests.
-- [ ] Stage E session-options wiring (`CapabilityPolicy` enum).
+- [x] (2026-05-02) Stage D `acp_runtime` adapter, sink task, and unit
+  tests (10 cases passing). The `WriteCmd` enum was simplified to two
+  variants (`Forward`, `Synthesised`); the sink terminates on channel
+  close instead of an explicit `Shutdown` command, eliminating a race
+  where a misordered `Shutdown` could drop queued items.
+- [x] (2026-05-02) Stage E session-options wiring (`CapabilityPolicy`
+  enum). `ProtocolSessionOptions::with_capability_policy` replaces
+  `with_acp_initialize_rewrite_enabled` and the protocol session
+  splits into `run_session_with_runtime_enforcement` (channel-based
+  sink path) and `run_session_without_runtime_enforcement` (existing
+  byte-transparent path). All 448 workspace unit tests pass.
 - [ ] Stage F `rstest-bdd` behavioural feature and bindings.
 - [ ] Stage G framer parameterized coverage.
 - [ ] Stage H documentation updates.
@@ -899,6 +908,15 @@ and report; they must not write to the working tree.
   and future Corbusier conformance work can re-export the policy types
   through a more public path when an actual cross-module consumer
   arrives.
+- Decision: simplify `WriteCmd` to two variants (`Forward`,
+  `Synthesised`) and terminate the sink purely on channel close,
+  removing the proposed `WriteCmd::Shutdown` variant.
+  Rationale: with explicit `Shutdown`, a misordered send (Shutdown
+  before pending Synthesised) would drop queued items. Channel-close
+  is unconditional: every queued command flushes before the sink sees
+  the terminator. The protocol coordinator drops every sender after
+  the output stream drains, so the ordering invariant from the
+  Logisphere review still holds with one fewer moving part.
 - Decision: have `build_method_blocked_error` return
   `serde_json::Result<Vec<u8>>` instead of `Vec<u8>`.
   Rationale: AGENTS.md forbids `.expect()` in production code. The

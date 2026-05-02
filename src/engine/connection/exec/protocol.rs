@@ -37,10 +37,16 @@ mod acp_frame;
 #[path = "acp_helpers.rs"]
 mod acp_helpers;
 #[path = "acp_policy.rs"]
-mod acp_policy;
+pub(super) mod acp_policy;
+#[path = "acp_runtime.rs"]
+mod acp_runtime;
 
+use self::acp_frame::OutboundFrameAssembler;
+use self::acp_policy::MethodDenylist;
+use self::acp_runtime::{OutboundPolicyAdapter, SINK_CHANNEL_CAPACITY, WriteCmd, run_container_stdin_sink};
 use super::helpers::spawn_stdin_forwarding_task;
 use super::host_io::stdin_forwarding_disabled_for_tests;
+use super::session::CapabilityPolicy;
 use super::{ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
@@ -70,14 +76,14 @@ const STDIN_BUFFER_CAPACITY: usize = 65_536;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct ProtocolSessionOptions {
     disable_stdin_forwarding: bool,
-    rewrite_acp_initialize: bool,
+    capability_policy: CapabilityPolicy,
 }
 
 impl ProtocolSessionOptions {
     pub(super) const fn new() -> Self {
         Self {
             disable_stdin_forwarding: false,
-            rewrite_acp_initialize: false,
+            capability_policy: CapabilityPolicy::Disabled,
         }
     }
 
@@ -86,9 +92,11 @@ impl ProtocolSessionOptions {
         self
     }
 
-    /// Enable or disable Agentic Control Protocol (ACP) initialisation rewriting for this protocol session.
-    pub(super) const fn with_acp_initialize_rewrite_enabled(mut self, enable: bool) -> Self {
-        self.rewrite_acp_initialize = enable;
+    /// Select the [`CapabilityPolicy`] that governs Agentic Control Protocol
+    /// (ACP) capability masking and runtime denylist enforcement for this
+    /// protocol session.
+    pub(super) const fn with_capability_policy(mut self, policy: CapabilityPolicy) -> Self {
+        self.capability_policy = policy;
         self
     }
 }
@@ -163,6 +171,24 @@ fn protocol_host_stdin(options: ProtocolSessionOptions) -> Pin<Box<dyn AsyncRead
 /// Run a protocol exec session using caller-supplied host IO handles.
 pub(super) async fn run_protocol_session_with_io_async<HostStdin, HostStdout, HostStderr>(
     request: &ExecRequest,
+    output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    input: Pin<Box<dyn AsyncWrite + Send>>,
+    stdio: ProtocolProxyIo<HostStdin, HostStdout, HostStderr>,
+) -> Result<(), PodbotError>
+where
+    HostStdin: AsyncRead + Send + Unpin + 'static,
+    HostStdout: AsyncWrite + Send + Unpin,
+    HostStderr: AsyncWrite + Send + Unpin,
+{
+    if stdio.options.capability_policy.allows_runtime_enforcement() {
+        run_session_with_runtime_enforcement(request, output, input, stdio).await
+    } else {
+        run_session_without_runtime_enforcement(request, output, input, stdio).await
+    }
+}
+
+async fn run_session_without_runtime_enforcement<HostStdin, HostStdout, HostStderr>(
+    request: &ExecRequest,
     mut output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
     input: Pin<Box<dyn AsyncWrite + Send>>,
     stdio: ProtocolProxyIo<HostStdin, HostStdout, HostStderr>,
@@ -178,7 +204,7 @@ where
         stderr: mut host_stderr,
         options,
     } = stdio;
-    let rewrite_acp_initialize = options.rewrite_acp_initialize;
+    let rewrite_acp_initialize = options.capability_policy.rewrites_initialize();
     let stdin_task =
         spawn_stdin_forwarding_task(host_stdin, input, move |stdin_reader, exec_input| {
             forward_host_stdin_to_exec_async(stdin_reader, exec_input, rewrite_acp_initialize)
@@ -194,6 +220,139 @@ where
         settle_stdin_forwarding_task(request.container_id(), stdin_task, options).await;
     output_result?;
     stdin_result
+}
+
+async fn run_session_with_runtime_enforcement<HostStdin, HostStdout, HostStderr>(
+    request: &ExecRequest,
+    mut output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    input: Pin<Box<dyn AsyncWrite + Send>>,
+    stdio: ProtocolProxyIo<HostStdin, HostStdout, HostStderr>,
+) -> Result<(), PodbotError>
+where
+    HostStdin: AsyncRead + Send + Unpin + 'static,
+    HostStdout: AsyncWrite + Send + Unpin,
+    HostStderr: AsyncWrite + Send + Unpin,
+{
+    let ProtocolProxyIo {
+        stdin: host_stdin,
+        stdout: mut host_stdout,
+        stderr: mut host_stderr,
+        options,
+    } = stdio;
+    let rewrite_acp_initialize = options.capability_policy.rewrites_initialize();
+    let container_id_owned = String::from(request.container_id());
+    let (sink_tx, sink_rx) = tokio::sync::mpsc::channel::<WriteCmd>(SINK_CHANNEL_CAPACITY);
+    let sink_task = tokio::spawn(run_container_stdin_sink(input, sink_rx));
+
+    let stdin_sender = sink_tx.clone();
+    let stdin_task = tokio::spawn(async move {
+        forward_host_stdin_to_channel(host_stdin, stdin_sender, rewrite_acp_initialize).await
+    });
+
+    let assembler = OutboundFrameAssembler::new(MethodDenylist::default_families());
+    let mut adapter = OutboundPolicyAdapter::new(assembler, sink_tx, container_id_owned);
+
+    let output_result = run_output_loop_with_adapter(
+        request.container_id(),
+        &mut output,
+        &mut adapter,
+        &mut host_stdout,
+        &mut host_stderr,
+    )
+    .await;
+    adapter.finish();
+    drop(adapter);
+
+    let stdin_result =
+        settle_stdin_forwarding_task(request.container_id(), stdin_task, options).await;
+
+    let sink_result = sink_task
+        .await
+        .map_err(|error| {
+            exec_failed(
+                request.container_id(),
+                format!("container stdin sink task failed: {error}"),
+            )
+        })?
+        .map_err(|error| {
+            exec_failed(
+                request.container_id(),
+                format!("container stdin sink failed: {error}"),
+            )
+        });
+
+    output_result?;
+    stdin_result?;
+    sink_result
+}
+
+async fn forward_host_stdin_to_channel<HostStdin>(
+    host_stdin: HostStdin,
+    sender: tokio::sync::mpsc::Sender<WriteCmd>,
+    rewrite_acp_initialize: bool,
+) -> io::Result<()>
+where
+    HostStdin: AsyncRead + Unpin,
+{
+    use tokio::io::AsyncReadExt;
+
+    let mut buffered_stdin =
+        tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
+
+    if rewrite_acp_initialize {
+        let bytes = acp_helpers::read_and_mask_initial_acp_frame(&mut buffered_stdin).await?;
+        if !bytes.is_empty() && sender.send(WriteCmd::Forward(bytes)).await.is_err() {
+            return Ok(());
+        }
+    }
+
+    let mut buf = vec![0u8; STDIN_BUFFER_CAPACITY];
+    loop {
+        let bytes_read = buffered_stdin.read(&mut buf).await?;
+        if bytes_read == 0 {
+            break;
+        }
+        let chunk = buf
+            .get(..bytes_read)
+            .map(<[u8]>::to_vec)
+            .unwrap_or_default();
+        if sender.send(WriteCmd::Forward(chunk)).await.is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
+async fn run_output_loop_with_adapter<HostStdout, HostStderr>(
+    container_id: &str,
+    output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
+    adapter: &mut OutboundPolicyAdapter,
+    host_stdout: &mut HostStdout,
+    host_stderr: &mut HostStderr,
+) -> Result<(), PodbotError>
+where
+    HostStdout: AsyncWrite + Unpin,
+    HostStderr: AsyncWrite + Unpin,
+{
+    while let Some(chunk_result) = output.next().await {
+        let chunk = chunk_result
+            .map_err(|error| exec_failed(container_id, format!("exec stream failed: {error}")))?;
+        match chunk {
+            LogOutput::StdOut { message } | LogOutput::Console { message } => {
+                adapter
+                    .handle_chunk(message.as_ref(), host_stdout)
+                    .await
+                    .map_err(|error| {
+                        exec_failed(container_id, format!("failed writing stdout output: {error}"))
+                    })?;
+            }
+            LogOutput::StdErr { message } => {
+                write_output_chunk(container_id, host_stderr, message.as_ref(), "stderr").await?;
+            }
+            LogOutput::StdIn { .. } => {}
+        }
+    }
+    Ok(())
 }
 
 async fn settle_stdin_forwarding_task(
