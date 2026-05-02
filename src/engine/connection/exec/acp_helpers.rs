@@ -64,20 +64,40 @@ pub(super) async fn forward_initial_acp_frame_async<HostStdin>(
 where
     HostStdin: AsyncRead + Unpin,
 {
+    let bytes = read_and_mask_initial_acp_frame(buffered_stdin).await?;
+    input.write_all(&bytes).await
+}
+
+/// Reads the first newline-delimited ACP frame from `buffered_stdin` and
+/// returns the bytes that the protocol session should forward to the
+/// container, applying capability masking when the frame is a recognized
+/// `initialize` request.
+///
+/// If the frame exceeds [`MAX_FIRST_FRAME_BYTES`] before a newline is found,
+/// or if EOF is reached first, the buffered bytes are returned unchanged so
+/// the caller can forward them verbatim.
+pub(super) async fn read_and_mask_initial_acp_frame<HostStdin>(
+    buffered_stdin: &mut tokio::io::BufReader<HostStdin>,
+) -> io::Result<Vec<u8>>
+where
+    HostStdin: AsyncRead + Unpin,
+{
     let mut first_frame = Vec::new();
     loop {
         match next_initial_frame_action(buffered_stdin, &mut first_frame).await? {
             InitialFrameAction::Continue => {}
             InitialFrameAction::ForwardUnchanged(reason) => {
-                return forward_unmodified_initial_frame(input, &first_frame, reason).await;
+                log_unmodified_forwarding(reason, first_frame.len());
+                return Ok(first_frame);
             }
             InitialFrameAction::ForwardMasked => {
-                return forward_masked_initial_frame(input, &first_frame).await;
+                let masked = mask_acp_initialize_frame(&first_frame);
+                log_masked_frame_forwarded(&masked, &first_frame);
+                return Ok(masked);
             }
         }
     }
 }
-
 /// Read the next chunk into `first_frame` and decide how to proceed.
 async fn next_initial_frame_action<HostStdin>(
     buffered_stdin: &mut tokio::io::BufReader<HostStdin>,
@@ -131,29 +151,6 @@ fn log_eof_before_newline(bytes: usize) {
         "ACP stdin reached EOF before newline; forwarding without rewrite"
     );
 }
-
-/// Write `first_frame` to `input` unchanged after logging the forwarding
-/// reason.
-async fn forward_unmodified_initial_frame(
-    input: &mut Pin<Box<dyn AsyncWrite + Send>>,
-    first_frame: &[u8],
-    reason: ForwardUnchangedReason,
-) -> io::Result<()> {
-    log_unmodified_forwarding(reason, first_frame.len());
-    input.write_all(first_frame).await
-}
-
-/// Mask `first_frame` and write the result to `input`.
-async fn forward_masked_initial_frame(
-    input: &mut Pin<Box<dyn AsyncWrite + Send>>,
-    first_frame: &[u8],
-) -> io::Result<()> {
-    let masked_frame = mask_acp_initialize_frame(first_frame);
-    input.write_all(&masked_frame).await?;
-    log_masked_frame_forwarded(&masked_frame, first_frame);
-    Ok(())
-}
-
 /// Emit a debug trace when the first frame was masked before forwarding.
 fn log_masked_frame_forwarded(masked_frame: &[u8], first_frame: &[u8]) {
     if masked_frame != first_frame {
