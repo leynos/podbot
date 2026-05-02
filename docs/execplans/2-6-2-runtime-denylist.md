@@ -770,7 +770,14 @@ and report; they must not write to the working tree.
   multi-chunk reassembly, and blocked-then-permitted ordering, all
   asserting both host stdout (byte-identical permitted forwards) and
   container stdin (synthesized error responses with preserved id).
-- [ ] Stage G framer parameterized coverage.
+- [x] (2026-05-02) Stage G framer parameterized coverage. The
+  `every_two_way_split_reassembles_to_original_byte_stream` test
+  exhaustively splits a five-frame permitted stream at every byte
+  boundary (over 250 splits). The `three_way_splits_reassemble_...`
+  parameterized table covers 32 distinct triples. All splits
+  reassemble byte-identically, confirming that frames forwarded by
+  the assembler are bit-for-bit identical to the original input
+  regardless of chunk boundaries.
 - [ ] Stage H documentation updates.
 - [ ] Stage I roadmap update and full gate stack.
 
