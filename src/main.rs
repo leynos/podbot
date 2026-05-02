@@ -15,7 +15,7 @@ use std::io::IsTerminal;
 use clap::Parser;
 use eyre::{Report, Result as EyreResult};
 use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
-use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, RunArgs, StopArgs, TokenDaemonArgs};
+use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, StopArgs, TokenDaemonArgs};
 use podbot::config::{AppConfig, load_config};
 use podbot::error::ConfigError;
 use podbot::error::Result as PodbotResult;
@@ -50,7 +50,10 @@ fn main() -> EyreResult<()> {
 /// conversion to `eyre::Report`.
 fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
     match &cli.command {
-        Commands::Run(args) => run_agent_cli(config, args),
+        Commands::Run(args) => {
+            let request = args.to_run_request()?;
+            run_agent_cli(config, &request)
+        }
         Commands::Host(_args) => {
             // TODO: Re-enable `host_agent_cli` once it emits diagnostics to
             // stderr only and cannot corrupt stdout protocol traffic.
@@ -71,10 +74,16 @@ fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
 
 /// CLI adapter for running an AI agent in a sandboxed container.
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutcome> {
+fn run_agent_cli(
+    config: &AppConfig,
+    request: &podbot::api::RunRequest,
+) -> PodbotResult<CommandOutcome> {
     println!(
         "Running {:?} agent in {:?} mode for repository {} on branch {}",
-        config.agent.kind, config.agent.mode, args.repo, args.branch
+        config.agent.kind,
+        config.agent.mode,
+        request.repository(),
+        request.branch()
     );
     if let Some(ref socket) = config.engine_socket {
         println!("Using engine socket: {socket}");
@@ -82,7 +91,7 @@ fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutc
     if let Some(ref image) = config.image {
         println!("Using image: {image}");
     }
-    let result = run_agent_api(config)?;
+    let result = run_agent_api(config, request)?;
     println!("Container orchestration not yet implemented.");
     Ok(result)
 }
@@ -166,12 +175,18 @@ fn normalize_process_exit_code(code: i64) -> i32 {
 }
 
 #[cfg(feature = "experimental")]
-fn run_agent_api(config: &AppConfig) -> PodbotResult<CommandOutcome> {
-    podbot::api::run_agent(config)
+fn run_agent_api(
+    config: &AppConfig,
+    request: &podbot::api::RunRequest,
+) -> PodbotResult<CommandOutcome> {
+    podbot::api::run_agent(config, request)
 }
 
 #[cfg(not(feature = "experimental"))]
-fn run_agent_api(_config: &AppConfig) -> PodbotResult<CommandOutcome> {
+fn run_agent_api(
+    _config: &AppConfig,
+    _request: &podbot::api::RunRequest,
+) -> PodbotResult<CommandOutcome> {
     Err(ConfigError::InvalidValue {
         field: String::from("command"),
         reason: String::from("the run command requires feature = \"experimental\""),

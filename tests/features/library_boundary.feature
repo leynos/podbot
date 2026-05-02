@@ -23,5 +23,6 @@ Feature: Library boundary stability
     Then the error is a ContainerError variant
 
   Scenario: Stub orchestration functions return success
+    Given a run request for repository owner/name and branch main
     When each stub orchestration function is called
     Then all outcomes are success

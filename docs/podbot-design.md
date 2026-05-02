@@ -67,6 +67,12 @@ process termination. Library functions return typed request and response values
 plus semantic errors (`PodbotError`) so host applications can integrate their
 own logging, retries, scheduling, and policy controls.
 
+`podbot run` is a CLI adapter over the library-owned `podbot::api::RunRequest`
+type. The CLI parses `--repo` and `--branch`, turns them into `RunRequest`, and
+then calls the experimental `run_agent(config, request)` orchestration entry
+point. Rust embedders can construct the same request without importing
+`podbot::cli` or any Clap types.
+
 Within the Podbot binary, execution is intentionally split into two operating
 paths:
 
@@ -968,6 +974,9 @@ The stable library boundary should follow these constraints:
 - The stable exec surface is
   `podbot::api::{ExecRequest, ExecMode, ExecContext, exec}` rather than
   engine-owned traits or runtime handles.
+- `RunRequest` is the stable, library-owned request type for interactive run
+  sessions. The current `run_agent` orchestration function remains experimental
+  while the full agent lifecycle is still a stub.
 - Hook, validation, session, and MCP contracts remain experimental until their
   ADRs and consumer-facing integration notes converge on one request/response
   taxonomy.
@@ -978,16 +987,23 @@ The following modules form the stable public API surface for library consumers.
 Types in these modules are versioned and should not change in breaking ways
 without a major version bump.
 
-| Module   | Stability | Key types and functions                                                                                                                                                                                                                                                     |
-| -------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `api`    | Stable    | `CommandOutcome`, `ExecRequest`, `ExecMode`, `ExecContext`, `exec`, `run_agent`, `list_containers`, `stop_container`, `run_token_daemon`                                                                                                                                    |
-| `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`, `load_config`, `load_config_with_env`, `AgentConfig`, `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`, `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`, `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent` |
-| `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`, `GitHubError`, `FilesystemError`, `Result<T>`                                                                                                                                                                               |
-| `engine` | Internal  | Hidden compatibility surface; not part of the supported semver contract for embedders.                                                                                                                                                                                      |
-| `github` | Internal  | Hidden GitHub integration module; not part of the stable integration contract.                                                                                                                                                                                              |
-| `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo feature; library-only consumers can set `default-features = false` to hide module visibility.                                                                                                             |
-
-Table: Module stability and key types for Podbot modules
+- `api` is stable for `CommandOutcome`, `ExecRequest`, `ExecMode`,
+  `ExecContext`, `RunRequest`, and `exec`.
+- `config` is stable for configuration types and loaders, including
+  `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`, `load_config`,
+  `load_config_with_env`, `AgentConfig`, `AgentKind`, `AgentMode`,
+  `CredsConfig`, `GitHubConfig`, `McpConfig`, `SandboxConfig`,
+  `SelinuxLabelMode`, `WorkspaceConfig`, `WorkspaceSource`, and `CommandIntent`.
+- `error` is stable for `PodbotError`, `ConfigError`, `ContainerError`,
+  `GitHubError`, `FilesystemError`, and `Result<T>`.
+- `api` also exposes experimental orchestration functions under
+  `feature = "experimental"`: `run_agent`, `list_containers`, `stop_container`,
+  and `run_token_daemon`. Their signatures may change before stabilization.
+- `engine` and `github` are hidden compatibility surfaces and are not part of
+  the supported semver contract for embedders.
+- `cli` is the Clap adapter for the binary. It is gated behind the `cli` Cargo
+  feature; library-only consumers can set `default-features = false` to hide
+  module visibility.
 
 ### Planned API surfaces
 

@@ -599,7 +599,7 @@ Implement the argument parsing and subcommand routing.
 
 **Tasks:**
 
-- [ ] Define the run subcommand for launching agent sessions.
+- [x] Define the run subcommand for launching agent sessions.
 - [ ] Define the host subcommand for protocol-only app server hosting.
 - [ ] Add the token-daemon subcommand for standalone token management.
 - [ ] Create the ps subcommand for listing containers.
