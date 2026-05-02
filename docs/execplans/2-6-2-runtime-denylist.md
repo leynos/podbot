@@ -18,7 +18,7 @@ client-side `initialize` request before they reach the sandboxed agent.
 Step 2.6.2 closes the second door: a hosted agent may still attempt to call
 those host-delegated methods (`terminal/create`, `terminal/wait_for_exit`,
 `fs/read_text_file`, `fs/write_text_file`, and so on) through the protocol
-proxy after initialisation. Without enforcement at the proxy seam, those
+proxy after initialization. Without enforcement at the proxy seam, those
 calls would either reach the IDE host (defeating the sandbox) or stall
 (because the IDE will not service capabilities it never advertised). Either
 outcome breaks the trust boundary that `docs/podbot-design.md` records:
@@ -32,7 +32,7 @@ Observable success for this task:
 - when the protocol proxy is in ACP enforcement mode, an outbound
   `terminal/*` or `fs/*` JavaScript Object Notation Remote Procedure Call
   (JSON-RPC) request emitted by the hosted agent never reaches host stdout;
-- the agent receives a synthesised JSON-RPC error response (with the same
+- the agent receives a synthesized JSON-RPC error response (with the same
   `id`) carrying a Podbot-specific application error code naming the
   blocked method;
 - a stderr diagnostic line records each denial with the container
@@ -59,7 +59,7 @@ Observable success for this task:
 - Scope is limited to Step 2.6.2 in `docs/podbot-roadmap.md`. The operator
   override (Step 2.6.4), the consolidated override and handshake test
   battery (Step 2.6.5), and any user-facing configuration surface for
-  enabling delegation are out of scope. Synthesising a protocol error and
+  enabling delegation are out of scope. Synthesizing a protocol error and
   emitting a stderr denial line are in scope because they are the minimum
   observable behaviour an enforcement mechanism must produce; Step 2.6.3
   remains free to enrich diagnostic structure later.
@@ -87,7 +87,7 @@ Observable success for this task:
   `src/engine/connection/exec/mod.rs` so the modules are reachable from
   both production and tests without the inline path declarations.
 - Every new module must begin with a `//!` module-level comment.
-- Use `rstest` fixtures and parameterised cases for unit coverage; use
+- Use `rstest` fixtures and parameterized cases for unit coverage; use
   `rstest-bdd` v0.5.0 with `StepResult<T> = Result<T, String>` for
   behavioural coverage. Mirror the patterns in
   `src/engine/connection/exec/protocol_acp_bdd_tests.rs`.
@@ -117,7 +117,7 @@ Stop and escalate (do not improvise) when any of the following occurs.
   `src/engine/connection/exec/mod.rs` rather than internal proxy-seam
   edits.
 - Concurrency tolerance: bidirectional injection (output task pushing
-  synthesised error frames into the input writer) cannot be expressed
+  synthesized error frames into the input writer) cannot be expressed
   without `unsafe`, leaked tasks, or mutexes that span `await` points.
 - Dependency tolerance: a new crate is required.
 - Iteration tolerance: any of `make check-fmt`, `make lint`, or
@@ -133,7 +133,7 @@ Stop and escalate (do not improvise) when any of the following occurs.
 
 - Risk: bidirectional injection couples the output and input tasks in a
   way that is sensitive to cancellation order. A naive shared writer can
-  cause synthesised denial responses to be lost when the host closes
+  cause synthesized denial responses to be lost when the host closes
   stdin before the agent receives the error frame.
   Severity: high. Likelihood: medium.
   Mitigation: introduce a dedicated container-stdin sink task that owns
@@ -151,19 +151,19 @@ Stop and escalate (do not improvise) when any of the following occurs.
   Severity: medium. Likelihood: medium.
   Mitigation: the dedicated sink task removes the race entirely because
   the host-stdin forwarder no longer owns the writer; aborting it on the
-  settle timeout cannot truncate synthesised errors. The settle timeout
+  settle timeout cannot truncate synthesized errors. The settle timeout
   continues to apply to the host-stdin forwarder only. Cover this with
   a regression test that emits a blocked call as the final frame and
-  asserts the synthesised error reaches container stdin.
+  asserts the synthesized error reaches container stdin.
 
-- Risk: synthesised error responses arrive at the agent after its own
+- Risk: synthesized error responses arrive at the agent after its own
   request timeout has fired, producing a stray response with an unknown
-  `id` that destabilises the agent's JSON-RPC client.
+  `id` that destabilizes the agent's JSON-RPC client.
   Severity: medium. Likelihood: medium.
-  Mitigation: deliver synthesised errors synchronously with the deny
+  Mitigation: deliver synthesized errors synchronously with the deny
   decision (the bounded `mpsc` channel has a small capacity such as 16,
   so contention is rare). Add a behavioural assertion that the
-  synthesised error appears on container stdin within one chunk of the
+  synthesized error appears on container stdin within one chunk of the
   blocked request being observed on the output stream.
 
 - Risk: parsing every outbound frame adds CPU and allocation overhead to
@@ -192,10 +192,10 @@ Stop and escalate (do not improvise) when any of the following occurs.
   emit Podbot-generated bytes into host stdout, breaking the stream
   purity contract.
   Severity: high. Likelihood: low.
-  Mitigation: synthesised error responses are written to **container
+  Mitigation: synthesized error responses are written to **container
   stdin** (the agent's input), not host stdout. Permitted frames are
   forwarded byte-for-byte from the original slice; the policy parses to
-  *decide* but never re-serialises before forwarding. Add a stream-purity
+  *decide* but never re-serializes before forwarding. Add a stream-purity
   assertion to the new behavioural feature, including a golden-bytes
   comparison rather than a parsed-JSON comparison.
 
@@ -213,7 +213,7 @@ Stop and escalate (do not improvise) when any of the following occurs.
 - Risk: feature-file edits for `rstest-bdd` are compile-time inputs;
   stale generated bindings can mask scenario-name mismatches.
   Severity: medium. Likelihood: medium.
-  Mitigation: keep scenario titles synchronised with the feature file
+  Mitigation: keep scenario titles synchronized with the feature file
   and trigger a clean rebuild
   (`cargo clean -p podbot && make test 2>&1 | tee ...`) once if generated
   bindings appear stale.
@@ -267,8 +267,8 @@ referenced in `docs/podbot-design.md`:
   without `id`.
 - Capability families that Podbot blocks by default are `terminal/...`
   and `fs/...`. These methods are emitted by the agent and target the
-  client (the IDE), so the bytes flow agent stdout to host stdout in our
-  proxy.
+  client (the Integrated Development Environment, or IDE), so the bytes
+  flow agent stdout to host stdout in the protocol proxy.
 
 The data flow that this step modifies is therefore the agent-to-host
 direction. The init-masking work in 2.6.1 lives on the host-to-agent
@@ -320,7 +320,7 @@ in Stage C is responsible for all I/O and observability.
 Define a `MethodFamily` value type, a `MethodDenylist` aggregate of
 families, the default family list, the `FrameDecision` enum (note the
 absence of pre-built error bytes — the decision stays
-serialisation-free so it is trivially testable), and the two pure
+serialization-free so it is trivially testable), and the two pure
 functions `evaluate_agent_outbound_frame` and
 `build_method_blocked_error`. The full Rust signatures appear in
 `Interfaces and dependencies`.
@@ -356,7 +356,7 @@ the form:
 ```
 
 It appends the supplied line-ending bytes (default `\n` if the original
-frame had no recognised line ending). The `-32001` code lives in the
+frame had no recognized line ending). The `-32001` code lives in the
 JSON-RPC application error range `-32099..=-32000`; reserve `-32002`
 for the Step 2.6.4 "override required" follow-on. Do not use
 `-32601 Method not found` because the method exists and the agent
@@ -378,7 +378,7 @@ Add unit tests under
   `terminal/`, `terminal/create`);
 - `MethodDenylist::is_blocked` with both default families;
 - blocked request with numeric, string, and null `id` (each preserved
-  as the original JSON type in the synthesised error);
+  as the original JSON type in the synthesized error);
 - blocked notification (no id field);
 - permitted method passes through;
 - malformed JSON returns `Forward`;
@@ -404,7 +404,7 @@ borrow-style enum and an `OutboundFrameAssembler` struct as described in
 `Interfaces and dependencies`. The trailing `&[u8]` on `FrameOutput`
 carries the original frame bytes (including line ending) for `Forward`
 decisions and the original line-ending bytes for `Decision` results so
-the adapter can reconstruct the synthesised error with the same line
+the adapter can reconstruct the synthesized error with the same line
 terminator.
 
 Behavioural rules for the assembler:
@@ -415,7 +415,7 @@ Behavioural rules for the assembler:
   `raw_fallback` flag, and from then on every chunk is emitted as
   `Forward` unchanged.
 - `finish` is called at end of stream. The assembler **drops** any
-  residual partial frame: an unauthorised partial frame must not be
+  residual partial frame: an unauthorized partial frame must not be
   forwarded to host stdout. `finish` returns `None` and the adapter
   logs the byte count to stderr exactly once.
 
@@ -442,7 +442,7 @@ Create `src/engine/connection/exec/acp_runtime.rs` containing the
 adapter and the container-stdin sink task. This module owns all
 `tokio::sync::mpsc` and `tracing` use for the runtime path.
 
-Define a `WriteCmd` enum (`Forward`, `Synthesised`, `Shutdown`)
+Define a `WriteCmd` enum (`Forward`, `Synthesized`, `Shutdown`)
 describing every byte written to container stdin. Define
 `run_container_stdin_sink` as the dedicated sink task and the
 `OutboundPolicyAdapter` struct paired with `handle_chunk` and `finish`
@@ -451,9 +451,9 @@ methods. Full signatures appear in `Interfaces and dependencies`.
 Behavioural rules for the adapter:
 
 - For each `FrameOutput::Forward(bytes)`, write the original byte slice
-  to `host_stdout`. Never re-serialise.
+  to `host_stdout`. Never re-serialize.
 - For each `FrameOutput::Decision(BlockRequest { id, method }, line_ending)`,
-  call `build_method_blocked_error`, push `WriteCmd::Synthesised` into
+  call `build_method_blocked_error`, push `WriteCmd::Synthesized` into
   the channel, and emit `tracing::warn!` with
   `target = "podbot::acp::policy"`, the `container_id`, the blocked
   `method`, the request `id`, and a stable `"ACP blocked request denied"`
@@ -501,13 +501,13 @@ succeeds, and `cargo test -p podbot --lib 2>&1 | tee ...` passes new
 unit tests for the adapter and sink covering:
 
 - blocked request followed by permitted frame: only the permitted frame
-  reaches `host_stdout`, and the synthesised error reaches the sink;
-- the sink delivers the synthesised error before processing
+  reaches `host_stdout`, and the synthesized error reaches the sink;
+- the sink delivers the synthesized error before processing
   `WriteCmd::Shutdown`;
 - the sink handles a `BrokenPipe` from container stdin without
   failing the session;
 - `WriteCmd::Forward` from the host-stdin forwarder is interleaved
-  correctly with `WriteCmd::Synthesised` from the adapter;
+  correctly with `WriteCmd::Synthesized` from the adapter;
 - adapter is a no-op for `LogOutput::StdErr` chunks, which still flow
   to host stderr verbatim.
 
@@ -537,14 +537,14 @@ Validation: `cargo test -p podbot --lib session 2>&1 | tee ...` passes.
 
 Create `tests/features/acp_method_denylist.feature` with scenarios:
 
-1. Blocked request returns synthesised error and is not forwarded.
+1. Blocked request returns synthesized error and is not forwarded.
 2. Blocked notification is dropped silently with a stderr record.
 3. Permitted method passes through unchanged byte-for-byte.
 4. Frame split across two chunks reassembles before the policy applies.
 5. Oversized frame falls back to raw forwarding for the rest of the
    session and emits a single stderr fallback record.
 6. Permitted frame after a blocked frame still flushes correctly.
-7. Container stdin sees the synthesised error response within one chunk
+7. Container stdin sees the synthesized error response within one chunk
    of the blocked request being observed on the output stream, and
    strictly before the sink processes `WriteCmd::Shutdown`.
 
@@ -559,11 +559,11 @@ Validation: `make test 2>&1 | tee ...` passes; the new `.feature`
 scenarios appear in the test output and fail before the bindings are
 present, pass after.
 
-### Stage G: Parameterised coverage for the framer
+### Stage G: Parameterized coverage for the framer
 
 `proptest` is not in the workspace lockfile and adding it would breach
 the no-new-dependency constraint. Instead, add an exhaustive
-parameterised `rstest` table in
+parameterized `rstest` table in
 `src/engine/connection/exec/acp_frame_tests.rs` that:
 
 - generates a fixed sequence of permitted JSON-RPC frames as test
@@ -577,7 +577,7 @@ parameterised `rstest` table in
   triples, including splits inside JSON string literals and inside
   multi-byte UTF-8 sequences.
 
-Validation: the parameterised cases (at least 256 distinct splits)
+Validation: the parameterized cases (at least 256 distinct splits)
 all pass. If a future change adds `proptest` to the workspace for
 unrelated reasons, this table becomes the seed corpus.
 
@@ -589,7 +589,7 @@ Update `docs/podbot-design.md` to describe:
   trailing-slash prefix matching is correct, JSON-RPC error code
   `-32001`, the `data.reason = "podbot_capability_policy"` discriminator);
 - the dedicated container-stdin sink task and the
-  `WriteCmd::{Forward, Synthesised, Shutdown}` ordering invariant;
+  `WriteCmd::{Forward, Synthesized, Shutdown}` ordering invariant;
 - the raw-fallback behaviour on buffer overflow and the
   drop-partial-frame behaviour at end of stream;
 - the `CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` enum and
@@ -628,7 +628,7 @@ Update `docs/podbot-roadmap.md` to mark only the second Step 2.6
 checkbox done. Leave the next three checkboxes open.
 
 Run the full gate stack sequentially with `tee` for each command (do not
-parallelise):
+parallelize):
 
 ```shell
 set -o pipefail
@@ -650,7 +650,7 @@ Acceptance is observable through the following experiments.
   `src/engine/connection/exec/acp_runtime.rs`, and the corresponding
   unit and behavioural test files.
 - Unit tests: `cargo test -p podbot --lib` reports the new
-  `acp_policy_tests`, `acp_runtime_tests`, and the property/parameterised
+  `acp_policy_tests`, `acp_runtime_tests`, and the property/parameterized
   framer test as passing. Each new test fails when run against the tip
   of `main` and passes against this branch.
 - Behavioural tests: `cargo test -p podbot --test bdd` (or whichever
@@ -661,7 +661,7 @@ Acceptance is observable through the following experiments.
   `RecordingWriter`-style doubles (the same pattern as
   `protocol_acp_forwarding_tests.rs`) demonstrates that:
   - feeding a `terminal/create` JSON-RPC request into the simulated
-    container stdout produces zero bytes on host stdout, one synthesised
+    container stdout produces zero bytes on host stdout, one synthesized
     JSON-RPC error frame on container stdin, and one stderr warn line;
   - feeding a `session/update` request through the same path yields
     byte-identical pass-through.
@@ -690,7 +690,7 @@ Quality criteria:
   the small edits to `protocol.rs`, `session.rs`, and the documentation.
 - If `rstest-bdd` scenario bindings appear stale, run
   `cargo clean -p podbot && make test 2>&1 | tee ...` once.
-- If the property/parameterised framer test detects a regression, the
+- If the property/parameterized framer test detects a regression, the
   failure case can be added as a deterministic `rstest` case before
   fixing the assembler.
 
@@ -731,7 +731,7 @@ and report; they must not write to the working tree.
 - [ ] Stage D `acp_runtime` adapter, sink task, and unit tests.
 - [ ] Stage E session-options wiring (`CapabilityPolicy` enum).
 - [ ] Stage F `rstest-bdd` behavioural feature and bindings.
-- [ ] Stage G framer parameterised coverage.
+- [ ] Stage G framer parameterized coverage.
 - [ ] Stage H documentation updates.
 - [ ] Stage I roadmap update and full gate stack.
 
@@ -750,7 +750,7 @@ and report; they must not write to the working tree.
 - Discovery: the ACP method polarity is agent-emitted. `terminal/*` and
   `fs/*` requests originate from the hosted agent and target the IDE
   client over the agent's stdout. The runtime denylist therefore lives
-  on the container-to-host (output) direction, and the synthesised
+  on the container-to-host (output) direction, and the synthesized
   error response is written back to **container stdin** so the agent
   observes a JSON-RPC error to its own outbound request. The pure
   policy function name `evaluate_agent_outbound_frame` makes this
@@ -766,15 +766,15 @@ and report; they must not write to the working tree.
   `Vec<u8>` for the assembler, but `bytes` is not a direct workspace
   dependency (it appears only transitively via `tokio` and `bollard`).
   The no-new-dependency constraint forbids promoting it, so the plan
-  uses `Vec<u8>` and reserves a future optimisation note for when
+  uses `Vec<u8>` and reserves a future optimization note for when
   `bytes` becomes a direct dependency for unrelated reasons.
 - Discovery: `proptest` is not in the workspace lockfile either, so
-  Stage G uses an exhaustive `rstest` parameterised table over fixed
-  byte fixtures rather than randomised property generation.
+  Stage G uses an exhaustive `rstest` parameterized table over fixed
+  byte fixtures rather than randomized property generation.
 
 ## Decision log
 
-- Decision: bundle the synthesised JSON-RPC error response and stderr
+- Decision: bundle the synthesized JSON-RPC error response and stderr
   denial line into Step 2.6.2.
   Rationale: enforcement without a response causes the hosted agent to
   hang forever waiting for a reply, which would be a worse user
@@ -793,20 +793,20 @@ and report; they must not write to the working tree.
   runtime denial. The enum keeps every combination representable
   through one constructor.
 - Decision: introduce a dedicated container-stdin sink task driven by a
-  `WriteCmd::{Forward, Synthesised, Shutdown}` channel, rather than
+  `WriteCmd::{Forward, Synthesized, Shutdown}` channel, rather than
   having the existing host-stdin forwarder drain a secondary mpsc
   alongside its `tokio::io::copy` loop.
   Rationale: the Logisphere `Doggylump` analysis showed that draining a
   secondary queue from inside a `tokio::io::copy` loop is awkward and
   collides with the `STDIN_SETTLE_TIMEOUT` race. A dedicated sink task
   is the single ordering authority: it drains until `Shutdown`, so the
-  output adapter can guarantee that synthesised errors are flushed
+  output adapter can guarantee that synthesized errors are flushed
   before container stdin closes. Both the host-stdin forwarder and the
   output adapter become *senders* with no shared writer ownership.
-- Decision: keep parsing pure and never re-serialise permitted frames.
+- Decision: keep parsing pure and never re-serialize permitted frames.
   Rationale: byte-identical forwarding preserves any agent-side
   integrity assumptions (key ordering, whitespace, embedded hashes) and
-  avoids weaponising the proxy against ACP extensions that depend on
+  avoids weaponizing the proxy against ACP extensions that depend on
   byte-stable frames. The `OutboundFrameAssembler` retains the original
   byte slice for every `Forward` decision; `serde_json::from_slice` is
   used only for the decision step.
@@ -839,7 +839,7 @@ and report; they must not write to the working tree.
   legitimate frames into the raw-fallback path.
 - Decision: at end of stream, drop any residual partial frame instead
   of forwarding it.
-  Rationale: a partial frame is by definition unauthorised — the
+  Rationale: a partial frame is by definition unauthorized — the
   policy never decided on it. Forwarding bytes that have not been
   classified would re-introduce the very class of leak this step is
   meant to prevent. The byte count of the dropped residual is logged
@@ -850,7 +850,7 @@ and report; they must not write to the working tree.
   buffered bytes verbatim, set a one-shot raw-fallback flag, and
   forward all subsequent bytes raw for the remainder of the session.
   Rationale: the established 2.6.1 policy is tolerant pass-through on
-  size limits, and weaponising a single oversize frame into a hard
+  size limits, and weaponizing a single oversize frame into a hard
   failure would harm legitimate agents. Recording the fallback once on
   stderr keeps the operator informed without spamming a tight loop.
 - Decision: insert a Stage A.5 architecture spike that times-boxes a
@@ -963,7 +963,7 @@ only ACP module that touches `tokio::sync::mpsc` and `tracing`):
 ```rust
 pub(super) enum WriteCmd {
     Forward(Vec<u8>),
-    Synthesised(Vec<u8>),
+    Synthesized(Vec<u8>),
     Shutdown,
 }
 
@@ -1015,7 +1015,7 @@ impl CapabilityPolicy {
         matches!(self, Self::MaskOnly | Self::MaskAndDeny)
     }
 
-    pub(crate) const fn enforces_runtime_denylist(self) -> bool {
+    pub(crate) const fn allows_runtime_enforcement(self) -> bool {
         matches!(self, Self::MaskAndDeny)
     }
 }
