@@ -199,6 +199,7 @@ fn is_rate_limited(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn is_rate_limited_detects_primary_rate_limit() {
@@ -222,5 +223,29 @@ mod tests {
     fn is_rate_limited_rejects_non_rate_limit_messages() {
         assert!(!is_rate_limited("Resource not accessible by integration"));
         assert!(!is_rate_limited("Bad credentials"));
+    }
+
+    #[rstest]
+    #[case(401, "rate_limit_nope", "HTTP 401", "invalid")]
+    #[case(403, "API rate limit exceeded", "HTTP 403", "rate-limited")]
+    #[case(403, "Resource not accessible", "HTTP 403", "denied")]
+    #[case(404, "rate_limit_nope", "HTTP 404", "installation not found")]
+    #[case(503, "rate_limit_nope", "HTTP 503", "unavailable")]
+    #[case(422, "rate_limit_nope", "HTTP 422", "unexpected response")]
+    fn classify_installation_token_by_status_returns_expected_fragment(
+        #[case] code: u16,
+        #[case] raw: &str,
+        #[case] status_fragment: &str,
+        #[case] message_fragment: &str,
+    ) {
+        let msg = classify_installation_token_by_status(code, raw);
+        assert!(
+            msg.contains(status_fragment),
+            "expected status fragment {status_fragment:?} in: {msg}"
+        );
+        assert!(
+            msg.contains(message_fragment),
+            "expected message fragment {message_fragment:?} in: {msg}"
+        );
     }
 }
