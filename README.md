@@ -36,13 +36,13 @@ Podbot will ultimately serve as the agent encapsulation adapter for
 
 - Async runtime with Tokio
 - Semantic error handling (Config, Container, GitHub, Filesystem errors)
+- GitHub App authentication and token management
 - Layered configuration system (CLI → env vars → config file → defaults)
 - CLI scaffolding with subcommands: `run`, `token-daemon`, `ps`, `stop`, `exec`
 
 ### 🚧 Coming soon
 
 - Container orchestration with Bollard
-- GitHub App authentication and token management
 - Repository cloning and agent startup
 - Container image with bundled agents
 
