@@ -126,15 +126,9 @@ impl OutboundFrameAssembler {
                 continue;
             }
 
-            // No newline in the rest of the chunk; append and stop.
+            // No newline in the rest of the chunk; buffer the tail or fall back.
             let pending = chunk.get(cursor..).unwrap_or(&[]);
-            if self.buffer.len() + pending.len() > MAX_RUNTIME_FRAME_BYTES {
-                outputs.push(self.flush_buffer_for_overflow(pending));
-                fallback = Some(FallbackReason::BufferOverflow);
-                self.raw_fallback = true;
-                break;
-            }
-            self.buffer.extend_from_slice(pending);
+            fallback = self.buffer_or_overflow_tail(pending, &mut outputs);
             break;
         }
 
@@ -148,6 +142,27 @@ impl OutboundFrameAssembler {
         self.buffer.extend_from_slice(fresh_bytes);
         let frame = std::mem::take(&mut self.buffer);
         classify_frame(&frame, &self.denylist)
+    }
+
+    /// Append `pending` to the internal buffer when the combined length still
+    /// fits inside [`MAX_RUNTIME_FRAME_BYTES`]; otherwise flush the buffered
+    /// bytes plus `pending` verbatim into `outputs`, set the assembler's raw
+    /// fallback flag, and return [`FallbackReason::BufferOverflow`] so the
+    /// caller can record the one-shot fallback. Returns `None` when the tail
+    /// was buffered without overflowing.
+    fn buffer_or_overflow_tail(
+        &mut self,
+        pending: &[u8],
+        outputs: &mut Vec<FrameOutput>,
+    ) -> Option<FallbackReason> {
+        if self.buffer.len() + pending.len() > MAX_RUNTIME_FRAME_BYTES {
+            outputs.push(self.flush_buffer_for_overflow(pending));
+            self.raw_fallback = true;
+            Some(FallbackReason::BufferOverflow)
+        } else {
+            self.buffer.extend_from_slice(pending);
+            None
+        }
     }
 
     fn flush_buffer_for_overflow(&mut self, pending: &[u8]) -> FrameOutput {
