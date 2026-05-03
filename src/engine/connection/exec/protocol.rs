@@ -287,24 +287,40 @@ where
     sink_result
 }
 
-async fn forward_host_stdin_to_channel<HostStdin>(
-    host_stdin: HostStdin,
-    sender: tokio::sync::mpsc::Sender<WriteCmd>,
-    rewrite_acp_initialize: bool,
+/// Reads the first newline-delimited ACP frame from `buffered_stdin`,
+/// applies capability masking, and forwards the resulting bytes to
+/// `sender` as a [`WriteCmd::Forward`].
+///
+/// Returns `Ok(true)` when the caller should continue pumping host
+/// stdin (either because the masker produced no bytes to forward, or
+/// because the send to the sink succeeded). Returns `Ok(false)` when
+/// the sink channel has closed and the caller should return cleanly.
+async fn send_masked_initialize_frame<R>(
+    buffered_stdin: &mut tokio::io::BufReader<R>,
+    sender: &tokio::sync::mpsc::Sender<WriteCmd>,
+) -> io::Result<bool>
+where
+    R: AsyncRead + Unpin,
+{
+    let bytes = acp_helpers::read_and_mask_initial_acp_frame(buffered_stdin).await?;
+    if bytes.is_empty() {
+        return Ok(true);
+    }
+    Ok(sender.send(WriteCmd::Forward(bytes)).await.is_ok())
+}
+
+/// Pumps the remainder of host stdin into the container-stdin sink as
+/// a sequence of [`WriteCmd::Forward`] chunks bounded by
+/// [`STDIN_BUFFER_CAPACITY`]. Stops on EOF or when the sink channel
+/// closes.
+async fn pump_raw_frames<R>(
+    buffered_stdin: &mut tokio::io::BufReader<R>,
+    sender: &tokio::sync::mpsc::Sender<WriteCmd>,
 ) -> io::Result<()>
 where
-    HostStdin: AsyncRead + Unpin,
+    R: AsyncRead + Unpin,
 {
     use tokio::io::AsyncReadExt;
-
-    let mut buffered_stdin = tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
-
-    if rewrite_acp_initialize {
-        let bytes = acp_helpers::read_and_mask_initial_acp_frame(&mut buffered_stdin).await?;
-        if !bytes.is_empty() && sender.send(WriteCmd::Forward(bytes)).await.is_err() {
-            return Ok(());
-        }
-    }
 
     let mut buf = vec![0u8; STDIN_BUFFER_CAPACITY];
     loop {
@@ -321,6 +337,26 @@ where
         }
     }
     Ok(())
+}
+
+async fn forward_host_stdin_to_channel<HostStdin>(
+    host_stdin: HostStdin,
+    sender: tokio::sync::mpsc::Sender<WriteCmd>,
+    rewrite_acp_initialize: bool,
+) -> io::Result<()>
+where
+    HostStdin: AsyncRead + Unpin,
+{
+    let mut buffered_stdin =
+        tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
+
+    if rewrite_acp_initialize
+        && !send_masked_initialize_frame(&mut buffered_stdin, &sender).await?
+    {
+        return Ok(());
+    }
+
+    pump_raw_frames(&mut buffered_stdin, &sender).await
 }
 
 struct AdapterOutputIo<'a, HostStdout, HostStderr> {
