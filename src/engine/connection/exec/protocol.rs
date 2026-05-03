@@ -347,11 +347,9 @@ async fn forward_host_stdin_to_channel<HostStdin>(
 where
     HostStdin: AsyncRead + Unpin,
 {
-    let mut buffered_stdin =
-        tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
+    let mut buffered_stdin = tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_stdin);
 
-    if rewrite_acp_initialize
-        && !send_masked_initialize_frame(&mut buffered_stdin, &sender).await?
+    if rewrite_acp_initialize && !send_masked_initialize_frame(&mut buffered_stdin, &sender).await?
     {
         return Ok(());
     }
