@@ -1,5 +1,6 @@
 //! Then step definitions for repository-cloning behavioural scenarios.
 
+use podbot::engine::RepositoryCloneResult;
 use podbot::error::{ConfigError, ContainerError, PodbotError};
 use rstest_bdd_macros::then;
 
@@ -23,18 +24,12 @@ fn the_workspace_path_is(
     repository_cloning_state: &RepositoryCloningState,
     string: String,
 ) -> StepResult<()> {
-    let expected = string.trim_matches('"');
-    repository_cloning_state
-        .outcome
-        .with_ref(|outcome| match outcome {
-            Ok(result) if result.workspace_path == expected => Ok(()),
-            Ok(result) => Err(format!(
-                "Expected workspace path '{expected}', got '{}'",
-                result.workspace_path
-            )),
-            Err(err) => Err(format!("Expected clone success, got error: {err}")),
-        })
-        .ok_or_else(|| String::from("outcome not set"))?
+    assert_clone_result_field(
+        repository_cloning_state,
+        string.trim_matches('"'),
+        "workspace path",
+        |result| &result.workspace_path,
+    )
 }
 
 #[then("the checked out branch is {string}")]
@@ -42,18 +37,12 @@ fn the_checked_out_branch_is(
     repository_cloning_state: &RepositoryCloningState,
     string: String,
 ) -> StepResult<()> {
-    let expected = string.trim_matches('"');
-    repository_cloning_state
-        .outcome
-        .with_ref(|outcome| match outcome {
-            Ok(result) if result.checked_out_branch == expected => Ok(()),
-            Ok(result) => Err(format!(
-                "Expected branch '{expected}', got '{}'",
-                result.checked_out_branch
-            )),
-            Err(err) => Err(format!("Expected clone success, got error: {err}")),
-        })
-        .ok_or_else(|| String::from("outcome not set"))?
+    assert_clone_result_field(
+        repository_cloning_state,
+        string.trim_matches('"'),
+        "branch",
+        |result| &result.checked_out_branch,
+    )
 }
 
 #[then("the clone command used GIT_ASKPASS")]
@@ -132,6 +121,25 @@ fn no_repository_clone_exec_was_attempted(
     } else {
         Err(format!("expected no execs, got {execs:?}"))
     }
+}
+
+fn assert_clone_result_field(
+    state: &RepositoryCloningState,
+    expected: &str,
+    field_label: &str,
+    extract: impl Fn(&RepositoryCloneResult) -> &str,
+) -> StepResult<()> {
+    state
+        .outcome
+        .with_ref(|outcome| match outcome {
+            Ok(result) if extract(result) == expected => Ok(()),
+            Ok(result) => Err(format!(
+                "Expected {field_label} '{expected}', got '{}'",
+                extract(result)
+            )),
+            Err(err) => Err(format!("Expected clone success, got error: {err}")),
+        })
+        .ok_or_else(|| String::from("outcome not set"))?
 }
 
 fn assert_error(
