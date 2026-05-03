@@ -66,39 +66,41 @@ fn denylist_state() -> DenylistState {
     DenylistState::default()
 }
 
-fn permitted_request_frame(method: &str, id: i64) -> Vec<u8> {
+fn make_request_frame(method: &str, id: i64) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(&serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
         "method": method,
         "params": {},
     }))
-    .expect("permitted request serializes");
+    .expect("request frame serializes");
     bytes.push(b'\n');
     bytes
 }
 
-fn blocked_request_frame(method: &str, id: i64) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "method": method,
-        "params": {},
-    }))
-    .expect("blocked request serializes");
-    bytes.push(b'\n');
-    bytes
-}
-
-fn blocked_notification_frame(method: &str) -> Vec<u8> {
+fn make_notification_frame(method: &str) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(&serde_json::json!({
         "jsonrpc": "2.0",
         "method": method,
         "params": {},
     }))
-    .expect("blocked notification serializes");
+    .expect("notification frame serializes");
     bytes.push(b'\n');
     bytes
+}
+
+fn assert_host_stdout_matches(denylist_state: &DenylistState, expected: &[u8]) -> StepResult<()> {
+    let bytes = denylist_state
+        .host_stdout_bytes
+        .get()
+        .ok_or_else(|| String::from("host stdout snapshot not recorded"))?;
+    if bytes == expected {
+        Ok(())
+    } else {
+        Err(String::from(
+            "host stdout did not receive the expected frame verbatim",
+        ))
+    }
 }
 
 fn build_runtime() -> (
@@ -158,25 +160,25 @@ fn adapter_uses_default_denylist(denylist_state: &DenylistState) {
 
 #[when(r#"the agent emits a "terminal/create" request with id 7"#)]
 fn emit_blocked_terminal_create(denylist_state: &DenylistState) -> StepResult<()> {
-    let frame = blocked_request_frame("terminal/create", 7);
+    let frame = make_request_frame("terminal/create", 7);
     run_runtime(denylist_state, vec![frame], || {})
 }
 
 #[when(r#"the agent emits a "session/new" request with id 1"#)]
 fn emit_permitted_session_new(denylist_state: &DenylistState) -> StepResult<()> {
-    let frame = permitted_request_frame("session/new", 1);
+    let frame = make_request_frame("session/new", 1);
     run_runtime(denylist_state, vec![frame], || {})
 }
 
 #[when(r#"the agent emits an "fs/changed" notification"#)]
 fn emit_blocked_notification(denylist_state: &DenylistState) -> StepResult<()> {
-    let frame = blocked_notification_frame("fs/changed");
+    let frame = make_notification_frame("fs/changed");
     run_runtime(denylist_state, vec![frame], || {})
 }
 
 #[when("the agent emits a blocked frame split across two output chunks")]
 fn emit_blocked_split(denylist_state: &DenylistState) -> StepResult<()> {
-    let frame = blocked_request_frame("terminal/create", 2);
+    let frame = make_request_frame("terminal/create", 2);
     let split_at = frame.len().div_euclid(2);
     let first = frame
         .get(..split_at)
@@ -191,8 +193,8 @@ fn emit_blocked_split(denylist_state: &DenylistState) -> StepResult<()> {
 
 #[when("the agent emits a blocked request followed by a permitted request")]
 fn emit_blocked_then_permitted(denylist_state: &DenylistState) -> StepResult<()> {
-    let mut chunk = blocked_request_frame("terminal/create", 5);
-    let permitted = permitted_request_frame("session/update", 6);
+    let mut chunk = make_request_frame("terminal/create", 5);
+    let permitted = make_request_frame("session/update", 6);
     chunk.extend_from_slice(&permitted);
     run_runtime(denylist_state, vec![chunk], || {})
 }
@@ -271,36 +273,14 @@ fn expect_synthesized_id(denylist_state: &DenylistState, expected_id: &Value) ->
 
 #[then("host stdout receives the permitted frame verbatim")]
 fn assert_host_stdout_matches_permitted(denylist_state: &DenylistState) -> StepResult<()> {
-    let bytes = denylist_state
-        .host_stdout_bytes
-        .get()
-        .ok_or_else(|| String::from("host stdout snapshot not recorded"))?;
-    let expected = permitted_request_frame("session/new", 1);
-    if bytes == expected {
-        Ok(())
-    } else {
-        Err(String::from(
-            "host stdout did not receive the permitted frame verbatim",
-        ))
-    }
+    assert_host_stdout_matches(denylist_state, &make_request_frame("session/new", 1))
 }
 
 #[then("host stdout receives only the permitted frame verbatim")]
 fn assert_host_stdout_matches_permitted_after_blocked(
     denylist_state: &DenylistState,
 ) -> StepResult<()> {
-    let bytes = denylist_state
-        .host_stdout_bytes
-        .get()
-        .ok_or_else(|| String::from("host stdout snapshot not recorded"))?;
-    let expected = permitted_request_frame("session/update", 6);
-    if bytes == expected {
-        Ok(())
-    } else {
-        Err(String::from(
-            "host stdout should contain only the permitted frame after a blocked one",
-        ))
-    }
+    assert_host_stdout_matches(denylist_state, &make_request_frame("session/update", 6))
 }
 
 #[then("container stdin receives no synthesized response")]
