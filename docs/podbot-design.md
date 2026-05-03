@@ -406,9 +406,9 @@ acquire a token.
 
 #### Installation-token acquisition contract
 
-The helper
-`github::installation_token_with_buffer(app_id, installation_id,
-private_key_path, buffer)` now owns Step 3.2. It:
+The helper `github::installation_token_with_buffer`
+(`app_id`, `installation_id`, `private_key_path`, `buffer`)
+now owns Step 3.2. It:
 
 1. loads the RSA private key with `github::load_private_key`,
 2. builds an App-authenticated Octocrab client with
@@ -996,31 +996,16 @@ The following modules form the stable public API surface for library consumers.
 Types in these modules are versioned and should not change in breaking ways
 without a major version bump.
 
-| Module   | Stability | Key types and functions                                           |
-| -------- | --------- | ----------------------------------------------------------------- |
-| `api`    | Stable    | `CommandOutcome`, `ExecParams`, `exec`, `run_agent`,              |
-|          |           | `list_containers`, `stop_container`, `run_token_daemon`           |
-| `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`,              |
-|          |           | `load_config`, `load_config_with_env`, `AgentConfig`,             |
-|          |           | `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`,          |
-|          |           | `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`,                 |
-|          |           | `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent`             |
-| `engine` | Internal  | `EngineConnector`, `SocketResolver`, `ExecMode`,                  |
-|          |           | `ExecRequest`, `ExecResult`, `ContainerExecClient`,               |
-|          |           | `ContainerCreator`, `ContainerUploader`,                          |
-|          |           | `CreateContainerRequest`, `ContainerSecurityOptions`,             |
-|          |           | `CredentialUploadRequest`, `CredentialUploadResult`               |
-| `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`,                   |
-|          |           | `GitHubError`, `FilesystemError`, `Result<T>`                     |
-| `github` | Internal  | Subject to change; not part of the stable integration contract.   |
-|          |           | GitHub App support provided by the `podbot::github` module with   |
-|          |           | `load_private_key`, `build_app_client`,                           |
-|          |           | `validate_app_credentials`, `GitHubAppClient` trait.              |
-| `cli`    | Adapter   | Clap parse types for the CLI binary. Gated behind the `cli` Cargo |
-|          |           | feature (enabled by default). When enabled, adds `clap` as a      |
-|          |           | direct dependency. Library-only consumers can set                 |
-|          |           | `default-features = false` to hide CLI module visibility.         |
-|          |           | Note: `clap` remains in the dependency tree via `ortho_config`.   |
+<!-- markdownlint-disable MD060 -->
+| Module   | Stability | Key types and functions |
+| -------- | --------- | ---------------------- |
+| `api`    | Stable    | `CommandOutcome`, `ExecParams`, `exec`, `run_agent`, `list_containers`, `stop_container`, `run_token_daemon` |
+| `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`, `load_config`, `load_config_with_env`, `AgentConfig`, `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`, `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`, `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent` |
+| `engine` | Internal  | `EngineConnector`, `SocketResolver`, `ExecMode`, `ExecRequest`, `ExecResult`, `ContainerExecClient`, `ContainerCreator`, `ContainerUploader`, `CreateContainerRequest`, `ContainerSecurityOptions`, `CredentialUploadRequest`, `CredentialUploadResult` |
+| `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`, `GitHubError`, `FilesystemError`, `Result<T>` |
+| `github` | Internal  | `load_private_key`, `build_app_client`, `validate_app_credentials`, `GitHubAppClient` |
+| `cli`    | Adapter   | CLI parse types (gated by `cli` feature; uses `clap`) |
+<!-- markdownlint-enable MD060 -->
 
 Table: Module stability and key types for Podbot modules
 
