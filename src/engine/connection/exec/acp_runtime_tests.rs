@@ -82,39 +82,42 @@ impl AsyncWrite for BrokenPipeWriter {
     }
 }
 
-fn permitted_frame() -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "session/new",
-        "params": {},
-    }))
-    .expect("permitted frame serializes");
+/// Builds a newline-terminated JSON-RPC 2.0 frame.
+///
+/// Pass `id = Some(…)` for requests; `id = None` for notifications.
+fn make_jsonrpc_frame(method: &str, id: Option<&Value>) -> Vec<u8> {
+    let value = id.map_or_else(
+        || {
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": {},
+            })
+        },
+        |request_id| {
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": {},
+            })
+        },
+    );
+    let mut bytes = serde_json::to_vec(&value).expect("frame serializes");
     bytes.push(b'\n');
     bytes
+}
+
+fn permitted_frame() -> Vec<u8> {
+    make_jsonrpc_frame("session/new", Some(&serde_json::json!(1)))
 }
 
 fn blocked_request_frame(id: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "method": "terminal/create",
-        "params": {},
-    }))
-    .expect("blocked request serializes");
-    bytes.push(b'\n');
-    bytes
+    make_jsonrpc_frame("terminal/create", Some(id))
 }
 
 fn blocked_notification_frame() -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": "fs/changed",
-        "params": {},
-    }))
-    .expect("blocked notification serializes");
-    bytes.push(b'\n');
-    bytes
+    make_jsonrpc_frame("fs/changed", None)
 }
 
 fn build_adapter() -> (OutboundPolicyAdapter, mpsc::Receiver<WriteCmd>) {
