@@ -40,27 +40,29 @@ fn default_denylist_blocks_terminal_and_fs_only(#[case] method: &str, #[case] ex
     assert_eq!(denylist.is_blocked(method), expected);
 }
 
-fn jsonrpc_request(id: &Value, method: &str) -> Vec<u8> {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "method": method,
-        "params": {},
-    });
-    let mut bytes = serde_json::to_vec(&payload).expect("request serializes");
+/// Serializes `value` to compact JSON bytes and appends a newline terminator,
+/// producing a well-formed ACP frame suitable for test input.
+fn serialize_frame(value: &serde_json::Value) -> Vec<u8> {
+    let mut bytes = serde_json::to_vec(value).expect("frame serializes");
     bytes.push(b'\n');
     bytes
 }
 
+fn jsonrpc_request(id: &Value, method: &str) -> Vec<u8> {
+    serialize_frame(&serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": method,
+        "params": {},
+    }))
+}
+
 fn jsonrpc_notification(method: &str) -> Vec<u8> {
-    let payload = serde_json::json!({
+    serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "method": method,
         "params": {},
-    });
-    let mut bytes = serde_json::to_vec(&payload).expect("notification serializes");
-    bytes.push(b'\n');
-    bytes
+    }))
 }
 
 #[rstest]
@@ -125,12 +127,11 @@ fn evaluate_forwards_malformed_json() {
 
 #[test]
 fn evaluate_forwards_response_without_method_field() {
-    let frame = serde_json::to_vec(&serde_json::json!({
+    let frame = serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
         "result": {"value": 42},
-    }))
-    .expect("response serializes");
+    }));
     let denylist = MethodDenylist::default_families();
 
     assert_eq!(
@@ -141,12 +142,11 @@ fn evaluate_forwards_response_without_method_field() {
 
 #[test]
 fn evaluate_forwards_frame_when_method_not_string() {
-    let frame = serde_json::to_vec(&serde_json::json!({
+    let frame = serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": 7,
-    }))
-    .expect("invalid frame still serializes");
+    }));
     let denylist = MethodDenylist::default_families();
 
     assert_eq!(
