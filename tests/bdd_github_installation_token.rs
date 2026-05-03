@@ -17,7 +17,7 @@ use rstest_bdd_macros::scenario;
 fn valid_credentials_produce_an_installation_token(
     github_installation_token_state: GitHubInstallationTokenState,
 ) {
-    let _ = github_installation_token_state;
+    std::mem::drop(github_installation_token_state);
 }
 
 #[scenario(
@@ -27,7 +27,7 @@ fn valid_credentials_produce_an_installation_token(
 fn token_expiry_inside_the_buffer_is_rejected(
     github_installation_token_state: GitHubInstallationTokenState,
 ) {
-    let _ = github_installation_token_state;
+    std::mem::drop(github_installation_token_state);
 }
 
 #[scenario(
@@ -37,7 +37,7 @@ fn token_expiry_inside_the_buffer_is_rejected(
 fn github_rejects_installation_token_acquisition(
     github_installation_token_state: GitHubInstallationTokenState,
 ) {
-    let _ = github_installation_token_state;
+    std::mem::drop(github_installation_token_state);
 }
 
 #[scenario(
@@ -47,5 +47,5 @@ fn github_rejects_installation_token_acquisition(
 fn missing_expiry_metadata_is_rejected(
     github_installation_token_state: GitHubInstallationTokenState,
 ) {
-    let _ = github_installation_token_state;
+    std::mem::drop(github_installation_token_state);
 }

@@ -13,6 +13,8 @@ use super::installation_token::{
 };
 use super::*;
 
+const FIXTURE_RSA_PRIVATE_KEY: &str = include_str!("../../tests/fixtures/test_rsa_private_key.pem");
+
 #[fixture]
 fn now() -> Result<DateTime<Utc>, chrono::ParseError> {
     Ok(DateTime::parse_from_rfc3339("2026-04-22T12:00:00Z")?.with_timezone(&Utc))
@@ -152,4 +154,59 @@ async fn installation_token_with_client_maps_mock_error() {
         }
         other => panic!("expected TokenAcquisitionFailed, got: {other:?}"),
     }
+}
+
+#[rstest]
+#[tokio::test]
+async fn installation_token_with_factory_returns_valid_token(
+    now: Result<DateTime<Utc>, chrono::ParseError>,
+    future_expiry: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use camino::Utf8PathBuf;
+    use std::fs;
+    use tempfile::tempdir;
+
+    let current_time = now?;
+    let temp = tempdir()?;
+    let key_path = Utf8PathBuf::from_path_buf(temp.path().join("test.pem"))
+        .expect("temp path should be UTF-8");
+    fs::write(&key_path, FIXTURE_RSA_PRIVATE_KEY)?;
+
+    let expected_expiry = future_expiry.to_owned();
+    let expected_expiry_clone = expected_expiry.clone();
+    let request = InstallationTokenRequest::new(42, 77, &key_path, Duration::from_secs(300))
+        .with_now(current_time);
+
+    let result = installation_token_with_factory(request, |_app_id, _key| {
+        let mut mock = MockGitHubInstallationTokenClient::new();
+        let expiry = expected_expiry_clone.clone();
+        mock.expect_acquire_installation_token()
+            .times(1)
+            .returning(move |_| {
+                let token = serde_json::from_value(json!({
+                    "token": "ghs_via_buffer",
+                    "expires_at": expiry,
+                    "permissions": {},
+                    "repositories": null,
+                }))
+                .expect("should deserialize");
+                Box::pin(async move { Ok(token) })
+            });
+        Ok(mock)
+    })
+    .await?;
+
+    if result.token() != "ghs_via_buffer" {
+        return Err(format!("unexpected token: {}", result.token()).into());
+    }
+
+    let expected = chrono::DateTime::parse_from_rfc3339(&expected_expiry)?
+        .with_timezone(&Utc)
+        .to_rfc3339();
+    let actual = result.expires_at().to_rfc3339();
+    if expected != actual {
+        return Err(format!("unexpected expiry: {actual}").into());
+    }
+
+    Ok(())
 }

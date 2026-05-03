@@ -104,12 +104,13 @@ pub struct InstallationTokenRequest<'a> {
     installation_id: u64,
     private_key_path: &'a Utf8Path,
     buffer: Duration,
+    now: DateTime<Utc>,
 }
 
 impl<'a> InstallationTokenRequest<'a> {
     /// Create a new installation-token request.
     #[must_use]
-    pub const fn new(
+    pub fn new(
         app_id: u64,
         installation_id: u64,
         private_key_path: &'a Utf8Path,
@@ -120,7 +121,15 @@ impl<'a> InstallationTokenRequest<'a> {
             installation_id,
             private_key_path,
             buffer,
+            now: Utc::now(),
         }
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub const fn with_now(mut self, now: DateTime<Utc>) -> Self {
+        self.now = now;
+        self
     }
 }
 
@@ -183,7 +192,7 @@ where
         &client,
         request.installation_id,
         request.buffer,
-        Utc::now(),
+        request.now,
     )
     .await
 }
