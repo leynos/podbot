@@ -294,10 +294,9 @@ actionable error messages with remediation hints:
 ### Installation token acquisition
 
 When podbot needs repository access, it exchanges the configured GitHub App
-identity for an installation-scoped token through its GitHub App
-configuration. Embedders should use the stable `podbot::api`,
-`podbot::config`, and `podbot::error` modules rather than internal GitHub
-helpers.
+identity for an installation-scoped token through its GitHub App configuration.
+Embedders should use the stable `podbot::api`, `podbot::config`, and
+`podbot::error` modules rather than internal GitHub helpers.
 
 The helper returns both the token string and the parsed expiry timestamp.
 Podbot rejects tokens that are already expired or that expire within the

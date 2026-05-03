@@ -236,9 +236,9 @@ Acquire scoped installation tokens for repository access.
   `network_timeout`, `auth_invalid_credentials`, `rate_limited`,
   `service_unavailable`, and `parse_error`. Unit and integration tests must
   show the expected response for each classified failure and for a successful
-  refresh. Token fetch should complete within a two-second timeout under
-  normal API conditions, and expiry metadata should be retained only as long as
-  the token value remains valid for refresh scheduling and diagnostics.
+  refresh. Token fetch should complete within a two-second timeout under normal
+  API conditions, and expiry metadata should be retained only as long as the
+  token value remains valid for refresh scheduling and diagnostics.
 
 **Completion criteria:** Installation tokens acquire successfully. Tokens have
 appropriate scope for repository operations.

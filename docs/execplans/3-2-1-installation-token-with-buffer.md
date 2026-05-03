@@ -208,8 +208,8 @@ work.
   minimal JSON payload into `InstallationToken`.
 
 - `make fmt` still is not idempotent for the repository’s existing Markdown
-  tables. Re-running it on this branch reproduces the previously observed
-  MD056 and MD060 failures in `docs/podbot-design.md` and
+  tables. Re-running it on this branch reproduces the previously observed MD056
+  and MD060 failures in `docs/podbot-design.md` and
   `docs/execplans/5-3-1-stabilize-public-library-boundaries.md`, even though
   `make markdownlint` passes once those files are restored to their checked-in
   table layout.
@@ -251,10 +251,10 @@ Completed on 2026-04-22 UTC.
 
 Step 3.2 now ships a real installation-token acquisition path in
 `src/github/installation_token.rs`. The public helper
-`installation_token_with_buffer(app_id, installation_id, private_key_path,
-buffer)` loads the RSA private key, builds an App-authenticated Octocrab
-client, requests `POST /app/installations/{installation_id}/access_tokens`,
-parses `expires_at`, enforces the expiry buffer, and returns a podbot-owned
+`installation_token_with_buffer(app_id, installation_id, private_key_path, buffer)`
+ loads the RSA private key, builds an App-authenticated Octocrab client,
+requests `POST /app/installations/{installation_id}/access_tokens`, parses
+`expires_at`, enforces the expiry buffer, and returns a podbot-owned
 `InstallationAccessToken` value object. Tokens that expire within the buffer
 raise `GitHubError::TokenExpired`; malformed or missing expiry metadata fails
 closed with `GitHubError::TokenAcquisitionFailed`.
