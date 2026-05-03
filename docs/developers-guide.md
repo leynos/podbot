@@ -26,6 +26,7 @@ All quality gates must pass before committing. The canonical targets are:
 | `make fmt`          | `cargo fmt --workspace`                                                | Apply formatting fixes        |
 | `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Lint with all warnings denied |
 | `make test`         | `cargo test --workspace`                                               | Run full test suite           |
+| `make typecheck`    | `cargo check --all-targets --all-features`                             | Verify types without testing  |
 | `make markdownlint` | markdownlint-cli                                                       | Validate Markdown files       |
 | `make nixie`        | Mermaid diagram validator                                              | Validate diagrams in Markdown |
 
@@ -557,6 +558,12 @@ module provides:
   point called by `OctocrabAppClient::validate_credentials` via `map_err`
 - `classify_by_status(code: u16, full_error: &str) -> String` — maps HTTP
   status codes to error messages with remediation hints
+- `classify_installation_token_error(error: octocrab::Error) -> GitHubError` —
+  entry point for installation-token acquisition failures that maps to
+  `GitHubError::TokenAcquisitionFailed`
+- `classify_installation_token_by_status(code: u16, full_error: &str) ->
+  String` —
+  formatter for installation-token specific status classifications
 - `is_rate_limited(message: &str) -> bool` — distinguishes rate-limit 403s
   from permission 403s using case-insensitive substring matching
 
@@ -569,6 +576,10 @@ public API surface:
   `github` module
 - `classify_by_status` is `pub(crate)` — visible within the podbot crate for
   unit tests but not part of the public library API
+- `classify_installation_token_error` is `pub(super)` — visible only within the
+  `github` module
+- `classify_installation_token_by_status` is `pub(crate)` — visible within
+  the podbot crate for unit tests and shared use
 - `is_rate_limited` is private (`fn`) — implementation detail
 
 Integration tests (in `tests/`) are outside the crate boundary and cannot
@@ -594,7 +605,66 @@ classifications as follows:
 - **500–599** — GitHub API unavailable
 - **other** — unexpected response
 
-### 12.4. Extending the classifier
+### 12.4. GitHub App and installation-token subsystem
+
+The installation-token subsystem in `src/github/installation_token.rs` shares the
+same GitHub client model as credential validation but introduces additional
+expiry-aware acceptance rules for `POST /app/installations/{id}/access_tokens`.
+
+#### 12.4.1. Domain value
+
+- `InstallationAccessToken` — value object returned to callers.
+  - `token: String` (redacted in `Debug` output)
+  - `expires_at: DateTime<Utc>`
+  - Accessors: `token()` and `expires_at()`
+
+#### 12.4.2. Acquisition seam
+
+- `GitHubInstallationTokenClient` — abstraction over the POST path:
+  `acquire_installation_token(u64) -> Result<InstallationToken, GitHubError>`.
+  The trait is generated with `#[cfg_attr(test, mockall::automock)]` so
+  production and test builds can share deterministic unit tests for token
+  acquisition.
+
+- `OctocrabAppClient` — production implementation uses Octocrab's typed
+  request API and posts an empty request object to
+  `/app/installations/{installation_id}/access_tokens`.
+
+#### 12.4.3. Request model and orchestrators
+
+- `InstallationTokenRequest` — inputs required to perform acquisition:
+  `app_id`, `installation_id`, `private_key_path`, `buffer`, and `now`.
+- `installation_token_with_buffer` — public entry point:
+  loads the private key from disk, builds the GitHub client, then runs the
+  acquisition flow.
+- `installation_token_with_factory` — testable entry point used by unit tests;
+  receives a factory callback instead of opening the network client directly.
+- `installation_token_with_client_and_time` — internal helper used by both
+  public entry points; injects an authenticated client and `now` timestamp.
+
+#### 12.4.4. Parsing helpers
+
+- `token_from_response` — maps `octocrab::models::InstallationToken` into
+  `InstallationAccessToken` and applies expiry checks.
+- `parse_expiry` — validates RFC3339 `expires_at` metadata and converts it to
+  `DateTime<Utc>`.
+
+#### 12.4.5. Error mapping contract
+
+Token acquisition failures map to the following `GitHubError` variants:
+
+- `GitHubError::PrivateKeyLoadFailed` — private key file is missing, unreadable,
+  or malformed.
+- `GitHubError::AuthenticationFailed` — client construction fails.
+- `GitHubError::TokenAcquisitionFailed` — GitHub request fails or response
+  metadata is absent/invalid.
+- `GitHubError::TokenExpired` — returned token expiry is outside the safety
+  window implied by `buffer`.
+
+The classification layer in `src/github/classify.rs` converts the token
+acquisition class errors into user-facing guidance with actionable hints.
+
+### 12.5. Extending the classifier
 
 To add a new HTTP status code classification:
 
@@ -605,7 +675,7 @@ To add a new HTTP status code classification:
 4. Add a BDD scenario to `tests/features/github_credential_errors.feature` if
    the classification affects user-visible orchestration behaviour.
 
-### 12.5. Rate-limit detection
+### 12.6. Rate-limit detection
 
 The `is_rate_limited` function uses ASCII case-insensitive byte comparison to
 avoid allocating a lowercased string on the error path. It scans for the
