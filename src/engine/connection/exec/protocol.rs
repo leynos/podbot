@@ -42,9 +42,13 @@ use crate::error::PodbotError;
 
 /// Host-side stdio handles used by the protocol byte proxy.
 pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
+    /// Host stdin reader supplied to the forwarding task.
     stdin: HostStdin,
+    /// Host stdout writer used for container stdout and console output.
     stdout: HostStdout,
+    /// Host stderr writer used for container stderr and error diagnostics.
     stderr: HostStderr,
+    /// Per-session configuration knobs applied to this proxy run.
     options: ProtocolSessionOptions,
 }
 
@@ -100,15 +104,14 @@ impl ProtocolSessionOptions {
 /// bytes, used to suppress inherited process stdin while the forwarding task
 /// remains alive.
 struct HeldOpenStdin {
-    // `tokio::io::duplex(1)` gives us the smallest possible in-memory pipe to
-    // keep `reader` and `_writer_guard` alive without producing an immediate
-    // EOF. No bytes are ever written through this seam; the 1-byte buffer just
-    // satisfies Tokio's duplex constructor while avoiding wasted memory.
+    /// The read half of the in-memory duplex pipe; never yields bytes.
     reader: tokio::io::DuplexStream,
+    /// Keeps the write half alive so `reader` never sees EOF.
     _writer_guard: tokio::io::DuplexStream,
 }
 
 impl tokio::io::AsyncRead for HeldOpenStdin {
+    /// Delegates to the inner duplex reader, which blocks indefinitely without producing bytes.
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

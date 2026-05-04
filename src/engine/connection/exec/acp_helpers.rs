@@ -35,15 +35,20 @@ pub(super) const ACP_TERMINAL_CAPABILITY: &str = "terminal";
 
 /// Decision produced by each iteration of the first-frame scanning loop.
 enum InitialFrameAction {
+    /// Keep reading; the complete first frame has not yet been buffered.
     Continue,
+    /// A complete frame was buffered; rewrite it before forwarding.
     ForwardMasked,
+    /// Forward the buffered bytes unchanged for the given reason.
     ForwardUnchanged(ForwardUnchangedReason),
 }
 
 /// Reason why the first ACP frame is forwarded without capability rewriting.
 #[derive(Clone, Copy)]
 enum ForwardUnchangedReason {
+    /// The frame exceeded [`MAX_FIRST_FRAME_BYTES`] before a newline was found.
     ExceededMaximumSize,
+    /// Host stdin reached EOF before a newline-delimited frame was complete.
     EofBeforeNewline,
 }
 
