@@ -314,7 +314,7 @@ The token strategy works as follows:
 3. The container receives a read-only bind mount:
    `<token_path>:/run/secrets/ghapp_token:ro`.
 
-4. The token daemon refreshes the token with a time buffer using podbot's
+4. The token daemon refreshes the token with a time buffer using Podbot's
    `github::installation_token_with_buffer` helper, which preserves both the
    token string and the parsed expiry timestamp before the daemon writes the
    refreshed secret atomically via rename from a temporary file.
@@ -999,7 +999,7 @@ without a major version bump.
 <!-- markdownlint-disable MD060 -->
 | Module   | Stability | Key types and functions |
 | -------- | --------- | ---------------------- |
-| `api`    | Stable    | `CommandOutcome`, `ExecParams`, `exec`, `run_agent`, `list_containers`, `stop_container`, `run_token_daemon` |
+| `api`    | Stable    | `CommandOutcome`, `ExecRequest`, `ExecMode`, `ExecContext`, `exec`, `run_agent`, `list_containers`, `stop_container`, `run_token_daemon` |
 | `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`, `load_config`, `load_config_with_env`, `AgentConfig`, `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`, `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`, `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent` |
 | `engine` | Internal  | `EngineConnector`, `SocketResolver`, `ExecMode`, `ExecRequest`, `ExecResult`, `ContainerExecClient`, `ContainerCreator`, `ContainerUploader`, `CreateContainerRequest`, `ContainerSecurityOptions`, `CredentialUploadRequest`, `CredentialUploadResult` |
 | `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`, `GitHubError`, `FilesystemError`, `Result<T>` |

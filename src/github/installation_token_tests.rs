@@ -166,6 +166,9 @@ async fn installation_token_with_factory_returns_valid_token(
     use std::fs;
     use tempfile::tempdir;
 
+    const EXPECTED_APP_ID: u64 = 42;
+    const EXPECTED_INSTALLATION_ID: u64 = 77;
+
     let current_time = now?;
     let temp = tempdir()?;
     let key_path = Utf8PathBuf::from_path_buf(temp.path().join("test.pem"))
@@ -177,11 +180,13 @@ async fn installation_token_with_factory_returns_valid_token(
     let request = InstallationTokenRequest::new(42, 77, &key_path, Duration::from_secs(300))
         .with_now(current_time);
 
-    let result = installation_token_with_factory(request, |_app_id, _key| {
+    let result = installation_token_with_factory(request, |app_id, _key| {
+        assert_eq!(app_id, EXPECTED_APP_ID);
         let mut mock = MockGitHubInstallationTokenClient::new();
         let expiry = expected_expiry_clone.clone();
         mock.expect_acquire_installation_token()
             .times(1)
+            .with(mockall::predicate::eq(EXPECTED_INSTALLATION_ID))
             .returning(move |_| {
                 let token = serde_json::from_value(json!({
                     "token": "ghs_via_buffer",

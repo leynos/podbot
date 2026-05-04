@@ -12,6 +12,7 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use jsonwebtoken::EncodingKey;
 use octocrab::models::InstallationToken;
 use serde::Serialize;
+use tokio::time::timeout;
 
 use super::{BoxFuture, OctocrabAppClient, build_app_client, load_private_key};
 use crate::error::GitHubError;
@@ -89,10 +90,21 @@ impl GitHubInstallationTokenClient for OctocrabAppClient {
     ) -> BoxFuture<'_, Result<InstallationToken, GitHubError>> {
         Box::pin(async move {
             let route = format!("/app/installations/{installation_id}/access_tokens");
-            self.client()
-                .post::<_, InstallationToken>(route, Some(&EmptyInstallationTokenRequest {}))
-                .await
-                .map_err(classify_installation_token_error)
+            let response = timeout(
+                Duration::from_secs(10),
+                self.client()
+                    .post::<_, InstallationToken>(route, Some(&EmptyInstallationTokenRequest {})),
+            )
+            .await;
+            match response {
+                Ok(result) => result.map_err(classify_installation_token_error),
+                Err(_elapsed) => Err(GitHubError::TokenAcquisitionFailed {
+                    message: String::from(concat!(
+                        "timed out while requesting installation token after 10 seconds; ",
+                        "check network connectivity to GitHub and retry.",
+                    )),
+                }),
+            }
         })
     }
 }
