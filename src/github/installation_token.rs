@@ -137,7 +137,11 @@ impl<'a> InstallationTokenRequest<'a> {
         }
     }
 
-    #[cfg(test)]
+    /// Override the wall-clock reference used to evaluate the expiry buffer.
+    ///
+    /// Providing an explicit timestamp makes integration test harnesses and
+    /// non-`#[cfg(test)]` callers deterministic without coupling them to the
+    /// system clock.
     #[must_use]
     pub const fn with_now(mut self, now: DateTime<Utc>) -> Self {
         self.now = now;

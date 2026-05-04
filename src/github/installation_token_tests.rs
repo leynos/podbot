@@ -8,7 +8,7 @@ use rstest::{fixture, rstest};
 use serde_json::json;
 
 use super::installation_token::{
-    InstallationAccessToken, MockGitHubInstallationTokenClient,
+    InstallationAccessToken, MockGitHubInstallationTokenClient, installation_token_with_buffer,
     installation_token_with_client_and_time, token_from_response,
 };
 use super::*;
@@ -214,4 +214,19 @@ async fn installation_token_with_factory_returns_valid_token(
     }
 
     Ok(())
+}
+
+#[rstest]
+#[tokio::test]
+async fn installation_token_with_buffer_propagates_key_load_error() {
+    use camino::Utf8Path;
+
+    let missing_key = Utf8Path::new("/tmp/this_key_does_not_exist_podbot_test.pem");
+    let result =
+        installation_token_with_buffer(42, 77, missing_key, Duration::from_secs(300)).await;
+
+    assert!(
+        matches!(result, Err(GitHubError::PrivateKeyLoadFailed { .. })),
+        "expected PrivateKeyLoadFailed for a missing key file, got: {result:?}"
+    );
 }

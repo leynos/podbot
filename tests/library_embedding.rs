@@ -27,7 +27,7 @@ use podbot::engine::{
     ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
 use podbot::error::{ConfigError, ContainerError, PodbotError};
-use test_utils::exec_outcome_with_client;
+use test_utils::{TestStdinForwardingGuard, exec_outcome_with_client};
 
 mock! {
     #[derive(Debug)]
@@ -127,6 +127,7 @@ fn exec_via_library_api_returns_expected_outcome(
     let request = ExecRequest::new("embed-sandbox", test_case.command)?
         .with_mode(test_case.mode)
         .with_tty(false);
+    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
     let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
     assert_exec_outcome_matches(&result, test_case.check, test_case.description);
@@ -156,6 +157,7 @@ fn exec_failure_returns_container_error(
     )?
     .with_mode(mode)
     .with_tty(false);
+    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
     let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
     assert_exec_failed_with_container_error(&result, fail_at);

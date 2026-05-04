@@ -1003,7 +1003,7 @@ without a major version bump.
 | `config` | Stable    | `AppConfig`, `ConfigLoadOptions`, `ConfigOverrides`, `load_config`, `load_config_with_env`, `AgentConfig`, `AgentKind`, `AgentMode`, `CredsConfig`, `GitHubConfig`, `McpConfig`, `SandboxConfig`, `SelinuxLabelMode`, `WorkspaceConfig`, `WorkspaceSource`, `CommandIntent` |
 | `engine` | Internal  | `EngineConnector`, `SocketResolver`, `ExecMode`, `ExecRequest`, `ExecResult`, `ContainerExecClient`, `ContainerCreator`, `ContainerUploader`, `CreateContainerRequest`, `ContainerSecurityOptions`, `CredentialUploadRequest`, `CredentialUploadResult` |
 | `error`  | Stable    | `PodbotError`, `ConfigError`, `ContainerError`, `GitHubError`, `FilesystemError`, `Result<T>` |
-| `github` | Internal  | `load_private_key`, `build_app_client`, `validate_app_credentials`, `GitHubAppClient` |
+| `github` | Internal  | `load_private_key`, `build_app_client`, `validate_app_credentials`, `GitHubAppClient`, `InstallationAccessToken`, `GitHubInstallationTokenClient`, `InstallationTokenRequest`, `installation_token_with_buffer`, `installation_token_with_factory` |
 | `cli`    | Adapter   | CLI parse types (gated by `cli` feature; uses `clap`) |
 <!-- markdownlint-enable MD060 -->
 
