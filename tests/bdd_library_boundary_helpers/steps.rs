@@ -25,7 +25,7 @@ use super::StepResult;
 #[cfg(feature = "experimental")]
 use super::state::StubOutcomes;
 use super::state::{ConfigResult, LibraryBoundaryState, LibraryResult};
-use crate::test_utils::exec_outcome_with_client;
+use crate::test_utils::{TestStdinForwardingGuard, exec_outcome_with_client};
 
 mock! {
     #[derive(Debug)]
@@ -158,6 +158,7 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
 
     let runtime =
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
+    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
 
     let request = ExecRequest::new(
         "lib-sandbox",

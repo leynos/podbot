@@ -35,6 +35,31 @@ pub(super) fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
     }
 }
 
+/// Classify a GitHub API error raised while acquiring an installation token.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "required by map_err signature; error is consumed to extract status"
+)]
+pub(super) fn classify_installation_token_error(error: octocrab::Error) -> GitHubError {
+    match error {
+        octocrab::Error::GitHub { ref source, .. } => {
+            let code = source.status_code.as_u16();
+            let raw = format!("{error}");
+            let message = classify_installation_token_by_status(code, &raw);
+            GitHubError::TokenAcquisitionFailed { message }
+        }
+        _ => GitHubError::TokenAcquisitionFailed {
+            message: format!(
+                concat!(
+                    "failed to acquire GitHub installation token: {error}. ",
+                    "Hint: Check network connectivity, DNS resolution, and GitHub API reachability.",
+                ),
+                error = error,
+            ),
+        },
+    }
+}
+
 /// Format a classified message for a known HTTP status code.
 ///
 /// `full_error` is the complete `Display` output from the Octocrab error,
@@ -99,6 +124,62 @@ pub(crate) fn classify_by_status(code: u16, full_error: &str) -> String {
     }
 }
 
+/// Format installation-token acquisition failures into actionable guidance.
+#[must_use]
+pub(crate) fn classify_installation_token_by_status(code: u16, full_error: &str) -> String {
+    match code {
+        401 => format!(
+            concat!(
+                "GitHub rejected installation token acquisition (HTTP 401). ",
+                "Hint: The App JWT may be invalid or expired. Verify the App ID, ",
+                "the RSA private key, and the host clock. Raw error: {raw}",
+            ),
+            raw = full_error,
+        ),
+        403 if is_rate_limited(full_error) => format!(
+            concat!(
+                "GitHub rate-limited installation token acquisition (HTTP 403). ",
+                "Hint: Wait and retry after the rate limit resets. ",
+                "Check https://www.githubstatus.com if the problem persists. Raw error: {raw}",
+            ),
+            raw = full_error,
+        ),
+        403 => format!(
+            concat!(
+                "GitHub denied installation token acquisition (HTTP 403). ",
+                "Hint: The installation may lack the required repository permissions ",
+                "or the App may not be installed on the target repository. Raw error: {raw}",
+            ),
+            raw = full_error,
+        ),
+        404 => format!(
+            concat!(
+                "GitHub installation not found (HTTP 404). ",
+                "Hint: Verify github.installation_id matches the configured App and ",
+                "that the installation still exists. Raw error: {raw}",
+            ),
+            raw = full_error,
+        ),
+        500..=599 => format!(
+            concat!(
+                "GitHub API unavailable during installation token acquisition (HTTP {code}). ",
+                "Hint: Retry after the service recovers and check https://www.githubstatus.com. ",
+                "Raw error: {raw}",
+            ),
+            code = code,
+            raw = full_error,
+        ),
+        _ => format!(
+            concat!(
+                "unexpected response while acquiring installation token (HTTP {code}). ",
+                "Hint: Check GitHub service status and the raw error for details. Raw error: {raw}",
+            ),
+            code = code,
+            raw = full_error,
+        ),
+    }
+}
+
 /// Check whether a GitHub API error message indicates a rate-limit
 /// response rather than a genuine permissions failure.
 ///
@@ -118,6 +199,7 @@ fn is_rate_limited(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     #[test]
     fn is_rate_limited_detects_primary_rate_limit() {
@@ -141,5 +223,29 @@ mod tests {
     fn is_rate_limited_rejects_non_rate_limit_messages() {
         assert!(!is_rate_limited("Resource not accessible by integration"));
         assert!(!is_rate_limited("Bad credentials"));
+    }
+
+    #[rstest]
+    #[case(401, "rate_limit_nope", "HTTP 401", "invalid")]
+    #[case(403, "API rate limit exceeded", "HTTP 403", "rate-limited")]
+    #[case(403, "Resource not accessible", "HTTP 403", "denied")]
+    #[case(404, "rate_limit_nope", "HTTP 404", "installation not found")]
+    #[case(503, "rate_limit_nope", "HTTP 503", "unavailable")]
+    #[case(422, "rate_limit_nope", "HTTP 422", "unexpected response")]
+    fn classify_installation_token_by_status_returns_expected_fragment(
+        #[case] code: u16,
+        #[case] raw: &str,
+        #[case] status_fragment: &str,
+        #[case] message_fragment: &str,
+    ) {
+        let msg = classify_installation_token_by_status(code, raw);
+        assert!(
+            msg.contains(status_fragment),
+            "expected status fragment {status_fragment:?} in: {msg}"
+        );
+        assert!(
+            msg.contains(message_fragment),
+            "expected message fragment {message_fragment:?} in: {msg}"
+        );
     }
 }

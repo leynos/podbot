@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release typecheck lint fmt check-fmt markdownlint nixie
 
 
 TARGET ?= podbot
@@ -19,6 +19,9 @@ all: check-fmt lint test ## Perform a comprehensive check of code
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
+
+typecheck: ## Typecheck all targets and features
+	$(CARGO) check $(CARGO_FLAGS) $(BUILD_JOBS)
 
 test: ## Run tests with warnings treated as errors
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(TEST_FLAGS) $(BUILD_JOBS)

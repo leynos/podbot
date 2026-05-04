@@ -226,11 +226,19 @@ Acquire scoped installation tokens for repository access.
 
 **Tasks:**
 
-- [ ] Implement installation_token_with_buffer to acquire tokens with expiry
+- [x] Implement installation_token_with_buffer to acquire tokens with expiry
   buffer.
-- [ ] Return the token string for use in Git operations.
-- [ ] Handle token acquisition failures gracefully.
-- [ ] Log token expiry time for debugging.
+- [x] Return the token string for use in Git operations.
+- [x] Return a deterministic installation-token acquisition result shape for
+  later daemon work: `success:boolean`, `token:string|null`,
+  `expiry_iso:string|null`, `error_code:string|null`, and
+  `error_message:string|null`. Classified failures must distinguish
+  `network_timeout`, `auth_invalid_credentials`, `rate_limited`,
+  `service_unavailable`, and `parse_error`. Unit and integration tests must
+  show the expected response for each classified failure and for a successful
+  refresh. Token fetch should complete within a two-second timeout under normal
+  API conditions, and expiry metadata should be retained only as long as the
+  token value remains valid for refresh scheduling and diagnostics.
 
 **Completion criteria:** Installation tokens acquire successfully. Tokens have
 appropriate scope for repository operations.
