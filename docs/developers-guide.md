@@ -20,15 +20,15 @@ For user-facing behaviour and configuration reference, see
 
 All quality gates must pass before committing. The canonical targets are:
 
-| Target              | Command                                                                | Purpose                       |
-| ------------------- | ---------------------------------------------------------------------- | ----------------------------- |
-| `make check-fmt`    | `cargo fmt --workspace -- --check`                                     | Verify formatting             |
-| `make fmt`          | `cargo fmt --workspace`                                                | Apply formatting fixes        |
-| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Lint with all warnings denied |
-| `make test`         | `cargo test --workspace`                                               | Run full test suite           |
-| `make typecheck`    | `cargo check --all-targets --all-features`                             | Verify types without testing  |
-| `make markdownlint` | markdownlint-cli                                                       | Validate Markdown files       |
-| `make nixie`        | Mermaid diagram validator                                              | Validate diagrams in Markdown |
+| Target | Command | Purpose |
+| ------ | ------- | ------- |
+| `make check-fmt` | `cargo fmt --workspace -- --check` | Verify formatting |
+| `make fmt` | `cargo fmt --workspace` | Apply formatting fixes |
+| `make lint` | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Lint with all warnings denied |
+| `make test` | `cargo test --workspace` | Run full test suite |
+| `make typecheck` | `cargo check --workspace --all-targets --all-features` | Verify types without running tests |
+| `make markdownlint` | markdownlint-cli | Validate Markdown files |
+| `make nixie` | Mermaid diagram validator | Validate diagrams in Markdown |
 
 Run long commands through `tee` and `set -o pipefail` so truncated output can
 be reviewed from the log file.
@@ -675,7 +675,35 @@ To add a new HTTP status code classification:
 4. Add a BDD scenario to `tests/features/github_credential_errors.feature` if
    the classification affects user-visible orchestration behaviour.
 
-### 12.6. Rate-limit detection
+### 12.6. Installation-token classification
+
+`classify_installation_token_error` is the `pub(super)` entry point for
+installation-token acquisition failures. It mirrors
+`classify_github_api_error` by inspecting Octocrab errors and returning
+`GitHubError::TokenAcquisitionFailed` rather than `AuthenticationFailed`.
+On `octocrab::Error::GitHub` it delegates to
+`classify_installation_token_by_status`; on other errors it emits a generic
+connectivity-focused fallback.
+
+`classify_installation_token_by_status` is a `pub(crate)` formatter marked
+`#[must_use]`. It maps status codes to installation-token acquisition messages:
+
+| Status | Classification |
+| ------ | -------------- |
+| 401 | JWT invalid or expired; check App ID, key, and host clock |
+| 403 (rate-limited) | Rate limit exceeded; wait and retry |
+| 403 (other) | Installation lacks required permissions or App not installed on target |
+| 404 | Installation not found; verify `github.installation_id` |
+| 5xx | GitHub API unavailable; check status page |
+| Other | Unexpected response; inspect raw error |
+
+Rate-limit detection reuses the existing `is_rate_limited` helper in §12.7.
+
+`tests` module cases in `src/github/classify.rs` use parameterised `#[rstest]`
+`#[case]` coverage for all table branches, including the fallback path for
+other statuses.
+
+### 12.7. Rate-limit detection
 
 The `is_rate_limited` function uses ASCII case-insensitive byte comparison to
 avoid allocating a lowercased string on the error path. It scans for the
@@ -998,3 +1026,61 @@ When adding another identity field or related Git setting:
 7. Add BDD scenarios in `tests/features/git_identity.feature` and matching
    step definitions under `tests/bdd_git_identity_helpers/`.
 8. Update this section and the user-facing contract in `docs/users-guide.md`.
+
+## 18. Installation-token subsystem
+
+`src/github/installation_token.rs` provides the end-to-end installation-token
+acquisition path used by the daemon refresh loop and embedding callers.
+
+### 18.1. Module layout
+
+- `InstallationAccessToken` — value object returned to callers with:
+  - `token: String` (`Debug` redacts as `[REDACTED]`)
+  - `expires_at: DateTime<Utc>`
+- `GitHubInstallationTokenClient` — test seam trait with
+  `acquire_installation_token`, generated with `#[cfg_attr(test, mockall::automock)]`
+  for deterministic unit tests.
+- `OctocrabAppClient` implementation — posts an empty request object to
+  `/app/installations/{installation_id}/access_tokens` and maps transport/API
+  errors via `classify_installation_token_error`.
+- `InstallationTokenRequest<'a>` — request bundle:
+  - `app_id`, `installation_id`, `private_key_path`, `buffer`, `now`
+  - `now` defaults to `Utc::now()` in production
+  - `with_now(now: DateTime<Utc>)` is compiled with `#[cfg(test)]` and is
+    used to make expiration checks deterministic in tests
+
+### 18.2. Public entry points
+
+| Function | Visibility | Description |
+| -------- | ---------- | ----------- |
+| `installation_token_with_buffer` | `pub` | Loads the RSA key from disk, builds a live Octocrab App client, and requests the token |
+| `installation_token_with_factory` | `pub` | Injects a client factory for testability and bypasses live HTTP for unit tests |
+
+### 18.3. Internal helpers
+
+| Helper | Visibility | Description |
+| ------ | ---------- | ----------- |
+| `installation_token_with_client_and_time` | `pub(crate)` | Accepts an injected client and fixed `DateTime<Utc>`, then executes acquisition and applies buffer validation |
+| `token_from_response` | `pub(crate)` | Parses `expires_at` and calls `ensure_expiry_outside_buffer` |
+| `parse_expiry` | private | Converts RFC 3339 expiry text to `DateTime<Utc>` |
+| `ensure_expiry_outside_buffer` | private | Returns `Err(GitHubError::TokenExpired)` when `expires_at ≤ now + buffer` |
+
+### 18.4. Error mapping
+
+| Condition | `GitHubError` variant |
+| --------- | --------------------- |
+| Private key file unreadable or invalid | `PrivateKeyLoadFailed` |
+| Octocrab App client construction fails | `AuthenticationFailed` |
+| GitHub API rejects token request | `TokenAcquisitionFailed` |
+| `expires_at` missing or unparseable | `TokenAcquisitionFailed` |
+| Token expiry outside buffer window | `TokenExpired` |
+
+### 18.5. Testing seams
+
+Unit tests in `src/github/installation_token_tests.rs` inject a deterministic
+`now` with `InstallationTokenRequest::with_now()` and replace live network
+calls with `MockGitHubInstallationTokenClient`.
+
+BDD scenarios under `tests/bdd_github_installation_token_helpers/` follow the
+same orchestration path through the factory seam from the `#[given]`,
+`#[when]`, and `#[then]` layers without live GitHub access.
