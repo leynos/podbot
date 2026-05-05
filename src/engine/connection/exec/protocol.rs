@@ -19,6 +19,43 @@
 //! `handle_log_output_chunk` for `LogOutput::StdOut` and `LogOutput::Console`
 //! messages from the container. All other code paths route to stderr or return
 //! errors without touching stdout.
+//!
+//! ## Concurrency Model
+//!
+//! `run_protocol_session_with_io_async` runs two concurrent paths:
+//!
+//! 1. **Stdin forwarding task** — spawned via `spawn_stdin_forwarding_task`,
+//!    which takes ownership of the host-stdin reader and the container-input
+//!    writer. The task runs on the Tokio thread pool and is represented by a
+//!    `JoinHandle<io::Result<()>>`. Ownership of the handle is retained by the
+//!    caller function for the lifetime of the session.
+//!
+//! 2. **Output loop** — driven directly on the caller task via
+//!    `run_output_loop_async`. It polls the container output stream to
+//!    completion before any stdin shutdown logic runs.
+//!
+//! ### Task coordination
+//!
+//! The output loop is awaited to completion first. Once it returns (success or
+//! error), `settle_stdin_forwarding_task` awaits the stdin handle with a
+//! [`STDIN_SETTLE_TIMEOUT`] deadline of 50 ms. This grace period covers the
+//! common case where container EOF propagates to the forwarding task within
+//! normal pipe-flush timings.
+//!
+//! ### Timeout and cancellation
+//!
+//! If the grace period expires, `abort_stdin_forwarding_task` calls
+//! `JoinHandle::abort` and immediately drops the handle **without awaiting
+//! it**. Awaiting after abort would block indefinitely if host stdin is stalled
+//! in a non-cancellable kernel read; dropping the handle mirrors the
+//! attached-session teardown path and keeps shutdown bounded.
+//!
+//! A `JoinError` carrying `is_cancelled()` is mapped to `Ok(())` because an
+//! explicit abort is an intentional shutdown signal, not a failure.
+//!
+//! When `disable_stdin_forwarding` is set, the forwarding task reads from a
+//! `HeldOpenStdin` duplex adapter that never yields bytes and never closes.
+//! In that mode a timeout is expected and is silently treated as success.
 
 use std::io;
 use std::pin::Pin;
