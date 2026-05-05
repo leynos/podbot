@@ -6,7 +6,12 @@ use super::protocol::ProtocolSessionOptions;
 /// stream behaviour.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct ExecSessionOptions {
+    /// When `true`, protocol-mode sessions replace host stdin with a held-open
+    /// no-op reader so that the process's inherited stdin is not forwarded.
     disable_protocol_stdin_forwarding: bool,
+    /// When `true`, the first ACP `initialize` frame sent from host stdin is
+    /// rewritten to remove `terminal` and `fs` capabilities before being
+    /// forwarded to the container.
     rewrite_acp_initialize: bool,
 }
 
@@ -44,6 +49,8 @@ impl ExecSessionOptions {
     }
 }
 
+/// Convert exec-session options into the lower-level [`ProtocolSessionOptions`]
+/// consumed by the protocol proxy loop.
 pub(super) const fn protocol_session_options(
     options: ExecSessionOptions,
 ) -> ProtocolSessionOptions {

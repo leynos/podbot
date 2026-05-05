@@ -33,15 +33,22 @@ pub(super) const ACP_FILE_SYSTEM_CAPABILITY: &str = "fs";
 /// which are masked before the frame is forwarded to the container.
 pub(super) const ACP_TERMINAL_CAPABILITY: &str = "terminal";
 
+/// Decision produced by each iteration of the first-frame scanning loop.
 enum InitialFrameAction {
+    /// Keep reading; the complete first frame has not yet been buffered.
     Continue,
+    /// A complete frame was buffered; rewrite it before forwarding.
     ForwardMasked,
+    /// Forward the buffered bytes unchanged for the given reason.
     ForwardUnchanged(ForwardUnchangedReason),
 }
 
+/// Reason why the first ACP frame is forwarded without capability rewriting.
 #[derive(Clone, Copy)]
 enum ForwardUnchangedReason {
+    /// The frame exceeded [`MAX_FIRST_FRAME_BYTES`] before a newline was found.
     ExceededMaximumSize,
+    /// Host stdin reached EOF before a newline-delimited frame was complete.
     EofBeforeNewline,
 }
 
@@ -71,6 +78,7 @@ where
     }
 }
 
+/// Read the next chunk into `first_frame` and decide how to proceed.
 async fn next_initial_frame_action<HostStdin>(
     buffered_stdin: &mut tokio::io::BufReader<HostStdin>,
     first_frame: &mut Vec<u8>,
@@ -100,6 +108,7 @@ where
     })
 }
 
+/// Emit a debug trace for a frame forwarded without rewriting.
 fn log_unmodified_forwarding(reason: ForwardUnchangedReason, bytes: usize) {
     match reason {
         ForwardUnchangedReason::ExceededMaximumSize => log_exceeded_maximum_size(bytes),
@@ -107,6 +116,7 @@ fn log_unmodified_forwarding(reason: ForwardUnchangedReason, bytes: usize) {
     }
 }
 
+/// Emit a debug trace when the first frame exceeded the size limit.
 fn log_exceeded_maximum_size(bytes: usize) {
     tracing::debug!(
         bytes,
@@ -114,6 +124,7 @@ fn log_exceeded_maximum_size(bytes: usize) {
     );
 }
 
+/// Emit a debug trace when EOF was reached before a newline was found.
 fn log_eof_before_newline(bytes: usize) {
     tracing::debug!(
         bytes,
@@ -121,6 +132,8 @@ fn log_eof_before_newline(bytes: usize) {
     );
 }
 
+/// Write `first_frame` to `input` unchanged after logging the forwarding
+/// reason.
 async fn forward_unmodified_initial_frame(
     input: &mut Pin<Box<dyn AsyncWrite + Send>>,
     first_frame: &[u8],
@@ -130,6 +143,7 @@ async fn forward_unmodified_initial_frame(
     input.write_all(first_frame).await
 }
 
+/// Mask `first_frame` and write the result to `input`.
 async fn forward_masked_initial_frame(
     input: &mut Pin<Box<dyn AsyncWrite + Send>>,
     first_frame: &[u8],
@@ -140,12 +154,15 @@ async fn forward_masked_initial_frame(
     Ok(())
 }
 
+/// Emit a debug trace when the first frame was masked before forwarding.
 fn log_masked_frame_forwarded(masked_frame: &[u8], first_frame: &[u8]) {
     if masked_frame != first_frame {
         tracing::debug!("ACP initialize frame masked and forwarded");
     }
 }
 
+/// Fill the internal buffer and copy up to the size limit into `first_frame`.
+/// Returns `(bytes_consumed, has_complete_frame)`.
 async fn read_next_bounded_frame_chunk<HostStdin>(
     buffered_stdin: &mut tokio::io::BufReader<HostStdin>,
     first_frame: &mut Vec<u8>,
@@ -229,6 +246,9 @@ pub(super) fn split_frame_line_ending(frame: &[u8]) -> (&[u8], &[u8]) {
     (frame, b"")
 }
 
+/// Remove `terminal` and `fs` from `params.clientCapabilities` in an ACP
+/// `initialize` message. Returns `true` when at least one capability was
+/// removed.
 fn remove_masked_acp_capabilities(message: &mut Value) -> bool {
     if message.get("method").and_then(Value::as_str) != Some(ACP_INITIALIZE_METHOD) {
         return false;
