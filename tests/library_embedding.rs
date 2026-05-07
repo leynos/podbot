@@ -17,7 +17,10 @@ use futures_util::stream;
 use mockall::mock;
 use rstest::{fixture, rstest};
 
-use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
+use podbot::api::{
+    BranchName, CloneRepositoryParams, CommandOutcome, ExecMode, ExecRequest, RepositoryRef,
+    clone_repository_into_workspace,
+};
 #[cfg(feature = "experimental")]
 use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
 #[cfg(feature = "experimental")]
@@ -227,6 +230,33 @@ fn stub_orchestration_functions_return_success() {
 }
 
 // -------------------------------------------------------------------------
+// Repository cloning embeddability
+// -------------------------------------------------------------------------
+
+#[rstest]
+fn repository_clone_api_is_embeddable(runtime: Result<tokio::runtime::Runtime, std::io::Error>) {
+    let rt = runtime.expect("test requires a Tokio runtime");
+    let mut client = MockEmbedClient::new();
+    configure_successful_detached_execs(&mut client, 2);
+    let repository = RepositoryRef::parse("leynos/podbot").expect("repository should parse");
+    let branch = BranchName::parse("main").expect("branch should parse");
+
+    let result = clone_repository_into_workspace(&CloneRepositoryParams {
+        client: &client,
+        container_id: "embed-sandbox",
+        repository,
+        branch,
+        workspace_base_dir: "/work",
+        askpass_path: "/usr/local/bin/git-askpass",
+        runtime_handle: rt.handle(),
+    })
+    .expect("repository clone should succeed");
+
+    assert_eq!(result.workspace_path, "/work");
+    assert_eq!(result.checked_out_branch, "main");
+}
+
+// -------------------------------------------------------------------------
 // Test helpers
 // -------------------------------------------------------------------------
 
@@ -380,6 +410,28 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         let inspect = ExecInspectResponse {
             running: Some(false),
             exit_code: Some(exit_code),
+            ..ExecInspectResponse::default()
+        };
+        Box::pin(async move { Ok(inspect) })
+    });
+}
+
+fn configure_successful_detached_execs(client: &mut MockEmbedClient, count: usize) {
+    client.expect_create_exec().times(count).returning(|_, _| {
+        Box::pin(async {
+            Ok(CreateExecResults {
+                id: String::from("embed-exec-id"),
+            })
+        })
+    });
+    client
+        .expect_start_exec()
+        .times(count)
+        .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
+    client.expect_inspect_exec().times(count).returning(|_| {
+        let inspect = ExecInspectResponse {
+            running: Some(false),
+            exit_code: Some(0),
             ..ExecInspectResponse::default()
         };
         Box::pin(async move { Ok(inspect) })

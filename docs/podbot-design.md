@@ -118,7 +118,10 @@ workspace preparation, and agent execution through seven steps.
      However, embedding tokens in Uniform Resource Locators (URLs) risks
      leaking credentials into process arguments and shell history. A safer
      approach uses `GIT_ASKPASS` with a script that reads from
-     `/run/secrets/ghapp_token`.
+     `/run/secrets/ghapp_token`. Podbot passes `GIT_ASKPASS` and
+     `GIT_TERMINAL_PROMPT=0` through the container exec environment, clones
+     from `https://github.com/owner/name.git` without credentials in the URL,
+     and verifies that the requested branch is checked out.
    - `host_mount`: bind-mount a host directory (`workspace.host_path`) into the
      container at `workspace.container_path` and set the agent working
      directory to that mounted path. GitHub token acquisition and clone steps
@@ -608,7 +611,9 @@ must enforce legal `(kind, mode)` combinations.
 
 The `workspace.source` setting controls where the agent sees source code:
 
-- `github_clone`: Podbot clones into `workspace.base_dir` inside the container.
+- `github_clone`: Podbot clones the requested `owner/name` repository directly
+  into `workspace.base_dir` inside the container. The path is the workspace
+  root, not a parent directory for a nested repository checkout.
 - `host_mount`: Podbot bind-mounts `workspace.host_path` at
   `workspace.container_path`, and the mounted host workspace becomes the active
   working directory for the agent.

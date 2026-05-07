@@ -292,11 +292,11 @@ Clone the target repository into the container workspace.
 
 **Tasks:**
 
-- [ ] Accept repository in owner/name format.
-- [ ] Require the --branch flag with no default value.
-- [ ] Clone using GIT_ASKPASS for authentication.
-- [ ] Clone to the configured workspace.base_dir path.
-- [ ] Verify the clone completes successfully.
+- [x] Accept repository in owner/name format.
+- [x] Require the --branch flag with no default value.
+- [x] Clone using GIT_ASKPASS for authentication.
+- [x] Clone to the configured workspace.base_dir path.
+- [x] Verify the clone completes successfully.
 
 **Completion criteria:** Repository clones with the specified branch checked
 out. Authentication uses the token mechanism without exposing credentials in
