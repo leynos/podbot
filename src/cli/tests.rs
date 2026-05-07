@@ -53,14 +53,34 @@ fn agent_mode_arg_converts_to_library_mode(#[case] arg: AgentModeArg, #[case] ex
 }
 
 #[rstest]
-fn run_config_load_options_include_command_intent_and_agent_overrides() {
+#[case(
+    Commands::Host(HostArgs {
+        agent: Some(AgentKindArg::Custom),
+        mode: Some(AgentModeArg::Acp),
+    }),
+    CommandIntent::Host,
+    AgentKind::Custom,
+    AgentMode::Acp,
+)]
+#[case(
+    Commands::Run(crate::cli::RunArgs {
+        repo: String::from("owner/name"),
+        branch: String::from("main"),
+        agent: Some(AgentKindArg::Codex),
+        mode: Some(AgentModeArg::Podbot),
+    }),
+    CommandIntent::Run,
+    AgentKind::Codex,
+    AgentMode::Podbot,
+)]
+fn config_load_options_sets_intent_and_agent_overrides(
+    #[case] command: Commands,
+    #[case] expected_intent: CommandIntent,
+    #[case] expected_kind: AgentKind,
+    #[case] expected_mode: AgentMode,
+) {
     let cli = Cli {
-        command: Commands::Run(super::RunArgs {
-            repo: String::from("owner/name"),
-            branch: String::from("main"),
-            agent: Some(AgentKindArg::Codex),
-            mode: Some(AgentModeArg::Podbot),
-        }),
+        command,
         config: None,
         engine_socket: None,
         image: None,
@@ -68,20 +88,34 @@ fn run_config_load_options_include_command_intent_and_agent_overrides() {
 
     let options = cli.config_load_options();
 
-    assert_eq!(options.command_intent, CommandIntent::Run);
-    assert_eq!(options.overrides.agent_kind, Some(AgentKind::Codex));
-    assert_eq!(options.overrides.agent_mode, Some(AgentMode::Podbot));
+    assert_eq!(options.command_intent, expected_intent);
+    assert_eq!(options.overrides.agent_kind, Some(expected_kind));
+    assert_eq!(options.overrides.agent_mode, Some(expected_mode));
 }
 
 #[rstest]
-fn run_config_load_options_leave_agent_overrides_unset_when_flags_are_omitted() {
+#[case(
+    Commands::Host(HostArgs {
+        agent: None,
+        mode: None,
+    }),
+    CommandIntent::Host,
+)]
+#[case(
+    Commands::Run(crate::cli::RunArgs {
+        repo: String::from("owner/name"),
+        branch: String::from("main"),
+        agent: None,
+        mode: None,
+    }),
+    CommandIntent::Run,
+)]
+fn config_load_options_leaves_agent_overrides_unset_when_flags_are_omitted(
+    #[case] command: Commands,
+    #[case] expected_intent: CommandIntent,
+) {
     let cli = Cli {
-        command: Commands::Run(super::RunArgs {
-            repo: String::from("owner/name"),
-            branch: String::from("main"),
-            agent: None,
-            mode: None,
-        }),
+        command,
         config: None,
         engine_socket: None,
         image: None,
@@ -89,7 +123,7 @@ fn run_config_load_options_leave_agent_overrides_unset_when_flags_are_omitted() 
 
     let options = cli.config_load_options();
 
-    assert_eq!(options.command_intent, CommandIntent::Run);
+    assert_eq!(options.command_intent, expected_intent);
     assert!(options.overrides.agent_kind.is_none());
     assert!(options.overrides.agent_mode.is_none());
 }
@@ -109,44 +143,6 @@ fn run_args_convert_to_library_run_request() {
 
     assert_eq!(request.repository(), "owner/name");
     assert_eq!(request.branch(), "main");
-}
-
-#[rstest]
-fn host_config_load_options_include_host_intent() {
-    let cli = Cli {
-        command: Commands::Host(HostArgs {
-            agent: Some(AgentKindArg::Custom),
-            mode: Some(AgentModeArg::Acp),
-        }),
-        config: None,
-        engine_socket: None,
-        image: None,
-    };
-
-    let options = cli.config_load_options();
-
-    assert_eq!(options.command_intent, CommandIntent::Host);
-    assert_eq!(options.overrides.agent_kind, Some(AgentKind::Custom));
-    assert_eq!(options.overrides.agent_mode, Some(AgentMode::Acp));
-}
-
-#[rstest]
-fn host_config_load_options_leave_agent_overrides_unset_when_flags_are_omitted() {
-    let cli = Cli {
-        command: Commands::Host(HostArgs {
-            agent: None,
-            mode: None,
-        }),
-        config: None,
-        engine_socket: None,
-        image: None,
-    };
-
-    let options = cli.config_load_options();
-
-    assert_eq!(options.command_intent, CommandIntent::Host);
-    assert!(options.overrides.agent_kind.is_none());
-    assert!(options.overrides.agent_mode.is_none());
 }
 
 #[rstest]
