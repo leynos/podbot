@@ -561,9 +561,8 @@ module provides:
 - `classify_installation_token_error(error: octocrab::Error) -> GitHubError` —
   entry point for installation-token acquisition failures that maps to
   `GitHubError::TokenAcquisitionFailed`
-- `classify_installation_token_by_status(code: u16, full_error: &str) ->
-  String` —
-  formatter for installation-token specific status classifications
+- `classify_installation_token_by_status(code: u16, full_error: &str) -> String`
+  — formatter for installation-token specific status classifications
 - `is_rate_limited(message: &str) -> bool` — distinguishes rate-limit 403s
   from permission 403s using case-insensitive substring matching
 
@@ -620,8 +619,9 @@ expiry-aware acceptance rules for `POST /app/installations/{id}/access_tokens`.
 
 #### 12.4.2. Acquisition seam
 
-- `GitHubInstallationTokenClient` — abstraction over the POST path:
-  `acquire_installation_token(u64) -> Result<InstallationToken, GitHubError>`.
+- `GitHubInstallationTokenClient` — abstraction over the POST path.
+  `acquire_installation_token(&self, installation_id: u64)` returns
+  `BoxFuture<'_, Result<InstallationToken, GitHubError>>`.
   The trait is generated with `#[cfg_attr(test, mockall::automock)]` so
   production and test builds can share deterministic unit tests for token
   acquisition.

@@ -115,7 +115,7 @@ work.
 - Risk: a literal call to Octocrab's convenience method needs
   `chrono::Duration`, but the crate does not currently declare `chrono` as a
   direct dependency. Severity: medium. Likelihood: high. Mitigation: if the
-  final implementation needs `chrono`, add it as a direct dependency using a
+  final implementation needs `chrono`, add it as a direct dependency using an
   implicit semver version that matches the currently locked `chrono` version
   family and the project's Cargo.toml guidance.
 
