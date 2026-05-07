@@ -45,6 +45,12 @@ src/engine/connection/exec/
 +-- protocol.rs          # Protocol proxy loops, stdin forwarding,
 |                        #   Stdout Purity Contract, STDIN_BUFFER_CAPACITY,
 |                        #   STDIN_SETTLE_TIMEOUT, ProtocolProxyIo
++-- acp_helpers.rs       # ACP initialize-frame rewriting; forwards the
+|                        #   first newline-delimited frame from host stdin,
+|                        #   masks terminal/* and fs/* clientCapabilities,
+|                        #   and re-serialises the JSON before forwarding
+|                        #   to the container; bounded by
+|                        #   MAX_FIRST_FRAME_BYTES
 +-- attached.rs          # Attached-mode session, terminal resize,
 |                        #   SIGWINCH handling, stdin echo forwarding
 +-- terminal.rs          # Terminal size detection (stty), resize helpers,
@@ -60,10 +66,11 @@ src/engine/connection/exec/
 |                        #   PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS=1
 +-- session.rs           # ExecSessionOptions struct and
 |                        #   protocol_session_options helper; controls
-|                        #   per-call session knobs (e.g. stdin forwarding
-|                        #   disable seam for tests;
-|                        #   with_protocol_stdin_forwarding_disabled(bool)
-|                        #   is compiled only for #[cfg(test)] builds
+|                        #   per-call session knobs (stdin forwarding
+|                        #   disable seam for tests via
+|                        #   with_protocol_stdin_forwarding_disabled(bool);
+|                        #   ACP initialize rewriting opt-in via
+|                        #   with_acp_initialize_rewrite_enabled(bool))
 +-- runtime_helpers.rs   # Blocking runtime helpers for synchronous exec
 |                        #   wrappers; block_on_runtime detects nested
 |                        #   Tokio contexts and routes to block_in_place
@@ -84,6 +91,18 @@ src/engine/connection/exec/
     +-- detached_helpers.rs          # Detached mode test helpers
     +-- lifecycle_helpers.rs         # Shared lifecycle fixtures
     +-- protocol_helpers.rs          # Protocol-specific test helpers
+    +-- protocol_acp_tests.rs         # Unit and shared BDD fixture helpers
+    |                                 #   for ACP capability masking;
+    |                                 #   RecordingInputWriter, frame
+    |                                 #   builders, run_forwarding harness,
+    |                                 #   and pub(super) BDD fixtures
+    +-- protocol_acp_bdd_tests.rs     # rstest-bdd BDD scenarios for ACP
+    |                                 #   capability masking (masked
+    |                                 #   initialize, malformed pass-through,
+    |                                 #   unblocked pass-through)
+    +-- protocol_acp_forwarding_tests.rs  # Forwarding path tests: rewrite
+                                          #   enabled/disabled flag, oversized
+                                          #   frame timeout safety
 ```
 
 ### 3.1. Execution modes

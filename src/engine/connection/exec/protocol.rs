@@ -19,6 +19,43 @@
 //! `handle_log_output_chunk` for `LogOutput::StdOut` and `LogOutput::Console`
 //! messages from the container. All other code paths route to stderr or return
 //! errors without touching stdout.
+//!
+//! ## Concurrency Model
+//!
+//! `run_protocol_session_with_io_async` runs two concurrent paths:
+//!
+//! 1. **Stdin forwarding task** — spawned via `spawn_stdin_forwarding_task`,
+//!    which takes ownership of the host-stdin reader and the container-input
+//!    writer. The task runs on the Tokio thread pool and is represented by a
+//!    `JoinHandle<io::Result<()>>`. Ownership of the handle is retained by the
+//!    caller function for the lifetime of the session.
+//!
+//! 2. **Output loop** — driven directly on the caller task via
+//!    `run_output_loop_async`. It polls the container output stream to
+//!    completion before any stdin shutdown logic runs.
+//!
+//! ### Task coordination
+//!
+//! The output loop is awaited to completion first. Once it returns (success or
+//! error), `settle_stdin_forwarding_task` awaits the stdin handle with a
+//! [`STDIN_SETTLE_TIMEOUT`] deadline of 50 ms. This grace period covers the
+//! common case where container EOF propagates to the forwarding task within
+//! normal pipe-flush timings.
+//!
+//! ### Timeout and cancellation
+//!
+//! If the grace period expires, `abort_stdin_forwarding_task` calls
+//! `JoinHandle::abort` and immediately drops the handle **without awaiting
+//! it**. Awaiting after abort would block indefinitely if host stdin is stalled
+//! in a non-cancellable kernel read; dropping the handle mirrors the
+//! attached-session teardown path and keeps shutdown bounded.
+//!
+//! A `JoinError` carrying `is_cancelled()` is mapped to `Ok(())` because an
+//! explicit abort is an intentional shutdown signal, not a failure.
+//!
+//! When `disable_stdin_forwarding` is set, the forwarding task reads from a
+//! `HeldOpenStdin` duplex adapter that never yields bytes and never closes.
+//! In that mode a timeout is expected and is silently treated as success.
 
 use std::io;
 use std::pin::Pin;
@@ -42,9 +79,13 @@ use crate::error::PodbotError;
 
 /// Host-side stdio handles used by the protocol byte proxy.
 pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
+    /// Host stdin reader supplied to the forwarding task.
     stdin: HostStdin,
+    /// Host stdout writer used for container stdout and console output.
     stdout: HostStdout,
+    /// Host stderr writer used for container stderr and error diagnostics.
     stderr: HostStderr,
+    /// Per-session configuration knobs applied to this proxy run.
     options: ProtocolSessionOptions,
 }
 
@@ -63,13 +104,19 @@ const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
 /// low while preventing unbounded accumulation during high-throughput scenarios.
 const STDIN_BUFFER_CAPACITY: usize = 65_536;
 
+/// Per-session configuration knobs for protocol-mode exec proxy loops.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct ProtocolSessionOptions {
+    /// When `true`, host stdin is replaced by a held-open no-op reader so that
+    /// the process's inherited stdin is never forwarded to the container.
     disable_stdin_forwarding: bool,
+    /// When `true`, the first ACP `initialize` frame is rewritten to remove
+    /// `terminal` and `fs` capabilities before being forwarded to the container.
     rewrite_acp_initialize: bool,
 }
 
 impl ProtocolSessionOptions {
+    /// Create default protocol-session options with production behaviour.
     pub(super) const fn new() -> Self {
         Self {
             disable_stdin_forwarding: false,
@@ -77,6 +124,7 @@ impl ProtocolSessionOptions {
         }
     }
 
+    /// Disable or enable protocol stdin forwarding for this session.
     pub(super) const fn with_stdin_forwarding_disabled(mut self, disable: bool) -> Self {
         self.disable_stdin_forwarding = disable;
         self
@@ -89,16 +137,18 @@ impl ProtocolSessionOptions {
     }
 }
 
+/// An `AsyncRead` adapter that stays open indefinitely without producing
+/// bytes, used to suppress inherited process stdin while the forwarding task
+/// remains alive.
 struct HeldOpenStdin {
-    // `tokio::io::duplex(1)` gives us the smallest possible in-memory pipe to
-    // keep `reader` and `_writer_guard` alive without producing an immediate
-    // EOF. No bytes are ever written through this seam; the 1-byte buffer just
-    // satisfies Tokio's duplex constructor while avoiding wasted memory.
+    /// The read half of the in-memory duplex pipe; never yields bytes.
     reader: tokio::io::DuplexStream,
+    /// Keeps the write half alive so `reader` never sees EOF.
     _writer_guard: tokio::io::DuplexStream,
 }
 
 impl tokio::io::AsyncRead for HeldOpenStdin {
+    /// Delegates to the inner duplex reader, which blocks indefinitely without producing bytes.
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -123,12 +173,15 @@ impl<HostStdin, HostStdout, HostStderr> ProtocolProxyIo<HostStdin, HostStdout, H
         }
     }
 
+    /// Attach session options to this host-IO bundle.
     pub(super) const fn with_options(mut self, options: ProtocolSessionOptions) -> Self {
         self.options = options;
         self
     }
 }
 
+/// Run a protocol exec session using real host stdio and the given session
+/// options.
 pub(super) async fn run_protocol_session_async_with_options(
     request: &ExecRequest,
     output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
@@ -144,6 +197,8 @@ pub(super) async fn run_protocol_session_async_with_options(
     run_protocol_session_with_io_async(request, output, input, stdio).await
 }
 
+/// Return the appropriate stdin reader for a protocol session. Yields a
+/// held-open no-op reader when stdin forwarding is disabled.
 fn protocol_host_stdin(options: ProtocolSessionOptions) -> Pin<Box<dyn AsyncRead + Send>> {
     if options.disable_stdin_forwarding || stdin_forwarding_disabled_for_tests() {
         let (writer_guard, reader) = tokio::io::duplex(1);
@@ -192,6 +247,8 @@ where
     stdin_result
 }
 
+/// Wait for the stdin forwarding task to complete within a short grace
+/// period.
 async fn settle_stdin_forwarding_task(
     container_id: &str,
     mut stdin_task: JoinHandle<io::Result<()>>,
@@ -216,6 +273,7 @@ async fn settle_stdin_forwarding_task(
     classify_stdin_forwarding_task_result(container_id, join_result)
 }
 
+/// Map a join result from the stdin forwarding task to a `PodbotError`.
 fn classify_stdin_forwarding_task_result(
     container_id: &str,
     join_result: Result<io::Result<()>, tokio::task::JoinError>,
@@ -234,6 +292,7 @@ fn classify_stdin_forwarding_task_result(
     }
 }
 
+/// Abort and drop the stdin forwarding task without awaiting it.
 fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     if !stdin_task.is_finished() {
         stdin_task.abort();
@@ -244,6 +303,8 @@ fn abort_stdin_forwarding_task(stdin_task: JoinHandle<io::Result<()>>) {
     }
 }
 
+/// Copy host stdin to the container exec input, optionally rewriting the
+/// first ACP `initialize` frame before the raw copy begins.
 async fn forward_host_stdin_to_exec_async<HostStdin>(
     host_stdin: HostStdin,
     mut input: Pin<Box<dyn AsyncWrite + Send>>,
@@ -267,6 +328,8 @@ where
 #[path = "protocol_acp_tests.rs"]
 mod acp_tests;
 
+/// Drain the container output stream, routing each chunk to host stdout or
+/// stderr.
 async fn run_output_loop_async<HostStdout, HostStderr>(
     container_id: &str,
     output: &mut Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
@@ -286,6 +349,7 @@ where
     Ok(())
 }
 
+/// Route a single container log-output chunk to the appropriate host stream.
 async fn handle_log_output_chunk<HostStdout, HostStderr>(
     container_id: &str,
     chunk: LogOutput,
@@ -307,6 +371,8 @@ where
     }
 }
 
+/// Write and flush a byte slice to `writer`, mapping I/O failures to
+/// `PodbotError`.
 async fn write_output_chunk<Writer>(
     container_id: &str,
     writer: &mut Writer,
