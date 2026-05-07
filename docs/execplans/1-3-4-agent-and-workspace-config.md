@@ -1,9 +1,8 @@
-# Agent and workspace configuration
+# Step 1.3.4: Agent and workspace configuration
 
-This Execution Plan (ExecPlan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This Execution Plan (ExecPlan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -119,7 +118,7 @@ configuration live in `src/config/tests.rs`. Behavioural configuration coverage
 uses `tests/bdd_config.rs` with scenarios in
 `tests/features/configuration.feature`. The design intent for configuration is
 in `docs/podbot-design.md`, while user-facing behaviour is documented in
-`docs/users-guide.md`. The roadmap entry for this task is under Step 1.3 in
+`docs/users-guide.md`. The roadmap entry for this task is task 1.3.4 in
 `docs/podbot-roadmap.md`.
 
 `agent.kind` currently supports `claude` and `codex` via `AgentKind`. The
@@ -160,7 +159,7 @@ Update `tests/bdd_config.rs` with step definitions and scenario bindings.
 Stage E: Documentation and roadmap. Record the `agent.mode` decision and
 behaviour in `docs/podbot-design.md`, update `docs/users-guide.md` to include
 `agent.mode` in the configuration example and environment variable table, and
-mark the relevant Step 1.3 tasks as done in `docs/podbot-roadmap.md`.
+mark task 1.3.4 as done in `docs/podbot-roadmap.md`.
 
 Stage F: Validation. Run the required Makefile targets with captured logs,
 including documentation tooling if any Markdown files were modified.
@@ -273,7 +272,7 @@ Success looks like:
 - `docs/podbot-design.md` reflects the final `agent.mode` decision and
   `docs/users-guide.md` documents the new configuration key and environment
   variable.
-- The Step 1.3 tasks for AgentConfig and WorkspaceConfig are marked as done in
+- Task 1.3.4 for AgentConfig and WorkspaceConfig is marked as done in
   `docs/podbot-roadmap.md`.
 
 ## Idempotence and Recovery
