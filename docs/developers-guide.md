@@ -699,7 +699,7 @@ connectivity-focused fallback.
 
 Rate-limit detection reuses the existing `is_rate_limited` helper in §12.7.
 
-`tests` module cases in `src/github/classify.rs` use parameterised `#[rstest]`
+`tests` module cases in `src/github/classify.rs` use parameterized `#[rstest]`
 `#[case]` coverage for all table branches, including the fallback path for
 other statuses.
 
