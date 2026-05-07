@@ -1046,8 +1046,9 @@ acquisition path used by the daemon refresh loop and embedding callers.
 - `InstallationTokenRequest<'a>` — request bundle:
   - `app_id`, `installation_id`, `private_key_path`, `buffer`, `now`
   - `now` defaults to `Utc::now()` in production
-  - `with_now(now: DateTime<Utc>)` is compiled with `#[cfg(test)]` and is
-    used to make expiration checks deterministic in tests
+  - `with_now(now: DateTime<Utc>)` is always available (not feature- or
+    test-gated) so callers can pin the wall-clock reference for deterministic
+    expiry-buffer checks in tests and other harnesses
 
 ### 18.2. Public entry points
 

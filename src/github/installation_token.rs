@@ -272,6 +272,11 @@ struct EmptyInstallationTokenRequest {}
 
 #[cfg(test)]
 mod tests {
+    //! Guards the JSON shape of the empty POST body for installation access
+    //! tokens. `empty_installation_token_request_serializes_as_object` checks
+    //! that [`EmptyInstallationTokenRequest`] serialises to `{}`, matching what
+    //! the GitHub API expects for an empty request object.
+
     use serde_json::json;
 
     use super::EmptyInstallationTokenRequest;
