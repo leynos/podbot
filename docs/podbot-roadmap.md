@@ -652,7 +652,7 @@ the binary. The result informs every embedder-facing API. See podbot-design.md
   - Include `run`, `exec`, `stop`, `ps`, and token-daemon operations, typed
     outcomes, and CLI-only process exits kept in the adapter.
   - See docs/execplans/5-1-1-public-orchestration-module.md.
-  - Success: command flows are callable through library APIs and the binary is
+  - Success: command flows are callable through library APIs, and the binary is
     a thin adapter.
 
 ### 5.2. Decouple configuration APIs from Clap
