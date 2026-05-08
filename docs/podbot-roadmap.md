@@ -493,8 +493,9 @@ mcp-server-hosting-design.md §§4-8; ADR 001.
     plus header details without exposing lifecycle internals.
 - [ ] 4.6.2. Implement per-workspace MCP wire lifecycle operations.
   - Requires 4.6.1 and 2.5.3.
-  - Support create, list, and remove operations, isolate per-workspace state
-    from registry metadata, and inject only agent-facing reachability data.
+  - Support creating, listing, and removing operations, isolate per-workspace
+    state from registry metadata, and inject only agent-facing reachability
+    data.
   - Success: agents receive enough endpoint data to connect while Podbot owns
     bridge lifecycle and cleanup.
 - [ ] 4.6.3. Enforce helper-container `RepoAccess` boundaries.
@@ -647,7 +648,7 @@ the binary. The result informs every embedder-facing API. See podbot-design.md
 §Dual delivery model; ADR 001.
 
 - [x] 5.1.1. Introduce public orchestration APIs for command flows.
-  - Requires phase 2.
+  - Requires 2.5.3.
   - Include `run`, `exec`, `stop`, `ps`, and token-daemon operations, typed
     outcomes, and CLI-only process exits kept in the adapter.
   - See docs/execplans/5-1-1-public-orchestration-module.md.
