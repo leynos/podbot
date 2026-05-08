@@ -1,830 +1,947 @@
 # Podbot development roadmap
 
-This roadmap breaks down the implementation of the sandboxed agent runner into
-achievable, measurable tasks. Each phase represents a strategic milestone, with
-steps grouping related work and tasks defining atomic execution units.
-
-Podbot is delivered through two interfaces:
-
-- A Command-Line Interface (CLI) for terminal operators.
-- A Rust library for embedding in larger agent-hosting tools.
-
-Roadmap items must preserve this dual-delivery model.
-
-## Phase 1: Foundation and configuration
-
-Establish the project's dependency graph and configuration system, providing
-the scaffolding upon which all other modules depend.
-
-### Step 1.1: Core dependencies ✓
-
-Add the foundational crates required for async runtime, container management,
-GitHub integration, and cross-platform filesystem operations.
-
-**Tasks:**
-
-- [x] Use tokio as the async runtime with full features enabled.
-- [x] Integrate bollard for Docker and Podman API access.
-- [x] Enable octocrab for GitHub App authentication.
-- [x] Define semantic error enums with thiserror.
-- [x] Employ eyre for opaque error handling at the application boundary.
-- [x] Leverage cap_std and camino for capabilities-oriented filesystem access.
-- [x] Introduce OrthoConfig for layered configuration with derive support.
-- [x] Use clap for command-line argument parsing.
-
-**Completion criteria:** All dependencies compile, `make lint` passes, and the
-crate builds without warnings. ✓
-
-### Step 1.2: Error handling foundation ✓
-
-Establish the error handling patterns that propagate through all modules.
-
-**Tasks:**
-
-- [x] Create a root error module defining the pattern for semantic error enums.
-- [x] Configure eyre::Report as the return type for the main entry point.
-- [x] Ensure no unwrap or expect calls appear outside test code.
-
-**Completion criteria:** Error handling compiles, clippy raises no warnings
-about error patterns, and the expect_used lint remains strict. ✓
-
-### Step 1.3: Configuration module ✓
-
-Implement the configuration system with layered precedence: CLI flags override
-environment variables, which override configuration files, which override
-defaults.
-
-**Tasks:**
-
-- [x] Define AppConfig as the root configuration structure.
-- [x] Create GithubConfig for App ID, installation ID, and private key path.
-- [x] Establish SandboxConfig for privileged mode and /dev/fuse mount options.
-- [x] Specify AgentConfig for agent kind and execution mode.
-- [x] Add WorkspaceConfig for base directory.
-- [x] Implement OrthoConfig derive for layered precedence.
-- [x] Support configuration file at ~/.config/podbot/config.toml.
-- [x] Add validation ensuring required fields are present.
-
-**Completion criteria:** Configuration loads from file, environment, and CLI
-flags with correct precedence. Unit tests cover each layer and validation
-errors. ✓
-
-### Step 1.4: Hosting schema migration and compatibility matrix
-
-Extend configuration types for hosting mode without breaking existing
-installations.
-
-**Tasks:**
-
-- [x] Add schema fields for hosting: `workspace.source`, `workspace.host_path`,
-  `workspace.container_path`, `agent.command`, `agent.args`, and
-  `agent.env_allowlist`.
-- [x] Add MCP hosting defaults to configuration: bind strategy, idle timeout,
-  maximum message size, auth token policy, and allowed-origin policy.
-- [x] Add execution-mode values required for hosting mode while preserving
-  `podbot` defaults for existing configurations.
-- [x] Define migration rules, so legacy config files load deterministically
-  without manual edits.
-- [x] Implement validation for legal combinations of subcommand, `agent.kind`,
-  `agent.mode`, and `workspace.source`.
-- [x] Add a compatibility test matrix covering legacy and hosting-era
-  configuration variants.
-
-**Completion criteria:** Legacy configurations continue to load as expected,
-and hosting-mode configurations validate with actionable semantic errors. ✓
-
-## Phase 2: Container engine integration
-
-Implement the Bollard wrapper that manages container lifecycle, credential
-injection, and both interactive and protocol-safe execution.
-
-### Step 2.1: Engine connection ✓
-
-Connect to the Podman or Docker socket and verify the connection.
-
-**Tasks:**
-
-- [x] Implement socket connection via DOCKER_HOST, CONTAINER_HOST or PODMAN_HOST
-  environment variables or direct path specification.
-- [x] Add a health check that verifies the engine responds.
-- [x] Handle socket permission errors with actionable error messages.
-- [x] Support both Unix sockets and TCP connections.
-
-**Completion criteria:** Connection succeeds against a running Podman or Docker
-daemon. Permission errors produce clear diagnostic messages. ✓
-
-### Step 2.2: Container creation
-
-Create containers with the security configuration required for sandboxed
-execution.
-
-**Tasks:**
-
-- [x] Implement create_container with configurable security options.
-- [x] Support privileged mode for maximum compatibility.
-- [x] Support minimal mode with only /dev/fuse mounted.
-- [x] Configure appropriate capabilities and security options for SELinux
-  environments.
-- [x] Set the container image from configuration.
-
-**Completion criteria:** Containers start in both privileged and minimal modes.
-Inner Podman executes successfully within the container.
-
-### Step 2.3: Credential injection
-
-Copy agent credentials into the container filesystem.
-
-**Tasks:**
-
-- [x] Implement upload_to_container using tar archive format.
-- [x] Copy ~/.claude credentials when configured.
-- [x] Copy ~/.codex credentials when configured.
-- [x] Preserve file permissions during upload.
-- [x] Verify credentials appear at expected paths within container.
-
-**Completion criteria:** Credentials upload successfully. File permissions
-match source. Agent binaries can read their credentials.
-
-### Step 2.4: Interactive execution
-
-Attach a terminal to the agent process for interactive sessions.
-
-**Tasks:**
-
-- [x] Implement exec with TTY attachment for interactive sessions.
-- [x] Handle terminal resize signals (SIGWINCH).
-- [x] Support both attached and detached execution modes.
-- [x] Capture exit codes from executed commands.
-
-**Completion criteria:** Interactive sessions work with proper terminal
-handling. Resize events propagate correctly. Exit codes return accurately.
-
-### Step 2.5: Protocol-safe execution (stdio proxy) ✓
-
-Provide non-TTY execution for app-server hosting protocols.
-
-**Tasks:**
-
-- [x] Implement exec attachment with `tty = false` enforced. See
-  podbot-design.md "Execution flow" (protocol mode).
-- [x] Implement byte-stream proxy loops: stdin -> container stdin, container
-  stdout -> host stdout, and container stderr -> host stderr. See
-  podbot-design.md "Execution flow" (protocol mode stream contract).
-- [x] Keep proxy buffering bounded, so hosted protocols can apply backpressure.
-  See podbot-design.md "Bounded buffering implementation".
-- [x] Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
-  See podbot-design.md "Execution flow" (stdout purity contract).
-- [x] Add lifecycle stream-purity tests for startup, steady-state, shutdown, and
-  error paths. See podbot-design.md "Execution flow" (stream contract).
-- [x] Add a regression test asserting zero stdout bytes before the first proxied
-  protocol byte and after the final proxied byte. See podbot-design.md
-  "Execution flow" (stdout purity contract).
-
-**Completion criteria:** Hosting sessions run without TTY framing, preserve
-protocol byte streams, and keep stdout free from Podbot diagnostics. ✓
-
-### Step 2.6: ACP capability masking enforcement
-
-Prevent ACP client-side delegation from bypassing container sandbox boundaries.
-
-**Tasks:**
-
-- [x] Intercept ACP initialization and mask `terminal/*` and `fs/*` capabilities
-  by default before forwarding capability metadata.
-- [ ] Enforce a runtime denylist for blocked ACP methods after initialization.
-- [ ] Return protocol errors for blocked methods and record denials on stderr.
-- [ ] Add explicit configuration to opt in to ACP delegation when operators
-  intentionally accept host-side execution.
-- [ ] Add tests for handshake rewriting, blocked-method denial, and override
-  behaviour.
-
-**Completion criteria:** ACP hosting defaults to sandbox-preserving behaviour,
-with deterministic and test-backed enforcement.
-
-## Phase 3: GitHub App integration
-
-Handle GitHub App authentication and the token lifecycle required for
-repository access.
-
-### Step 3.1: App authentication
-
-Configure Octocrab with GitHub App credentials.
-
-**Tasks:**
-
-- [x] Load the private key from the configured path.
-- [x] Configure OctocrabBuilder with app_id and private_key.
-- [x] Validate credentials produce a valid App token on startup.
-- [x] Handle invalid or expired App credentials with clear errors.
-
-**Completion criteria:** App authentication succeeds against GitHub. Invalid
-credentials produce actionable error messages.
-
-### Step 3.2: Installation token acquisition
-
-Acquire scoped installation tokens for repository access.
-
-**Tasks:**
-
-- [ ] Implement installation_token_with_buffer to acquire tokens with expiry
-  buffer.
-- [ ] Return the token string for use in Git operations.
-- [ ] Handle token acquisition failures gracefully.
-- [ ] Log token expiry time for debugging.
-
-**Completion criteria:** Installation tokens acquire successfully. Tokens have
-appropriate scope for repository operations.
-
-### Step 3.3: Token daemon
-
-Implement the background daemon that refreshes tokens before expiry.
-
-**Tasks:**
-
-- [ ] Create the runtime directory at $XDG_RUNTIME_DIR/podbot/\<container_id>/.
-- [ ] Set directory mode 0700 and file mode 0600.
-- [ ] Write the initial token to ghapp_token within the directory.
-- [ ] Implement a refresh loop with a five-minute buffer before expiry.
-- [ ] Write tokens atomically via rename from a temporary file.
-- [ ] Handle refresh failures with retry logic.
-
-**Completion criteria:** Tokens refresh automatically before expiry. Atomic
-writes prevent partial reads. The daemon runs reliably over extended periods.
-
-### Step 3.4: GIT_ASKPASS mechanism (Git credential helper variable)
-
-Configure the container to use token-based Git authentication.
-
-**Tasks:**
-
-- [ ] Document the helper script that reads /run/secrets/ghapp_token.
-- [ ] Configure the read-only bind mount for the token file.
-- [ ] Set the `GIT_ASKPASS` Git credential helper environment variable in the
-  container.
-- [ ] Verify Git clone and fetch operations succeed after token refresh.
-
-**Completion criteria:** Git operations authenticate using the mounted token.
-Operations continue working after token refresh without intervention.
-
-## Phase 4: Repository and agent orchestration
-
-Wire together the complete execution flow from container creation through agent
-startup.
-
-### Step 4.1: Git identity configuration ✓
-
-Configure Git identity within the container using host settings.
-
-**Tasks:**
-
-- [x] Read user.name from host Git configuration.
-- [x] Read user.email from host Git configuration.
-- [x] Execute git config --global user.name within the container.
-- [x] Execute git config --global user.email within the container.
-- [x] Handle missing Git identity with a warning rather than failure.
-
-**Completion criteria:** Git commits within the container use the configured
-identity. Missing identity produces a warning but does not block execution. ✓
-
-### Step 4.2: Repository cloning
-
-Clone the target repository into the container workspace.
-
-**Tasks:**
-
-- [ ] Accept repository in owner/name format.
-- [ ] Require the --branch flag with no default value.
-- [ ] Clone using GIT_ASKPASS for authentication.
-- [ ] Clone to the configured workspace.base_dir path.
-- [ ] Verify the clone completes successfully.
-
-**Completion criteria:** Repository clones with the specified branch checked
-out. Authentication uses the token mechanism without exposing credentials in
-process arguments.
-
-### Step 4.3a: Interactive agent startup
-
-Launch the agent in permissive mode and attach the terminal.
-
-**Tasks:**
-
-- [ ] Implement orchestration for interactive mode (`agent.mode = "podbot"`).
-- [ ] Start Claude Code with `--dangerously-skip-permissions`.
-- [ ] Start Codex with `--dangerously-bypass-approvals-and-sandbox`.
-- [ ] Attach the terminal to the agent process.
-- [ ] Handle agent exit and cleanup.
-
-**Completion criteria:** Interactive agents start in permissive mode, terminal
-interaction works correctly, and cleanup occurs on agent exit.
-
-### Step 4.3b: App server startup
-
-Launch long-lived app servers for IDE and protocol clients.
-
-**Tasks:**
-
-- [ ] Add Codex App Server startup support
-  (`codex app-server --listen stdio://`).
-- [ ] Add ACP startup support through generic command execution
-  (`agent.command` + `agent.args`).
-- [ ] Route hosting sessions through the Step 2.5 non-TTY stdio proxy.
-- [ ] Route protocol hosting through the dedicated `host` command path.
-- [ ] Add config validation for legal `(agent.kind, agent.mode)` pairs.
-- [ ] Ensure clean shutdown semantics when the client closes stdin or sends a
-  termination signal.
-
-**Completion criteria:** App server modes start reliably, run through protocol-
-safe proxying, and shut down cleanly when the hosting client ends the session.
-
-### Step 4.4: Workspace strategies
-
-Support both cloned and host-mounted workspace models.
-
-**Tasks:**
-
-- [ ] Implement `workspace.source = "host_mount"` bind mounts.
-- [ ] Retain `workspace.source = "github_clone"` for token-backed clone flows.
-- [ ] Define path mapping policy (default mount target `/workspace`).
-- [ ] Canonicalize host paths before mounting and reject unresolved symlink
-  escapes.
-- [ ] Enforce allowlisted host mount roots.
-- [ ] Ensure container user write permissions are documented and validated for
-  rootless engines.
-- [ ] Update threat-model documentation for host-mounted workspace boundaries.
-- [ ] Add negative tests for forbidden mount paths and boundary violations.
-
-**Completion criteria:** Operators can choose clone or host-mount workspace
-strategies explicitly, with documented security and permission behaviour.
-
-### Step 4.5: Normalized launch contract
-
-Centralize launch validation and normalization across interactive and hosting
-flows.
-
-**Tasks:**
-
-- [ ] Define a library-level `LaunchRequest` model for agent kind, mode,
-  workspace source, credential policy, prompt references, bundle references,
-  skill selection, hook subscriptions, and MCP wire definitions.
-- [ ] Define a normalized `LaunchPlan` that resolves command, args, env policy,
-  mount policy, stream policy, artefact staging targets, and wire injection
-  details.
-- [ ] Update orchestration internals, so `run` and `host` both use the same
-  normalization path.
-- [ ] Add tests that assert consistent normalization outcomes across command
-  entry points.
-
-**Completion criteria:** Launch behaviour is defined once in library code and
-is consistent across CLI commands.
-
-### Step 4.6: Hosted session control plane
-
-Expose a typed hosted-session surface that separates protocol IO from
-control-plane events.
-
-**Tasks:**
-
-- [ ] Introduce a `HostedSession` handle that exposes protocol IO separately
-  from a typed event stream.
-- [ ] Emit typed session events for lifecycle transitions, diagnostics, MCP wire
-  status, and hook requests without writing directly to stdout or stderr.
-- [ ] Add typed control methods for session stop and hook acknowledgement.
-- [ ] Render hosted-session events to stderr in the CLI adapter while
-  preserving stdout protocol purity.
-- [ ] Add embedding-focused integration tests that drive the hosted-session
-  surface directly from library code.
-
-**Completion criteria:** Embedders can host agents through a typed session
-handle, and `podbot host` remains protocol-clean while using the same library
+This roadmap describes the delivery order for Podbot, the sandboxed agent
+runner described in [podbot-design.md](podbot-design.md) and refined by the
+hosting, Corbusier conformance, and Architectural Decision Record (ADR)
+documents in this directory. It is an implementation guide, not a date
+commitment.
+
+The structure follows Goals, Ideas, Steps, Tasks (GIST): each phase states a
+testable idea, each step is a workstream that validates or falsifies part of
+that idea, and each numbered task is a review-sized execution unit. Tasks
+include dependencies, design signposts, and completion criteria where the
+finish line is not obvious.
+
+Podbot is delivered through two first-class surfaces: a Command-Line Interface
+(CLI) for terminal operators, and a Rust library for embedding in larger
+agent-hosting tools. Roadmap work must preserve that dual-delivery model.
+
+## 1. Foundation and configuration
+
+Idea: if Podbot settles its dependency spine, error model, configuration
+contract, and hosting-era schema before wider orchestration work, later slices
+can extend one coherent architecture rather than reworking operator and
+embedder interfaces repeatedly.
+
+This phase is foundational, but it is still testable: later phases should be
+able to consume semantic errors, layered configuration, and hosting defaults
+without reaching back into CLI-only types or ad hoc configuration parsing.
+
+### 1.1. Establish the dependency and build spine
+
+This step answers whether the repository can compile the core dependency set
+needed for asynchronous execution, container orchestration, GitHub App
+authentication, and capabilities-oriented file access. The result informs all
+later implementation because these crates define the runtime and public-error
+constraints. See podbot-design.md §§Execution flow, Crate selection.
+
+- [x] 1.1.1. Add the foundational crate set for async runtime, container
+  management, GitHub App authentication, command parsing, layered
+  configuration, semantic errors, opaque application errors, and
+  capabilities-oriented paths.
+  - Include `tokio`, `bollard`, `octocrab`, `clap`, `ortho_config`,
+    `thiserror`, `eyre`, `cap_std`, and `camino`.
+  - Success: the workspace compiles, `make lint` passes, and the crate builds
+    without warnings.
+
+### 1.2. Define the error handling boundary
+
+This step proves that library code can return semantic errors while the binary
+keeps opaque, human-readable reporting at the application boundary. The result
+unblocks library APIs and CLI adapters that must not leak `eyre::Report`
+through stable public surfaces. See podbot-design.md §§Dual delivery model,
+Error handling boundary.
+
+- [x] 1.2.1. Create the root semantic error module.
+  - See docs/execplans/1-2-1-root-error-module.md.
+  - Success: domain errors compile as inspectable enums and remain usable from
+    library call paths.
+- [x] 1.2.2. Configure `eyre::Report` only at the binary entrypoint boundary.
+  - Requires 1.2.1.
+  - See docs/execplans/1-2-2-eyre-report.md.
+  - Success: the main entrypoint reports human-readable failures without
+    exporting opaque errors from library APIs.
+- [x] 1.2.3. Keep panic-prone helpers out of production code.
+  - Requires 1.2.1 and 1.2.2.
+  - Success: `unwrap` and `expect` remain absent from production code, and the
+    strict `expect_used` policy remains enforceable.
+
+### 1.3. Build layered configuration that both surfaces can consume
+
+This step answers whether operators and embedders can resolve one validated
+configuration model through files, environment variables, CLI flags, and
+explicit library options. The result informs hosting schema migration and later
+launch normalization. See podbot-design.md §§Configuration, Execution flow.
+
+- [x] 1.3.1. Define `AppConfig` as the root configuration structure.
+  - See docs/execplans/1-3-1-define-app-config.md.
+  - Success: all configuration groups compose through one loadable root model.
+- [x] 1.3.2. Add `GitHubConfig` for App ID, installation ID, and private key
+  path.
+  - Requires 1.3.1.
+  - See docs/execplans/1-3-2-github-config.md.
+  - Success: GitHub configuration validates required fields before
+    authentication work begins.
+- [x] 1.3.3. Add `SandboxConfig` for privileged mode, `/dev/fuse`, and
+  Security-Enhanced Linux (SELinux) policy.
+  - Requires 1.3.1.
+  - See docs/execplans/1-3-3-sandbox-config.md.
+  - Success: container security options can be resolved without hard-coded
+    sandbox defaults.
+- [x] 1.3.4. Add `AgentConfig` and `WorkspaceConfig` for agent kind,
+  execution mode, and workspace base directory.
+  - Requires 1.3.1.
+  - See docs/execplans/1-3-4-agent-and-workspace-config.md.
+  - Success: agent and workspace choices can be validated independently of CLI
+    parsing.
+- [x] 1.3.5. Support deterministic configuration discovery and validation.
+  - Requires 1.3.1-1.3.4.
+  - Include `~/.config/podbot/config.toml`, environment overrides, CLI
+    overrides, defaults, and required-field validation.
+  - Success: file, environment, and CLI precedence is covered by unit and
+    behavioural tests.
+- [x] 1.3.6. Implement `OrthoConfig` derive support for layered precedence.
+  - Requires 1.3.1-1.3.5.
+  - See docs/execplans/1-3-6-ortho-config-derive.md and
+    docs/execplans/adopt-ortho-config-v0-8-0.md.
+  - Success: configuration loading uses the derive path rather than a parallel
+    hand-rolled precedence implementation.
+
+### 1.4. Prove the schema can absorb hosting mode
+
+This step answers whether the existing configuration model can grow protocol
+hosting, workspace sources, and MCP defaults without breaking legacy
+configuration files. The result unblocks protocol-safe execution and hosted
+session work. See podbot-design.md §§Execution flow, Host-mount path safety
+policy; mcp-server-hosting-design.md §§7-8.
+
+- [x] 1.4.1. Add hosting-era schema fields, deterministic migration rules, and
+  compatibility validation.
+  - Requires 1.3.6.
+  - Include `workspace.source`, `workspace.host_path`,
+    `workspace.container_path`, `agent.command`, `agent.args`,
+    `agent.env_allowlist`, MCP hosting defaults, and legal combinations of
+    subcommand, agent kind, agent mode, and workspace source.
+  - See docs/execplans/1-4-1-hosting-schema-migration.md.
+  - Success: legacy configurations continue to load, hosting configurations
+    validate, and illegal combinations produce actionable semantic errors.
+
+## 2. Container execution and protocol-safe transport
+
+Idea: if Podbot can own the host container socket, create hardened containers,
+inject only selected credentials, and proxy protocol sessions without TTY
+framing or stdout contamination, then the sandbox boundary is real enough for
+both interactive agents and app-server hosting.
+
+This phase delivers the first usable execution slice: connect to the engine,
+create a sandbox, inject credentials, run attached sessions, and prove that
+protocol hosting can reuse the execution layer without inheriting terminal
+behaviour.
+
+### 2.1. Connect to and verify the container engine
+
+This step answers whether Podbot can discover and verify Docker or Podman
+endpoints with clear diagnostics. It informs all later container lifecycle
+work. See podbot-design.md §§Crate selection, Engine connection protocol
+support.
+
+- [x] 2.1.1. Implement socket connection from environment variables and direct
+  endpoint paths.
+  - Requires 1.3.3.
+  - See docs/execplans/2-1-1-socket-connection-via-env-var.md.
+  - Success: `DOCKER_HOST`, `CONTAINER_HOST`, `PODMAN_HOST`, and explicit
+    paths resolve through the supported endpoint dispatcher.
+- [x] 2.1.2. Add a health check that verifies the engine responds.
+  - Requires 2.1.1.
+  - See docs/execplans/2-1-2-health-check-call.md.
+  - Success: lazy TCP failures surface during verification with clear errors.
+- [x] 2.1.3. Handle socket permission errors with actionable diagnostics.
+  - Requires 2.1.1.
+  - See docs/execplans/2-1-3-handle-socket-permission-errors.md.
+  - Success: missing and inaccessible sockets are distinguished for operator
+    remediation.
+- [x] 2.1.4. Support Unix sockets, named pipes, TCP, HTTP, HTTPS, and bare
+  endpoint paths.
+  - Requires 2.1.1 and 2.1.2.
+  - See docs/execplans/2-1-4-support-both-unix-sockets-and-tcp-connections.md.
+  - Success: connection dispatch matches the documented protocol matrix.
+
+### 2.2. Create sandbox containers with reviewable security policy
+
+This step proves that container creation can apply explicit security and image
+policy without smuggling assumptions into later orchestration. It informs
+credential injection, execution, and image work. See podbot-design.md
+§§Execution flow, Security model.
+
+- [x] 2.2.1. Implement container creation with configurable security options.
+  - Requires 2.1.4 and 1.3.3.
+  - See docs/execplans/2-2-1-create-container.md.
+  - Success: callers can create a sandbox container from validated config.
+- [x] 2.2.2. Support privileged mode for maximum compatibility.
+  - Requires 2.2.1.
+  - See docs/execplans/2-2-2-privileged-mode.md.
+  - Success: privileged containers start with the expected compatibility
+    settings.
+- [x] 2.2.3. Support minimal mode with only `/dev/fuse` mounted.
+  - Requires 2.2.1.
+  - See docs/execplans/2-2-3-minimal-mode.md.
+  - Success: minimal containers preserve the inner-Podman use case without
+    broader privilege.
+- [x] 2.2.4. Configure SELinux capabilities and security options.
+  - Requires 2.2.1.
+  - See docs/execplans/2-2-4-configure-se-linux-capabilities.md.
+  - Success: SELinux environments can run with documented label behaviour.
+- [x] 2.2.5. Set the container image from configuration.
+  - Requires 1.3.5 and 2.2.1.
+  - See docs/execplans/2-2-5-set-container-image-from-config.md.
+  - Success: image selection is validated through configuration rather than
+    hard-coded into the engine layer.
+
+### 2.3. Inject selected agent credentials
+
+This step answers whether Podbot can copy credential families into the sandbox
+without exposing the whole host home directory. The result informs interactive
+launch and hosted app-server launch. See podbot-design.md §§Execution flow,
+Credential injection contract.
+
+- [x] 2.3.1. Upload selected credential directories into the container through
+  Bollard tar archives.
+  - Requires 2.2.5.
+  - Include Claude and Codex credential families, missing-directory no-op
+    behaviour, permission preservation, deterministic reported target paths,
+    and semantic upload errors.
+  - See docs/execplans/2-3-1-agent-credentials.md.
+  - Success: selected credential families appear at the expected in-container
+    paths with preserved permissions.
+
+### 2.4. Attach interactive execution
+
+This step proves that the same container can host a human-operated terminal
+session. The result informs the separation between interactive and protocol
+execution paths. See podbot-design.md §Execution flow.
+
+- [x] 2.4.1. Implement interactive exec with terminal attachment, resize
+  propagation, attached and detached modes, exit-code capture, and cleanup.
+  - Requires 2.2.5 and 2.3.1.
+  - See docs/execplans/2-4-1-interactive-execution.md.
+  - Success: terminal sessions work with resize propagation and accurate
+    process outcomes.
+
+### 2.5. Prove protocol execution is stdout-pure
+
+This step answers whether hosted protocols can run through Podbot without TTY
+framing, buffering surprises, or Podbot diagnostics on stdout. The result
+unblocks `podbot host`, Codex App Server, ACP, and MCP bridge work. See
+podbot-design.md §§Execution flow, Bounded buffering implementation;
+developers-guide.md §§4-6.
+
+- [x] 2.5.1. Enforce `tty = false` for protocol exec attachment.
+  - Requires 2.4.1.
+  - See docs/execplans/2-5-1-exec-attachment-with-tty-false-enforced.md.
+  - Success: protocol sessions never allocate terminal framing.
+- [x] 2.5.2. Implement byte-stream proxy loops for host stdin, container
+  stdout, and container stderr.
+  - Requires 2.5.1.
+  - See docs/execplans/2-5-2-byte-stream proxy loops.md.
+  - Success: proxied protocol bytes are forwarded without prefixes, newline
+    rewrites, or interactive echo leakage.
+- [x] 2.5.3. Bound proxy buffering and preserve stream purity through
+  lifecycle edges.
+  - Requires 2.5.2.
+  - Include startup, steady-state, shutdown, error-path, and zero-extra-stdout
+    regression coverage as implementation acceptance criteria.
+  - See docs/execplans/2-5-3-keep-proxy-buffering-bounded.md.
+  - Success: hosted protocol sessions apply backpressure and keep stdout free
+    of Podbot diagnostics before, during, and after proxying.
+
+### 2.6. Enforce ACP sandbox-preserving defaults
+
+This step answers whether ACP client-side delegation can be masked before it
+bypasses sandbox boundaries. The result informs validation diagnostics and
+hosted protocol conformance. See podbot-design.md §Execution flow; ADR 006;
+docs/corbusier-conformance-design-for-agents-mcp-wires-and-hooks.md §§Current
+state and required alignment, Prompt validation request/response and capability
+dispositions.
+
+- [x] 2.6.1. Rewrite ACP initialization to mask `terminal/*` and `fs/*`
+  capabilities by default.
+  - Requires 2.5.3.
+  - See docs/execplans/2-6-1-intercept-acp-initialization.md.
+  - Success: ACP initialization no longer advertises host-executed tool
+    families unless an explicit policy allows them.
+- [ ] 2.6.2. Enforce runtime denial for blocked ACP methods.
+  - Requires 2.6.1.
+  - Return protocol errors for blocked methods and record denials on stderr.
+  - Success: blocked ACP method calls fail deterministically after
+    initialization without contaminating stdout.
+- [ ] 2.6.3. Add the explicit ACP delegation override.
+  - Requires 2.6.2 and 1.4.1.
+  - See ADR 006 and ADR 008.
+  - Success: operators can opt into host-side ACP delegation only through a
+    visible trust-boundary change covered by configuration validation.
+
+## 3. GitHub App repository access
+
+Idea: if GitHub authentication, token refresh, and Git credential delivery are
+handled outside the sandbox and exposed through a read-only token file, agents
+can clone and fetch repositories without receiving long-lived host secrets.
+
+This phase delivers the private-repository path for
+`workspace.source = "github_clone"`. It is sequenced after container execution
+because token files must be mounted into a concrete sandbox.
+
+### 3.1. Authenticate as a GitHub App
+
+This step proves that configured App credentials are loadable, construct an
+Octocrab client, and can be validated against GitHub with classified errors.
+The result unblocks installation token acquisition. See podbot-design.md
+§§Token management, Octocrab, Credential validation contract.
+
+- [x] 3.1.1. Load the RSA private key from the configured path.
+  - Requires 1.3.2.
+  - See docs/execplans/3-1-1-load-private-key-from-configured-path.md.
+  - Success: supported PEM formats load and wrong key types fail clearly.
+- [x] 3.1.2. Configure `OctocrabBuilder` with App ID and private key.
+  - Requires 3.1.1.
+  - See docs/execplans/3-1-2-configure-octocrab-builder.md.
+  - Success: client construction reports missing runtime and builder failures
+    as semantic authentication errors.
+- [x] 3.1.3. Validate credentials against GitHub on startup.
+  - Requires 3.1.2.
+  - See docs/execplans/3-1-3-validate-credentials-on-startup.md.
+  - Success: commands requiring GitHub access fail before launch when the App
+    credentials are invalid.
+- [x] 3.1.4. Classify invalid or expired App credentials with clear errors.
+  - Requires 3.1.3.
+  - See the 3.1.4 credential-error execplan.
+  - Success: HTTP status and network failures include actionable remediation
+    hints.
+
+### 3.2. Acquire scoped installation tokens
+
+This step answers whether Podbot can mint scoped, expiring repository tokens
+without exposing GitHub App private key material to the container. The result
+unblocks the token daemon and clone flow. See podbot-design.md §Token
+management.
+
+- [ ] 3.2.1. Implement installation token acquisition with an expiry buffer.
+  - Requires 3.1.4.
+  - Use `installation_token_with_buffer`, return the token string for Git
+    operations, handle acquisition failures semantically, and log expiry
+    timing without logging token values.
+  - Success: scoped tokens acquire successfully for configured installations
+    and carry enough expiry metadata for refresh scheduling.
+
+### 3.3. Refresh tokens through a host-side daemon
+
+This step proves that repository credentials can rotate while the container
+continues to read a stable in-container secret path. The result informs
+`GIT_ASKPASS` and long-lived sessions. See podbot-design.md §§Execution flow,
+Token management.
+
+- [ ] 3.3.1. Implement the token daemon runtime directory and atomic token
+  writer.
+  - Requires 3.2.1 and 2.2.5.
+  - Create `$XDG_RUNTIME_DIR/podbot/<container_id>/`, set directory mode
+    `0700`, set token file mode `0600`, and write by rename from a temporary
+    file.
+  - Success: readers never observe partial token contents.
+- [ ] 3.3.2. Implement the refresh loop and retry policy.
+  - Requires 3.3.1.
+  - Refresh before expiry with a five-minute buffer and retry transient
+    failures without widening token exposure.
+  - Success: a long-running session continues to authenticate after token
+    refresh.
+
+### 3.4. Authenticate Git through `GIT_ASKPASS`
+
+This step answers whether cloned workspaces can use the refreshed token file
+without leaking credentials into process arguments or shell history. The result
+unblocks repository cloning. See podbot-design.md §§Execution flow, Token
+management; mcp-server-hosting-design.md §7.4.
+
+- [ ] 3.4.1. Mount the token file read-only and configure the Git askpass
+  helper contract.
+  - Requires 3.3.2 and 7.3.1.
+  - Include the read-only bind mount, `GIT_ASKPASS` environment variable,
+    helper-script documentation, and clone/fetch verification after refresh.
+  - Success: Git operations authenticate through `/run/secrets/ghapp_token`
+    and continue after token rotation without token values appearing in
+    process arguments.
+
+## 4. Agent launch, hosted sessions, and orchestration surfaces
+
+Idea: if Podbot normalizes every launch into typed request and plan values,
+then interactive sessions, hosted protocols, MCP wires, prompt artefacts,
+hooks, recovery, and e2e orchestration can share one library-owned control
+plane while the CLI remains a thin adapter.
+
+This phase is the main vertical slice for embedder-facing hosting. It turns the
+lower-level container and credential pieces into a coherent agent session
 surface.
 
-### Step 4.7: MCP wire provisioning and injection
-
-Provide a first-class Podbot surface for per-workspace MCP wire lifecycle.
-
-**Tasks:**
-
-- [ ] Add typed MCP wire request and response models for `Stdio`,
-  `StdioContainer`, and `StreamableHttp` sources.
-- [ ] Implement create, list, and remove operations for per-workspace MCP
-  wires, returning agent-facing URL and header injection details.
-- [ ] Keep helper-container `RepoAccess` explicit and default it to `None`.
-- [ ] Distinguish wire lifecycle from global server-definition lifecycle and
-  keep per-workspace wire state isolated from registry metadata.
-- [ ] Add integration tests covering stdio, helper-container, and remote HTTP
-  wire sources.
-
-**Completion criteria:** Podbot can provision MCP wires per workspace through a
-typed API and inject only the reachability details required by the agent.
-
-### Step 4.8: Prompt, bundle, and validation surfaces
-
-Define the artefact and validation surfaces needed for prompt-driven hosted
-sessions.
-
-**Tasks:**
-
-- [ ] Define prompt frontmatter and bundle manifest contracts that support
-  prompts, skills, MCP server references, and hook artefacts.
-- [ ] Preserve compatibility with skill-folder discovery while keeping Podbot
-  additions namespaced and reviewable.
-- [ ] Implement a library `validate_prompt` surface that returns diagnostics and
-  capability disposition results for a target agent runtime.
-- [ ] Add an optional `podbot validate-prompt` CLI that emits structured JSON
-  for operator and Continuous Integration (CI) use.
-- [ ] Add tests for prompt rendering, bundle cross-reference validation, ACP
-  capability masking diagnostics, and artefact materialization order.
-
-**Completion criteria:** Podbot can validate prompts and bundle references
-before launch with typed diagnostics, and prompt/bundle artefacts have a
-documented ingestion contract.
-
-### Step 4.9: Hook execution and orchestrator acknowledgement
-
-Implement the hosted hook protocol required for orchestrator-governed sessions.
-
-**Tasks:**
-
-- [ ] Define hook artefact and subscription models, including explicit workspace
-  access and environment allowlist policy.
-- [ ] Emit hook request events over the hosted-session event channel and suspend
-  session progress until the orchestrator acknowledges them.
-- [ ] Enforce deterministic timeout and abort semantics when acknowledgements do
-  not arrive in time.
-- [ ] Capture hook stdout and stderr into structured completion events without
-  contaminating protocol streams.
-- [ ] Add tests for acknowledgement, denial, timeout, and duplicate-delivery
-  idempotency.
-
-**Completion criteria:** Hosted sessions can gate agent progress on explicit
-hook acknowledgements through the typed session surface, with deterministic and
-test-backed semantics.
-
-### Step 4.10: Recovery, replay, and restart safety
-
-Make hosted control-plane behaviour restart-safe for wires and hook-gated
-sessions.
-
-**Tasks:**
-
-- [ ] Add monotonic event identifiers to hosted session events for ordering and
-  duplicate detection.
-- [ ] Persist minimal session state required to recover pending hooks and wire
-  lifecycle after process restart.
-- [ ] Expose a recovery API that resumes or abandons hosted sessions
-  deterministically.
-- [ ] Ensure duplicate hook requests after restart do not cause duplicate
-  acknowledgements or duplicate hook execution.
-- [ ] Add tests covering restart during pending-hook acknowledgement,
-  completion replay, and stale wire cleanup.
-
-**Completion criteria:** Podbot can recover or abandon hosted sessions
-deterministically after restart without violating stdout purity or hook
-idempotency.
-
-### Step 4.11: Gated e2e orchestration suite
-
-Create a dedicated end-to-end suite for full runtime orchestration validation.
-
-**Tasks:**
-
-- [ ] Create a distinct e2e test suite separate from the main test suite (for
-  example, dedicated test modules and fixtures under an e2e path).
-- [ ] Add a dedicated on-demand execution target (for example, `make test-e2e`)
-  and ensure `make test` does not invoke e2e tests by default.
-- [ ] Implement an e2e preflight phase that validates required components
-  before any scenario begins.
-- [ ] Include preflight checks for engine/socket readiness, sandbox image and
-  binary availability, nested-container prerequisites, and Vidai Mock endpoint
-  reachability for Codex scenarios.
-- [ ] Define and enforce a versioned machine-parseable preflight output format
-  (JSON Lines) shared by CLI runs, library call paths, and Continuous
-  Integration (CI) jobs.
-- [ ] Emit assistive remediation messages for each preflight failure that
-  include failed check name, observed state, and concrete remedy commands.
-- [ ] Enforce run-scoped test isolation for concurrent execution via unique
-  `run_id` naming, required container labels, and run-scoped runtime paths.
-- [ ] Implement e2e scenario: create and start a running sandbox container
-  using a mock agent shell script stub.
-- [ ] Implement e2e scenario: create and start a running sandbox container, and
-  then start a nested container inside it using the inner Podman runtime with a
-  mock agent shell script stub.
-- [ ] Implement e2e scenario: start Codex configured for an OpenAI-compatible
-  mock inference provider implemented with Vidai Mock.
-- [ ] Implement e2e scenario: create a host-mounted workspace, provision
-  multiple MCP wires, and validate that the agent receives only injected URL
-  and header data.
-- [ ] Implement e2e scenario: trigger a hosted hook, restart the orchestrator
-  or host process mid-acknowledgement, and verify exactly-once acknowledgement
-  effects after recovery.
-- [ ] Add CI workflow wiring so the e2e suite runs in CI only when explicitly
-  triggered (manual dispatch or explicit workflow call), while remaining
-  available through local on-demand execution (`make test-e2e`).
-- [ ] Persist e2e logs and runtime diagnostics as CI artefacts for failed and
-  successful runs.
-
-**Completion criteria:** All listed e2e scenarios pass reliably in the
-dedicated gated pipeline. The default test suite remains unchanged in speed and
-scope, and e2e execution occurs via local on-demand runs and explicitly
-triggered CI jobs. Preflight failures provide clear remediation guidance
-instead of generic setup errors. Parallel e2e runs do not collide, and
-preflight output remains schema-stable across surfaces.
-
-## Phase 5: Library API and embedding support
-
-Expose Podbot orchestration as a stable library API that can be called by
-external host applications without shelling out to the CLI.
-
-### Step 5.1: Extract command orchestration into library modules
-
-Move subcommand behaviour from binary entrypoint code into reusable library
-functions.
-
-**Tasks:**
-
-- [x] Introduce a public orchestration module for run, exec, stop, ps, and
-  token daemon operations.
-- [x] Replace binary-local orchestration logic with calls into library
-  orchestration functions.
-- [x] Ensure orchestration returns typed outcomes rather than printing
-  directly.
-- [x] Keep side-effecting process control (`std::process::exit`) in the CLI
-  adapter only.
-
-**Completion criteria:** All command flows are invocable through library APIs.
-The binary becomes a thin adapter layer over library orchestration.
-
-### Step 5.2: Decouple configuration APIs from Clap
-
-Ensure embedders can configure Podbot without constructing CLI parse types.
-
-**Tasks:**
-
-- [x] Add a library-facing configuration loader that accepts explicit load
-  options and overrides.
-- [x] Keep Clap-dependent structures in a CLI adapter layer.
-- [x] Provide conversion helpers from parsed CLI flags into library load
-  options.
-- [x] Add tests for library configuration loading independent of CLI parsing.
-
-**Completion criteria:** Library consumers can resolve `AppConfig` without
-using `clap::Parser` or `Cli` structs.
-
-### Step 5.3: Stabilize public library boundaries
-
-Define and document the supported long-term API surface.
-
-**Tasks:**
-
-- [x] Document supported public modules and request/response types.
-- [x] Ensure public APIs use semantic errors (`PodbotError`) and avoid opaque
-  `eyre` types.
-- [x] Gate CLI-only dependencies and code paths behind a binary or feature
-  boundary.
-- [x] Reconcile the public hook and validation schemas with the documented
-  integration contract before stabilizing them.
-- [x] Add integration tests that embed Podbot as a library from a host-style
-  call path.
-
-**Completion criteria:** Podbot can be integrated as a dependency in another
-Rust tool with documented, versioned APIs and no CLI coupling requirements.
-
-## Phase 6: CLI
-
-Complete the user-facing command interface with all subcommands.
-
-### Step 6.1: Subcommand dispatch
-
-Implement the argument parsing and subcommand routing.
-
-**Tasks:**
-
-- [ ] Define the run subcommand for launching agent sessions.
-- [ ] Define the host subcommand for protocol-only app server hosting.
-- [ ] Add the token-daemon subcommand for standalone token management.
-- [ ] Create the ps subcommand for listing containers.
-- [ ] Implement the stop subcommand for terminating containers.
-- [ ] Provide the exec subcommand for running commands in containers.
-- [ ] Validate required arguments per subcommand.
-
-**Completion criteria:** All subcommands parse correctly. Help text describes
-each command and its arguments. Invalid arguments produce clear errors.
-
-### Step 6.2: Run subcommand
-
-Implement the interactive workflow for launching terminal-attached sessions.
-
-**Tasks:**
-
-- [ ] Accept --repo owner/name as a required argument.
-- [ ] Accept --branch as a required argument.
-- [ ] Accept --agent with values `codex`, `claude`, or `custom`.
-- [ ] Accept `--agent-mode podbot` only for this command.
-- [ ] Reject hosting modes (`codex_app_server` and `acp`) with a clear message
-  directing operators to `podbot host`.
-- [ ] Orchestrate the interactive execution flow from the run module.
-- [ ] Return appropriate exit codes on success and failure.
-
-**Completion criteria:** The run command launches interactive sessions only.
-Hosting-mode requests are rejected with actionable guidance.
-
-### Step 6.3: Management subcommands
-
-Implement commands for managing running containers.
-
-**Tasks:**
-
-- [ ] Add ps to list active Podbot containers with status.
-- [ ] Create stop to terminate a container by ID or name.
-- [ ] Provide exec to run arbitrary commands within a container.
-- [ ] Format output for readability.
-
-**Completion criteria:** Management commands operate correctly against running
-containers. Output formats are clear and consistent.
-
-### Step 6.4: Token daemon subcommand
-
-Support standalone token daemon execution.
-
-**Tasks:**
-
-- [ ] Accept container ID as an argument.
-- [ ] Support execution as a user systemd service.
-- [ ] Implement graceful shutdown on SIGTERM.
-- [ ] Log token refresh events.
-
-**Completion criteria:** The daemon runs independently of agent sessions.
-Systemd integration works correctly. Shutdown handles cleanly.
-
-### Step 6.5: Host subcommand
-
-Implement the dedicated protocol-only bridge command.
-
-**Tasks:**
-
-- [ ] Add `podbot host` for `agent-mode` values `codex_app_server` and `acp`.
-- [ ] Wire the command to non-TTY proxy orchestration with strict stdout purity.
-- [ ] Ensure all lifecycle diagnostics for `podbot host` are emitted on stderr.
-- [ ] Handle client disconnect and signal-driven shutdown cleanly.
-- [ ] Return explicit non-zero exit codes when protocol setup fails.
-
-**Completion criteria:** `podbot host` behaves as a protocol-clean transport
-adapter and does not share interactive `run` output concerns.
-
-## Phase 7: Container image
-
-Create the sandbox container image with all required components.
-
-### Step 7.1: Base image definition
-
-Define the Containerfile for the sandbox environment.
-
-**Tasks:**
-
-- [ ] Select an appropriate base image with Podman support.
-- [ ] Install podman, fuse-overlayfs, and slirp4netns packages.
-- [ ] Install git and required utilities.
-- [ ] Configure user namespace support.
-- [ ] Set appropriate default user and working directory.
-
-**Completion criteria:** The image builds successfully. Inner Podman executes
-within the container. Git operations function correctly.
-
-### Step 7.2: Agent runtimes and binaries
-
-Add required runtimes and agent binaries to the image.
-
-**Tasks:**
-
-- [ ] Add Claude Code binary or installation method.
-- [ ] Add Codex CLI binary or installation method.
-- [ ] Add Node.js runtime for OpenCode and Droid ACP tooling.
-- [ ] Add Python 3.10+ runtime for Claude Agent SDK wrappers.
-- [ ] Add OpenCode installation method and document Droid ACP dependency
-  requirements.
-- [ ] Add Goose installation method and ACP-mode invocation documentation.
-- [ ] Verify each installed runtime and agent command executes correctly within
-  the container.
-- [ ] Document versioning and upgrade procedures for runtimes and agents.
-
-**Completion criteria:** Required runtimes and hosted agent commands execute
-within the container, with documented and repeatable upgrade paths.
-
-### Step 7.3: GIT_ASKPASS helper
-
-Install the helper script for token-based authentication.
-
-**Tasks:**
-
-- [ ] Write the helper script that reads /run/secrets/ghapp_token.
-- [ ] Install at a known path (e.g., /usr/local/bin/git-askpass).
-- [ ] Set executable permissions.
-- [ ] Configure as the default GIT_ASKPASS in the image.
-
-**Completion criteria:** The helper script reads tokens correctly. Git
-operations authenticate using the helper. Permissions are appropriate.
-
-### Step 7.4: Image build automation
-
-Automate image building and distribution.
-
-**Tasks:**
-
-- [ ] Add a Makefile target for local image builds.
-- [ ] Configure Continuous Integration (CI) workflow to build on changes.
-- [ ] Push images to a container registry.
-- [ ] Document the image versioning strategy.
-- [ ] Add image verification tests.
-
-**Completion criteria:** Images build automatically in CI. Registry pushes
-succeed. Version tags follow a documented convention.
-
-## Phase 8: Protocol conformance and hosting tests
-
-Validate protocol correctness for app server hosting integrations.
-
-### Step 8.1: Codex App Server integration test
-
-Verify Podbot can host Codex App Server end-to-end.
-
-**Tasks:**
-
-- [ ] Add integration coverage that launches `podbot host` with
-  `codex app-server --listen stdio://`.
-- [ ] Drive `initialize -> new thread -> prompt` through the Codex app-server
-  test client flow.
-- [ ] Assert no Podbot diagnostics are emitted on stdout during protocol
-  traffic.
-
-**Completion criteria:** Codex client test flow succeeds against Podbot hosting
-without stdout protocol contamination.
-
-### Step 8.2: ACP transport conformance harness
-
-Verify Podbot preserves ACP framing and stream purity.
-
-**Tasks:**
-
-- [ ] Build a minimal ACP harness that exchanges newline-delimited JSON-RPC
-  messages through Podbot hosting.
-- [ ] Assert newline framing is preserved exactly with no embedded newline
-  corruption.
-- [ ] Assert Podbot emits no stray stdout bytes outside proxied ACP protocol
-  traffic.
-- [ ] Add tests for ACP capability masking of `terminal/*` and `fs/*` in the
-  initialization handshake.
-- [ ] Add tests for runtime denial of blocked ACP methods after initialization.
-
-**Completion criteria:** ACP sessions remain protocol-correct under Podbot
-hosting, with default sandbox-preserving capability masking enforced.
-
-### Step 8.3: Host lifecycle and output-purity tests
-
-Validate protocol cleanliness across full process lifecycle transitions.
-
-**Tasks:**
-
-- [ ] Assert `podbot host` emits no stdout bytes before the first proxied
-  protocol byte.
-- [ ] Assert `podbot host` emits no stdout bytes after client disconnect and
-  shutdown.
-- [ ] Exercise signal-driven termination paths and assert stderr-only
-  diagnostics.
-- [ ] Verify partial-frame and backpressure scenarios do not corrupt framing.
-
-**Completion criteria:** Protocol sessions remain stream-clean and framing-safe
-across startup, steady-state, and shutdown paths.
-
-### Step 8.4: Wire, hook, and validation conformance tests
-
-Validate the higher-level integration contract used by orchestrators such as
-Corbusier.
-
-**Tasks:**
-
-- [ ] Launch a host-mounted workspace with multiple MCP wires and assert the
-  returned URL and header contract is sufficient for agent startup.
-- [ ] Verify `validate_prompt` reports deterministic diagnostics for ACP-masked
-  capabilities, missing wires, and missing hooks.
-- [ ] Exercise hook acknowledgement across allow, deny, timeout, and restart
-  scenarios, asserting idempotent outcomes.
-- [ ] Assert helper-container `RepoAccess` remains explicit and never alters the
-  agent container's own workspace mount policy.
-
-**Completion criteria:** Podbot's integration contract for wires, prompt
-validation, and hook acknowledgement is validated end to end against the
-documented orchestrator-facing behaviour.
-
-## Future enhancements
-
-The following items are documented for future consideration but are not part of
-the initial implementation roadmap:
-
-- [ ] **Network egress restriction:** Limit container network access to model
-  endpoints and GitHub only, reducing prompt injection risk.
-- [ ] **Virtual machine isolation:** Provide VM-based execution for environments
-  requiring stronger isolation guarantees than container boundaries.
-- [ ] **Multi-repository support:** Allow agents to access multiple repositories
-  within a single session.
-- [ ] **Session persistence:** Save and restore agent sessions across container
-  restarts.
+### 4.1. Configure Git identity inside the sandbox
+
+This step proves that Podbot can apply host Git identity as a convenience
+without blocking execution when identity is missing. The result informs
+repository workflows and interactive sessions. See podbot-design.md §Execution
+flow; developers-guide.md §17.
+
+- [x] 4.1.1. Read host Git identity and configure it inside the container.
+  - Requires 2.4.1.
+  - Include `user.name`, `user.email`, in-container `git config --global`
+    calls, and warning-only behaviour for missing identity.
+  - See docs/execplans/4-1-1-git-identity-configuration.md.
+  - Success: commits inside the container use configured identity when present
+    and missing identity does not block execution.
+
+### 4.2. Prepare repository workspaces
+
+This step answers whether Podbot can materialize the target working tree for
+both clone-backed and mount-backed launches. The result informs interactive
+startup, app-server startup, and MCP helper-container sharing. See
+podbot-design.md §§Execution flow, Host-mount path safety policy.
+
+- [ ] 4.2.1. Implement authenticated repository cloning for
+  `workspace.source = "github_clone"`.
+  - Requires 3.4.1 and 4.1.1.
+  - Accept `owner/name`, require an explicit branch, clone to
+    `workspace.base_dir`, and authenticate through `GIT_ASKPASS`.
+  - Success: the specified branch is checked out without exposing credentials
+    in process arguments.
+- [ ] 4.2.2. Implement safe host-mounted workspaces.
+  - Requires 1.4.1 and 2.2.5.
+  - Canonicalize host paths, reject symlink escapes, enforce allowlisted mount
+    roots, validate rootless-engine write permissions, and document the
+    threat-model boundary.
+  - Success: operators can choose host-mounted workspaces only within
+    configured boundaries, with negative coverage for forbidden paths.
+
+### 4.3. Start interactive and hosted agents through distinct modes
+
+This step proves that launch mode determines stream policy and command shape
+without duplicating orchestration. The result informs launch normalization and
+CLI command boundaries. See podbot-design.md §Execution flow.
+
+- [ ] 4.3.1. Launch interactive agents in permissive terminal-attached mode.
+  - Requires 2.4.1, 2.3.1, and 4.2.1 or 4.2.2.
+  - Start Claude Code and Codex with their documented permissive flags, attach
+    the terminal, and clean up on agent exit.
+  - Success: `agent.mode = "podbot"` starts an interactive session and does
+    not accept hosting-only modes.
+- [ ] 4.3.2. Launch app-server and ACP sessions through protocol-safe hosting.
+  - Requires 2.5.3, 2.6.3, and 4.2.1 or 4.2.2.
+  - Support Codex App Server over `stdio://`, generic ACP command execution,
+    library/proxy launch behaviour, legal `(agent.kind, agent.mode)`
+    validation, and clean shutdown on stdin close or termination signals.
+  - Success: hosted app servers run through non-TTY proxying and preserve
+    stdout purity from setup through shutdown.
+
+### 4.4. Normalize launch requests and launch plans
+
+This step answers whether all session modes can be described before execution
+using typed, inspectable library values. The result informs public API
+stabilization and artefact staging. See ADR 001; ADR 007.
+
+- [ ] 4.4.1. Define the library-level `LaunchRequest` model.
+  - Requires 4.3.2.
+  - Include agent kind, mode, workspace source, credential policy, prompt
+    references, bundle references, skill selection, hook subscriptions, and
+    MCP wire definitions.
+  - Success: CLI and embedder paths can submit equivalent launch intent
+    without sharing CLI parse types.
+- [ ] 4.4.2. Define `LaunchPlan` and route `run` and `host` through one
+  normalization path.
+  - Requires 4.4.1.
+  - Resolve command, args, environment policy, mount policy, stream policy,
+    artefact staging targets, and wire injection details.
+  - Success: normalization outcomes match across command entry points and
+    invalid combinations fail before container mutation.
+
+### 4.5. Expose hosted-session control without protocol contamination
+
+This step proves that embedders can observe and control hosted sessions through
+typed events while protocol bytes remain separate. The result informs hooks,
+recovery, and CLI stderr rendering. See ADR 002.
+
+- [ ] 4.5.1. Introduce the `HostedSession` handle.
+  - Requires 4.4.2.
+  - Separate protocol IO from a typed event stream and expose typed stop and
+    hook-acknowledgement control methods.
+  - Success: embedding tests can drive the hosted-session surface directly
+    without shelling out to the CLI.
+- [ ] 4.5.2. Render hosted-session events through adapters.
+  - Requires 4.5.1.
+  - Emit lifecycle, diagnostic, MCP wire, and hook-request events from library
+    code, and render CLI diagnostics to stderr only.
+  - Success: `podbot host` stays protocol-clean while using the same library
+    session surface as embedders.
+
+### 4.6. Provision MCP wires per workspace
+
+This step answers whether Podbot can turn orchestrator-selected MCP sources
+into agent-facing endpoints without putting tool catalogue policy in Podbot.
+The result informs Corbusier integration and hosted validation. See
+mcp-server-hosting-design.md §§4-8; ADR 001.
+
+- [ ] 4.6.1. Add typed MCP wire request and response models.
+  - Requires 4.4.1.
+  - Include `McpSource::Stdio`, `McpSource::StdioContainer`,
+    `McpSource::StreamableHttp`, `RepoAccess`, `CreateMcpWireRequest`, and
+    `CreateMcpWireResponse`.
+  - Success: the public wire contract exposes source intent and returned URL
+    plus header details without exposing lifecycle internals.
+- [ ] 4.6.2. Implement per-workspace MCP wire lifecycle operations.
+  - Requires 4.6.1 and 2.5.3.
+  - Support creating, listing, and removing operations, isolate per-workspace
+    state from registry metadata, and inject only agent-facing reachability
+    data.
+  - Success: agents receive enough endpoint data to connect while Podbot owns
+    bridge lifecycle and cleanup.
+- [ ] 4.6.3. Enforce helper-container `RepoAccess` boundaries.
+  - Requires 4.6.2 and 4.2.2.
+  - Keep `RepoAccess::None` as the default and ensure helper-container access
+    never changes the agent container's own workspace mount policy.
+  - Success: stdio helper containers can request explicit repository access
+    without implicit cross-container data exposure.
+
+### 4.7. Stage prompts, skills, and bundles before launch
+
+This step proves that hosted sessions can materialize prompt-driven artefacts
+deterministically before an agent starts. The result informs validation, hooks,
+and recovery. See ADR 004; ADR 005; ADR 007.
+
+- [ ] 4.7.1. Define prompt frontmatter, template rendering, and bundle manifest
+  contracts.
+  - Requires 4.4.1.
+  - Preserve standard skill-folder discovery while namespacing Podbot
+    additions for prompts, skills, MCP references, and hook artefacts.
+  - Success: artefacts have a documented ingestion contract and render with
+    strict template semantics.
+- [ ] 4.7.2. Materialize launch artefacts in deterministic order.
+  - Requires 4.7.1 and 4.4.2.
+  - Stage skills, render prompts, provision requested wires, register hook
+    subscriptions, mount staged artefacts read-only, and clean them up on
+    teardown.
+  - Success: identical launch inputs produce identical staged artefacts and no
+    stale session artefacts remain after normal teardown.
+
+### 4.8. Validate prompt and capability disposition before launch
+
+This step answers whether operators and orchestrators can inspect prompt, wire,
+hook, and capability mismatches without mutating runtime state. The result
+informs CI usage and ACP masking diagnostics. See ADR 006; ADR 008;
+docs/corbusier-conformance-design-for-agents-mcp-wires-and-hooks.md §§555-778.
+
+- [ ] 4.8.1. Implement the side-effect-free `validate_prompt` library surface.
+  - Requires 2.6.3, 4.6.1, and 4.7.1.
+  - Return typed diagnostics, canonicalized frontmatter where possible, and
+    capability dispositions for native, host-enforced, translated, ignored,
+    and denied capabilities.
+  - Success: validation reports missing inputs, missing wires, missing hooks,
+    and ACP-masked capabilities without receiving secrets or creating
+    containers.
+- [ ] 4.8.2. Add structured CLI validation output.
+  - Requires 4.8.1.
+  - Add `podbot validate-prompt` only if it can emit stable JSON for operator
+    and Continuous Integration (CI) use without coupling validation to CLI
+    parse types.
+  - Success: CI can consume deterministic validation results and non-JSON
+    diagnostics remain off stdout in machine mode.
+
+### 4.9. Gate hosted hooks through suspend and acknowledge
+
+This step proves that hosted sessions can pause for orchestrator governance
+without giving hooks uncontrolled workspace or secret access. The result
+informs recovery and Corbusier conformance. See ADR 003; ADR 008.
+
+- [ ] 4.9.1. Define hook artefact and subscription models.
+  - Requires 4.5.1 and 4.7.1.
+  - Include inline scripts, container images, trigger subscriptions, explicit
+    workspace access, and hook-specific environment allowlists.
+  - Success: hook intent is reviewable before launch and separate from MCP
+    helper-container access.
+- [ ] 4.9.2. Implement suspend-and-acknowledge session flow.
+  - Requires 4.9.1 and 4.5.2.
+  - Emit hook request events, suspend progress until acknowledgement, and
+    enforce deterministic allow, deny, timeout, and abort semantics.
+  - Success: the orchestrator controls whether a hook runs and the session
+    resumes or aborts predictably.
+- [ ] 4.9.3. Capture hook outputs as structured events.
+  - Requires 4.9.2.
+  - Capture hook stdout and stderr separately, redact configured sensitive
+    values, and avoid protocol stream contamination.
+  - Success: hook completion is auditable through control events without
+    writing hook output to hosted protocol stdout.
+
+### 4.10. Recover and replay hosted control-plane state
+
+This step answers whether hook-gated and wire-backed hosted sessions can be
+recovered or abandoned deterministically after process restart. The result
+informs e2e orchestration and operator trust. See ADR 009.
+
+- [ ] 4.10.1. Add monotonic event envelopes to hosted session events.
+  - Requires 4.5.2.
+  - Include event identifiers, session identifiers, timestamps, ordering
+    guarantees, and duplicate-detection semantics.
+  - Success: orchestrators can detect gaps and duplicate events.
+- [ ] 4.10.2. Persist minimal recovery state for hooks and wires.
+  - Requires 4.10.1, 4.6.2, 4.7.2, and 4.9.2.
+  - Persist enough state to resume or abandon pending hooks, clean stale wires,
+    and avoid duplicate hook execution after restart.
+  - Success: restart during a pending acknowledgement resolves
+    deterministically without violating stdout purity or hook idempotency.
+
+### 4.11. Prove orchestration with gated e2e scenarios
+
+This step validates the phase idea against real runtime boundaries rather than
+unit-level contracts alone. The result informs release readiness and CI
+operability. See podbot-design.md §§Execution flow, Security model;
+mcp-server-hosting-design.md §9; ADR 009.
+
+- [ ] 4.11.1. Create the on-demand e2e harness and preflight contract.
+  - Requires 4.10.2 and 7.4.1.
+  - Add a distinct e2e suite, `make test-e2e`, machine-parseable JSON Lines
+    preflight output, engine/socket readiness checks, sandbox image checks,
+    binary availability checks, nested-container prerequisite checks, and
+    assistive remediation messages.
+  - Success: e2e runs fail before scenarios start when prerequisites are
+    missing, and default `make test` scope is unchanged.
+- [ ] 4.11.2. Add sandbox, nested-container, and Codex mock-provider
+  scenarios.
+  - Requires 4.11.1.
+  - Cover a mock agent shell script, inner Podman startup, and Codex configured
+    for an OpenAI-compatible mock inference provider implemented with Vidai
+    Mock.
+  - Success: the basic runtime path is validated against real container
+    boundaries.
+- [ ] 4.11.3. Add MCP wire and hook recovery scenarios.
+  - Requires 4.11.1, 4.6.3, and 4.10.2.
+  - Cover host-mounted workspaces with multiple MCP wires and restart during a
+    hosted hook acknowledgement.
+  - Success: injected wire metadata is sufficient for agent startup and hook
+    acknowledgement effects remain exactly-once after recovery.
+- [ ] 4.11.4. Wire e2e execution into explicit CI triggers and artefacts.
+  - Requires 4.11.1-4.11.3.
+  - Run e2e only on manual dispatch or explicit workflow call, enforce
+    run-scoped isolation with unique `run_id` names and labels, and persist
+    logs and diagnostics as CI artefacts.
+  - Success: local and CI e2e runs are reproducible, isolated, and diagnosable
+    without slowing the default test suite.
+
+## 5. Stable library API and embedding support
+
+Idea: if the already-built CLI behaviour is extracted behind a curated,
+semantic, versioned library boundary, Podbot can be embedded by host tools
+without those tools depending on binary entrypoints, Clap parse types, or
+process-exit side effects.
+
+This phase preserves the existing public-library work while making its
+relationship to later hosted surfaces explicit. Completed tasks stabilize the
+current API; future hosted surfaces graduate only after their contracts are
+implemented and documented.
+
+### 5.1. Extract command orchestration into library modules
+
+This step proves that command behaviour can be invoked without shelling out to
+the binary. The result informs every embedder-facing API. See podbot-design.md
+§Dual delivery model; ADR 001.
+
+- [x] 5.1.1. Introduce public orchestration APIs for command flows.
+  - Requires 2.5.3.
+  - Include `run`, `exec`, `stop`, `ps`, and token-daemon operations, typed
+    outcomes, and CLI-only process exits kept in the adapter.
+  - See docs/execplans/5-1-1-public-orchestration-module.md.
+  - Success: command flows are callable through library APIs, and the binary is
+    a thin adapter.
+
+### 5.2. Decouple configuration APIs from Clap
+
+This step answers whether embedders can resolve configuration without
+constructing CLI parse types. The result informs public API stability and
+feature gating. See podbot-design.md §Configuration.
+
+- [x] 5.2.1. Add a library-facing configuration loader.
+  - Requires 1.3.6.
+  - Accept explicit load options and overrides, keep Clap-dependent structures
+    in the CLI adapter, and provide conversion helpers from parsed flags.
+  - See docs/execplans/5-2-1-library-facing-configuration-loader.md.
+  - Success: library consumers can resolve `AppConfig` without using
+    `clap::Parser` or `Cli` structs.
+
+### 5.3. Stabilize the supported public boundary
+
+This step proves that external callers can rely on a small documented surface
+while implementation internals remain private. The result is the baseline for
+future hosted APIs. See ADR 001; developers-guide.md §11.
+
+- [x] 5.3.1. Document and enforce stable public modules, request and response
+  types, semantic errors, and CLI feature boundaries.
+  - Requires 5.1.1 and 5.2.1.
+  - Reconcile public hook and validation schema direction with the documented
+    integration contract before stabilizing any new hosted surface.
+  - See docs/execplans/5-3-1-stabilize-public-library-boundaries.md.
+  - Success: Podbot can be integrated as a Rust dependency with documented,
+    versioned APIs and no CLI coupling requirement.
+
+## 6. Operator CLI
+
+Idea: if the CLI is a disciplined adapter over library orchestration, terminal
+operators get clear commands and exit codes while hosted protocol and embedder
+surfaces keep their stricter stream and type contracts.
+
+This phase completes the user-facing command surface. It is sequenced after
+library extraction so CLI work does not become the source of orchestration
+truth.
+
+### 6.1. Route subcommands through library APIs
+
+This step answers whether all operator commands can parse arguments, validate
+required inputs, and delegate to library functions. The result informs command
+specific work. See podbot-design.md §Dual delivery model.
+
+- [ ] 6.1.1. Implement subcommand dispatch for `run`, `host`,
+  `token-daemon`, `ps`, `stop`, and `exec`.
+  - Requires 5.3.1.
+  - Success: help text describes each command, invalid arguments produce clear
+    errors, and dispatch does not duplicate library orchestration.
+
+### 6.2. Launch interactive sessions through `podbot run`
+
+This step proves that terminal operators can start interactive agent sessions
+without accidentally selecting protocol-hosting modes. The result informs
+operator documentation. See podbot-design.md §Execution flow.
+
+- [ ] 6.2.1. Implement the interactive `run` command.
+  - Requires 4.3.1 and 6.1.1.
+  - Accept required `--repo owner/name`, required `--branch`, `--agent` values
+    `codex`, `claude`, or `custom`, and only `--agent-mode podbot`.
+  - Success: hosting modes are rejected with guidance to use `podbot host`,
+    and successful runs return the agent exit code.
+
+### 6.3. Manage containers through operator commands
+
+This step answers whether operators can inspect and manage running Podbot
+containers without using raw container-engine commands. The result informs
+supportability. See users-guide.md §Command-line interface (CLI).
+
+- [ ] 6.3.1. Implement `ps`, `stop`, and `exec` management commands.
+  - Requires 6.1.1 and 5.1.1.
+  - List active Podbot containers, terminate containers by ID or name, execute
+    arbitrary commands in containers, and format human-readable output.
+  - Success: management commands operate against running containers with
+    clear, consistent output.
+
+### 6.4. Run the token daemon as an operator command
+
+This step proves that token refresh can be supervised independently of an agent
+session. The result informs systemd integration and long-lived clone flows. See
+podbot-design.md §Token management.
+
+- [ ] 6.4.1. Implement the `token-daemon` subcommand.
+  - Requires 3.3.2 and 6.1.1.
+  - Accept container ID, support user systemd execution, handle `SIGTERM`
+    gracefully, and log refresh events without token values.
+  - Success: the daemon can run independently and shut down cleanly.
+
+### 6.5. Host protocol sessions through `podbot host`
+
+This step answers whether the CLI can expose protocol hosting without sharing
+interactive output concerns. The result informs protocol conformance. See
+podbot-design.md §Execution flow; developers-guide.md §§4-6.
+
+- [ ] 6.5.1. Implement the dedicated protocol-only `host` command.
+  - Requires 4.3.2 and 6.1.1.
+  - Accept hosting modes `codex_app_server` and `acp`, route to non-TTY proxy
+    orchestration, write lifecycle diagnostics to stderr, handle disconnects
+    and signals cleanly, and return explicit non-zero setup failures.
+  - Success: `podbot host` behaves as a protocol-clean transport adapter.
+
+### 6.6. Expose MCP wire operations for operators and orchestrators
+
+This step proves that the public MCP wire lifecycle is reachable through JSON
+CLI output without making Corbusier scrape human-oriented text. The result
+informs Corbusier integration. See mcp-server-hosting-design.md §8.1.
+
+- [ ] 6.6.1. Add `podbot wire mcp add`, `remove`, and `list`.
+  - Requires 4.6.2 and 6.1.1.
+  - Support structured JSON output, stdio helper-container source definitions,
+    explicit repo-access settings, and semantic setup failures.
+  - Success: orchestrators can create and remove wires through the CLI when
+    they cannot link the Rust library directly.
+
+## 7. Runtime container image
+
+Idea: if the sandbox image is built from explicit, versioned runtime choices,
+Podbot can run nested containers, Git operations, interactive agents, and
+hosted app servers reproducibly rather than depending on mutable operator
+machines.
+
+This phase creates the runtime substrate consumed by orchestration and e2e
+tests. It is deliberately separate from the engine wrapper because image
+contents have their own versioning and upgrade contract.
+
+### 7.1. Build the base sandbox image
+
+This step answers whether the image can run inner Podman and Git inside the
+sandbox. The result informs agent runtime installation and e2e preflight. See
+podbot-design.md §Execution flow.
+
+- [ ] 7.1.1. Define the base Containerfile for the sandbox environment.
+  - Requires 2.2.5.
+  - Select a Podman-capable base image, install `podman`, `fuse-overlayfs`,
+    `slirp4netns`, `git`, and required utilities, configure user namespace
+    support, and set the default user and working directory.
+  - Success: the image builds, inner Podman runs, and Git commands execute
+    inside the container.
+
+### 7.2. Install agent runtimes and hosted tooling
+
+This step proves that the image contains the runtimes needed for interactive
+and hosted agents. The result informs launch commands and versioning policy.
+See podbot-design.md §Execution flow.
+
+- [ ] 7.2.1. Add Claude Code, Codex, ACP tooling runtimes, and documented
+  version checks.
+  - Requires 7.1.1.
+  - Include Claude Code, Codex CLI, Node.js for OpenCode and Droid ACP tooling,
+    Python 3.10+ for Claude Agent SDK wrappers, OpenCode installation, Goose
+    invocation documentation, command verification, and upgrade notes.
+  - Success: each documented runtime and agent command executes inside the
+    container with repeatable upgrade guidance.
+
+### 7.3. Install the Git askpass helper
+
+This step answers whether the image can consume the rotated token file through
+a narrow helper contract. The result unblocks clone-backed workspaces. See
+podbot-design.md §Token management; mcp-server-hosting-design.md §7.4.
+
+- [ ] 7.3.1. Install the `GIT_ASKPASS` helper in the sandbox image.
+  - Requires 7.1.1.
+  - Read `/run/secrets/ghapp_token`, install the helper at a known executable
+    path, set permissions, and configure the default `GIT_ASKPASS`.
+  - Success: Git operations authenticate through the mounted token file.
+
+### 7.4. Automate image build, verification, and distribution
+
+This step proves that image updates are reviewable and reproducible. The result
+informs e2e scenarios and operator upgrades. See mcp-server-hosting-design.md
+§8.5.
+
+- [ ] 7.4.1. Add local and CI image build automation.
+  - Requires 7.1.1-7.3.1.
+  - Add a Makefile target, CI build workflow, registry push, image
+    verification, version tags, and digest-pinning documentation.
+  - Success: images build automatically, publish with documented tags, and can
+    be verified before use in e2e runs.
+
+## 8. Protocol and orchestrator conformance
+
+Idea: if Codex App Server, ACP, MCP wires, prompt validation, and hook
+acknowledgement all remain correct under realistic protocol traffic, then
+Podbot's hosting contract is stable enough for external orchestrators such as
+Corbusier to depend on.
+
+This phase contains integration and conformance tasks because protocol framing,
+stdout purity, and orchestrator contracts are product surfaces in their own
+right. These tasks complement implementation tasks; they are not isolated
+unit-test chores.
+
+### 8.1. Prove Codex App Server hosting
+
+This step answers whether a real app-server client flow survives the Podbot
+host proxy. The result informs `podbot host` release readiness. See
+podbot-design.md §Execution flow.
+
+- [ ] 8.1.1. Add Codex App Server conformance coverage.
+  - Requires 6.5.1 and 7.2.1.
+  - Launch `podbot host` with `codex app-server --listen stdio://`, drive
+    initialize, new-thread, and prompt traffic through a test client, and
+    assert no Podbot diagnostics appear on stdout.
+  - Success: the Codex client flow succeeds against Podbot hosting without
+    protocol contamination.
+
+### 8.2. Prove ACP transport and capability masking
+
+This step answers whether ACP newline framing and sandbox-preserving masking
+survive real hosted traffic. The result informs ACP support policy. See
+podbot-design.md §Execution flow; ADR 006.
+
+- [ ] 8.2.1. Add ACP transport conformance coverage.
+  - Requires 2.6.3 and 6.5.1.
+  - Exchange newline-delimited JSON-RPC through Podbot, assert exact framing,
+    assert stdout purity, verify initialization masking, and verify runtime
+    denial for blocked ACP methods.
+  - Success: ACP sessions remain protocol-correct with default
+    sandbox-preserving enforcement.
+
+### 8.3. Prove lifecycle stream purity under edge conditions
+
+This step validates the most failure-prone protocol-hosting edges: startup,
+partial frames, backpressure, client disconnect, and signal termination. The
+result informs supportability and regression risk. See developers-guide.md
+§§4-6.
+
+- [ ] 8.3.1. Add host lifecycle and output-purity conformance coverage.
+  - Requires 6.5.1.
+  - Cover zero stdout before the first proxied protocol byte, zero stdout
+    after shutdown, stderr-only diagnostics under signals, partial-frame
+    handling, and backpressure scenarios.
+  - Success: hosted protocols remain stream-clean across startup,
+    steady-state, and shutdown.
+
+### 8.4. Prove orchestrator-facing integration contracts
+
+This step answers whether Corbusier can rely on Podbot's wire, validation, and
+hook semantics as documented. The result informs cross-project adoption. See
+docs/corbusier-conformance-design-for-agents-mcp-wires-and-hooks.md §§778-867.
+
+- [ ] 8.4.1. Add wire, hook, and validation conformance coverage.
+  - Requires 4.6.3, 4.8.2, 4.9.3, and 4.10.2.
+  - Cover multiple MCP wires in a host-mounted workspace, deterministic
+    `validate_prompt` diagnostics for masked capabilities and missing
+    artefacts, hook allow/deny/timeout/restart outcomes, and explicit
+    helper-container `RepoAccess` behaviour.
+  - Success: the orchestrator-facing contract is validated end to end against
+    documented behaviour.
+
+## 9. Deferred extensions
+
+Idea: if the core Podbot promise is already trustworthy and boring to operate,
+the project can evaluate broader isolation and session-management extensions on
+their product value instead of letting them destabilize the main release.
+
+These items are intentionally deferred from the core roadmap. They should not
+block the phases above unless a later design document explicitly promotes one
+of them into required v1 scope.
+
+### 9.1. Reassess stronger isolation after the container path is stable
+
+This step captures isolation enhancements that are valuable but not necessary
+to prove the current container-hosted design. See podbot-design.md §Security
+model.
+
+- [ ] 9.1.1. Evaluate network egress restriction for model endpoints and
+  GitHub.
+  - Requires: 8.1.1, 8.2.1, 8.3.1, and 8.4.1.
+  - Success: the project has a documented decision on whether egress
+    restriction belongs in a follow-up release.
+- [ ] 9.1.2. Evaluate virtual machine isolation for higher-assurance
+  environments.
+  - Requires: 8.1.1, 8.2.1, 8.3.1, and 8.4.1.
+  - Success: the project has a documented trade-off analysis comparing virtual
+    machines with the existing container boundary.
+
+### 9.2. Reassess broader workspace and session models
+
+This step captures product extensions that depend on a reliable hosted-session
+foundation. See podbot-design.md §§Execution flow, Security model.
+
+- [ ] 9.2.1. Evaluate multi-repository workspace support.
+  - Requires: 8.4.1.
+  - Success: the project has a documented design for whether and how multiple
+    repositories share credentials, mounts, and MCP wire policy.
+- [ ] 9.2.2. Evaluate persistent agent sessions across container restarts.
+  - Requires: 8.3.1.
+  - Success: the project has a documented persistence model or a clear
+    decision to keep sessions ephemeral.
