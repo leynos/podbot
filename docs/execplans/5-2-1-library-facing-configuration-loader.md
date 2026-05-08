@@ -383,7 +383,8 @@ Done means:
 The intended end state is:
 
 1. Library:
-   - `podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides, load_config, load_config_with_env}`
+   - `podbot::config::{AppConfig, ConfigLoadOptions, ConfigOverrides,
+     load_config, load_config_with_env}`
 2. CLI adapter:
    - Defines Clap parse types in `podbot::cli` and converts them into
      `ConfigLoadOptions` via `Cli::config_load_options()`.

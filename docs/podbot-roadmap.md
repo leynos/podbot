@@ -665,7 +665,7 @@ feature gating. See podbot-design.md §Configuration.
   - Requires 1.3.6.
   - Accept explicit load options and overrides, keep Clap-dependent structures
     in the CLI adapter, and provide conversion helpers from parsed flags.
-  - See docs/execplans/5-2-1-library-facing-configuration-loader-md.
+  - See docs/execplans/5-2-1-library-facing-configuration-loader.md.
   - Success: library consumers can resolve `AppConfig` without using
     `clap::Parser` or `Cli` structs.
 
@@ -923,12 +923,12 @@ model.
 
 - [ ] 9.1.1. Evaluate network egress restriction for model endpoints and
   GitHub.
-  - Requires phase 8.
+  - Requires 8.1.1, 8.2.1, 8.3.1, and 8.4.1.
   - Success: the project has a documented decision on whether egress
     restriction belongs in a follow-up release.
 - [ ] 9.1.2. Evaluate virtual machine isolation for higher-assurance
   environments.
-  - Requires phase 8.
+  - Requires 8.1.1, 8.2.1, 8.3.1, and 8.4.1.
   - Success: the project has a documented trade-off analysis comparing virtual
     machines with the existing container boundary.
 
@@ -938,10 +938,10 @@ This step captures product extensions that depend on a reliable hosted-session
 foundation. See podbot-design.md §§Execution flow, Security model.
 
 - [ ] 9.2.1. Evaluate multi-repository workspace support.
-  - Requires phase 8.
+  - Requires 8.4.1.
   - Success: the project has a documented design for whether and how multiple
     repositories share credentials, mounts, and MCP wire policy.
 - [ ] 9.2.2. Evaluate persistent agent sessions across container restarts.
-  - Requires phase 8.
+  - Requires 8.3.1.
   - Success: the project has a documented persistence model or a clear
     decision to keep sessions ephemeral.
