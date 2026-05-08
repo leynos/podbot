@@ -432,7 +432,7 @@ CLI command boundaries. See podbot-design.md §Execution flow.
 - [ ] 4.3.2. Launch app-server and ACP sessions through protocol-safe hosting.
   - Requires 2.5.3, 2.6.3, and 4.2.1 or 4.2.2.
   - Support Codex App Server over `stdio://`, generic ACP command execution,
-    the dedicated `host` command path, legal `(agent.kind, agent.mode)`
+    library/proxy launch behaviour, legal `(agent.kind, agent.mode)`
     validation, and clean shutdown on stdin close or termination signals.
   - Success: hosted app servers run through non-TTY proxying and preserve
     stdout purity from setup through shutdown.
