@@ -125,28 +125,19 @@ fn evaluate_forwards_malformed_json() {
     );
 }
 
-#[test]
-fn evaluate_forwards_response_without_method_field() {
-    let frame = serialize_frame(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {"value": 42},
-    }));
-    let denylist = MethodDenylist::default_families();
-
-    assert_eq!(
-        evaluate_agent_outbound_frame(&frame, &denylist),
-        FrameDecision::Forward
-    );
-}
-
-#[test]
-fn evaluate_forwards_frame_when_method_not_string() {
-    let frame = serialize_frame(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": 7,
-    }));
+#[rstest]
+#[case::response_without_method(serde_json::json!({
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {"value": 42},
+}))]
+#[case::method_not_string(serde_json::json!({
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": 7,
+}))]
+fn evaluate_forwards_frames_without_dispatchable_method(#[case] payload: serde_json::Value) {
+    let frame = serialize_frame(&payload);
     let denylist = MethodDenylist::default_families();
 
     assert_eq!(
