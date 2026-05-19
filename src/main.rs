@@ -174,6 +174,16 @@ fn normalize_process_exit_code(code: i64) -> i32 {
     i32::try_from(code).unwrap_or(1)
 }
 
+/// Returns an `experimental`-feature-gate error for the given command name.
+#[cfg(not(feature = "experimental"))]
+fn experimental_only(command: &str) -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: format!("the {command} command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
 #[cfg(feature = "experimental")]
 fn run_agent_api(
     config: &AppConfig,
@@ -187,11 +197,7 @@ fn run_agent_api(
     _config: &AppConfig,
     _request: &podbot::api::RunRequest,
 ) -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
-        field: String::from("command"),
-        reason: String::from("the run command requires feature = \"experimental\""),
-    }
-    .into())
+    experimental_only("run")
 }
 
 #[cfg(feature = "experimental")]
@@ -201,11 +207,7 @@ fn run_token_daemon_api(container_id: &str) -> PodbotResult<CommandOutcome> {
 
 #[cfg(not(feature = "experimental"))]
 fn run_token_daemon_api(_container_id: &str) -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
-        field: String::from("command"),
-        reason: String::from("the token-daemon command requires feature = \"experimental\""),
-    }
-    .into())
+    experimental_only("token-daemon")
 }
 
 #[cfg(feature = "experimental")]
@@ -215,11 +217,7 @@ fn list_containers_api() -> PodbotResult<CommandOutcome> {
 
 #[cfg(not(feature = "experimental"))]
 fn list_containers_api() -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
-        field: String::from("command"),
-        reason: String::from("the ps command requires feature = \"experimental\""),
-    }
-    .into())
+    experimental_only("ps")
 }
 
 #[cfg(feature = "experimental")]
@@ -229,11 +227,7 @@ fn stop_container_api(container: &str) -> PodbotResult<CommandOutcome> {
 
 #[cfg(not(feature = "experimental"))]
 fn stop_container_api(_container: &str) -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
-        field: String::from("command"),
-        reason: String::from("the stop command requires feature = \"experimental\""),
-    }
-    .into())
+    experimental_only("stop")
 }
 
 #[cfg(test)]
