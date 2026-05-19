@@ -66,34 +66,43 @@ fn denylist_state() -> DenylistState {
     DenylistState::default()
 }
 
+/// Serialises `value` to compact JSON bytes and appends a newline terminator,
+/// producing a well-formed ACP frame suitable for test input.
+fn serialize_frame(value: serde_json::Value) -> Vec<u8> {
+    let mut bytes = serde_json::to_vec(&value).expect("frame serializes");
+    drop(value);
+    bytes.push(b'\n');
+    bytes
+}
+
 fn make_request_frame(method: &str, id: i64) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
+    serialize_frame(serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
         "method": method,
         "params": {},
     }))
-    .expect("request frame serializes");
-    bytes.push(b'\n');
-    bytes
 }
 
 fn make_notification_frame(method: &str) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
+    serialize_frame(serde_json::json!({
         "jsonrpc": "2.0",
         "method": method,
         "params": {},
     }))
-    .expect("notification frame serializes");
-    bytes.push(b'\n');
-    bytes
+}
+
+/// Reads the host-stdout snapshot from `denylist_state`, returning an error
+/// if the slot has not yet been populated.
+fn read_host_stdout(denylist_state: &DenylistState) -> StepResult<Vec<u8>> {
+    denylist_state
+        .host_stdout_bytes
+        .get()
+        .ok_or_else(|| String::from("host stdout snapshot not recorded"))
 }
 
 fn assert_host_stdout_matches(denylist_state: &DenylistState, expected: &[u8]) -> StepResult<()> {
-    let bytes = denylist_state
-        .host_stdout_bytes
-        .get()
-        .ok_or_else(|| String::from("host stdout snapshot not recorded"))?;
+    let bytes = read_host_stdout(denylist_state)?;
     if bytes == expected {
         Ok(())
     } else {
@@ -201,10 +210,7 @@ fn emit_blocked_then_permitted(denylist_state: &DenylistState) -> StepResult<()>
 
 #[then("host stdout receives no bytes from the blocked request")]
 fn assert_host_stdout_empty(denylist_state: &DenylistState) -> StepResult<()> {
-    let bytes = denylist_state
-        .host_stdout_bytes
-        .get()
-        .ok_or_else(|| String::from("host stdout snapshot not recorded"))?;
+    let bytes = read_host_stdout(denylist_state)?;
     if bytes.is_empty() {
         Ok(())
     } else {
