@@ -51,6 +51,17 @@ src/engine/connection/exec/
 |                        #   and re-serialises the JSON before forwarding
 |                        #   to the container; bounded by
 |                        #   MAX_FIRST_FRAME_BYTES
++-- acp_policy.rs        # Pure ACP runtime policy; method-family matching,
+|                        #   denylist decisions, and synthesized JSON-RPC
+|                        #   blocked-method error payload construction
++-- acp_frame.rs         # Newline-delimited ACP output assembler; preserves
+|                        #   permitted frames byte-identically, applies the
+|                        #   runtime policy per completed frame, and enters
+|                        #   raw fallback on MAX_RUNTIME_FRAME_BYTES overflow
++-- acp_runtime.rs       # Runtime enforcement adapter and container-stdin
+|                        #   sink; owns bounded WriteCmd mpsc plumbing,
+|                        #   synthesized denial responses, and tracing
+|                        #   diagnostics for denials and fallback events
 +-- attached.rs          # Attached-mode session, terminal resize,
 |                        #   SIGWINCH handling, stdin echo forwarding
 +-- terminal.rs          # Terminal size detection (stty), resize helpers,
@@ -69,8 +80,8 @@ src/engine/connection/exec/
 |                        #   per-call session knobs (stdin forwarding
 |                        #   disable seam for tests via
 |                        #   with_protocol_stdin_forwarding_disabled(bool);
-|                        #   ACP initialize rewriting opt-in via
-|                        #   with_acp_initialize_rewrite_enabled(bool))
+|                        #   ACP enforcement policy selection via
+|                        #   with_capability_policy(CapabilityPolicy))
 +-- runtime_helpers.rs   # Blocking runtime helpers for synchronous exec
 |                        #   wrappers; block_on_runtime detects nested
 |                        #   Tokio contexts and routes to block_in_place
@@ -388,7 +399,6 @@ frame reaches the container. If masking leaves `params.clientCapabilities` (or
 Preserve the original line endings, and let malformed or non-ACP frames pass
 through unchanged.
 
-
 #### 8.2.2. ACP runtime denylist enforcement contract
 
 Step 2.6.2 layers a runtime denylist on top of the initialization-time mask.
@@ -433,6 +443,39 @@ error frames on container stdin). Synthesized JSON-RPC error responses use code
 `-32001` and the `data.reason = "podbot_capability_policy"` discriminator;
 assertions should compare on parsed structure, not on byte equality, since key
 ordering inside the JSON is not stable.
+
+#### 8.2.3. ACP runtime observability contract
+
+Step 2.6.2 ships stderr and `tracing::warn!` diagnostics for each denied ACP
+method attempt. Production rollout must also expose metrics for the runtime
+denylist path before `MaskAndDeny` is enabled by default or selected through a
+user-facing override. The metric names are intentionally specified here so the
+adapter, host command, and dashboards converge on one contract:
+
+- `podbot_acp_policy_state`: gauge labelled by `container_id` and `policy`
+  (`disabled`, `mask_only`, or `mask_and_deny`), set once when the protocol
+  session starts and cleared when it ends.
+- `podbot_acp_blocked_method_attempts_total`: counter labelled by
+  `container_id`, `method_family`, and `has_request_id`, incremented for every
+  `FrameDecision::BlockRequest` and `FrameDecision::BlockNotification`.
+- `podbot_acp_writecmd_queue_depth`: gauge labelled by `container_id`,
+  sampled around sends into the bounded `WriteCmd` channel so operators can
+  see sustained backpressure before synthesized errors are delayed.
+- `podbot_acp_writecmd_send_failures_total`: counter labelled by
+  `container_id` and `command_kind`, incremented when the sink channel closes
+  before a forwarded or synthesized frame can be queued.
+- `podbot_acp_frame_buffer_overflows_total`: counter labelled by
+  `container_id`, incremented when `OutboundFrameAssembler` enters raw
+  fallback because `MAX_RUNTIME_FRAME_BYTES` is exceeded before a newline.
+- `podbot_acp_partial_frames_dropped_total`: counter labelled by
+  `container_id`, incremented when end-of-stream drops a residual partial
+  frame that could not be classified safely.
+
+Every ACP runtime session should also attach a tracing span that carries the
+container ID, the selected `CapabilityPolicy`, the `SINK_CHANNEL_CAPACITY`
+value, and the runtime frame limit. Denial events, send failures, buffer
+overflow events, and partial-frame drops should be emitted inside that span so
+logs and metrics can be correlated during incident analysis.
 
 ### 8.3. Parameterized tests
 

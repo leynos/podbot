@@ -944,9 +944,12 @@ Adjustments from the original draft:
 
 Follow-on work (deliberately out of scope for 2.6.2):
 
-- Step 2.6.3: enrich denial diagnostics, e.g. structured stderr with a
-  per-session counter or an OpenTelemetry-style metric so operators can
-  dashboard denial rates without grepping logs.
+- Step 2.6.3: enrich denial diagnostics with the metrics contract in
+  `docs/developers-guide.md`: blocked method attempt counters, enforcement
+  policy state gauge, bounded `WriteCmd` channel queue-depth or send-failure
+  metrics, frame buffer overflow counters, partial-frame drop counters, and a
+  tracing span that correlates those events by container ID and selected
+  `CapabilityPolicy`.
 - Step 2.6.4: explicit operator override that flips selected blocked
   methods back to `Forward`. The `MethodDenylist` struct already models the
   family list as a `&'static [MethodFamily]`, so the override surface can
