@@ -28,6 +28,11 @@ Feature: Command-line interface
     Given the CLI is invoked with run --repo owner/name --branch main
     Then the invocation succeeds
 
+  Scenario: Run command help documents required arguments
+    Given the CLI is invoked with run --help
+    Then the output contains --repo
+    And the output contains --branch
+
   Scenario: Ps command succeeds without arguments
     Given the CLI is invoked with ps
     Then the invocation succeeds

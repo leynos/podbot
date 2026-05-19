@@ -17,7 +17,7 @@ use futures_util::stream;
 use mockall::mock;
 use rstest::{fixture, rstest};
 
-use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest, RunRequest};
 #[cfg(feature = "experimental")]
 use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
 #[cfg(feature = "experimental")]
@@ -204,12 +204,22 @@ fn error_types_are_matchable() {
 // -------------------------------------------------------------------------
 
 #[rstest]
+fn run_request_can_be_constructed_without_cli_types() {
+    let request =
+        RunRequest::new("owner/name", "main").expect("library run request should be valid");
+
+    assert_eq!(request.repository(), "owner/name");
+    assert_eq!(request.branch(), "main");
+}
+
+#[rstest]
 #[cfg(feature = "experimental")]
 fn stub_orchestration_functions_return_success() {
     let config = AppConfig::default();
+    let request = RunRequest::new("owner/name", "main").expect("run request should be valid");
 
     assert!(
-        matches!(run_agent(&config), Ok(CommandOutcome::Success)),
+        matches!(run_agent(&config, &request), Ok(CommandOutcome::Success)),
         "run_agent should return Success"
     );
     assert!(

@@ -10,7 +10,7 @@ use bollard::container::LogOutput;
 use futures_util::stream;
 use mockable::MockEnv;
 use mockall::mock;
-use podbot::api::{ExecMode, ExecRequest};
+use podbot::api::{ExecMode, ExecRequest, RunRequest};
 #[cfg(feature = "experimental")]
 use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
 #[cfg(feature = "experimental")]
@@ -61,6 +61,17 @@ fn given_mock_engine_client(library_boundary_state: &LibraryBoundaryState) {
 fn given_exec_params(library_boundary_state: &LibraryBoundaryState) {
     // Params are constructed in the when step; this is a precondition marker.
     let _ = library_boundary_state;
+}
+
+#[given("a run request for repository {repository} and branch {branch}")]
+fn given_run_request(
+    library_boundary_state: &LibraryBoundaryState,
+    repository: String,
+    branch: String,
+) -> StepResult<()> {
+    let request = RunRequest::new(repository, branch).map_err(|e| e.to_string())?;
+    library_boundary_state.run_request.set(request);
+    Ok(())
 }
 
 #[given("a mock container engine client that fails on create exec")]
@@ -181,16 +192,16 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
 }
 
 #[when("each stub orchestration function is called")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
 #[cfg(feature = "experimental")]
 fn when_stubs_called(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
     let config = AppConfig::default();
+    let request = match library_boundary_state.run_request.get() {
+        Some(request) => request,
+        None => RunRequest::new("owner/name", "main").map_err(|e| e.to_string())?,
+    };
     let mut results = Vec::new();
 
-    match run_agent(&config) {
+    match run_agent(&config, &request) {
         Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
         Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
     }
