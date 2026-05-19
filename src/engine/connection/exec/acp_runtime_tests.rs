@@ -15,7 +15,7 @@ use super::{
     OutboundFrameAssembler, OutboundPolicyAdapter, SINK_CHANNEL_CAPACITY, WriteCmd,
     run_container_stdin_sink,
 };
-use crate::engine::connection::exec::protocol::acp_policy::MethodDenylist;
+use crate::engine::connection::exec::acp_policy::MethodDenylist;
 
 /// Recording host-stdout writer that captures every byte and tracks shutdown.
 #[derive(Clone, Default)]

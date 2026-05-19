@@ -69,10 +69,18 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
-#[path = "acp_frame.rs"]
-mod acp_helpers;
-pub(super) mod acp_policy;
-mod acp_runtime;
+use super::ExecRequest;
+use super::acp_frame::OutboundFrameAssembler;
+use super::acp_helpers;
+use super::acp_policy::MethodDenylist;
+use super::acp_runtime::{
+    OutboundPolicyAdapter, SINK_CHANNEL_CAPACITY, WriteCmd, run_container_stdin_sink,
+};
+use super::helpers::spawn_stdin_forwarding_task;
+use super::host_io::stdin_forwarding_disabled_for_tests;
+use super::runtime_helpers::exec_failed;
+use super::session::CapabilityPolicy;
+use crate::error::PodbotError;
 /// Host-side stdio handles used by the protocol byte proxy.
 pub(super) struct ProtocolProxyIo<HostStdin, HostStdout, HostStderr> {
     /// Host stdin reader supplied to the forwarding task.
@@ -98,7 +106,7 @@ const STDIN_SETTLE_TIMEOUT: Duration = Duration::from_millis(50);
 /// limiting how many bytes can be in flight. A 64 KiB buffer aligns with common
 /// protocol message sizes and typical OS pipe buffer defaults, keeping latency
 /// low while preventing unbounded accumulation during high-throughput scenarios.
-const STDIN_BUFFER_CAPACITY: usize = 65_536;
+pub(super) const STDIN_BUFFER_CAPACITY: usize = 65_536;
 
 /// Per-session configuration knobs for protocol-mode exec proxy loops.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -582,5 +590,3 @@ where
     })?;
     Ok(())
 }
-
-mod acp_frame;

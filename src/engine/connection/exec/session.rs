@@ -12,13 +12,6 @@ use super::protocol::ProtocolSessionOptions;
 /// runtime denylist on agent-emitted JSON-RPC frames, refusing
 /// `terminal/*` and `fs/*` requests with a synthesized JSON-RPC error
 /// response and recording each denial on stderr.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "MaskOnly and MaskAndDeny remain unused until podbot host wires the opt-in"
-    )
-)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct ExecSessionOptions {
     /// When `true`, protocol-mode sessions replace host stdin with a held-open
@@ -164,6 +157,14 @@ mod tests {
     }
 }
 
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "MaskOnly and MaskAndDeny remain unused until podbot host wires the opt-in"
+    )
+)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum CapabilityPolicy {
     /// Pure byte proxy; no ACP-specific behaviour.
     #[default]

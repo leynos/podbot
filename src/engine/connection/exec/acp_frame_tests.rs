@@ -9,7 +9,7 @@ use ortho_config::serde_json::{self, Value};
 use rstest::rstest;
 
 use super::{FallbackReason, FrameOutput, MAX_RUNTIME_FRAME_BYTES, OutboundFrameAssembler};
-use crate::engine::connection::exec::protocol::acp_policy::{FrameDecision, MethodDenylist};
+use crate::engine::connection::exec::acp_policy::{FrameDecision, MethodDenylist};
 
 fn permitted_frame(method: &str, line_ending: &[u8]) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(&serde_json::json!({

@@ -13,7 +13,7 @@ use tokio::io::AsyncWrite;
 use tokio::sync::mpsc;
 
 use super::{OutboundFrameAssembler, OutboundPolicyAdapter, SINK_CHANNEL_CAPACITY, WriteCmd};
-use crate::engine::connection::exec::protocol::acp_policy::MethodDenylist;
+use crate::engine::connection::exec::acp_policy::MethodDenylist;
 
 type StepResult<T> = Result<T, String>;
 

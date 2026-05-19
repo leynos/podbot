@@ -3,6 +3,10 @@
 //! This module wraps Bollard exec APIs behind a small trait seam so command
 //! execution behaviour can be unit-tested without a live daemon.
 
+mod acp_frame;
+mod acp_helpers;
+mod acp_policy;
+mod acp_runtime;
 mod attached;
 mod helpers;
 mod host_io;

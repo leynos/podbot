@@ -16,7 +16,7 @@ use std::pin::Pin;
 use ortho_config::serde_json::{self, Value};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
 
-use super::STDIN_BUFFER_CAPACITY;
+use super::protocol::STDIN_BUFFER_CAPACITY;
 
 /// Upper bound on the number of bytes buffered while searching for the first
 /// ACP frame. Frames that exceed this limit are forwarded as-is without
