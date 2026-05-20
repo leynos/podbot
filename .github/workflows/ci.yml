@@ -26,6 +26,10 @@ jobs:
             **/*.md
             !**/target/**
             !**/dist/**
+      - name: Install cargo-audit
+        run: cargo binstall --no-confirm cargo-audit
+      - name: Audit dependencies
+        run: make audit
       - name: Lint
         run: make lint
       - name: No-CLI compile check

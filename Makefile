@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release lint typecheck fmt check-fmt markdownlint nixie audit rust-audit
 
 
 TARGET ?= podbot
@@ -45,6 +45,17 @@ markdownlint: ## Lint Markdown files
 
 nixie: ## Validate Mermaid diagrams
 	$(NIXIE) --no-sandbox
+
+audit: rust-audit ## Audit dependencies for known vulnerabilities
+
+rust-audit: ## Audit every Rust manifest for known vulnerabilities
+	find . \
+		\( -path '*/target/*' \) -prune -o \
+		-name Cargo.toml -exec sh -c 'set -e; for manifest do \
+			manifest_dir=$$(dirname "$$manifest"); \
+			printf "Auditing Rust manifest %s\n" "$$manifest"; \
+			(cd "$$manifest_dir" && $(CARGO) audit); \
+		done' sh {} +
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
