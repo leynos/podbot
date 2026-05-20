@@ -81,6 +81,18 @@ pub(crate) struct OutboundFrameAssembler {
     raw_fallback: bool,
 }
 
+/// Produces the output for a chunk received while the assembler is in
+/// raw-fallback mode: forward the chunk verbatim, or yield an empty list
+/// if the chunk is empty.
+fn forward_raw_chunk(chunk: &[u8]) -> (Vec<FrameOutput>, Option<FallbackReason>) {
+    let outputs = if chunk.is_empty() {
+        Vec::new()
+    } else {
+        vec![FrameOutput::Forward(chunk.to_vec())]
+    };
+    (outputs, None)
+}
+
 impl OutboundFrameAssembler {
     /// Construct a new assembler over the supplied denylist.
     pub(crate) fn new(denylist: MethodDenylist) -> Self {
@@ -122,14 +134,7 @@ impl OutboundFrameAssembler {
         chunk: &[u8],
     ) -> (Vec<FrameOutput>, Option<FallbackReason>) {
         if self.raw_fallback {
-            return (
-                if chunk.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![FrameOutput::Forward(chunk.to_vec())]
-                },
-                None,
-            );
+            return forward_raw_chunk(chunk);
         }
 
         let mut outputs = Vec::new();
