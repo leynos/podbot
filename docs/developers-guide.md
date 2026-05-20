@@ -51,6 +51,17 @@ src/engine/connection/exec/
 |                        #   and re-serialises the JSON before forwarding
 |                        #   to the container; bounded by
 |                        #   MAX_FIRST_FRAME_BYTES
++-- acp_policy.rs        # Pure ACP runtime policy; method-family matching,
+|                        #   denylist decisions, and synthesized JSON-RPC
+|                        #   blocked-method error payload construction
++-- acp_frame.rs         # Newline-delimited ACP output assembler; preserves
+|                        #   permitted frames byte-identically, applies the
+|                        #   runtime policy per completed frame, and enters
+|                        #   raw fallback on MAX_RUNTIME_FRAME_BYTES overflow
++-- acp_runtime.rs       # Runtime enforcement adapter and container-stdin
+|                        #   sink; owns bounded WriteCmd mpsc plumbing,
+|                        #   synthesized denial responses, and tracing
+|                        #   diagnostics for denials and fallback events
 +-- attached.rs          # Attached-mode session, terminal resize,
 |                        #   SIGWINCH handling, stdin echo forwarding
 +-- terminal.rs          # Terminal size detection (stty), resize helpers,
@@ -69,8 +80,8 @@ src/engine/connection/exec/
 |                        #   per-call session knobs (stdin forwarding
 |                        #   disable seam for tests via
 |                        #   with_protocol_stdin_forwarding_disabled(bool);
-|                        #   ACP initialize rewriting opt-in via
-|                        #   with_acp_initialize_rewrite_enabled(bool))
+|                        #   ACP enforcement policy selection via
+|                        #   with_capability_policy(CapabilityPolicy))
 +-- runtime_helpers.rs   # Blocking runtime helpers for synchronous exec
 |                        #   wrappers; block_on_runtime detects nested
 |                        #   Tokio contexts and routes to block_in_place
@@ -387,6 +398,84 @@ frame reaches the container. If masking leaves `params.clientCapabilities` (or
 `clientCapabilities`) empty, drop the entire `clientCapabilities` object.
 Preserve the original line endings, and let malformed or non-ACP frames pass
 through unchanged.
+
+#### 8.2.2. ACP runtime denylist enforcement contract
+
+Step 2.6.2 layers a runtime denylist on top of the initialization-time mask.
+The implementation is split into four sibling modules under
+`src/engine/connection/exec/`:
+
+- `acp_helpers.rs` (Step 2.6.1) owns first-frame `initialize` masking
+  and the shared `split_frame_line_ending` and
+  `read_and_mask_initial_acp_frame` helpers; it is unchanged by the runtime
+  work apart from the helper extraction.
+- `acp_policy.rs` is purely synchronous and depends on neither `tokio`
+  nor `tracing`. It exports the `MethodFamily`, `MethodDenylist`,
+  `FrameDecision`, `evaluate_agent_outbound_frame`, and
+  `build_method_blocked_error` types and functions.
+- `acp_frame.rs` is the streaming newline-bounded assembler with the
+  128 kibibyte `MAX_RUNTIME_FRAME_BYTES` ceiling. It returns
+  `(Vec<FrameOutput>, Option<FallbackReason>)` per chunk so the adapter can act
+  on per-chunk fallback events. Permitted frames are returned byte-identical;
+  the assembler never re-serializes them.
+- `acp_runtime.rs` is the only ACP module that owns
+  `tokio::sync::mpsc` and `tracing`. It exposes the bounded sink task
+  `run_container_stdin_sink` (capacity `SINK_CHANNEL_CAPACITY = 16`), the
+  `WriteCmd` enum (`Forward`, `Synthesised`), and the `OutboundPolicyAdapter`
+  that translates assembler output into host stdout writes (permitted) or
+  sink-channel sends (synthesized error responses) plus `tracing::warn!` denial
+  lines.
+
+Selection between the byte-transparent and enforcement paths happens through
+`CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` on
+`session::ExecSessionOptions`. `Disabled` is the default and matches the
+original `ExecMode::Protocol` contract. `MaskOnly` enables only the first-frame
+rewrite. `MaskAndDeny` activates the runtime adapter, the sink task, and the
+channel-based stdin forwarder.
+
+When tests need to drive the runtime adapter directly, they should mirror the
+pattern in `acp_runtime_tests.rs` and `acp_runtime_bdd_tests.rs`: build the
+assembler with `MethodDenylist::default_families()`, wire it to a bounded
+`tokio::sync::mpsc` channel, run scenarios with a `RecordingWriter`-style host
+stdout double, and drain the channel after dropping all senders to assert both
+directions (byte-identical permitted forwards on host stdout and synthesized
+error frames on container stdin). Synthesized JSON-RPC error responses use code
+`-32001` and the `data.reason = "podbot_capability_policy"` discriminator;
+assertions should compare on parsed structure, not on byte equality, since key
+ordering inside the JSON is not stable.
+
+#### 8.2.3. ACP runtime observability contract
+
+Step 2.6.2 ships stderr and `tracing::warn!` diagnostics for each denied ACP
+method attempt. Production rollout must also expose metrics for the runtime
+denylist path before `MaskAndDeny` is enabled by default or selected through a
+user-facing override. The metric names are intentionally specified here so the
+adapter, host command, and dashboards converge on one contract:
+
+- `podbot_acp_policy_state`: gauge labelled by `container_id` and `policy`
+  (`disabled`, `mask_only`, or `mask_and_deny`), set once when the protocol
+  session starts and cleared when it ends.
+- `podbot_acp_blocked_method_attempts_total`: counter labelled by
+  `container_id`, `method_family`, and `has_request_id`, incremented for every
+  `FrameDecision::BlockRequest` and `FrameDecision::BlockNotification`.
+- `podbot_acp_writecmd_queue_depth`: gauge labelled by `container_id`,
+  sampled around sends into the bounded `WriteCmd` channel so operators can
+  see sustained backpressure before synthesized errors are delayed.
+- `podbot_acp_writecmd_send_failures_total`: counter labelled by
+  `container_id` and `command_kind`, incremented when the sink channel closes
+  before a forwarded or synthesized frame can be queued.
+- `podbot_acp_frame_buffer_overflows_total`: counter labelled by
+  `container_id`, incremented when `OutboundFrameAssembler` enters raw
+  fallback because `MAX_RUNTIME_FRAME_BYTES` is exceeded before a newline.
+- `podbot_acp_partial_frames_dropped_total`: counter labelled by
+  `container_id`, incremented when end-of-stream drops a residual partial
+  frame that could not be classified safely.
+
+Every ACP runtime session should also attach a tracing span that carries the
+container ID, the selected `CapabilityPolicy`, the `SINK_CHANNEL_CAPACITY`
+value, and the runtime frame limit. Denial events, send failures, buffer
+overflow events, and partial-frame drops should be emitted inside that span so
+logs and metrics can be correlated during incident analysis.
 
 ### 8.3. Parameterized tests
 

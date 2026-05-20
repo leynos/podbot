@@ -179,8 +179,8 @@ Completed result:
 
 ### Stage B: Rewrite only ACP initialize capability metadata
 
-Add a narrow helper pipeline in
-`src/engine/connection/exec/acp_helpers.rs` that:
+Add a narrow helper pipeline in `src/engine/connection/exec/acp_helpers.rs`
+that:
 
 - reads the first newline-delimited frame from host stdin;
 - parses it as JSON if possible;

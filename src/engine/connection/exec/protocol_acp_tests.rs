@@ -8,11 +8,11 @@ use std::task::{Context, Poll};
 use rstest::rstest;
 use tokio::io::{AsyncWrite, AsyncWriteExt, DuplexStream};
 
-use super::acp_helpers::{
+use super::*;
+use crate::engine::connection::exec::acp_helpers::{
     ACP_FILE_SYSTEM_CAPABILITY, ACP_TERMINAL_CAPABILITY, MAX_FIRST_FRAME_BYTES,
     forward_initial_acp_frame_async, mask_acp_initialize_frame, split_frame_line_ending,
 };
-use super::*;
 
 struct RecordingInputWriter {
     bytes: Arc<Mutex<Vec<u8>>>,
