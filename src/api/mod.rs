@@ -179,9 +179,10 @@ fn validate_agent_github_credentials_on_scoped_thread(
     app_id: u64,
     private_key_path: &camino::Utf8Path,
 ) -> PodbotResult<()> {
+    let redacted_private_key_path = "[REDACTED]";
     tracing::debug!(
         app_id,
-        private_key_path = %private_key_path,
+        private_key_path = %redacted_private_key_path,
         "validating GitHub App credentials on a scoped thread"
     );
     std::thread::scope(|scope| -> PodbotResult<()> {
@@ -197,9 +198,10 @@ fn validate_agent_github_credentials_on_local_runtime(
     app_id: u64,
     private_key_path: &camino::Utf8Path,
 ) -> PodbotResult<()> {
+    let redacted_private_key_path = "[REDACTED]";
     tracing::debug!(
         app_id,
-        private_key_path = %private_key_path,
+        private_key_path = %redacted_private_key_path,
         "validating GitHub App credentials on a local runtime"
     );
     let runtime = create_runtime()?;

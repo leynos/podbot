@@ -1,4 +1,4 @@
-# Define The `run` Subcommand As A Library-Safe Adapter
+# Define the `run` subcommand as a library-safe adapter
 
 This ExecPlan (execution plan) is a living document. The sections
 `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
@@ -108,9 +108,9 @@ right companions for the work:
   preserved. The CLI is an adapter; the library owns the semantic contract.
 - No public library API may accept or return Clap types.
 - `podbot::cli` must remain behind the existing `cli` feature gate.
-- This plan covers Step 6.1 task `Define the run subcommand for launching agent
-  sessions
-  `. It must not silently absorb the Step 6.2 interactive orchestration implementation.
+- This plan covers Step 6.1 task
+  `Define the run subcommand for launching agent sessions`. It must not
+  silently absorb the Step 6.2 interactive orchestration implementation.
 - `podbot run` remains the interactive entry point. Hosted modes belong to
   `podbot host`, and the implementation must preserve that separation.
 - Unit coverage must use `rstest`.
@@ -241,7 +241,7 @@ right companions for the work:
    `docs/users-guide.md` so the user-facing contract matches the implemented
    argument and validation behaviour. When the implementation is complete,
    change only the `Define the run subcommand for launching agent sessions`
-   checkbox in `docs/podbot-roadmap.md` to done.
+   checkbox in `docs/podbot-roadmap.md` as done.
 
 6. Run the full validation sequence and capture evidence.
 
@@ -361,8 +361,9 @@ same request directly without importing `podbot::cli`.
 Coverage now proves the request constructor, CLI-to-request conversion, BDD CLI
 help and required-argument behaviour, and library embedding through the
 Clap-free run request. Documentation records the boundary in
-`docs/podbot-design.md` and `docs/users-guide.md`, and the roadmap checkbox for
-`Define the run subcommand for launching agent sessions` is marked complete.
+`docs/podbot-design.md` and `docs/users-guide.md`, and the roadmap entry for
+`Define the run subcommand for launching agent sessions` now splits out the
+subcommand checks so only `run` is checked.
 
 Validation passed on 2026-05-01:
 
