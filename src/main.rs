@@ -232,8 +232,13 @@ fn stop_container_api(_container: &str) -> PodbotResult<CommandOutcome> {
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser;
+    #[cfg(feature = "experimental")]
+    use podbot::api::CommandOutcome;
     use podbot::cli::{Cli, Commands, HostArgs};
     use podbot::config::AppConfig;
+    #[cfg(not(feature = "experimental"))]
+    use podbot::error::{ConfigError, PodbotError};
 
     use super::{normalize_process_exit_code, run};
 
@@ -276,5 +281,59 @@ mod tests {
                 .contains("host subcommand is temporarily disabled"),
             "unexpected error: {error}",
         );
+    }
+
+    #[test]
+    #[cfg(feature = "experimental")]
+    fn run_dispatches_cli_request_to_run_agent_api() {
+        let cli =
+            Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", "main"])
+                .expect("run command should parse");
+
+        let outcome = run(&cli, &AppConfig::default()).expect("run dispatch should succeed");
+
+        assert_eq!(outcome, CommandOutcome::Success);
+    }
+
+    #[test]
+    #[cfg(not(feature = "experimental"))]
+    fn run_dispatches_cli_request_to_experimental_gate() {
+        let cli =
+            Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", "main"])
+                .expect("run command should parse");
+
+        let error = run(&cli, &AppConfig::default()).expect_err("run should require experimental");
+
+        assert_experimental_only_error(error, "run");
+    }
+
+    #[test]
+    #[cfg(not(feature = "experimental"))]
+    fn non_experimental_stubs_report_command_names() {
+        let config = AppConfig::default();
+        let request = podbot::api::RunRequest::new("owner/name", "main")
+            .expect("run request should be valid");
+
+        let cases = [
+            ("run", super::run_agent_api(&config, &request)),
+            ("token-daemon", super::run_token_daemon_api("test-ctr")),
+            ("ps", super::list_containers_api()),
+            ("stop", super::stop_container_api("test-ctr")),
+        ];
+
+        for (command, result) in cases {
+            let error = result.expect_err("stub should require experimental");
+            assert_experimental_only_error(error, command);
+        }
+    }
+
+    #[cfg(not(feature = "experimental"))]
+    fn assert_experimental_only_error(error: PodbotError, command: &str) {
+        assert!(matches!(
+            error,
+            PodbotError::Config(ConfigError::InvalidValue { field, reason })
+                if field == "command"
+                    && reason == format!("the {command} command requires feature = \"experimental\"")
+        ));
     }
 }

@@ -30,6 +30,10 @@ pub use run::RunRequest;
 #[cfg(feature = "experimental")]
 use crate::config::AppConfig;
 use crate::error::Result as PodbotResult;
+#[cfg(feature = "experimental")]
+type CredentialValidationFuture<'a> = std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<(), crate::error::GitHubError>> + 'a>,
+>;
 
 /// Outcome of a podbot command.
 ///
@@ -83,13 +87,28 @@ pub fn run_agent(config: &AppConfig, request: &RunRequest) -> PodbotResult<Comma
 fn validate_github_config_for_run(config: &AppConfig, request: &RunRequest) -> PodbotResult<()> {
     if config.github.is_partially_configured() {
         tracing::debug!(
+            operation = "run_agent",
             repository = request.repository(),
             branch = request.branch(),
             "validating GitHub configuration for run request"
         );
-        config.github.validate()?;
+        config
+            .github
+            .validate()
+            .inspect_err(|error| warn_github_config_validation_failed(request, error))?;
     }
     Ok(())
+}
+
+#[cfg(feature = "experimental")]
+fn warn_github_config_validation_failed(request: &RunRequest, error: &crate::error::PodbotError) {
+    tracing::warn!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        %error,
+        "GitHub configuration validation failed for run request"
+    );
 }
 
 #[cfg(feature = "experimental")]
@@ -102,14 +121,33 @@ fn validate_configured_github_credentials(
         config.github.private_key_path.as_ref(),
     ) {
         tracing::debug!(
+            operation = "run_agent",
             repository = request.repository(),
             branch = request.branch(),
             app_id,
             "validating GitHub App credentials for run request"
         );
-        validate_agent_github_credentials(app_id, private_key_path)?;
+        validate_agent_github_credentials(app_id, private_key_path).inspect_err(|error| {
+            warn_github_credential_validation_failed(request, app_id, error);
+        })?;
     }
     Ok(())
+}
+
+#[cfg(feature = "experimental")]
+fn warn_github_credential_validation_failed(
+    request: &RunRequest,
+    app_id: u64,
+    error: &crate::error::PodbotError,
+) {
+    tracing::warn!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        app_id,
+        %error,
+        "GitHub App credential validation failed for run request"
+    );
 }
 
 /// List running podbot containers.
@@ -167,18 +205,43 @@ fn validate_agent_github_credentials(
     app_id: u64,
     private_key_path: &camino::Utf8Path,
 ) -> PodbotResult<()> {
+    validate_agent_github_credentials_with(
+        app_id,
+        private_key_path,
+        |validated_app_id, key_path| {
+            Box::pin(crate::github::validate_app_credentials(
+                validated_app_id,
+                key_path,
+            ))
+        },
+    )
+}
+
+#[cfg(feature = "experimental")]
+fn validate_agent_github_credentials_with<F>(
+    app_id: u64,
+    private_key_path: &camino::Utf8Path,
+    validate: F,
+) -> PodbotResult<()>
+where
+    F: for<'a> Fn(u64, &'a camino::Utf8Path) -> CredentialValidationFuture<'a> + Copy + Sync,
+{
     if tokio::runtime::Handle::try_current().is_ok() {
-        validate_agent_github_credentials_on_scoped_thread(app_id, private_key_path)
+        validate_agent_github_credentials_on_scoped_thread(app_id, private_key_path, validate)
     } else {
-        validate_agent_github_credentials_on_local_runtime(app_id, private_key_path)
+        validate_agent_github_credentials_on_local_runtime(app_id, private_key_path, validate)
     }
 }
 
 #[cfg(feature = "experimental")]
-fn validate_agent_github_credentials_on_scoped_thread(
+fn validate_agent_github_credentials_on_scoped_thread<F>(
     app_id: u64,
     private_key_path: &camino::Utf8Path,
-) -> PodbotResult<()> {
+    validate: F,
+) -> PodbotResult<()>
+where
+    F: for<'a> Fn(u64, &'a camino::Utf8Path) -> CredentialValidationFuture<'a> + Copy + Sync,
+{
     let redacted_private_key_path = "[REDACTED]";
     tracing::debug!(
         app_id,
@@ -187,17 +250,27 @@ fn validate_agent_github_credentials_on_scoped_thread(
     );
     std::thread::scope(|scope| -> PodbotResult<()> {
         scope
-            .spawn(|| validate_agent_github_credentials_on_local_runtime(app_id, private_key_path))
+            .spawn(|| {
+                validate_agent_github_credentials_on_local_runtime(
+                    app_id,
+                    private_key_path,
+                    validate,
+                )
+            })
             .join()
             .map_err(|_| credential_validation_thread_panicked())?
     })
 }
 
 #[cfg(feature = "experimental")]
-fn validate_agent_github_credentials_on_local_runtime(
+fn validate_agent_github_credentials_on_local_runtime<F>(
     app_id: u64,
     private_key_path: &camino::Utf8Path,
-) -> PodbotResult<()> {
+    validate: F,
+) -> PodbotResult<()>
+where
+    F: for<'a> Fn(u64, &'a camino::Utf8Path) -> CredentialValidationFuture<'a>,
+{
     let redacted_private_key_path = "[REDACTED]";
     tracing::debug!(
         app_id,
@@ -206,10 +279,7 @@ fn validate_agent_github_credentials_on_local_runtime(
     );
     let runtime = create_runtime()?;
     runtime
-        .block_on(crate::github::validate_app_credentials(
-            app_id,
-            private_key_path,
-        ))
+        .block_on(validate(app_id, private_key_path))
         .map_err(crate::error::PodbotError::from)
 }
 

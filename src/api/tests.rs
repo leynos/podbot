@@ -3,7 +3,10 @@
 use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
+use proptest::prelude::*;
 use rstest::rstest;
+#[cfg(feature = "experimental")]
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::exec::exec_with_client;
 use super::{CommandOutcome, ExecMode, ExecRequest, RunRequest};
@@ -83,6 +86,25 @@ fn run_request_rejects_empty_values(
         error.to_string().contains(expected_field),
         "expected error to mention {expected_field}, got {error}"
     );
+}
+
+proptest! {
+    #[test]
+    fn run_request_validation_follows_trim_semantics(
+        repository in "[\\sA-Za-z0-9_/.-]{0,64}",
+        branch in "[\\sA-Za-z0-9_/.-]{0,64}",
+    ) {
+        let result = RunRequest::new(repository.clone(), branch.clone());
+
+        if repository.trim().is_empty() || branch.trim().is_empty() {
+            prop_assert!(result.is_err());
+        } else {
+            prop_assert!(result.is_ok());
+            let request = result.unwrap_or_else(|error| panic!("valid request rejected: {error}"));
+            prop_assert_eq!(request.repository(), repository);
+            prop_assert_eq!(request.branch(), branch);
+        }
+    }
 }
 
 #[rstest]
@@ -228,6 +250,61 @@ fn run_agent_requires_complete_github_config() {
 #[cfg(feature = "experimental")]
 fn credential_validation_thread_panic_maps_to_github_error() {
     let error = super::credential_validation_thread_panicked();
+
+    assert!(matches!(
+        error,
+        PodbotError::GitHub(crate::error::GitHubError::AuthenticationFailed { message })
+            if message == "GitHub credential validation thread panicked"
+    ));
+}
+
+#[rstest]
+#[cfg(feature = "experimental")]
+fn credential_validation_uses_local_runtime_without_current_handle() {
+    let calls = AtomicUsize::new(0);
+    let private_key_path = Utf8PathBuf::from("/tmp/test-key.pem");
+
+    super::validate_agent_github_credentials_with(1, &private_key_path, |_, _| {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async { Ok(()) })
+    })
+    .expect("local runtime credential validation should succeed");
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[rstest]
+#[cfg(feature = "experimental")]
+fn credential_validation_uses_scoped_thread_inside_current_runtime() {
+    let calls = AtomicUsize::new(0);
+    let private_key_path = Utf8PathBuf::from("/tmp/test-key.pem");
+    let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
+
+    runtime
+        .block_on(async {
+            super::validate_agent_github_credentials_with(1, &private_key_path, |_, _| {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async { Ok(()) })
+            })
+        })
+        .expect("scoped-thread credential validation should succeed");
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[rstest]
+#[cfg(feature = "experimental")]
+fn credential_validation_scoped_thread_panic_maps_to_github_error() {
+    let private_key_path = Utf8PathBuf::from("/tmp/test-key.pem");
+    let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
+
+    let error = runtime
+        .block_on(async {
+            super::validate_agent_github_credentials_with(1, &private_key_path, |_, _| {
+                Box::pin(async { panic!("credential validation panic") })
+            })
+        })
+        .expect_err("scoped-thread panic should be mapped to an error");
 
     assert!(matches!(
         error,

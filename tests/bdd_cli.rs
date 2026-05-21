@@ -9,6 +9,8 @@ use podbot::cli::Cli;
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then};
+#[cfg(feature = "experimental")]
+use std::process::Command;
 
 /// State shared across CLI test scenarios.
 #[derive(Default, ScenarioState)]
@@ -163,6 +165,24 @@ fn invoke_run_with_all_args(cli_state: &CliState) {
     }
 }
 
+#[given("the CLI run command is executed with repository owner/name and branch main")]
+#[cfg(feature = "experimental")]
+fn execute_run_with_all_args(cli_state: &CliState) -> Result<(), String> {
+    let output = Command::new(env!("CARGO_BIN_EXE_podbot"))
+        .args(["run", "--repo", "owner/name", "--branch", "main"])
+        .output()
+        .map_err(|error| format!("podbot binary should execute: {error}"))?;
+
+    cli_state.success.set(output.status.success());
+    cli_state
+        .output
+        .set(String::from_utf8_lossy(&output.stdout).into_owned());
+    cli_state
+        .error
+        .set(String::from_utf8_lossy(&output.stderr).into_owned());
+    Ok(())
+}
+
 #[given("the CLI is invoked with ps")]
 fn invoke_ps(cli_state: &CliState) {
     let result: Result<Cli, clap::Error> = Cli::try_parse_from(["podbot", "ps"]);
@@ -278,6 +298,15 @@ fn run_requires_branch(cli_state: CliState) {
     name = "Run command succeeds with required arguments"
 )]
 fn run_succeeds_with_all_args(cli_state: CliState) {
+    let _ = cli_state;
+}
+
+#[scenario(
+    path = "tests/features/cli.feature",
+    name = "Run command dispatches to orchestration"
+)]
+#[cfg(feature = "experimental")]
+fn run_dispatches_to_orchestration(cli_state: CliState) {
     let _ = cli_state;
 }
 
