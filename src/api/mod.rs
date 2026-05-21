@@ -1,11 +1,10 @@
 //! Orchestration API for podbot commands.
 //!
-//! This module provides the stable public exec orchestration surface:
-//! [`exec`], [`ExecContext`], [`ExecRequest`], [`ExecMode`], and
-//! [`CommandOutcome`]. Under `feature = "experimental"`, `run_agent`
-//! performs `GitHub` configuration and credential validation, while
-//! `stop_container`, `list_containers`, and `run_token_daemon` remain
-//! compatibility stubs.
+//! This module provides the stable public orchestration surface: [`exec`],
+//! [`ExecContext`], [`ExecRequest`], [`ExecMode`], [`RunRequest`], and
+//! [`CommandOutcome`]. Under `feature = "experimental"`, `run_agent` performs
+//! `GitHub` configuration and credential validation, while `stop_container`,
+//! `list_containers`, and `run_token_daemon` remain compatibility stubs.
 //!
 //! Internal-feature builds also expose additional compatibility helpers for
 //! Git identity configuration.
