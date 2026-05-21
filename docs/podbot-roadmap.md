@@ -700,11 +700,11 @@ This step answers whether all operator commands can parse arguments, validate
 required inputs, and delegate to library functions. The result informs command
 specific work. See podbot-design.md §Dual delivery model.
 
-- [ ] 6.1.1. Implement subcommand dispatch for `run`, `host`,
+- [x] 6.1.1. Implement subcommand dispatch for `run`, `host`,
   `token-daemon`, `ps`, `stop`, and `exec`.
   - Requires 5.3.1.
-  - Progress: `run` dispatch is implemented through the library-owned request
-    boundary in docs/execplans/6-1-1-run-subcommand.md.
+  - Implemented scope: `run` dispatch is implemented through the library-owned
+    request boundary in docs/execplans/6-1-1-run-subcommand.md.
   - Success: help text describes each command, invalid arguments produce clear
     errors, and dispatch does not duplicate library orchestration.
 

@@ -195,10 +195,10 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
 #[cfg(feature = "experimental")]
 fn when_stubs_called(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
     let config = AppConfig::default();
-    let request = match library_boundary_state.run_request.get() {
-        Some(request) => request,
-        None => RunRequest::new("owner/name", "main").map_err(|e| e.to_string())?,
-    };
+    let request = library_boundary_state
+        .run_request
+        .get()
+        .ok_or_else(|| String::from("run request should be configured"))?;
     let mut results = Vec::new();
 
     match run_agent(&config, &request) {

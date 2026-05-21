@@ -68,18 +68,48 @@ pub enum CommandOutcome {
 /// These validation failures are real runtime behaviour, not placeholder
 /// errors deferred until the rest of the orchestration flow is implemented.
 #[cfg(feature = "experimental")]
-pub fn run_agent(config: &AppConfig, _request: &RunRequest) -> PodbotResult<CommandOutcome> {
+pub fn run_agent(config: &AppConfig, request: &RunRequest) -> PodbotResult<CommandOutcome> {
+    tracing::debug!(
+        repository = request.repository(),
+        branch = request.branch(),
+        "validating run request before agent orchestration"
+    );
+    validate_github_config_for_run(config, request)?;
+    validate_configured_github_credentials(config, request)?;
+    Ok(CommandOutcome::Success)
+}
+
+#[cfg(feature = "experimental")]
+fn validate_github_config_for_run(config: &AppConfig, request: &RunRequest) -> PodbotResult<()> {
     if config.github.is_partially_configured() {
+        tracing::debug!(
+            repository = request.repository(),
+            branch = request.branch(),
+            "validating GitHub configuration for run request"
+        );
         config.github.validate()?;
     }
+    Ok(())
+}
 
+#[cfg(feature = "experimental")]
+fn validate_configured_github_credentials(
+    config: &AppConfig,
+    request: &RunRequest,
+) -> PodbotResult<()> {
     if let (Some(app_id), Some(private_key_path)) = (
         config.github.app_id,
         config.github.private_key_path.as_ref(),
     ) {
+        tracing::debug!(
+            repository = request.repository(),
+            branch = request.branch(),
+            app_id,
+            "validating GitHub App credentials for run request"
+        );
         validate_agent_github_credentials(app_id, private_key_path)?;
     }
-    Ok(CommandOutcome::Success)
+    Ok(())
 }
 
 /// List running podbot containers.
@@ -138,29 +168,47 @@ fn validate_agent_github_credentials(
     private_key_path: &camino::Utf8Path,
 ) -> PodbotResult<()> {
     if tokio::runtime::Handle::try_current().is_ok() {
-        std::thread::scope(|scope| -> PodbotResult<()> {
-            scope
-                .spawn(|| -> PodbotResult<()> {
-                    let runtime = create_runtime()?;
-                    runtime
-                        .block_on(crate::github::validate_app_credentials(
-                            app_id,
-                            private_key_path,
-                        ))
-                        .map_err(crate::error::PodbotError::from)
-                })
-                .join()
-                .map_err(|_| credential_validation_thread_panicked())?
-        })
+        validate_agent_github_credentials_on_scoped_thread(app_id, private_key_path)
     } else {
-        let runtime = create_runtime()?;
-        runtime
-            .block_on(crate::github::validate_app_credentials(
-                app_id,
-                private_key_path,
-            ))
-            .map_err(crate::error::PodbotError::from)
+        validate_agent_github_credentials_on_local_runtime(app_id, private_key_path)
     }
+}
+
+#[cfg(feature = "experimental")]
+fn validate_agent_github_credentials_on_scoped_thread(
+    app_id: u64,
+    private_key_path: &camino::Utf8Path,
+) -> PodbotResult<()> {
+    tracing::debug!(
+        app_id,
+        private_key_path = %private_key_path,
+        "validating GitHub App credentials on a scoped thread"
+    );
+    std::thread::scope(|scope| -> PodbotResult<()> {
+        scope
+            .spawn(|| validate_agent_github_credentials_on_local_runtime(app_id, private_key_path))
+            .join()
+            .map_err(|_| credential_validation_thread_panicked())?
+    })
+}
+
+#[cfg(feature = "experimental")]
+fn validate_agent_github_credentials_on_local_runtime(
+    app_id: u64,
+    private_key_path: &camino::Utf8Path,
+) -> PodbotResult<()> {
+    tracing::debug!(
+        app_id,
+        private_key_path = %private_key_path,
+        "validating GitHub App credentials on a local runtime"
+    );
+    let runtime = create_runtime()?;
+    runtime
+        .block_on(crate::github::validate_app_credentials(
+            app_id,
+            private_key_path,
+        ))
+        .map_err(crate::error::PodbotError::from)
 }
 
 #[cfg(feature = "experimental")]

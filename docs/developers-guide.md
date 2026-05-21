@@ -515,8 +515,10 @@ these to `eyre::Report` for operator-facing display.
 
 #### `run_agent`
 
-`run_agent(config: &AppConfig)` performs credential validation before starting
-the agent loop:
+`run_agent(config: &AppConfig, request: &RunRequest)` performs credential
+validation before starting the agent loop. The request carries the library-owned
+`podbot run` repository and branch inputs, so embedders can construct the same
+operation without importing CLI or Clap types:
 
 1. If none of `config.github.app_id`, `config.github.installation_id`, or
    `config.github.private_key_path` is set (`is_partially_configured()` returns
@@ -631,7 +633,7 @@ The semver-stable surface for library embedders is limited to three modules:
 | Module           | Contents                                               |
 | ---------------- | ------------------------------------------------------ |
 | `podbot::api`    | `exec`, `ExecRequest`, `ExecMode`, `ExecContext`,      |
-|                  | `CommandOutcome`                                       |
+|                  | `RunRequest`, `CommandOutcome`                         |
 | `podbot::config` | `AppConfig`, `GitHubConfig`, and related configuration |
 |                  | types                                                  |
 | `podbot::error`  | `PodbotError`, `Result<T>`, error variant enums        |

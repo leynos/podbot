@@ -1,4 +1,15 @@
 //! Given/when/then steps for orchestration scenarios.
+//!
+//! These step definitions exercise the library orchestration boundary used by
+//! the behavioural `bdd_orchestration` feature. They translate feature-file
+//! preconditions into [`OrchestrationState`], configure mock container-engine
+//! clients, and invoke the public orchestration APIs without depending on the
+//! CLI adapter.
+//!
+//! The module works with `state` to persist scenario inputs and outcomes, and
+//! with `crate::test_utils` to share deterministic exec-client helpers. This
+//! keeps BDD scenarios focused on command behaviour while the mock utilities
+//! provide repeatable engine responses.
 
 use bollard::container::LogOutput;
 use futures_util::stream;

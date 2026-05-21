@@ -5,7 +5,7 @@
 //! Run via `cargo test` — trybuild compiles this file in isolation and fails
 //! the test if it does not compile.
 
-use podbot::api::{CommandOutcome, ExecContext, ExecMode, ExecRequest, exec};
+use podbot::api::{CommandOutcome, ExecContext, ExecMode, ExecRequest, RunRequest, exec};
 use podbot::config::AppConfig;
 use podbot::error::Result;
 
@@ -22,6 +22,10 @@ fn _assert_top_level_exec_is_importable(
     request: &ExecRequest,
 ) -> Result<CommandOutcome> {
     exec(config, request)
+}
+
+fn _assert_run_request_is_importable() -> Result<RunRequest> {
+    RunRequest::new("owner/name", "main")
 }
 
 fn _assert_context_exec_is_importable(

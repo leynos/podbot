@@ -59,6 +59,10 @@ impl RunRequest {
 
 fn validate_non_empty(field: &str, value: &str) -> PodbotResult<()> {
     if value.trim().is_empty() {
+        tracing::debug!(
+            field,
+            "rejecting run request because a required value is empty"
+        );
         return Err(ConfigError::InvalidValue {
             field: field.to_owned(),
             reason: format!("{field} must not be empty"),
