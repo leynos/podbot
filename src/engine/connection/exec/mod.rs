@@ -171,7 +171,6 @@ impl ExecRequest {
     }
 
     /// Set environment variables in `KEY=value` form.
-    #[cfg(any(feature = "internal", test))]
     #[must_use]
     pub fn with_env(mut self, env: Option<Vec<String>>) -> Self {
         self.env = env.filter(|entries| !entries.is_empty());
