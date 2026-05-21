@@ -40,7 +40,7 @@ impl RepositoryRef {
             return Err(invalid_repository_ref());
         };
 
-        if owner.is_empty() || name.is_empty() || name.contains('/') {
+        if has_invalid_segments(owner, name) {
             return Err(invalid_repository_ref());
         }
 
@@ -69,6 +69,10 @@ fn invalid_repository_ref() -> crate::error::PodbotError {
         reason: String::from("expected repository in owner/name form"),
     }
     .into()
+}
+
+fn has_invalid_segments(owner: &str, name: &str) -> bool {
+    owner.is_empty() || name.is_empty() || name.contains('/')
 }
 
 /// A required Git branch name supplied by the caller.
