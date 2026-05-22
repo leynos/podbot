@@ -146,6 +146,31 @@ fn evaluate_forwards_frames_without_dispatchable_method(#[case] payload: serde_j
     );
 }
 
+#[rstest]
+#[case::missing_jsonrpc(serde_json::json!({
+    "id": 1,
+    "method": "terminal/create",
+}))]
+#[case::wrong_jsonrpc_version(serde_json::json!({
+    "jsonrpc": "1.0",
+    "id": 1,
+    "method": "terminal/create",
+}))]
+#[case::jsonrpc_not_string(serde_json::json!({
+    "jsonrpc": 2.0,
+    "id": 1,
+    "method": "terminal/create",
+}))]
+fn evaluate_forwards_non_jsonrpc_objects_with_blocked_method(#[case] payload: serde_json::Value) {
+    let frame = serialize_frame(&payload);
+    let denylist = MethodDenylist::default_families();
+
+    assert_eq!(
+        evaluate_agent_outbound_frame(&frame, &denylist),
+        FrameDecision::Forward
+    );
+}
+
 #[test]
 fn evaluate_handles_crlf_terminated_frame() {
     let mut frame = serde_json::to_vec(&serde_json::json!({

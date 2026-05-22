@@ -9,9 +9,10 @@
 //! trivially testable.
 //!
 //! The policy is intentionally tolerant: any frame that fails to parse, lacks
-//! a `method` field, or carries an unblocked method passes through unchanged.
-//! This mirrors the first-frame masking philosophy established in
-//! `acp_helpers` and protects non-Agentic Control Protocol traffic.
+//! the JSON-RPC 2.0 marker, lacks a `method` field, or carries an unblocked
+//! method passes through unchanged. This mirrors the first-frame masking
+//! philosophy established in `acp_helpers` and protects non-Agentic Control
+//! Protocol traffic.
 
 use ortho_config::serde_json::{self, Value};
 
@@ -102,10 +103,11 @@ pub(crate) enum FrameDecision {
 /// Decide whether `frame` (an agent-outbound JSON-RPC frame) should be
 /// forwarded to the host or blocked by `denylist`.
 ///
-/// On any parse failure, missing-method, or response/batch shape, the
-/// function returns [`FrameDecision::Forward`]. Only a JSON-RPC request or
-/// notification whose `method` belongs to a blocked family produces a
-/// [`FrameDecision::BlockRequest`] or [`FrameDecision::BlockNotification`].
+/// On any parse failure, missing JSON-RPC 2.0 marker, missing-method, or
+/// response/batch shape, the function returns [`FrameDecision::Forward`].
+/// Only a JSON-RPC request or notification whose `method` belongs to a
+/// blocked family produces a [`FrameDecision::BlockRequest`] or
+/// [`FrameDecision::BlockNotification`].
 pub(crate) fn evaluate_agent_outbound_frame(
     frame: &[u8],
     denylist: &MethodDenylist,
@@ -114,6 +116,9 @@ pub(crate) fn evaluate_agent_outbound_frame(
     let Ok(message) = serde_json::from_slice::<Value>(payload) else {
         return FrameDecision::Forward;
     };
+    if message.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+        return FrameDecision::Forward;
+    }
     let Some(method) = message.get("method").and_then(Value::as_str) else {
         return FrameDecision::Forward;
     };
