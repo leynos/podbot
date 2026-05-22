@@ -3,6 +3,9 @@
 //! This module gathers the shared assertions, state, and step bindings used by
 //! the orchestration feature tests so the scenarios stay focused on outcomes
 //! rather than setup plumbing.
+//! It re-exports the helper modules consumed by `rstest-bdd` discovery and
+//! keeps the orchestration scenarios tied to the public API surface under
+//! test.
 
 mod assertions;
 mod state;

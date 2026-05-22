@@ -253,13 +253,28 @@ fn run_agent_requires_complete_github_config() {
 #[cfg(feature = "experimental")]
 #[case::feature_branch("owner/feature", "feature/run-request")]
 #[case::release_branch("team/service", "release-2026")]
-fn run_agent_accepts_distinct_run_requests(#[case] repository: &str, #[case] branch: &str) {
+fn run_agent_accepts_distinct_run_requests(
+    #[case] repository: &str,
+    #[case] branch: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = AppConfig::default();
-    let request = RunRequest::new(repository, branch).expect("request should be valid");
+    let request = RunRequest::new(repository, branch)?;
 
-    let outcome = run_agent(&config, &request).expect("valid run request should succeed");
+    let mut outcome = None;
+    let logs = capture_logs(
+        || {
+            outcome = Some(run_agent(&config, &request));
+        },
+        tracing::Level::DEBUG,
+    )?;
+    let command_outcome = outcome
+        .ok_or_else(|| std::io::Error::other("run_agent should have been called"))?
+        .map_err(|error| Box::new(error) as Box<dyn std::error::Error + Send + Sync>)?;
 
-    assert_eq!(outcome, CommandOutcome::Success);
+    require_outcome(command_outcome, CommandOutcome::Success)?;
+    require_log_contains(&logs, repository, "repository from RunRequest")?;
+    require_log_contains(&logs, branch, "branch from RunRequest")?;
+    Ok(())
 }
 
 #[rstest]
@@ -375,6 +390,14 @@ impl std::io::Write for SharedLogBuffer {
 fn capture_warning_logs(
     operation: impl FnOnce(),
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    capture_logs(operation, tracing::Level::WARN)
+}
+
+#[cfg(feature = "experimental")]
+fn capture_logs(
+    operation: impl FnOnce(),
+    max_level: tracing::Level,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let output = Arc::new(Mutex::new(Vec::new()));
     let writer = SharedLogWriter {
         output: Arc::clone(&output),
@@ -383,7 +406,7 @@ fn capture_warning_logs(
         .with_writer(writer)
         .with_ansi(false)
         .without_time()
-        .with_max_level(tracing::Level::WARN)
+        .with_max_level(max_level)
         .finish();
 
     tracing::subscriber::with_default(subscriber, operation);
@@ -398,6 +421,20 @@ fn capture_warning_logs(
         .clone();
     String::from_utf8(bytes)
         .map_err(|error| Box::new(error) as Box<dyn std::error::Error + Send + Sync>)
+}
+
+#[cfg(feature = "experimental")]
+fn require_outcome(
+    actual: CommandOutcome,
+    expected: CommandOutcome,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(Box::new(std::io::Error::other(format!(
+            "expected outcome {expected:?}, got {actual:?}"
+        ))))
+    }
 }
 
 #[cfg(feature = "experimental")]
