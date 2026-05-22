@@ -314,7 +314,16 @@ where
     let stdin_result =
         settle_stdin_forwarding_task(request.container_id(), stdin_task, options).await;
 
-    let sink_result = sink_task
+    if let Err(error) = output_result {
+        sink_task.abort();
+        return Err(error);
+    }
+    if let Err(error) = stdin_result {
+        sink_task.abort();
+        return Err(error);
+    }
+
+    sink_task
         .await
         .map_err(|error| {
             exec_failed(
@@ -327,11 +336,7 @@ where
                 request.container_id(),
                 format!("container stdin sink failed: {error}"),
             )
-        });
-
-    output_result?;
-    stdin_result?;
-    sink_result
+        })
 }
 
 /// Reads the first newline-delimited ACP frame from `buffered_stdin`,
