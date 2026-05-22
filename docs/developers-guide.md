@@ -448,10 +448,11 @@ ordering inside the JSON is not stable.
 #### 8.2.3. ACP runtime observability contract
 
 Step 2.6.2 ships stderr and `tracing::warn!` diagnostics for each denied ACP
-method attempt. Production rollout must also expose metrics for the runtime
-denylist path before `MaskAndDeny` is enabled by default or selected through a
-user-facing override. The metric names are intentionally specified here so the
-adapter, host command, and dashboards converge on one contract:
+method attempt. Metrics and span-based tracing instrumentation are deferred to
+Step 2.6.3 or the production rollout before `MaskAndDeny` is enabled by
+default or selected through a user-facing override. The metric names below
+capture the intended contract for that later work, so the adapter, host
+command, and dashboards converge on one shape when it lands:
 
 - `podbot_acp_policy_state`: gauge labelled by `container_id` and `policy`
   (`disabled`, `mask_only`, or `mask_and_deny`), set once when the protocol
@@ -472,11 +473,12 @@ adapter, host command, and dashboards converge on one contract:
   `container_id`, incremented when end-of-stream drops a residual partial
   frame that could not be classified safely.
 
-Every ACP runtime session should also attach a tracing span that carries the
-container ID, the selected `CapabilityPolicy`, the `SINK_CHANNEL_CAPACITY`
-value, and the runtime frame limit. Denial events, send failures, buffer
-overflow events, and partial-frame drops should be emitted inside that span so
-logs and metrics can be correlated during incident analysis.
+When that instrumentation is introduced, every ACP runtime session should
+also attach a tracing span that carries the container ID, the selected
+`CapabilityPolicy`, the `SINK_CHANNEL_CAPACITY` value, and the runtime frame
+limit. Denial events, send failures, buffer overflow events, and partial-frame
+drops should be emitted inside that span so logs and metrics can be correlated
+during incident analysis.
 
 ### 8.3. Parameterized tests
 
