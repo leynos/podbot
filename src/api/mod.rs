@@ -91,10 +91,14 @@ fn validate_github_config_for_run(config: &AppConfig, request: &RunRequest) -> P
             branch = request.branch(),
             "validating GitHub configuration for run request"
         );
-        config
-            .github
-            .validate()
-            .inspect_err(|error| warn_github_validation_failed(request, error, None))?;
+        config.github.validate().inspect_err(|error| {
+            warn_github_validation_failed(
+                request,
+                error,
+                None,
+                "GitHub configuration validation failed for run request",
+            );
+        })?;
     }
     Ok(())
 }
@@ -104,6 +108,7 @@ fn warn_github_validation_failed(
     request: &RunRequest,
     error: &crate::error::PodbotError,
     app_id: Option<&str>,
+    message: &str,
 ) {
     let app_id_for_log = app_id.unwrap_or("null");
     tracing::warn!(
@@ -112,7 +117,7 @@ fn warn_github_validation_failed(
         branch = request.branch(),
         app_id = app_id_for_log,
         %error,
-        "GitHub configuration validation failed for run request"
+        message
     );
 }
 
@@ -134,7 +139,12 @@ fn validate_configured_github_credentials(
         );
         validate_agent_github_credentials(app_id, private_key_path).inspect_err(|error| {
             let app_id_text = app_id.to_string();
-            warn_github_validation_failed(request, error, Some(app_id_text.as_str()));
+            warn_github_validation_failed(
+                request,
+                error,
+                Some(app_id_text.as_str()),
+                "GitHub credential authentication failed for run request",
+            );
         })?;
     }
     Ok(())
