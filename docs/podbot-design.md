@@ -243,14 +243,14 @@ ACP masking is an implementation requirement, not a documentation preference:
   activates both behaviours together.
 - When `MaskAndDeny` is selected, container stdin has a single owner: a
   dedicated sink task that drains a bounded `tokio::sync::mpsc` channel of
-  `WriteCmd::{Forward, Synthesised}` values. Both the host-stdin forwarder and
+  `WriteCmd::{Forward, Synthesized}` values. Both the host-stdin forwarder and
   the output-direction policy adapter are _senders_. The ordering invariant is
   established by channel construction: the protocol coordinator drops every
   sender after the output stream drains, so the sink processes every queued
-  synthesized response before it reads the closed-channel terminator and shuts
-  container stdin. The sink tolerates `BrokenPipe` from container stdin by
-  logging a single warning and continuing to drain the channel, preserving the
-  existing exit-code reporting path.
+  synthesized response before it observes channel close and shuts container
+  stdin. There is no explicit shutdown command. The sink tolerates `BrokenPipe`
+  from container stdin by logging a single warning and continuing to drain the
+  channel, preserving the existing exit-code reporting path.
 - The output-direction frame assembler buffers up to 128 kibibytes of
   agent-emitted bytes while searching for a frame's terminating newline. On
   overflow before a newline is observed, the assembler flushes the buffered

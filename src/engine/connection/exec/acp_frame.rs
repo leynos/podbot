@@ -30,6 +30,8 @@
 //! assembler holds no locks, no channels, and no `tokio` types; it is
 //! purely synchronous data manipulation.
 
+use ortho_config::serde_json;
+
 use super::acp_policy::{FrameDecision, MethodDenylist, evaluate_agent_outbound_frame};
 
 /// Maximum bytes buffered while searching for a frame's terminating newline.
@@ -43,16 +45,28 @@ pub(crate) const MAX_RUNTIME_FRAME_BYTES: usize = 131_072;
 /// [`OutboundFrameAssembler`].
 ///
 /// `Forward` carries the verbatim bytes that the adapter must write to host
-/// stdout (including any original line ending). `Decision` carries the
-/// policy verdict together with the original line-ending bytes that the
-/// adapter should reuse when synthesizing an error response.
+/// stdout (including any original line ending). `Decision` carries a
+/// non-forward policy verdict together with the original line-ending bytes
+/// that the adapter should reuse when synthesizing an error response.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FrameOutput {
     /// Forward these bytes to host stdout unchanged.
     Forward(Vec<u8>),
     /// Apply the policy decision; the trailing slice is the original line
     /// ending (`b""`, `b"\n"`, or `b"\r\n"`) for synthesized responses.
-    Decision(FrameDecision, Vec<u8>),
+    Decision(DeniedFrameDecision, Vec<u8>),
+}
+
+/// Non-forward policy decision emitted for a completed frame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DeniedFrameDecision {
+    /// Drop a blocked notification without generating a response.
+    BlockNotification { method: String },
+    /// Generate a JSON-RPC error response for a blocked request.
+    BlockRequest {
+        id: serde_json::Value,
+        method: String,
+    },
 }
 
 /// Reason recorded once when the assembler enters raw-fallback mode at end
@@ -202,9 +216,19 @@ fn classify_frame(frame_bytes: &[u8], denylist: &MethodDenylist) -> FrameOutput 
     let decision = evaluate_agent_outbound_frame(frame_bytes, denylist);
     match decision {
         FrameDecision::Forward => FrameOutput::Forward(frame_bytes.to_vec()),
-        other => {
+        FrameDecision::BlockNotification { method } => {
             let line_ending = trailing_line_ending(frame_bytes).to_vec();
-            FrameOutput::Decision(other, line_ending)
+            FrameOutput::Decision(
+                DeniedFrameDecision::BlockNotification { method },
+                line_ending,
+            )
+        }
+        FrameDecision::BlockRequest { id, method } => {
+            let line_ending = trailing_line_ending(frame_bytes).to_vec();
+            FrameOutput::Decision(
+                DeniedFrameDecision::BlockRequest { id, method },
+                line_ending,
+            )
         }
     }
 }

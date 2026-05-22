@@ -246,14 +246,14 @@ fn expect_synthesized_id(denylist_state: &DenylistState, expected_id: &Value) ->
         .sink_commands
         .get()
         .ok_or_else(|| String::from("sink command snapshot not recorded"))?;
-    let synthesised: Vec<&Vec<u8>> = commands
+    let synthesized: Vec<&Vec<u8>> = commands
         .iter()
         .filter_map(|cmd| match cmd {
-            WriteCmd::Synthesised(bytes) => Some(bytes),
+            WriteCmd::Synthesized(bytes) => Some(bytes),
             WriteCmd::Forward(_) => None,
         })
         .collect();
-    let bytes = match synthesised.as_slice() {
+    let bytes = match synthesized.as_slice() {
         [bytes] => *bytes,
         other => {
             return Err(format!(
@@ -295,10 +295,10 @@ fn assert_no_synthesized(denylist_state: &DenylistState) -> StepResult<()> {
         .sink_commands
         .get()
         .ok_or_else(|| String::from("sink command snapshot not recorded"))?;
-    let any_synthesised = commands
+    let any_synthesized = commands
         .iter()
-        .any(|cmd| matches!(cmd, WriteCmd::Synthesised(_)));
-    if any_synthesised {
+        .any(|cmd| matches!(cmd, WriteCmd::Synthesized(_)));
+    if any_synthesized {
         Err(String::from(
             "expected no synthesized response on container stdin",
         ))

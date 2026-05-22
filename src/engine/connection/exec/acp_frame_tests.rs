@@ -8,8 +8,11 @@
 use ortho_config::serde_json::{self, Value};
 use rstest::rstest;
 
-use super::{FallbackReason, FrameOutput, MAX_RUNTIME_FRAME_BYTES, OutboundFrameAssembler};
-use crate::engine::connection::exec::acp_policy::{FrameDecision, MethodDenylist};
+use super::{
+    DeniedFrameDecision, FallbackReason, FrameOutput, MAX_RUNTIME_FRAME_BYTES,
+    OutboundFrameAssembler,
+};
+use crate::engine::connection::exec::acp_policy::MethodDenylist;
 
 fn permitted_frame(method: &str, line_ending: &[u8]) -> Vec<u8> {
     let mut bytes = serde_json::to_vec(&serde_json::json!({
@@ -128,7 +131,10 @@ fn blocked_request_emits_decision_with_line_ending() {
     assert!(fallback.is_none());
     assert_eq!(outputs.len(), 1);
     match outputs.first() {
-        Some(FrameOutput::Decision(FrameDecision::BlockRequest { id, method }, line_ending)) => {
+        Some(FrameOutput::Decision(
+            DeniedFrameDecision::BlockRequest { id, method },
+            line_ending,
+        )) => {
             assert_eq!(id, &serde_json::json!(7));
             assert_eq!(method, "terminal/create");
             assert_eq!(line_ending, b"\n");
@@ -150,7 +156,10 @@ fn blocked_notification_emits_decision_without_id() {
     let (outputs, _) = framer.ingest_chunk(&frame);
 
     match outputs.first() {
-        Some(FrameOutput::Decision(FrameDecision::BlockNotification { method }, line_ending)) => {
+        Some(FrameOutput::Decision(
+            DeniedFrameDecision::BlockNotification { method },
+            line_ending,
+        )) => {
             assert_eq!(method, "fs/changed");
             assert_eq!(line_ending, b"\n");
         }
@@ -210,7 +219,10 @@ fn permitted_frame_after_blocked_frame_still_forwards() {
     assert_eq!(outputs.len(), 2);
     assert!(matches!(
         outputs.first(),
-        Some(FrameOutput::Decision(FrameDecision::BlockRequest { .. }, _))
+        Some(FrameOutput::Decision(
+            DeniedFrameDecision::BlockRequest { .. },
+            _
+        ))
     ));
     match outputs.get(1) {
         Some(FrameOutput::Forward(bytes)) => assert_eq!(bytes, &permitted),

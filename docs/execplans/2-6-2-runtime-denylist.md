@@ -137,10 +137,9 @@ Stop and escalate (do not improvise) when any of the following occurs.
   container input writer and drains a single
   `tokio::sync::mpsc::Receiver<WriteCmd>`. The host-stdin forwarding task and
   the output-direction policy adapter both become *senders* rather than
-  competing writers. The sink drains the channel until it receives an explicit
-  `WriteCmd::Shutdown`, which the protocol coordinator emits only after the
-  output loop returns. Document the ordering invariant inline and in
-  `docs/podbot-design.md`.
+  competing writers. The sink drains the channel until every sender has been
+  dropped; the closed channel is the only terminator. Document the ordering
+  invariant inline and in `docs/podbot-design.md`.
 
 - Risk: the existing `STDIN_SETTLE_TIMEOUT` of 50 milliseconds may abort
   the input task before queued denial responses are flushed, especially when
@@ -417,11 +416,10 @@ Create `src/engine/connection/exec/acp_runtime.rs` containing the adapter and
 the container-stdin sink task. This module owns all `tokio::sync::mpsc` and
 `tracing` use for the runtime path.
 
-Define a `WriteCmd` enum (`Forward`, `Synthesized`, `Shutdown`) describing
-every byte written to container stdin. Define `run_container_stdin_sink` as the
-dedicated sink task and the `OutboundPolicyAdapter` struct paired with
-`handle_chunk` and `finish` methods. Full signatures appear in
-`Interfaces and dependencies`.
+Define a `WriteCmd` enum (`Forward`, `Synthesized`) describing every byte
+written to container stdin. Define `run_container_stdin_sink` as the dedicated
+sink task and the `OutboundPolicyAdapter` struct paired with `handle_chunk` and
+`finish` methods. Full signatures appear in `Interfaces and dependencies`.
 
 Behavioural rules for the adapter:
 
@@ -439,13 +437,13 @@ Behavioural rules for the adapter:
 
 Behavioural rules for the sink:
 
-- Drain commands until `Shutdown` is received, writing and flushing each
-  one in arrival order.
+- Drain commands until the channel closes, writing and flushing each one in
+  arrival order.
 - On `BrokenPipe` from container stdin (the agent has exited), downgrade
   subsequent writes to a single `tracing::warn!` and continue draining the
-  channel until `Shutdown`. The protocol session still completes cleanly and
-  the exit-code reporting path remains intact.
-- After `Shutdown`, call `input.shutdown().await` once and return.
+  channel until every sender has been dropped. The protocol session still
+  completes cleanly and the exit-code reporting path remains intact.
+- After the channel closes, call `input.shutdown().await` once and return.
 
 Modify `src/engine/connection/exec/protocol.rs`:
 
@@ -463,9 +461,9 @@ Modify `src/engine/connection/exec/protocol.rs`:
     `tokio::io::copy`-into-writer path).
   - Build the `OutboundPolicyAdapter` with the same channel sender and
     pass it into `run_output_loop_async`.
-  - After the output loop returns, the adapter sends `WriteCmd::Shutdown`,
-    awaits the sink task, then awaits the host-stdin forwarder under
-    the existing `STDIN_SETTLE_TIMEOUT`.
+  - After the output loop returns, drop the adapter sender, await the
+    host-stdin forwarder under the existing `STDIN_SETTLE_TIMEOUT`, then await
+    the sink task so it can observe channel close after all senders are gone.
 - When the policy is `MaskOnly`, behave exactly as today (init
   rewriting on, runtime enforcement off). When the policy is `Disabled`, the
   existing byte-transparent code path is taken.
@@ -477,8 +475,7 @@ tests for the adapter and sink covering:
 
 - blocked request followed by permitted frame: only the permitted frame
   reaches `host_stdout`, and the synthesized error reaches the sink;
-- the sink delivers the synthesized error before processing
-  `WriteCmd::Shutdown`;
+- the sink delivers the synthesized error before terminating on channel close;
 - the sink handles a `BrokenPipe` from container stdin without
   failing the session;
 - `WriteCmd::Forward` from the host-stdin forwarder is interleaved
@@ -521,7 +518,7 @@ Create `tests/features/acp_method_denylist.feature` with scenarios:
 6. Permitted frame after a blocked frame still flushes correctly.
 7. Container stdin sees the synthesized error response within one chunk
    of the blocked request being observed on the output stream, and strictly
-   before the sink processes `WriteCmd::Shutdown`.
+   before the sink observes channel close.
 
 Bind the scenarios in `src/engine/connection/exec/acp_runtime_bdd_tests.rs`,
 mirroring the `AcpMaskingState` pattern from `protocol_acp_bdd_tests.rs`. Use a
@@ -561,7 +558,7 @@ Update `docs/podbot-design.md` to describe:
   trailing-slash prefix matching is correct, JSON-RPC error code `-32001`, the
   `data.reason = "podbot_capability_policy"` discriminator);
 - the dedicated container-stdin sink task and the
-  `WriteCmd::{Forward, Synthesized, Shutdown}` ordering invariant;
+  `WriteCmd::{Forward, Synthesized}` channel-close ordering invariant;
 - the raw-fallback behaviour on buffer overflow and the
   drop-partial-frame behaviour at end of stream;
 - the `CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` enum and
@@ -718,7 +715,7 @@ report; they must not write to the working tree.
   adapter logs at most one partial-frame drop per session.
 - [x] (2026-05-02) Stage D `acp_runtime` adapter, sink task, and unit
   tests (10 cases passing). The `WriteCmd` enum was simplified to two variants
-  (`Forward`, `Synthesised`); the sink terminates on channel close instead of
+  (`Forward`, `Synthesized`); the sink terminates on channel close instead of
   an explicit `Shutdown` command, eliminating a race where a misordered
   `Shutdown` could drop queued items.
 - [x] (2026-05-02) Stage E session-options wiring (`CapabilityPolicy`
@@ -811,15 +808,15 @@ report; they must not write to the working tree.
   init masking without runtime denial. The enum keeps every combination
   representable through one constructor.
 - Decision: introduce a dedicated container-stdin sink task driven by a
-  `WriteCmd::{Forward, Synthesized, Shutdown}` channel, rather than having the
+  `WriteCmd::{Forward, Synthesized}` channel, rather than having the
   existing host-stdin forwarder drain a secondary mpsc alongside its
   `tokio::io::copy` loop. Rationale: the Logisphere `Doggylump` analysis showed
   that draining a secondary queue from inside a `tokio::io::copy` loop is
   awkward and collides with the `STDIN_SETTLE_TIMEOUT` race. A dedicated sink
-  task is the single ordering authority: it drains until `Shutdown`, so the
-  output adapter can guarantee that synthesized errors are flushed before
-  container stdin closes. Both the host-stdin forwarder and the output adapter
-  become *senders* with no shared writer ownership.
+  task is the single ordering authority: it drains until every sender has been
+  dropped, so the output adapter can guarantee that synthesized errors are
+  flushed before container stdin closes. Both the host-stdin forwarder and the
+  output adapter become *senders* with no shared writer ownership.
 - Decision: keep parsing pure and never re-serialize permitted frames.
   Rationale: byte-identical forwarding preserves any agent-side integrity
   assumptions (key ordering, whitespace, embedded hashes) and avoids
@@ -885,9 +882,9 @@ report; they must not write to the working tree.
   `protocol`, and future Corbusier conformance work can re-export the policy
   types through a more public path when an actual cross-module consumer arrives.
 - Decision: simplify `WriteCmd` to two variants (`Forward`,
-  `Synthesised`) and terminate the sink purely on channel close, removing the
+  `Synthesized`) and terminate the sink purely on channel close, removing the
   proposed `WriteCmd::Shutdown` variant. Rationale: with explicit `Shutdown`, a
-  misordered send (Shutdown before pending Synthesised) would drop queued
+  misordered send (Shutdown before pending Synthesized) would drop queued
   items. Channel-close is unconditional: every queued command flushes before
   the sink sees the terminator. The protocol coordinator drops every sender
   after the output stream drains, so the ordering invariant from the Logisphere
@@ -1069,7 +1066,6 @@ module that touches `tokio::sync::mpsc` and `tracing`):
 pub(super) enum WriteCmd {
     Forward(Vec<u8>),
     Synthesized(Vec<u8>),
-    Shutdown,
 }
 
 pub(super) async fn run_container_stdin_sink(

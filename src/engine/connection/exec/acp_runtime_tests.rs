@@ -157,7 +157,7 @@ async fn permitted_frame_writes_to_host_stdout_only() {
 }
 
 #[tokio::test]
-async fn blocked_request_skips_host_stdout_and_queues_synthesised_response() {
+async fn blocked_request_skips_host_stdout_and_queues_synthesized_response() {
     let (mut adapter, rx) = build_adapter();
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
@@ -176,8 +176,8 @@ async fn blocked_request_skips_host_stdout_and_queues_synthesised_response() {
     );
     let received = drain_channel(rx).await;
     let bytes = match received.as_slice() {
-        [WriteCmd::Synthesised(bytes)] => bytes.clone(),
-        other => panic!("expected one Synthesised, got {other:?}"),
+        [WriteCmd::Synthesized(bytes)] => bytes.clone(),
+        other => panic!("expected one Synthesized, got {other:?}"),
     };
     let payload_end = bytes.len().checked_sub(1).expect("trailing newline");
     let payload_slice = bytes.get(..payload_end).expect("payload before newline");
@@ -233,7 +233,7 @@ async fn permitted_frame_after_blocked_frame_still_reaches_host_stdout() {
 
     assert_eq!(recorder.snapshot(), permitted);
     let received = drain_channel(rx).await;
-    assert!(matches!(received.as_slice(), [WriteCmd::Synthesised(_)]));
+    assert!(matches!(received.as_slice(), [WriteCmd::Synthesized(_)]));
 }
 
 #[tokio::test]
@@ -259,11 +259,11 @@ async fn frame_split_across_chunks_is_classified_after_assembly() {
 
     assert!(recorder.snapshot().is_empty());
     let received = drain_channel(rx).await;
-    assert!(matches!(received.as_slice(), [WriteCmd::Synthesised(_)]));
+    assert!(matches!(received.as_slice(), [WriteCmd::Synthesized(_)]));
 }
 
 #[tokio::test]
-async fn sink_writes_forwards_then_synthesised_in_send_order() {
+async fn sink_writes_forwards_then_synthesized_in_send_order() {
     let recorder = RecordingWriter::default();
     let writer_handle = recorder.clone();
     let writer: Pin<Box<dyn AsyncWrite + Send>> = Box::pin(recorder);
@@ -273,9 +273,9 @@ async fn sink_writes_forwards_then_synthesised_in_send_order() {
     tx.send(WriteCmd::Forward(b"forward-one\n".to_vec()))
         .await
         .expect("forward send");
-    tx.send(WriteCmd::Synthesised(b"synthesised-one\n".to_vec()))
+    tx.send(WriteCmd::Synthesized(b"synthesized-one\n".to_vec()))
         .await
-        .expect("synthesised send");
+        .expect("synthesized send");
     tx.send(WriteCmd::Forward(b"forward-two\n".to_vec()))
         .await
         .expect("second forward send");
@@ -286,7 +286,7 @@ async fn sink_writes_forwards_then_synthesised_in_send_order() {
         .expect("sink runs cleanly");
 
     let bytes = writer_handle.snapshot();
-    assert_eq!(bytes, b"forward-one\nsynthesised-one\nforward-two\n");
+    assert_eq!(bytes, b"forward-one\nsynthesized-one\nforward-two\n");
     assert!(writer_handle.shutdown_observed());
 }
 
@@ -299,7 +299,7 @@ async fn sink_continues_after_broken_pipe_until_channel_closes() {
     tx.send(WriteCmd::Forward(b"first\n".to_vec()))
         .await
         .expect("first forward");
-    tx.send(WriteCmd::Synthesised(b"second\n".to_vec()))
+    tx.send(WriteCmd::Synthesized(b"second\n".to_vec()))
         .await
         .expect("second send");
     drop(tx);
@@ -313,7 +313,7 @@ async fn sink_continues_after_broken_pipe_until_channel_closes() {
 #[case::lf(b"\n" as &[u8])]
 #[case::crlf(b"\r\n" as &[u8])]
 #[tokio::test]
-async fn synthesised_response_preserves_blocked_frame_line_ending(#[case] line_ending: &[u8]) {
+async fn synthesized_response_preserves_blocked_frame_line_ending(#[case] line_ending: &[u8]) {
     let (mut adapter, rx) = build_adapter();
     let host_stdout = RecordingWriter::default();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
@@ -334,17 +334,17 @@ async fn synthesised_response_preserves_blocked_frame_line_ending(#[case] line_e
 
     let received = drain_channel(rx).await;
     let bytes = match received.as_slice() {
-        [WriteCmd::Synthesised(bytes)] => bytes.clone(),
-        other => panic!("expected synthesised response, got {other:?}"),
+        [WriteCmd::Synthesized(bytes)] => bytes.clone(),
+        other => panic!("expected synthesized response, got {other:?}"),
     };
     assert!(
         bytes.ends_with(line_ending),
-        "synthesised response should reuse the blocked frame's line ending",
+        "synthesized response should reuse the blocked frame's line ending",
     );
 }
 
 #[tokio::test]
-async fn blocked_request_synthesised_before_channel_close_is_flushed() {
+async fn blocked_request_synthesized_before_channel_close_is_flushed() {
     let recorder = RecordingWriter::default();
     let writer_handle = recorder.clone();
     let writer: Pin<Box<dyn AsyncWrite + Send>> = Box::pin(recorder);
@@ -370,13 +370,13 @@ async fn blocked_request_synthesised_before_channel_close_is_flushed() {
     let bytes = writer_handle.snapshot();
     assert!(
         !bytes.is_empty(),
-        "synthesised response must be flushed before container stdin closes",
+        "synthesized response must be flushed before container stdin closes",
     );
     let parsed: Value = serde_json::from_slice(
         bytes
             .strip_suffix(b"\n")
-            .expect("synthesised response ends with newline"),
+            .expect("synthesized response ends with newline"),
     )
-    .expect("synthesised response is valid JSON");
+    .expect("synthesized response is valid JSON");
     assert_eq!(parsed.get("id"), Some(&serde_json::json!(11)));
 }

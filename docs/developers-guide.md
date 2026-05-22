@@ -421,10 +421,11 @@ The implementation is split into four sibling modules under
 - `acp_runtime.rs` is the only ACP module that owns
   `tokio::sync::mpsc` and `tracing`. It exposes the bounded sink task
   `run_container_stdin_sink` (capacity `SINK_CHANNEL_CAPACITY = 16`), the
-  `WriteCmd` enum (`Forward`, `Synthesised`), and the `OutboundPolicyAdapter`
+  `WriteCmd` enum (`Forward`, `Synthesized`), and the `OutboundPolicyAdapter`
   that translates assembler output into host stdout writes (permitted) or
   sink-channel sends (synthesized error responses) plus `tracing::warn!` denial
-  lines.
+  lines. The sink terminates on channel close after every sender has been
+  dropped; there is no explicit shutdown command.
 
 Selection between the byte-transparent and enforcement paths happens through
 `CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` on

@@ -388,5 +388,8 @@ pub(super) fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
 #[path = "protocol_acp_forwarding_tests.rs"]
 mod forwarding_tests;
 
+#[path = "protocol_acp_policy_integration_tests.rs"]
+mod policy_integration_tests;
+
 #[path = "protocol_acp_bdd_tests.rs"]
 mod bdd_tests;

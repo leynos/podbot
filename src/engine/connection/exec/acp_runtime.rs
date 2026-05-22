@@ -23,15 +23,15 @@
 //! output stream has fully drained and after all blocked-request decisions
 //! have been queued. Because the channel preserves send order and the sink
 //! processes commands sequentially before the closed-channel terminator
-//! arrives, every [`WriteCmd::Synthesised`] queued during the output loop
+//! arrives, every [`WriteCmd::Synthesized`] queued during the output loop
 //! is delivered before container stdin closes.
 //!
 //! ## Failure tolerance
 //!
 //! - When container stdin returns `BrokenPipe` (the agent has already
 //!   exited), the sink downgrades the failure to a single `warn!` and
-//!   continues to drain the channel until [`WriteCmd::Shutdown`]. The exit
-//!   code path remains intact.
+//!   continues to drain the channel until every sender has been dropped. The
+//!   exit-code path remains intact.
 //! - When [`super::acp_policy::build_method_blocked_error`] fails (a
 //!   theoretical edge case for a finite owned [`Value`]), the adapter logs
 //!   a `warn!` and continues without sending a synthesized response,
@@ -44,8 +44,8 @@ use ortho_config::serde_json::{self, Value};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
 
-use super::acp_frame::{FallbackReason, FrameOutput, OutboundFrameAssembler};
-use super::acp_policy::{FrameDecision, build_method_blocked_error};
+use super::acp_frame::{DeniedFrameDecision, FallbackReason, FrameOutput, OutboundFrameAssembler};
+use super::acp_policy::build_method_blocked_error;
 
 /// Bounded capacity for the container-stdin command channel.
 ///
@@ -63,7 +63,7 @@ pub(super) enum WriteCmd {
     Forward(Vec<u8>),
     /// A JSON-RPC error response synthesized by the policy adapter in
     /// response to a blocked request.
-    Synthesised(Vec<u8>),
+    Synthesized(Vec<u8>),
 }
 
 /// Drain the supplied channel, writing each command to `input` and flushing
@@ -91,7 +91,7 @@ pub(super) async fn run_container_stdin_sink(
 
 fn command_bytes(command: WriteCmd) -> Vec<u8> {
     match command {
-        WriteCmd::Forward(bytes) | WriteCmd::Synthesised(bytes) => bytes,
+        WriteCmd::Forward(bytes) | WriteCmd::Synthesized(bytes) => bytes,
     }
 }
 
@@ -207,13 +207,12 @@ impl OutboundPolicyAdapter {
         }
     }
 
-    async fn handle_decision(&self, decision: FrameDecision, line_ending: &[u8]) {
+    async fn handle_decision(&self, decision: DeniedFrameDecision, line_ending: &[u8]) {
         match decision {
-            FrameDecision::Forward => {}
-            FrameDecision::BlockNotification { method } => {
+            DeniedFrameDecision::BlockNotification { method } => {
                 self.log_denial(&method, &Value::Null, "ACP blocked notification dropped");
             }
-            FrameDecision::BlockRequest { id, method } => {
+            DeniedFrameDecision::BlockRequest { id, method } => {
                 self.log_denial(&method, &id, "ACP blocked request denied");
                 self.queue_synthesized_error(&id, &method, line_ending)
                     .await;
@@ -229,7 +228,7 @@ impl OutboundPolicyAdapter {
     }
 
     async fn send_synthesized_or_log(&self, bytes: Vec<u8>, method: &str) {
-        let outcome = self.sender.send(WriteCmd::Synthesised(bytes)).await;
+        let outcome = self.sender.send(WriteCmd::Synthesized(bytes)).await;
         if let Err(error) = outcome {
             self.log_send_failure(method, &error);
         }
