@@ -6,7 +6,10 @@ use mockall::mock;
 use proptest::prelude::*;
 use rstest::rstest;
 #[cfg(feature = "experimental")]
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
 
 use super::exec::exec_with_client;
 use super::{CommandOutcome, ExecMode, ExecRequest, RunRequest};
@@ -248,6 +251,87 @@ fn run_agent_requires_complete_github_config() {
 
 #[rstest]
 #[cfg(feature = "experimental")]
+#[case::feature_branch("owner/feature", "feature/run-request")]
+#[case::release_branch("team/service", "release-2026")]
+fn run_agent_accepts_distinct_run_requests(#[case] repository: &str, #[case] branch: &str) {
+    let config = AppConfig::default();
+    let request = RunRequest::new(repository, branch).expect("request should be valid");
+
+    let outcome = run_agent(&config, &request).expect("valid run request should succeed");
+
+    assert_eq!(outcome, CommandOutcome::Success);
+}
+
+#[rstest]
+#[cfg(feature = "experimental")]
+fn run_agent_logs_request_context_when_github_config_validation_fails() {
+    let config = AppConfig {
+        github: GitHubConfig {
+            app_id: Some(1),
+            installation_id: None,
+            private_key_path: Some(Utf8PathBuf::from("/tmp/test-key.pem")),
+        },
+        ..AppConfig::default()
+    };
+    let request =
+        RunRequest::new("owner/request-context", "feature/log-context").expect("request is valid");
+
+    let logs = capture_warning_logs(|| {
+        let _result = run_agent(&config, &request);
+    });
+
+    assert!(
+        logs.contains("GitHub configuration validation failed for run request"),
+        "warning should include configuration validation message: {logs}"
+    );
+    assert!(
+        logs.contains("owner/request-context"),
+        "warning should include repository from RunRequest: {logs}"
+    );
+    assert!(
+        logs.contains("feature/log-context"),
+        "warning should include branch from RunRequest: {logs}"
+    );
+}
+
+#[rstest]
+#[cfg(feature = "experimental")]
+fn warn_github_validation_failed_logs_credential_message_and_request_context() {
+    let request =
+        RunRequest::new("owner/auth-context", "feature/auth-log").expect("request is valid");
+    let error = PodbotError::from(crate::error::GitHubError::AuthenticationFailed {
+        message: String::from("test authentication failure"),
+    });
+
+    let logs = capture_warning_logs(|| {
+        super::warn_github_validation_failed(
+            &request,
+            &error,
+            Some("42"),
+            "GitHub credential authentication failed for run request",
+        );
+    });
+
+    assert!(
+        logs.contains("GitHub credential authentication failed for run request"),
+        "warning should include credential authentication message: {logs}"
+    );
+    assert!(
+        logs.contains("owner/auth-context"),
+        "warning should include repository from RunRequest: {logs}"
+    );
+    assert!(
+        logs.contains("feature/auth-log"),
+        "warning should include branch from RunRequest: {logs}"
+    );
+    assert!(
+        logs.contains("42"),
+        "warning should include app id context: {logs}"
+    );
+}
+
+#[rstest]
+#[cfg(feature = "experimental")]
 fn credential_validation_thread_panic_maps_to_github_error() {
     let error = super::credential_validation_thread_panicked();
 
@@ -256,6 +340,66 @@ fn credential_validation_thread_panic_maps_to_github_error() {
         PodbotError::GitHub(crate::error::GitHubError::AuthenticationFailed { message })
             if message == "GitHub credential validation thread panicked"
     ));
+}
+
+#[cfg(feature = "experimental")]
+#[derive(Clone)]
+struct SharedLogWriter {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+#[cfg(feature = "experimental")]
+struct SharedLogBuffer {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+#[cfg(feature = "experimental")]
+impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for SharedLogWriter {
+    type Writer = SharedLogBuffer;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        SharedLogBuffer {
+            output: Arc::clone(&self.output),
+        }
+    }
+}
+
+#[cfg(feature = "experimental")]
+impl std::io::Write for SharedLogBuffer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut output = self
+            .output
+            .lock()
+            .map_err(|_| std::io::Error::other("log buffer mutex poisoned"))?;
+        output.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(feature = "experimental")]
+fn capture_warning_logs(operation: impl FnOnce()) -> String {
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let writer = SharedLogWriter {
+        output: Arc::clone(&output),
+    };
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(writer)
+        .with_ansi(false)
+        .without_time()
+        .with_max_level(tracing::Level::WARN)
+        .finish();
+
+    tracing::subscriber::with_default(subscriber, operation);
+
+    let bytes = output
+        .lock()
+        .expect("log buffer mutex should not be poisoned")
+        .clone();
+    String::from_utf8(bytes).expect("captured logs should be valid UTF-8")
 }
 
 #[rstest]

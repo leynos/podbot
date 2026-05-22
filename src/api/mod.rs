@@ -226,10 +226,34 @@ fn validate_agent_github_credentials_with<F>(
 where
     F: for<'a> Fn(u64, &'a camino::Utf8Path) -> CredentialValidationFuture<'a> + Copy + Sync + Send,
 {
-    if tokio::runtime::Handle::try_current().is_ok() {
+    let has_current_runtime = tokio::runtime::Handle::try_current().is_ok();
+    debug_github_credential_validation_execution_path(app_id, has_current_runtime);
+
+    if has_current_runtime {
         validate_agent_github_credentials_on_scoped_thread(app_id, private_key_path, validate)
     } else {
         validate_agent_github_credentials_on_local_runtime(app_id, private_key_path, validate)
+    }
+}
+
+#[cfg(feature = "experimental")]
+fn debug_github_credential_validation_execution_path(app_id: u64, has_current_runtime: bool) {
+    let redacted_private_key_path = "[REDACTED]";
+    let execution_path = github_credential_validation_execution_path(has_current_runtime);
+    tracing::debug!(
+        app_id,
+        private_key_path = %redacted_private_key_path,
+        execution_path,
+        "selected GitHub credential validation execution path"
+    );
+}
+
+#[cfg(feature = "experimental")]
+const fn github_credential_validation_execution_path(has_current_runtime: bool) -> &'static str {
+    if has_current_runtime {
+        "scoped-thread"
+    } else {
+        "local-runtime"
     }
 }
 
