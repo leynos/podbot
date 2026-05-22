@@ -237,7 +237,6 @@ mod tests {
     use podbot::api::CommandOutcome;
     use podbot::cli::{Cli, Commands, HostArgs};
     use podbot::config::AppConfig;
-    #[cfg(not(feature = "experimental"))]
     use podbot::error::{ConfigError, PodbotError};
 
     use super::{normalize_process_exit_code, run};
@@ -308,6 +307,48 @@ mod tests {
     }
 
     #[test]
+    fn run_rejects_empty_repo_argument() {
+        let cli = Cli::try_parse_from(["podbot", "run", "--repo", "", "--branch", "main"])
+            .expect("run command should parse");
+
+        let error = run(&cli, &AppConfig::default()).expect_err("empty repo should be rejected");
+
+        assert_invalid_run_argument(error, "run.repository");
+    }
+
+    #[test]
+    fn run_rejects_whitespace_repo_argument() {
+        let cli = Cli::try_parse_from(["podbot", "run", "--repo", "   ", "--branch", "main"])
+            .expect("run command should parse");
+
+        let error =
+            run(&cli, &AppConfig::default()).expect_err("whitespace repo should be rejected");
+
+        assert_invalid_run_argument(error, "run.repository");
+    }
+
+    #[test]
+    fn run_rejects_empty_branch_argument() {
+        let cli = Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", ""])
+            .expect("run command should parse");
+
+        let error = run(&cli, &AppConfig::default()).expect_err("empty branch should be rejected");
+
+        assert_invalid_run_argument(error, "run.branch");
+    }
+
+    #[test]
+    fn run_rejects_whitespace_branch_argument() {
+        let cli = Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", "   "])
+            .expect("run command should parse");
+
+        let error =
+            run(&cli, &AppConfig::default()).expect_err("whitespace branch should be rejected");
+
+        assert_invalid_run_argument(error, "run.branch");
+    }
+
+    #[test]
     #[cfg(not(feature = "experimental"))]
     fn non_experimental_stubs_report_command_names() {
         let config = AppConfig::default();
@@ -334,6 +375,15 @@ mod tests {
             PodbotError::Config(ConfigError::InvalidValue { field, reason })
                 if field == "command"
                     && reason == format!("the {command} command requires feature = \"experimental\"")
+        ));
+    }
+
+    fn assert_invalid_run_argument(error: PodbotError, expected_field: &str) {
+        assert!(matches!(
+            error,
+            PodbotError::Config(ConfigError::InvalidValue { field, reason })
+                if field == expected_field
+                    && reason == format!("{expected_field} must not be empty")
         ));
     }
 }
