@@ -1,4 +1,8 @@
-//! Behavioural helpers for orchestration scenarios.
+//! Behavioural helpers for orchestration BDD scenarios.
+//!
+//! This module gathers the shared assertions, state, and step bindings used by
+//! the orchestration feature tests so the scenarios stay focused on outcomes
+//! rather than setup plumbing.
 
 mod assertions;
 mod state;

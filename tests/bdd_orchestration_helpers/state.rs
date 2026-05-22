@@ -1,4 +1,8 @@
 //! Scenario state for orchestration behavioural tests.
+//!
+//! The state model holds the slots shared across orchestration scenarios, so
+//! the step definitions can coordinate command inputs, execution mode, and
+//! results without repeating fixture setup.
 
 use podbot::api::{CommandOutcome, ExecMode};
 use rstest::fixture;
