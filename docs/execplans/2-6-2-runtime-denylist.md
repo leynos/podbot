@@ -70,7 +70,7 @@ Observable success for this task:
   Runtime enforcement must compose with init masking, not replace it.
 - Default behaviour of `ExecMode::Protocol` must remain a raw byte proxy.
   Enforcement activates only when the existing
-  `ExecSessionOptions::with_acp_initialize_rewrite_enabled` opt-in is set
+  `ExecSessionOptions::with_capability_policy` opt-in is set
   (potentially renamed in this step to reflect both responsibilities).
 - Do not add new runtime dependencies. Reuse `serde_json` (re-exported via
   `ortho_config::serde_json`), `tokio::sync::mpsc`, and `tracing`, all of which
@@ -226,8 +226,8 @@ Read the following first; the plan assumes nothing else.
   module as the existing domain seam; new pure policy helpers belong in a
   sibling module to keep both files inside the 400-line guidance.
 - `src/engine/connection/exec/session.rs` exposes
-  `ExecSessionOptions::with_acp_initialize_rewrite_enabled`. This flag is
-  currently dead code outside tests. It is the natural opt-in to extend.
+  `ExecSessionOptions::with_capability_policy`. This option is currently dead
+  code outside tests. It is the natural opt-in to extend.
 - `src/engine/connection/exec/helpers.rs` provides
   `spawn_stdin_forwarding_task`, the seam through which the input task is
   spawned with sole ownership of the container input writer.
@@ -491,8 +491,7 @@ In `src/engine/connection/exec/session.rs`:
   with `pub(crate) const fn allows_runtime_enforcement(self) -> bool` and
   `pub(crate) const fn rewrites_initialize(self) -> bool` helpers.
 - Replace the existing `rewrite_acp_initialize: bool` field with
-  `capability_policy: CapabilityPolicy` and rename
-  `with_acp_initialize_rewrite_enabled` to
+  `capability_policy: CapabilityPolicy` and add
   `with_capability_policy(policy: CapabilityPolicy)`. Update the
   `protocol_session_options` translator so it forwards the selected
   `CapabilityPolicy` with the same builder name.
@@ -720,8 +719,8 @@ report; they must not write to the working tree.
   an explicit shutdown command, eliminating a race where a misordered shutdown
   could drop queued items.
 - [x] (2026-05-02) Stage E session-options wiring (`CapabilityPolicy`
-  enum). `ProtocolSessionOptions::with_capability_policy` replaces
-  `with_acp_initialize_rewrite_enabled` and the protocol session splits into
+  enum). `ProtocolSessionOptions::with_capability_policy` replaces the
+  earlier boolean opt-in and the protocol session splits into
   `run_session_with_runtime_enforcement` (channel-based sink path) and
   `run_session_without_runtime_enforcement` (existing byte-transparent path).
   All 448 workspace unit tests pass.
@@ -758,7 +757,7 @@ report; they must not write to the working tree.
 
 ## Surprises and discoveries
 
-- Discovery: `ExecSessionOptions::with_acp_initialize_rewrite_enabled`
+- Discovery: `ExecSessionOptions::with_capability_policy`
   is currently dead code outside tests and is the only opt-in seam for ACP
   behaviour. Replacing it (and the proposed second boolean) with a single
   `CapabilityPolicy` enum keeps the internal API surface minimal while making
@@ -802,8 +801,8 @@ report; they must not write to the working tree.
 - Decision: collapse the existing `rewrite_acp_initialize: bool` and
   the proposed `enforce_acp_method_denylist: bool` into a single
   `CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` enum on
-  `ExecSessionOptions`, replacing `with_acp_initialize_rewrite_enabled` with
-  `with_capability_policy(policy)`. Rationale: the Logisphere review
+  `ExecSessionOptions`, with `with_capability_policy(policy)`. Rationale: the
+  Logisphere review
   observed that two booleans for one trust-boundary decision invite drift; the
   explicit `MaskOnly` mode is also useful for diagnostic sessions that want
   init masking without runtime denial. The enum keeps every combination
@@ -1125,8 +1124,8 @@ impl CapabilityPolicy {
 
 In `src/engine/connection/exec/protocol.rs`, the new `ProtocolSessionOptions`
 field is `capability_policy: CapabilityPolicy`, defaulting to `Disabled`. The
-two prior boolean fields and the `with_acp_initialize_rewrite_enabled` builder
-are removed; every call site is migrated within the same change.
+two prior boolean fields are removed; every call site is migrated to
+`with_capability_policy` within the same change.
 
 No new external dependencies are introduced. `tokio::sync::mpsc` and `tracing`
 are already in the workspace; `serde_json` is reached through the existing
