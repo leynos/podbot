@@ -22,9 +22,9 @@
 //! [`OutboundPolicyAdapter`] and the host-stdin forwarder) only after the
 //! output stream has fully drained and after all blocked-request decisions
 //! have been queued. Because the channel preserves send order and the sink
-//! processes commands sequentially before the closed-channel terminator
-//! arrives, every [`WriteCmd::Synthesized`] queued during the output loop
-//! is delivered before container stdin closes.
+//! processes commands sequentially before `recv()` returns `None` for the
+//! closed channel, every [`WriteCmd::Synthesized`] queued during the output
+//! loop is delivered before container stdin closes.
 //!
 //! ## Failure tolerance
 //!
@@ -71,7 +71,8 @@ pub(super) enum WriteCmd {
 ///
 /// The function tolerates `BrokenPipe` from container stdin by logging a
 /// single `warn!` and continuing to drain the channel until every sender
-/// has been dropped, preserving the existing exit-code reporting path.
+/// has been dropped. Once the channel is closed, the sink stops draining,
+/// preserving the existing exit-code reporting path.
 pub(super) async fn run_container_stdin_sink(
     mut input: Pin<Box<dyn AsyncWrite + Send>>,
     mut commands: mpsc::Receiver<WriteCmd>,

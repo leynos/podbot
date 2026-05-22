@@ -493,8 +493,9 @@ In `src/engine/connection/exec/session.rs`:
 - Replace the existing `rewrite_acp_initialize: bool` field with
   `capability_policy: CapabilityPolicy` and rename
   `with_acp_initialize_rewrite_enabled` to
-  `with_acp_capability_policy(policy: CapabilityPolicy)`. Update the
-  `protocol_session_options` translator accordingly.
+  `with_capability_policy(policy: CapabilityPolicy)`. Update the
+  `protocol_session_options` translator so it forwards the selected
+  `CapabilityPolicy` with the same builder name.
 - Update the existing tests in `session.rs` so the renamed builder
   asserts the combined semantic.
 
@@ -716,8 +717,8 @@ report; they must not write to the working tree.
 - [x] (2026-05-02) Stage D `acp_runtime` adapter, sink task, and unit
   tests (10 cases passing). The `WriteCmd` enum was simplified to two variants
   (`Forward`, `Synthesized`); the sink terminates on channel close instead of
-  an explicit `Shutdown` command, eliminating a race where a misordered
-  `Shutdown` could drop queued items.
+  an explicit shutdown command, eliminating a race where a misordered shutdown
+  could drop queued items.
 - [x] (2026-05-02) Stage E session-options wiring (`CapabilityPolicy`
   enum). `ProtocolSessionOptions::with_capability_policy` replaces
   `with_acp_initialize_rewrite_enabled` and the protocol session splits into
@@ -802,7 +803,7 @@ report; they must not write to the working tree.
   the proposed `enforce_acp_method_denylist: bool` into a single
   `CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` enum on
   `ExecSessionOptions`, replacing `with_acp_initialize_rewrite_enabled` with
-  `with_acp_capability_policy(policy)`. Rationale: the Logisphere review
+  `with_capability_policy(policy)`. Rationale: the Logisphere review
   observed that two booleans for one trust-boundary decision invite drift; the
   explicit `MaskOnly` mode is also useful for diagnostic sessions that want
   init masking without runtime denial. The enum keeps every combination
@@ -883,12 +884,12 @@ report; they must not write to the working tree.
   types through a more public path when an actual cross-module consumer arrives.
 - Decision: simplify `WriteCmd` to two variants (`Forward`,
   `Synthesized`) and terminate the sink purely on channel close, removing the
-  proposed `WriteCmd::Shutdown` variant. Rationale: with explicit `Shutdown`, a
-  misordered send (Shutdown before pending Synthesized) would drop queued
-  items. Channel-close is unconditional: every queued command flushes before
-  the sink sees the terminator. The protocol coordinator drops every sender
-  after the output stream drains, so the ordering invariant from the Logisphere
-  review still holds with one fewer moving part.
+  proposed explicit shutdown variant. Rationale: with an explicit shutdown, a
+  misordered send before pending `Synthesized` items would drop queued items.
+  Channel-close is unconditional: every queued command flushes before the sink
+  sees the terminator. The protocol coordinator drops every sender after the
+  output stream drains, so the ordering invariant from the Logisphere review
+  still holds with one fewer moving part.
 - Decision: have `build_method_blocked_error` return
   `serde_json::Result<Vec<u8>>` instead of `Vec<u8>`. Rationale: AGENTS.md
   forbids `.expect()` in production code. The serialization step is practically
@@ -927,8 +928,8 @@ Adjustments from the original draft:
 
 - Module promotion: kept inline `#[path]` declarations rather than promoting
   modules to `mod.rs` (recorded in `Decision log`).
-- `WriteCmd::Shutdown` removed: the sink terminates purely on channel close,
-  eliminating the explicit-Shutdown ordering race.
+- The explicit shutdown command was removed: the sink terminates purely on
+  channel close, eliminating the shutdown-ordering race.
 - Refactoring for clippy's tight `cognitive-complexity-threshold = 9` and
   `too_many_arguments = 4` introduced several extra helper functions inside
   `acp_runtime` (`finalize_sink_writer`, `command_bytes`,
@@ -1027,7 +1028,7 @@ pub(crate) fn build_method_blocked_error(
     id: &serde_json::Value,
     method: &str,
     line_ending: &[u8],
-) -> Vec<u8>;
+) -> serde_json::Result<Vec<u8>>;
 ```
 
 In `src/engine/connection/exec/acp_frame.rs`, define (no `tokio`, no `tracing`):

@@ -17,9 +17,10 @@ pub(crate) struct ExecSessionOptions {
     /// When `true`, protocol-mode sessions replace host stdin with a held-open
     /// no-op reader so that the process's inherited stdin is not forwarded.
     disable_protocol_stdin_forwarding: bool,
-    /// When `true`, the first ACP `initialize` frame sent from host stdin is
-    /// rewritten to remove `terminal` and `fs` capabilities before being
-    /// forwarded to the container.
+    /// The `capability_policy` mode for ACP sessions: `Disabled` leaves the
+    /// initial `initialize` frame unchanged, `MaskOnly` strips `terminal` and
+    /// `fs` capabilities before forwarding it, and `MaskAndDeny` also denies
+    /// later requests that try to use those capabilities.
     capability_policy: CapabilityPolicy,
 }
 
