@@ -264,7 +264,8 @@ fn run_agent_accepts_distinct_run_requests(#[case] repository: &str, #[case] bra
 
 #[rstest]
 #[cfg(feature = "experimental")]
-fn run_agent_logs_request_context_when_github_config_validation_fails() {
+fn run_agent_logs_request_context_when_github_config_validation_fails()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = AppConfig {
         github: GitHubConfig {
             app_id: Some(1),
@@ -278,25 +279,22 @@ fn run_agent_logs_request_context_when_github_config_validation_fails() {
 
     let logs = capture_warning_logs(|| {
         let _result = run_agent(&config, &request);
-    });
+    })?;
 
-    assert!(
-        logs.contains("GitHub configuration validation failed for run request"),
-        "warning should include configuration validation message: {logs}"
-    );
-    assert!(
-        logs.contains("owner/request-context"),
-        "warning should include repository from RunRequest: {logs}"
-    );
-    assert!(
-        logs.contains("feature/log-context"),
-        "warning should include branch from RunRequest: {logs}"
-    );
+    require_log_contains(
+        &logs,
+        "GitHub configuration validation failed for run request",
+        "configuration validation message",
+    )?;
+    require_log_contains(&logs, "owner/request-context", "repository from RunRequest")?;
+    require_log_contains(&logs, "feature/log-context", "branch from RunRequest")?;
+    Ok(())
 }
 
 #[rstest]
 #[cfg(feature = "experimental")]
-fn warn_github_validation_failed_logs_credential_message_and_request_context() {
+fn warn_github_validation_failed_logs_credential_message_and_request_context()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let request =
         RunRequest::new("owner/auth-context", "feature/auth-log").expect("request is valid");
     let error = PodbotError::from(crate::error::GitHubError::AuthenticationFailed {
@@ -310,24 +308,17 @@ fn warn_github_validation_failed_logs_credential_message_and_request_context() {
             Some("42"),
             "GitHub credential authentication failed for run request",
         );
-    });
+    })?;
 
-    assert!(
-        logs.contains("GitHub credential authentication failed for run request"),
-        "warning should include credential authentication message: {logs}"
-    );
-    assert!(
-        logs.contains("owner/auth-context"),
-        "warning should include repository from RunRequest: {logs}"
-    );
-    assert!(
-        logs.contains("feature/auth-log"),
-        "warning should include branch from RunRequest: {logs}"
-    );
-    assert!(
-        logs.contains("42"),
-        "warning should include app id context: {logs}"
-    );
+    require_log_contains(
+        &logs,
+        "GitHub credential authentication failed for run request",
+        "credential authentication message",
+    )?;
+    require_log_contains(&logs, "owner/auth-context", "repository from RunRequest")?;
+    require_log_contains(&logs, "feature/auth-log", "branch from RunRequest")?;
+    require_log_contains(&logs, "42", "app id context")?;
+    Ok(())
 }
 
 #[rstest]
@@ -381,7 +372,9 @@ impl std::io::Write for SharedLogBuffer {
 }
 
 #[cfg(feature = "experimental")]
-fn capture_warning_logs(operation: impl FnOnce()) -> String {
+fn capture_warning_logs(
+    operation: impl FnOnce(),
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let output = Arc::new(Mutex::new(Vec::new()));
     let writer = SharedLogWriter {
         output: Arc::clone(&output),
@@ -397,9 +390,29 @@ fn capture_warning_logs(operation: impl FnOnce()) -> String {
 
     let bytes = output
         .lock()
-        .expect("log buffer mutex should not be poisoned")
+        .map_err(|error| {
+            Box::new(std::io::Error::other(format!(
+                "log buffer mutex poisoned: {error}"
+            ))) as Box<dyn std::error::Error + Send + Sync>
+        })?
         .clone();
-    String::from_utf8(bytes).expect("captured logs should be valid UTF-8")
+    String::from_utf8(bytes)
+        .map_err(|error| Box::new(error) as Box<dyn std::error::Error + Send + Sync>)
+}
+
+#[cfg(feature = "experimental")]
+fn require_log_contains(
+    logs: &str,
+    expected: &str,
+    description: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if logs.contains(expected) {
+        Ok(())
+    } else {
+        Err(Box::new(std::io::Error::other(format!(
+            "warning should include {description}: {logs}"
+        ))))
+    }
 }
 
 #[rstest]
