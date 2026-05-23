@@ -238,6 +238,7 @@ mod tests {
     use podbot::cli::{Cli, Commands, HostArgs};
     use podbot::config::AppConfig;
     use podbot::error::{ConfigError, PodbotError};
+    use rstest::rstest;
 
     use super::{normalize_process_exit_code, run};
 
@@ -306,46 +307,23 @@ mod tests {
         assert_experimental_only_error(error, "run");
     }
 
-    #[test]
-    fn run_rejects_empty_repo_argument() {
-        let cli = Cli::try_parse_from(["podbot", "run", "--repo", "", "--branch", "main"])
-            .expect("run command should parse");
-
-        let error = run(&cli, &AppConfig::default()).expect_err("empty repo should be rejected");
-
-        assert_invalid_run_argument(error, "run.repository");
-    }
-
-    #[test]
-    fn run_rejects_whitespace_repo_argument() {
-        let cli = Cli::try_parse_from(["podbot", "run", "--repo", "   ", "--branch", "main"])
-            .expect("run command should parse");
-
-        let error =
-            run(&cli, &AppConfig::default()).expect_err("whitespace repo should be rejected");
-
-        assert_invalid_run_argument(error, "run.repository");
-    }
-
-    #[test]
-    fn run_rejects_empty_branch_argument() {
-        let cli = Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", ""])
-            .expect("run command should parse");
-
-        let error = run(&cli, &AppConfig::default()).expect_err("empty branch should be rejected");
-
-        assert_invalid_run_argument(error, "run.branch");
-    }
-
-    #[test]
-    fn run_rejects_whitespace_branch_argument() {
-        let cli = Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", "   "])
+    #[rstest]
+    #[case("", "main", "run.repository")]
+    #[case("   ", "main", "run.repository")]
+    #[case("owner/name", "", "run.branch")]
+    #[case("owner/name", "   ", "run.branch")]
+    fn run_rejects_invalid_run_arguments(
+        #[case] repo: &str,
+        #[case] branch: &str,
+        #[case] expected_field: &str,
+    ) {
+        let cli = Cli::try_parse_from(["podbot", "run", "--repo", repo, "--branch", branch])
             .expect("run command should parse");
 
         let error =
-            run(&cli, &AppConfig::default()).expect_err("whitespace branch should be rejected");
+            run(&cli, &AppConfig::default()).expect_err("invalid run argument should be rejected");
 
-        assert_invalid_run_argument(error, "run.branch");
+        assert_invalid_run_argument(error, expected_field);
     }
 
     #[test]

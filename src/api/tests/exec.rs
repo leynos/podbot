@@ -8,7 +8,7 @@
 use bollard::container::LogOutput;
 use futures_util::stream;
 use mockall::mock;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
 use super::super::exec::exec_with_client;
 use super::super::{CommandOutcome, ExecMode, ExecRequest};
@@ -27,6 +27,23 @@ mock! {
         fn start_exec(&self, exec_id: &str, options: Option<bollard::exec::StartExecOptions>) -> StartExecFuture<'_>;
         fn inspect_exec(&self, exec_id: &str) -> InspectExecFuture<'_>;
         fn resize_exec(&self, exec_id: &str, options: bollard::exec::ResizeExecOptions) -> ResizeExecFuture<'_>;
+    }
+}
+
+struct InvalidExecCase {
+    container: &'static str,
+    command: Vec<String>,
+    expected_field: &'static str,
+}
+
+type InvalidExecCaseBuilder = fn(&'static str, Vec<String>, &'static str) -> InvalidExecCase;
+
+#[fixture]
+fn invalid_exec_case() -> InvalidExecCaseBuilder {
+    |container, command, expected_field| InvalidExecCase {
+        container,
+        command,
+        expected_field,
     }
 }
 
@@ -93,35 +110,23 @@ fn exec_request_normalizes_tty_for_non_attached_modes(#[case] mode: ExecMode) {
 }
 
 #[rstest]
-fn exec_request_rejects_blank_container() {
-    let error = ExecRequest::new("   ", vec![String::from("echo")])
-        .expect_err("blank container should be rejected");
+#[case("   ", vec![String::from("echo")], "container")]
+#[case("sandbox", Vec::new(), "command")]
+#[case("sandbox", vec![String::from("  ")], "command[0]")]
+fn exec_request_rejects_missing_required_fields(
+    #[case] input_container: &'static str,
+    #[case] input_command: Vec<String>,
+    #[case] expected_field: &'static str,
+    #[from(invalid_exec_case)] build_invalid_exec_case: InvalidExecCaseBuilder,
+) {
+    let invalid_exec_case = build_invalid_exec_case(input_container, input_command, expected_field);
+    let error = ExecRequest::new(invalid_exec_case.container, invalid_exec_case.command)
+        .expect_err("invalid exec request should be rejected");
 
     assert!(matches!(
         error,
-        PodbotError::Config(ConfigError::MissingRequired { field }) if field == "container"
-    ));
-}
-
-#[rstest]
-fn exec_request_rejects_empty_command() {
-    let error =
-        ExecRequest::new("sandbox", Vec::new()).expect_err("empty command should be rejected");
-
-    assert!(matches!(
-        error,
-        PodbotError::Config(ConfigError::MissingRequired { field }) if field == "command"
-    ));
-}
-
-#[rstest]
-fn exec_request_rejects_blank_executable() {
-    let error = ExecRequest::new("sandbox", vec![String::from("  ")])
-        .expect_err("blank executable should be rejected");
-
-    assert!(matches!(
-        error,
-        PodbotError::Config(ConfigError::MissingRequired { field }) if field == "command[0]"
+        PodbotError::Config(ConfigError::MissingRequired { field })
+            if field == invalid_exec_case.expected_field
     ));
 }
 
