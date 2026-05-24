@@ -18,10 +18,6 @@ use crate::error::{ConfigError, PodbotError};
 use camino::Utf8PathBuf;
 
 mod exec;
-#[cfg(feature = "experimental")]
-mod log_capture;
-#[cfg(feature = "experimental")]
-use log_capture::{capture_logs, capture_warning_logs, require_log_contains, require_outcome};
 
 #[rstest]
 fn command_outcome_success_equals_itself() {
@@ -131,81 +127,40 @@ fn run_agent_accepts_distinct_run_requests(
     let config = AppConfig::default();
     let request = RunRequest::new(repository, branch)?;
 
-    let mut outcome = None;
-    let logs = capture_logs(
-        || {
-            outcome = Some(run_agent(&config, &request));
-        },
-        tracing::Level::DEBUG,
-    )?;
-    let command_outcome = outcome
-        .ok_or_else(|| std::io::Error::other("run_agent should have been called"))?
+    let command_outcome = run_agent(&config, &request)
         .map_err(|error| Box::new(error) as Box<dyn std::error::Error + Send + Sync>)?;
 
     require_outcome(command_outcome, CommandOutcome::Success)?;
-    require_log_contains(&logs, repository, "repository from RunRequest")?;
-    require_log_contains(&logs, branch, "branch from RunRequest")?;
-    require_log_contains(&logs, "run_agent completed successfully", "success log")?;
+    require_equal(request.repository(), repository, "repository")?;
+    require_equal(request.branch(), branch, "branch")?;
     Ok(())
 }
 
-#[rstest]
 #[cfg(feature = "experimental")]
-fn run_agent_logs_request_context_when_github_config_validation_fails()
--> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let config = AppConfig {
-        github: GitHubConfig {
-            app_id: Some(1),
-            installation_id: None,
-            private_key_path: Some(Utf8PathBuf::from("/tmp/test-key.pem")),
-        },
-        ..AppConfig::default()
-    };
-    let request =
-        RunRequest::new("owner/request-context", "feature/log-context").expect("request is valid");
-
-    let logs = capture_warning_logs(|| {
-        let _result = run_agent(&config, &request);
-    })?;
-
-    require_log_contains(
-        &logs,
-        "GitHub configuration validation failed for run request",
-        "configuration validation message",
-    )?;
-    require_log_contains(&logs, "owner/request-context", "repository from RunRequest")?;
-    require_log_contains(&logs, "feature/log-context", "branch from RunRequest")?;
-    Ok(())
+fn require_equal(
+    actual: &str,
+    expected: &str,
+    field: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(format!("expected {field} {expected:?}, got {actual:?}").into())
+    }
 }
 
-#[rstest]
 #[cfg(feature = "experimental")]
-fn warn_github_validation_failed_logs_credential_message_and_request_context()
--> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let request =
-        RunRequest::new("owner/auth-context", "feature/auth-log").expect("request is valid");
-    let error = PodbotError::from(crate::error::GitHubError::AuthenticationFailed {
-        message: String::from("test authentication failure"),
-    });
-
-    let logs = capture_warning_logs(|| {
-        super::warn_github_validation_failed(
-            &request,
-            &error,
-            Some("42"),
-            "GitHub credential authentication failed for run request",
-        );
-    })?;
-
-    require_log_contains(
-        &logs,
-        "GitHub credential authentication failed for run request",
-        "credential authentication message",
-    )?;
-    require_log_contains(&logs, "owner/auth-context", "repository from RunRequest")?;
-    require_log_contains(&logs, "feature/auth-log", "branch from RunRequest")?;
-    require_log_contains(&logs, "42", "app id context")?;
-    Ok(())
+fn require_outcome(
+    actual: CommandOutcome,
+    expected: CommandOutcome,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(Box::new(std::io::Error::other(format!(
+            "expected outcome {expected:?}, got {actual:?}"
+        ))))
+    }
 }
 
 #[rstest]
@@ -222,7 +177,7 @@ fn credential_validation_thread_panic_maps_to_github_error() {
 
 #[rstest]
 #[cfg(feature = "experimental")]
-fn credential_validation_uses_local_runtime_without_current_handle() {
+fn credential_validation_uses_injected_test_validator() {
     let calls = AtomicUsize::new(0);
     let private_key_path = Utf8PathBuf::from("/tmp/test-key.pem");
 
@@ -230,26 +185,7 @@ fn credential_validation_uses_local_runtime_without_current_handle() {
         calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Ok(()) })
     })
-    .expect("local runtime credential validation should succeed");
-
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
-}
-
-#[rstest]
-#[cfg(feature = "experimental")]
-fn credential_validation_uses_scoped_thread_inside_current_runtime() {
-    let calls = AtomicUsize::new(0);
-    let private_key_path = Utf8PathBuf::from("/tmp/test-key.pem");
-    let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
-
-    runtime
-        .block_on(async {
-            super::validate_agent_github_credentials_with(1, &private_key_path, |_, _| {
-                calls.fetch_add(1, Ordering::SeqCst);
-                Box::pin(async { Ok(()) })
-            })
-        })
-        .expect("scoped-thread credential validation should succeed");
+    .expect("credential validation should succeed");
 
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }

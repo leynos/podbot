@@ -542,11 +542,10 @@ operation without importing CLI or Clap types:
 > stub. The function returns `CommandOutcome::Success` after successful
 > validation without launching a persistent process.
 
-When `GitHub` validation runs, `run_agent` records
-`podbot.run_agent.github_validation.total` and
-`podbot.run_agent.github_validation.duration_seconds`. Both metrics are
-labelled with `operation`, `validation` (`config` or `credentials`), and
-`status` (`success` or `failure`).
+The CLI adapter records `podbot.run_agent.validation.total` and
+`podbot.run_agent.validation.duration_seconds` around the `run_agent` API call.
+Both metrics are labelled with `operation` and `status` (`success` or
+`failure`) so operational side effects stay at the process boundary.
 
 #### `run_token_daemon`
 

@@ -99,9 +99,68 @@ fn run_agent_cli(
     if let Some(ref image) = config.image {
         println!("Using image: {image}");
     }
-    let result = run_agent_api(config, request)?;
+    let result = run_agent_api_with_observability(config, request)?;
     println!("Container orchestration not yet implemented.");
     Ok(result)
+}
+
+fn run_agent_api_with_observability(
+    config: &AppConfig,
+    request: &podbot::api::RunRequest,
+) -> PodbotResult<CommandOutcome> {
+    debug_run_agent_validation_started(request);
+    let started_at = std::time::Instant::now();
+    let result =
+        run_agent_api(config, request).inspect_err(|error| warn_run_agent_failed(request, error));
+    record_run_agent_metrics(&result, started_at.elapsed());
+    let outcome = result?;
+    debug_run_agent_completed(request);
+    Ok(outcome)
+}
+
+fn debug_run_agent_validation_started(request: &podbot::api::RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        "validating run request before agent orchestration"
+    );
+}
+
+fn warn_run_agent_failed(request: &podbot::api::RunRequest, error: &podbot::error::PodbotError) {
+    tracing::warn!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        %error,
+        "run_agent validation failed for run request"
+    );
+}
+
+fn debug_run_agent_completed(request: &podbot::api::RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        outcome = "success",
+        "run_agent completed successfully"
+    );
+}
+
+fn record_run_agent_metrics(result: &PodbotResult<CommandOutcome>, elapsed: std::time::Duration) {
+    let status = if result.is_ok() { "success" } else { "failure" };
+    metrics::counter!(
+        "podbot.run_agent.validation.total",
+        "operation" => "run_agent",
+        "status" => status,
+    )
+    .increment(1);
+    metrics::histogram!(
+        "podbot.run_agent.validation.duration_seconds",
+        "operation" => "run_agent",
+        "status" => status,
+    )
+    .record(elapsed.as_secs_f64());
 }
 
 /// CLI adapter for hosted app-server execution.
