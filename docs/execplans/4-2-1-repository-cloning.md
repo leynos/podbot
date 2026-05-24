@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: BLOCKED
+Status: IMPLEMENTED
 
 The user explicitly approved implementation on 2026-05-01 by asking the agent
 to proceed with the planned functionality.
@@ -499,6 +499,5 @@ Before requesting merge or committing, update this ExecPlan:
 
 ## Approval checkpoint
 
-This plan is ready for review, but it is not approved for implementation yet.
-Wait for explicit user approval before making any code or documentation changes
-outside this ExecPlan itself.
+Implementation was approved on 2026-05-01, and the repository cloning slice has
+now landed with code, tests, and documentation updates.

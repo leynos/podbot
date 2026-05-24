@@ -239,8 +239,10 @@ fn stub_orchestration_functions_return_success() {
     );
 }
 
-fn repository_clone_api_is_embeddable(runtime: Result<tokio::runtime::Runtime, std::io::Error>) {
-    let rt = runtime.expect("test requires a Tokio runtime");
+fn repository_clone_api_is_embeddable(
+    runtime: Result<tokio::runtime::Runtime, std::io::Error>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rt = runtime?;
     let mut client = MockEmbedClient::new();
     configure_successful_detached_execs(&mut client, 2);
     let repository = RepositoryRef::parse("leynos/podbot").expect("repository should parse");
@@ -257,8 +259,22 @@ fn repository_clone_api_is_embeddable(runtime: Result<tokio::runtime::Runtime, s
     })
     .expect("repository clone should succeed");
 
-    assert_eq!(result.workspace_path, "/work");
-    assert_eq!(result.checked_out_branch, "main");
+    if result.workspace_path != "/work" {
+        return Err(format!(
+            "expected workspace path /work, got {}",
+            result.workspace_path
+        )
+        .into());
+    }
+    if result.checked_out_branch != "main" {
+        return Err(format!(
+            "expected checked out branch main, got {}",
+            result.checked_out_branch
+        )
+        .into());
+    }
+
+    Ok(())
 }
 enum FailAt {
     Create,

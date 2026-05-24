@@ -404,7 +404,7 @@ podbot-design.md §§Execution flow, Host-mount path safety policy.
 
 - [x] 4.2.1. Implement authenticated repository cloning for
   `workspace.source = "github_clone"`.
-  - Requires 3.4.1 and 4.1.1.
+  - Requires 4.1.1.
   - Accept `owner/name`, require an explicit branch, clone to
     `workspace.base_dir`, and authenticate through `GIT_ASKPASS`.
   - See docs/execplans/4-2-1-repository-cloning.md.
