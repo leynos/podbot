@@ -279,7 +279,7 @@ fn validate_agent_github_credentials_with<F>(
     validate: F,
 ) -> PodbotResult<()>
 where
-    F: for<'a> Fn(u64, &'a camino::Utf8Path) -> CredentialValidationFuture<'a> + Copy + Sync + Send,
+    F: for<'a> Fn(u64, &'a camino::Utf8Path) -> CredentialValidationFuture<'a> + Sync + Send,
 {
     let has_current_runtime = tokio::runtime::Handle::try_current().is_ok();
     debug_github_credential_validation_execution_path(app_id, has_current_runtime);
@@ -324,7 +324,7 @@ fn validate_agent_github_credentials_on_scoped_thread<F>(
     validate: F,
 ) -> PodbotResult<()>
 where
-    F: for<'a> Fn(u64, &'a camino::Utf8Path) -> CredentialValidationFuture<'a> + Copy + Sync + Send,
+    F: for<'a> Fn(u64, &'a camino::Utf8Path) -> CredentialValidationFuture<'a> + Sync + Send,
 {
     let redacted_private_key_path = "[REDACTED]";
     tracing::debug!(
