@@ -42,7 +42,7 @@ pub fn clone_repository_into_workspace<C: ContainerExecClient + Sync>(
     client: &C,
     request: &RepositoryCloneRequest<'_>,
 ) -> Result<RepositoryCloneResult, PodbotError> {
-    validate_non_empty("workspace.base_dir", request.workspace_base_dir)?;
+    validate_workspace_base_dir(request.workspace_base_dir)?;
     validate_non_empty("git.askpass_path", request.askpass_path)?;
 
     run_clone(runtime, client, request)?;
@@ -149,6 +149,20 @@ fn validate_non_empty(field: &str, value: &str) -> Result<(), PodbotError> {
     if value.trim().is_empty() {
         return Err(ConfigError::MissingRequired {
             field: String::from(field),
+        }
+        .into());
+    }
+
+    Ok(())
+}
+
+fn validate_workspace_base_dir(value: &str) -> Result<(), PodbotError> {
+    validate_non_empty("workspace.base_dir", value)?;
+
+    if !value.starts_with('/') {
+        return Err(ConfigError::InvalidValue {
+            field: String::from("workspace.base_dir"),
+            reason: String::from("expected absolute container path"),
         }
         .into());
     }
@@ -307,6 +321,23 @@ mod tests {
         assert!(matches!(
             result,
             Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
+        ));
+    }
+
+    #[test]
+    fn relative_workspace_base_dir_returns_config_error_without_exec() {
+        let (_rt, handle) = runtime();
+        let client = MockExecClient::new();
+        let request = RepositoryCloneRequest {
+            workspace_base_dir: "work",
+            ..request("main")
+        };
+
+        let result = clone_repository_into_workspace(&handle, &client, &request);
+
+        assert!(matches!(
+            result,
+            Err(PodbotError::Config(ConfigError::InvalidValue { .. }))
         ));
     }
 }

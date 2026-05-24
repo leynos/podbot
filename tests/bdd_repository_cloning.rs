@@ -23,6 +23,14 @@ fn malformed_repository_input_fails_before_exec(repository_cloning_state: Reposi
 
 #[scenario(
     path = "tests/features/repository_cloning.feature",
+    name = "Relative workspace path fails before exec"
+)]
+fn relative_workspace_path_fails_before_exec(repository_cloning_state: RepositoryCloningState) {
+    let _ = repository_cloning_state;
+}
+
+#[scenario(
+    path = "tests/features/repository_cloning.feature",
     name = "Clone exec failure is reported"
 )]
 fn clone_exec_failure_is_reported(repository_cloning_state: RepositoryCloningState) {

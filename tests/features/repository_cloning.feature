@@ -24,6 +24,15 @@ Feature: Repository cloning
     Then repository cloning fails with a configuration error
     And no repository clone exec was attempted
 
+  Scenario: Relative workspace path fails before exec
+    Given repository input is "leynos/podbot"
+    And branch input is "main"
+    And workspace base directory is "work"
+    And git askpass helper path is "/usr/local/bin/git-askpass"
+    When repository cloning is requested for container sandbox-clone
+    Then repository cloning fails with a configuration error
+    And no repository clone exec was attempted
+
   Scenario: Clone exec failure is reported
     Given repository input is "leynos/podbot"
     And branch input is "main"
