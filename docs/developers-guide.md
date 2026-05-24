@@ -542,6 +542,12 @@ operation without importing CLI or Clap types:
 > stub. The function returns `CommandOutcome::Success` after successful
 > validation without launching a persistent process.
 
+When `GitHub` validation runs, `run_agent` records
+`podbot.run_agent.github_validation.total` and
+`podbot.run_agent.github_validation.duration_seconds`. Both metrics are
+labelled with `operation`, `validation` (`config` or `credentials`), and
+`status` (`success` or `failure`).
+
 #### `run_token_daemon`
 
 `run_token_daemon(container_id: &str)` is currently a stub. It accepts a
@@ -775,6 +781,8 @@ The `Cargo.toml` `[dev-dependencies]` section includes:
   `octocrab::Error::Service` variants in unit tests. This dependency is already
   in the transitive dependency graph via octocrab, so adding it as an explicit
   dev-dependency does not increase the total dependency count.
+- **proptest** — supports property-based tests for request validation and stays
+  confined to the test-only dependency set.
 
 The unit tests do not directly import `http` types despite octocrab's use of
 `http::StatusCode`, because the tests access status codes through octocrab's
