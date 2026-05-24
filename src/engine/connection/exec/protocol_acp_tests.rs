@@ -387,6 +387,9 @@ pub(super) fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
 
 #[cfg(test)]
 mod capability_policy_routing {
+    //! Verifies that `CapabilityPolicy` selects raw forwarding or runtime
+    //! enforcement for outbound ACP frames.
+
     use bollard::container::LogOutput;
     use futures_util::stream;
 
@@ -464,44 +467,44 @@ mod capability_policy_routing {
                 == Some(&serde_json::json!("terminal/create"))
     }
 
-    #[test]
-    fn mask_and_deny_routes_through_enforcement_path() {
+    #[rstest]
+    #[case::mask_and_deny_routes_through_enforcement_path(
+        CapabilityPolicy::MaskAndDeny,
+        false,
+        true
+    )]
+    #[case::disabled_policy_forwards_all_frames_raw(CapabilityPolicy::Disabled, true, false)]
+    #[case::mask_only_policy_forwards_blocked_frames_raw(CapabilityPolicy::MaskOnly, true, false)]
+    fn routes_output_frame_for_capability_policy(
+        #[case] policy: CapabilityPolicy,
+        #[case] expect_forward_raw: bool,
+        #[case] expect_synthesized_response: bool,
+    ) {
         let frame = blocked_terminal_create_frame();
-        let (host_stdout, container_stdin) =
-            run_policy_output_frame(CapabilityPolicy::MaskAndDeny, &frame);
+        let (host_stdout, container_stdin) = run_policy_output_frame(policy, &frame);
 
-        assert_ne!(
-            host_stdout, frame,
-            "MaskAndDeny must not forward blocked frames verbatim",
-        );
-        assert!(
-            synthesized_response_for_terminal_create(&container_stdin),
-            "MaskAndDeny should write a synthesized denial response to container stdin",
-        );
-    }
-
-    #[test]
-    fn disabled_policy_forwards_all_frames_raw() {
-        let frame = blocked_terminal_create_frame();
-        let (host_stdout, _container_stdin) =
-            run_policy_output_frame(CapabilityPolicy::Disabled, &frame);
-
-        assert_eq!(
-            host_stdout, frame,
-            "Disabled should preserve the byte-transparent output path",
-        );
-    }
-
-    #[test]
-    fn mask_only_policy_forwards_blocked_frames_raw() {
-        let frame = blocked_terminal_create_frame();
-        let (host_stdout, _container_stdin) =
-            run_policy_output_frame(CapabilityPolicy::MaskOnly, &frame);
-
-        assert_eq!(
-            host_stdout, frame,
-            "MaskOnly should not enable runtime denylist enforcement",
-        );
+        if expect_forward_raw {
+            assert_eq!(
+                host_stdout, frame,
+                "{policy:?} should preserve the byte-transparent output path",
+            );
+        } else {
+            assert_ne!(
+                host_stdout, frame,
+                "{policy:?} must not forward blocked frames verbatim",
+            );
+        }
+        if expect_synthesized_response {
+            assert!(
+                synthesized_response_for_terminal_create(&container_stdin),
+                "{policy:?} should write a synthesized denial response to container stdin",
+            );
+        } else {
+            assert!(
+                container_stdin.is_empty(),
+                "{policy:?} should not write a synthesized denial response",
+            );
+        }
     }
 }
 
