@@ -51,7 +51,15 @@ fn main() -> EyreResult<()> {
 fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
     match &cli.command {
         Commands::Run(args) => {
-            let request = args.to_run_request()?;
+            let request = args.to_run_request().inspect_err(|error| {
+                tracing::warn!(
+                    operation = "run",
+                    repository = args.repo,
+                    branch = args.branch,
+                    %error,
+                    "failed to build run request from CLI arguments"
+                );
+            })?;
             run_agent_cli(config, &request)
         }
         Commands::Host(_args) => {
@@ -99,7 +107,7 @@ fn run_agent_cli(
 /// CLI adapter for hosted app-server execution.
 #[expect(
     dead_code,
-    reason = "temporarily disabled until stdout-safe diagnostics are implemented"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/51): temporarily disabled until stdout-safe diagnostics are implemented"
 )]
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
