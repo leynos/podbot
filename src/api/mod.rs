@@ -30,6 +30,8 @@ pub use run::RunRequest;
 use crate::config::AppConfig;
 use crate::error::Result as PodbotResult;
 #[cfg(feature = "experimental")]
+use std::time::Duration;
+#[cfg(feature = "experimental")]
 type CredentialValidationFuture<'a> = std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<(), crate::error::GitHubError>> + 'a>,
 >;
@@ -72,14 +74,31 @@ pub enum CommandOutcome {
 /// errors deferred until the rest of the orchestration flow is implemented.
 #[cfg(feature = "experimental")]
 pub fn run_agent(config: &AppConfig, request: &RunRequest) -> PodbotResult<CommandOutcome> {
+    debug_run_agent_validation_started(request);
+    validate_github_config_for_run(config, request)?;
+    validate_configured_github_credentials(config, request)?;
+    debug_run_agent_completed(request);
+    Ok(CommandOutcome::Success)
+}
+
+#[cfg(feature = "experimental")]
+fn debug_run_agent_validation_started(request: &RunRequest) {
     tracing::debug!(
         repository = request.repository(),
         branch = request.branch(),
         "validating run request before agent orchestration"
     );
-    validate_github_config_for_run(config, request)?;
-    validate_configured_github_credentials(config, request)?;
-    Ok(CommandOutcome::Success)
+}
+
+#[cfg(feature = "experimental")]
+fn debug_run_agent_completed(request: &RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        outcome = "success",
+        "run_agent completed successfully"
+    );
 }
 
 #[cfg(feature = "experimental")]
@@ -91,14 +110,17 @@ fn validate_github_config_for_run(config: &AppConfig, request: &RunRequest) -> P
             branch = request.branch(),
             "validating GitHub configuration for run request"
         );
-        config.github.validate().inspect_err(|error| {
+        let started_at = std::time::Instant::now();
+        let result = config.github.validate().inspect_err(|error| {
             warn_github_validation_failed(
                 request,
                 error,
                 None,
                 "GitHub configuration validation failed for run request",
             );
-        })?;
+        });
+        record_github_validation_metrics("config", &result, started_at.elapsed());
+        result?;
     }
     Ok(())
 }
@@ -137,17 +159,44 @@ fn validate_configured_github_credentials(
             app_id,
             "validating GitHub App credentials for run request"
         );
-        validate_agent_github_credentials(app_id, private_key_path).inspect_err(|error| {
-            let app_id_text = app_id.to_string();
-            warn_github_validation_failed(
-                request,
-                error,
-                Some(app_id_text.as_str()),
-                "GitHub credential authentication failed for run request",
-            );
-        })?;
+        let started_at = std::time::Instant::now();
+        let result =
+            validate_agent_github_credentials(app_id, private_key_path).inspect_err(|error| {
+                let app_id_text = app_id.to_string();
+                warn_github_validation_failed(
+                    request,
+                    error,
+                    Some(app_id_text.as_str()),
+                    "GitHub credential authentication failed for run request",
+                );
+            });
+        record_github_validation_metrics("credentials", &result, started_at.elapsed());
+        result?;
     }
     Ok(())
+}
+
+#[cfg(feature = "experimental")]
+fn record_github_validation_metrics(
+    validation: &'static str,
+    result: &PodbotResult<()>,
+    elapsed: Duration,
+) {
+    let status = if result.is_ok() { "success" } else { "failure" };
+    metrics::counter!(
+        "podbot.run_agent.github_validation.total",
+        "operation" => "run_agent",
+        "validation" => validation,
+        "status" => status,
+    )
+    .increment(1);
+    metrics::histogram!(
+        "podbot.run_agent.github_validation.duration_seconds",
+        "operation" => "run_agent",
+        "validation" => validation,
+        "status" => status,
+    )
+    .record(elapsed.as_secs_f64());
 }
 
 /// List running podbot containers.

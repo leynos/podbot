@@ -31,12 +31,14 @@ Feature: Command-line interface
   Scenario: Run command dispatches to orchestration
     Given the CLI run command is executed with repository owner/name and branch main
     Then the invocation succeeds
-    And the output contains Container orchestration not yet implemented.
+    And stdout contains Container orchestration not yet implemented.
+    And stderr is empty
 
   Scenario: Run command help documents required arguments
     Given the CLI is invoked with run --help
-    Then the output contains --repo
-    And the output contains --branch
+    Then stdout contains --repo
+    And stdout contains --branch
+    And stderr is empty
 
   Scenario: Ps command succeeds without arguments
     Given the CLI is invoked with ps

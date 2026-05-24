@@ -90,11 +90,16 @@ fn invoke_run_with_repo(cli_state: &CliState) {
 }
 
 #[then("the output contains {text}")]
+fn output_contains(cli_state: &CliState, text: String) {
+    stdout_contains(cli_state, text);
+}
+
+#[then("stdout contains {text}")]
 #[expect(
     clippy::expect_used,
     reason = "test assertion - panic on missing state is intentional"
 )]
-fn output_contains(cli_state: &CliState, text: String) {
+fn stdout_contains(cli_state: &CliState, text: String) {
     let output = cli_state
         .output
         .get()
@@ -102,6 +107,15 @@ fn output_contains(cli_state: &CliState, text: String) {
     assert!(
         output.contains(&text),
         "Expected output to contain '{text}', but got:\n{output}"
+    );
+}
+
+#[then("stderr is empty")]
+fn stderr_is_empty(cli_state: &CliState) {
+    let error = cli_state.error.get().unwrap_or_default();
+    assert!(
+        error.is_empty(),
+        "Expected stderr to be empty, but got:\n{error}"
     );
 }
 

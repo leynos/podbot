@@ -157,6 +157,7 @@ fn run_agent_accepts_distinct_run_requests(
     require_outcome(command_outcome, CommandOutcome::Success)?;
     require_log_contains(&logs, repository, "repository from RunRequest")?;
     require_log_contains(&logs, branch, "branch from RunRequest")?;
+    require_log_contains(&logs, "run_agent completed successfully", "success log")?;
     Ok(())
 }
 
