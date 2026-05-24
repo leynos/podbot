@@ -8,11 +8,11 @@ use std::task::{Context, Poll};
 use rstest::rstest;
 use tokio::io::{AsyncWrite, AsyncWriteExt, DuplexStream};
 
-use super::acp_helpers::{
+use super::*;
+use crate::engine::connection::exec::acp_helpers::{
     ACP_FILE_SYSTEM_CAPABILITY, ACP_TERMINAL_CAPABILITY, MAX_FIRST_FRAME_BYTES,
     forward_initial_acp_frame_async, mask_acp_initialize_frame, split_frame_line_ending,
 };
-use super::*;
 
 struct RecordingInputWriter {
     bytes: Arc<Mutex<Vec<u8>>>,
@@ -385,8 +385,134 @@ pub(super) fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
     (host_stdin_bytes, expected)
 }
 
+#[cfg(test)]
+mod capability_policy_routing {
+    //! Verifies that `CapabilityPolicy` selects raw forwarding or runtime
+    //! enforcement for outbound ACP frames.
+
+    use bollard::container::LogOutput;
+    use futures_util::stream;
+
+    use super::*;
+    use crate::engine::connection::exec::session::CapabilityPolicy;
+    use crate::engine::connection::exec::{ExecMode, ExecRequest};
+
+    fn protocol_request() -> ExecRequest {
+        ExecRequest::new(
+            "capability-policy-routing",
+            vec![String::from("codex"), String::from("app-server")],
+            ExecMode::Protocol,
+        )
+        .expect("protocol request should build")
+    }
+
+    fn blocked_terminal_create_frame() -> Vec<u8> {
+        let mut bytes = serde_json::to_vec(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "terminal/create",
+            "params": {},
+        }))
+        .expect("blocked request should serialize");
+        bytes.push(b'\n');
+        bytes
+    }
+
+    fn run_policy_output_frame(policy: CapabilityPolicy, frame: &[u8]) -> (Vec<u8>, Vec<u8>) {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
+        let host_stdin = runtime
+            .block_on(build_host_stdin(&[]))
+            .expect("host stdin should build");
+        let host_stdout = RecordingInputWriter::new();
+        let host_stdout_bytes = host_stdout.bytes.clone();
+        let host_stderr = RecordingInputWriter::new();
+        let container_input = RecordingInputWriter::new();
+        let container_stdin_bytes = container_input.bytes.clone();
+        let output = stream::iter([Ok(LogOutput::StdOut {
+            message: frame.to_vec().into(),
+        })]);
+        let stdio = ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr)
+            .with_options(ProtocolSessionOptions::new().with_capability_policy(policy));
+
+        runtime
+            .block_on(run_protocol_session_with_io_async(
+                &protocol_request(),
+                Box::pin(output),
+                Box::pin(container_input),
+                stdio,
+            ))
+            .expect("protocol session should complete");
+
+        (
+            host_stdout_bytes
+                .lock()
+                .expect("stdout mutex should not poison")
+                .clone(),
+            container_stdin_bytes
+                .lock()
+                .expect("stdin mutex should not poison")
+                .clone(),
+        )
+    }
+
+    fn synthesized_response_for_terminal_create(bytes: &[u8]) -> bool {
+        let response: serde_json::Value =
+            serde_json::from_slice(bytes.strip_suffix(b"\n").unwrap_or(bytes))
+                .expect("synthesized response should contain JSON");
+        response.get("id") == Some(&serde_json::json!(7))
+            && response
+                .get("error")
+                .and_then(|error| error.get("data"))
+                .and_then(|data| data.get("method"))
+                == Some(&serde_json::json!("terminal/create"))
+    }
+
+    #[rstest]
+    #[case::mask_and_deny_routes_through_enforcement_path(
+        CapabilityPolicy::MaskAndDeny,
+        false,
+        true
+    )]
+    #[case::disabled_policy_forwards_all_frames_raw(CapabilityPolicy::Disabled, true, false)]
+    #[case::mask_only_policy_forwards_blocked_frames_raw(CapabilityPolicy::MaskOnly, true, false)]
+    fn routes_output_frame_for_capability_policy(
+        #[case] policy: CapabilityPolicy,
+        #[case] expect_forward_raw: bool,
+        #[case] expect_synthesized_response: bool,
+    ) {
+        let frame = blocked_terminal_create_frame();
+        let (host_stdout, container_stdin) = run_policy_output_frame(policy, &frame);
+
+        if expect_forward_raw {
+            assert_eq!(
+                host_stdout, frame,
+                "{policy:?} should preserve the byte-transparent output path",
+            );
+        } else {
+            assert_ne!(
+                host_stdout, frame,
+                "{policy:?} must not forward blocked frames verbatim",
+            );
+        }
+        if expect_synthesized_response {
+            assert!(
+                synthesized_response_for_terminal_create(&container_stdin),
+                "{policy:?} should write a synthesized denial response to container stdin",
+            );
+        } else {
+            assert!(
+                container_stdin.is_empty(),
+                "{policy:?} should not write a synthesized denial response",
+            );
+        }
+    }
+}
+
 #[path = "protocol_acp_forwarding_tests.rs"]
 mod forwarding_tests;
+
+#[path = "protocol_acp_policy_integration_tests.rs"]
+mod policy_integration_tests;
 
 #[path = "protocol_acp_bdd_tests.rs"]
 mod bdd_tests;

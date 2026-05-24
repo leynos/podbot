@@ -2,14 +2,18 @@
 
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use rstest::rstest;
 use tokio::io::AsyncRead;
 
-use super::super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_io_async};
+use super::super::super::protocol::{
+    ProtocolProxyIo, ProtocolSessionOptions, run_protocol_session_with_io_async,
+};
 use super::*;
+use crate::engine::connection::exec::session::CapabilityPolicy;
 
 struct PendingReader;
 
@@ -119,6 +123,39 @@ fn protocol_proxy_times_out_incomplete_stdin_forwarding(runtime: RuntimeFixture)
             RecordingWriter::new(),
         ),
     ));
+
+    assert_exec_failed_message(
+        result,
+        "stdin forwarding did not complete before protocol session shutdown",
+    );
+}
+
+#[rstest]
+fn runtime_enforcement_propagates_stdin_timeout_before_sink_wait(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("runtime fixture should initialize");
+    let request = make_protocol_request().expect("protocol request should build");
+    let stdio = ProtocolProxyIo::new(
+        PendingReader,
+        RecordingWriter::new(),
+        RecordingWriter::new(),
+    )
+    .with_options(
+        ProtocolSessionOptions::new().with_capability_policy(CapabilityPolicy::MaskAndDeny),
+    );
+    let result = runtime_handle
+        .block_on(async {
+            tokio::time::timeout(
+                Duration::from_secs(1),
+                run_protocol_session_with_io_async(
+                    &request,
+                    make_output_stream(vec![]),
+                    Box::pin(RecordingInputWriter::new()),
+                    stdio,
+                ),
+            )
+            .await
+        })
+        .expect("runtime enforcement session should not hang behind the sink");
 
     assert_exec_failed_message(
         result,
