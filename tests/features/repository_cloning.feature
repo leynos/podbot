@@ -16,7 +16,7 @@ Feature: Repository cloning
     And the clone command used GIT_ASKPASS
 
   Scenario: Malformed repository input fails before exec
-    Given repository input is "leynos"
+    Given repository input is "leynos /podbot"
     And branch input is "main"
     And workspace base directory is "/work"
     And git askpass helper path is "/usr/local/bin/git-askpass"

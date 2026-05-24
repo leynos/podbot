@@ -72,7 +72,11 @@ fn invalid_repository_ref() -> crate::error::PodbotError {
 }
 
 fn has_invalid_segments(owner: &str, name: &str) -> bool {
-    owner.is_empty() || name.is_empty() || name.contains('/')
+    owner.is_empty()
+        || name.is_empty()
+        || name.contains('/')
+        || owner != owner.trim()
+        || name != name.trim()
 }
 
 /// A required Git branch name supplied by the caller.
@@ -182,6 +186,9 @@ mod tests {
     #[case("/podbot")]
     #[case("leynos/")]
     #[case("leynos/podbot/extra")]
+    #[case("leynos /podbot")]
+    #[case("leynos/ podbot")]
+    #[case("leynos\t/podbot")]
     fn repository_ref_rejects_malformed_values(#[case] input: &str) {
         let result = RepositoryRef::parse(input);
 
