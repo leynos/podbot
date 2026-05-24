@@ -184,7 +184,7 @@ impl RunArgs {
     /// Returns an error if the parsed request contains semantically invalid
     /// values.
     pub fn to_run_request(&self) -> PodbotResult<RunRequest> {
-        RunRequest::new(self.repo.clone(), self.branch.clone())
+        RunRequest::new(&self.repo, &self.branch)
     }
 }
 

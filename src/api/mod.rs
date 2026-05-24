@@ -217,6 +217,12 @@ fn validate_agent_github_credentials(
     )
 }
 
+/// Validate `GitHub` credentials through the execution path required by the
+/// current thread.
+///
+/// Credential validation is safe to call concurrently. Each invocation owns its
+/// runtime decision and either creates an isolated local runtime or a scoped
+/// helper thread to avoid blocking an existing Tokio runtime.
 #[cfg(feature = "experimental")]
 fn validate_agent_github_credentials_with<F>(
     app_id: u64,
@@ -257,6 +263,11 @@ const fn github_credential_validation_execution_path(has_current_runtime: bool) 
     }
 }
 
+/// Validate credentials on a scoped helper thread when already inside Tokio.
+///
+/// The scoped-thread path keeps nested-runtime calls from blocking the current
+/// Tokio worker. Concurrent callers get independent scoped threads and local
+/// runtimes; no shared mutable state is retained between invocations.
 #[cfg(feature = "experimental")]
 fn validate_agent_github_credentials_on_scoped_thread<F>(
     app_id: u64,
@@ -286,6 +297,11 @@ where
     })
 }
 
+/// Validate credentials on a fresh local Tokio runtime.
+///
+/// The local-runtime path builds a fresh runtime for this validation call. It is
+/// independent across concurrent invocations and must only be selected when no
+/// Tokio runtime is already entered on the current thread.
 #[cfg(feature = "experimental")]
 fn validate_agent_github_credentials_on_local_runtime<F>(
     app_id: u64,

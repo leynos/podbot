@@ -21,6 +21,20 @@ mod log_capture;
 #[cfg(feature = "experimental")]
 use log_capture::{capture_logs, capture_warning_logs, require_log_contains, require_outcome};
 
+#[cfg(feature = "experimental")]
+static CONCURRENT_CREDENTIAL_VALIDATION_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "experimental")]
+fn record_concurrent_credential_validation(
+    _app_id: u64,
+    _private_key_path: &camino::Utf8Path,
+) -> super::CredentialValidationFuture<'_> {
+    Box::pin(async {
+        CONCURRENT_CREDENTIAL_VALIDATION_CALLS.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    })
+}
+
 #[rstest]
 fn command_outcome_success_equals_itself() {
     assert_eq!(CommandOutcome::Success, CommandOutcome::Success);
@@ -249,6 +263,39 @@ fn credential_validation_uses_scoped_thread_inside_current_runtime() {
         .expect("scoped-thread credential validation should succeed");
 
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[rstest]
+#[cfg(feature = "experimental")]
+fn credential_validation_supports_concurrent_calls_inside_current_runtime() {
+    CONCURRENT_CREDENTIAL_VALIDATION_CALLS.store(0, Ordering::SeqCst);
+    let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
+
+    runtime.block_on(async {
+        let tasks = (0..4)
+            .map(|index| {
+                tokio::spawn(async move {
+                    let private_key_path = Utf8PathBuf::from(format!("/tmp/test-key-{index}.pem"));
+                    super::validate_agent_github_credentials_with(
+                        1,
+                        &private_key_path,
+                        record_concurrent_credential_validation,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for task in tasks {
+            task.await
+                .expect("credential validation task should join")
+                .expect("concurrent credential validation should succeed");
+        }
+    });
+
+    assert_eq!(
+        CONCURRENT_CREDENTIAL_VALIDATION_CALLS.load(Ordering::SeqCst),
+        4
+    );
 }
 
 #[rstest]

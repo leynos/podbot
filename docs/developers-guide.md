@@ -26,6 +26,7 @@ All quality gates must pass before committing. The canonical targets are:
 | `make fmt`          | `cargo fmt --workspace`                                                | Apply formatting fixes        |
 | `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Lint with all warnings denied |
 | `make test`         | `cargo test --workspace`                                               | Run full test suite           |
+| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                 | Type-check the workspace      |
 | `make markdownlint` | markdownlint-cli                                                       | Validate Markdown files       |
 | `make nixie`        | Mermaid diagram validator                                              | Validate diagrams in Markdown |
 

@@ -41,12 +41,22 @@ impl std::io::Write for SharedLogBuffer {
     }
 }
 
+/// Capture warning-level logs emitted synchronously by `operation`.
+///
+/// This helper installs a scoped default subscriber for the current test
+/// thread. Use it only for same-thread log assertions; spawned work needs its
+/// own subscriber plumbing.
 pub(crate) fn capture_warning_logs(
     operation: impl FnOnce(),
 ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     capture_logs(operation, tracing::Level::WARN)
 }
 
+/// Capture logs up to `max_level` emitted synchronously by `operation`.
+///
+/// The subscriber is scoped with `tracing::subscriber::with_default`, so this
+/// helper is intended for single-threaded test sections. It does not guarantee
+/// capture from work moved onto other threads.
 pub(crate) fn capture_logs(
     operation: impl FnOnce(),
     max_level: tracing::Level,
