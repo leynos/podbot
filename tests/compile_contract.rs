@@ -9,6 +9,13 @@ fn stable_exec_context_signatures_compile() {
 }
 
 #[test]
+#[cfg(feature = "experimental")]
+fn experimental_run_agent_signature_compiles() {
+    let test_cases = trybuild::TestCases::new();
+    test_cases.pass("tests/ui/experimental_run_agent_signatures.rs");
+}
+
+#[test]
 #[cfg(feature = "internal")]
 fn config_internal_reexport_is_available_with_internal() {
     let test_cases = trybuild::TestCases::new();
