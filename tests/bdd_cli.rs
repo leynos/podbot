@@ -56,6 +56,7 @@ fn invoke_run_with_help(cli_state: &CliState) {
         |run| run.render_help().to_string(),
     );
     cli_state.output.set(help_text);
+    cli_state.error.set(String::new());
     cli_state.success.set(true);
 }
 #[given("the CLI is invoked with run")]
@@ -111,8 +112,12 @@ fn stdout_contains(cli_state: &CliState, text: String) {
 }
 
 #[then("stderr is empty")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
 fn stderr_is_empty(cli_state: &CliState) {
-    let error = cli_state.error.get().unwrap_or_default();
+    let error = cli_state.error.get().expect("stderr was not captured");
     assert!(
         error.is_empty(),
         "Expected stderr to be empty, but got:\n{error}"
