@@ -8,15 +8,19 @@ use podbot::api::CommandOutcome;
 use podbot::cli::{Cli, Commands, HostArgs};
 use podbot::config::AppConfig;
 use podbot::error::{ConfigError, PodbotError};
-#[cfg(feature = "experimental")]
-use rstest::fixture;
 use rstest::rstest;
-#[cfg(feature = "experimental")]
-use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "experimental")]
 use super::run_agent_api_with_observability;
 use super::{normalize_process_exit_code, run};
+
+#[cfg(feature = "experimental")]
+mod observability_helpers;
+#[cfg(feature = "experimental")]
+use observability_helpers::{
+    CapturedRunDispatch, RunObservabilityCase, assert_log_contains, capture_run_dispatch,
+    capture_run_logs,
+};
 
 #[test]
 fn normalize_process_exit_code_preserves_valid_range() {
@@ -273,128 +277,4 @@ fn assert_invalid_run_argument(error: PodbotError, expected_field: &str) {
             if field == expected_field
                 && reason == format!("{expected_field} must not be empty")
     ));
-}
-
-#[cfg(feature = "experimental")]
-struct RunObservabilityCase {
-    repo: &'static str,
-    branch: &'static str,
-    expect_success: bool,
-    expected_log_substring: &'static str,
-}
-
-#[cfg(feature = "experimental")]
-struct CapturedRunDispatch {
-    logs: String,
-    succeeded: bool,
-}
-
-#[cfg(feature = "experimental")]
-#[fixture]
-fn capture_run_dispatch()
--> impl Fn(&str, &str, bool) -> Result<CapturedRunDispatch, Box<dyn std::error::Error + Send + Sync>>
-{
-    |repo, branch, expect_success| {
-        let mut succeeded = false;
-        let logs = capture_run_logs(|| {
-            let cli = Cli::try_parse_from(["podbot", "run", "--repo", repo, "--branch", branch])
-                .expect("run command should parse");
-            let config = run_observability_config(expect_success);
-            let result = run(&cli, &config);
-
-            if expect_success {
-                result.expect("run dispatch should succeed");
-                succeeded = true;
-            } else {
-                result.expect_err("incomplete GitHub config should fail");
-            }
-        })?;
-
-        Ok(CapturedRunDispatch { logs, succeeded })
-    }
-}
-
-#[cfg(feature = "experimental")]
-fn run_observability_config(expect_success: bool) -> AppConfig {
-    if expect_success {
-        AppConfig::default()
-    } else {
-        AppConfig {
-            github: podbot::config::GitHubConfig {
-                app_id: Some(1),
-                installation_id: None,
-                private_key_path: None,
-            },
-            ..AppConfig::default()
-        }
-    }
-}
-
-#[cfg(feature = "experimental")]
-#[derive(Clone)]
-struct SharedLogWriter {
-    buffer: Arc<Mutex<Vec<u8>>>,
-}
-
-#[cfg(feature = "experimental")]
-impl std::io::Write for SharedLogWriter {
-    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        let mut buffer = self
-            .buffer
-            .lock()
-            .map_err(|error| std::io::Error::other(format!("log buffer poisoned: {error}")))?;
-        buffer.extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-#[cfg(feature = "experimental")]
-struct SharedLogBuffer {
-    buffer: Arc<Mutex<Vec<u8>>>,
-}
-
-#[cfg(feature = "experimental")]
-impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for SharedLogBuffer {
-    type Writer = SharedLogWriter;
-
-    fn make_writer(&'writer self) -> Self::Writer {
-        SharedLogWriter {
-            buffer: Arc::clone(&self.buffer),
-        }
-    }
-}
-
-#[cfg(feature = "experimental")]
-fn capture_run_logs(
-    run_test: impl FnOnce(),
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let buffer = Arc::new(Mutex::new(Vec::new()));
-    let writer = SharedLogBuffer {
-        buffer: Arc::clone(&buffer),
-    };
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .without_time()
-        .with_writer(writer)
-        .finish();
-
-    tracing::subscriber::with_default(subscriber, run_test);
-
-    let bytes = buffer
-        .lock()
-        .map_err(|error| std::io::Error::other(format!("log buffer poisoned: {error}")))?
-        .clone();
-    Ok(String::from_utf8(bytes)?)
-}
-
-#[cfg(feature = "experimental")]
-fn assert_log_contains(logs: &str, expected: &str) {
-    assert!(
-        logs.contains(expected),
-        "expected logs to contain {expected:?}, got {logs:?}"
-    );
 }
