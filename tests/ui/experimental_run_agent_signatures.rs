@@ -6,13 +6,8 @@
 
 use podbot::api::{CommandOutcome, RunRequest, run_agent};
 use podbot::config::AppConfig;
-use podbot::error::Result;
 
-fn _assert_run_agent_signature(
-    config: &AppConfig,
-    request: &RunRequest,
-) -> Result<CommandOutcome> {
-    run_agent(config, request)
+fn main() {
+    let _run_agent: fn(&AppConfig, &RunRequest) -> podbot::error::Result<CommandOutcome> =
+        run_agent;
 }
-
-fn main() {}

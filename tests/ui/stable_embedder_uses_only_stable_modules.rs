@@ -9,30 +9,18 @@ use podbot::api::{CommandOutcome, ExecContext, ExecMode, ExecRequest, RunRequest
 use podbot::config::AppConfig;
 use podbot::error::Result;
 
-fn _assert_exec_surface_is_importable(handle: &tokio::runtime::Handle) -> Result<ExecContext> {
-    let _request = ExecRequest::new("c", vec![String::from("cmd")])?
+fn main() -> Result<()> {
+    let _connect: fn(&AppConfig, &tokio::runtime::Handle) -> Result<ExecContext> =
+        ExecContext::connect;
+    let _context_exec: fn(&ExecContext, &ExecRequest) -> Result<CommandOutcome> =
+        ExecContext::exec;
+    let _top_level_exec: fn(&AppConfig, &ExecRequest) -> Result<CommandOutcome> = exec;
+    let _run_request_new: fn(String, String) -> Result<RunRequest> = RunRequest::new;
+
+    let _exec_request = ExecRequest::new("c", vec![String::from("cmd")])?
         .with_mode(ExecMode::Attached)
         .with_tty(false);
-    let config = AppConfig::default();
-    ExecContext::connect(&config, handle)
-}
+    let _run_request = RunRequest::new("owner/name", "main")?;
 
-fn _assert_top_level_exec_is_importable(
-    config: &AppConfig,
-    request: &ExecRequest,
-) -> Result<CommandOutcome> {
-    exec(config, request)
+    Ok(())
 }
-
-fn _assert_run_request_is_importable() -> Result<RunRequest> {
-    RunRequest::new("owner/name", "main")
-}
-
-fn _assert_context_exec_is_importable(
-    context: &ExecContext,
-    request: &ExecRequest,
-) -> Result<CommandOutcome> {
-    context.exec(request)
-}
-
-fn main() {}
