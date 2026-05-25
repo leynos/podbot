@@ -646,14 +646,16 @@ The `cli` module is optional behind the `cli` feature. Hidden compatibility
 modules such as `engine` and `GitHub` integration shims are not part of the
 supported semver contract for embedders.
 
-### Available functions
+### Available API items
 
-| Function                                               | Description                                   |
-| ------------------------------------------------------ | --------------------------------------------- |
-| `podbot::api::exec(config, request)`                   | Execute a command in a running container      |
-| `podbot::api::ExecContext::connect(…)`                 | Reuse a runtime handle and engine connection  |
-| `podbot::api::RunRequest::new(repo, branch)`           | Build the library-owned run request           |
-| `podbot::api::clone_repository_into_workspace(params)` | Clone `owner/name` into the sandbox workspace |
+| Item                                           | Description                         |
+| ---------------------------------------------- | ----------------------------------- |
+| `podbot::api::exec(config, request)`           | Execute in a container              |
+| `podbot::api::ExecContext::connect(…)`         | Reuse runtime and engine state      |
+| `podbot::api::RunRequest::new(repo, branch)`   | Build the library-owned run request |
+| `podbot::api::RepositoryRef`                   | Validate repository `owner/name`    |
+| `podbot::api::BranchName`                      | Validate a branch value             |
+| `podbot::api::WorkspacePath`                   | Validate a workspace path           |
 
 ### Return type
 

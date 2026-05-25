@@ -4,11 +4,10 @@ use std::sync::{Arc, Mutex};
 
 use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
 use mockall::mock;
-use podbot::api::{
-    BranchName, CloneRepositoryParams, RepositoryRef, clone_repository_into_workspace,
-};
+use podbot::api::{BranchName, RepositoryRef, WorkspacePath};
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
+    ContainerExecClient, CreateExecFuture, InspectExecFuture, RepositoryCloneRequest,
+    ResizeExecFuture, StartExecFuture, clone_repository_into_workspace,
 };
 use rstest_bdd_macros::{given, when};
 
@@ -38,51 +37,64 @@ mock! {
 }
 
 #[given("repository input is {string}")]
-fn repository_input_is(repository_cloning_state: &RepositoryCloningState, string: String) {
+pub(crate) fn repository_input_is(
+    repository_cloning_state: &RepositoryCloningState,
+    string: String,
+) {
     repository_cloning_state
         .repository_input
         .set(strip_quotes(&string));
 }
 
 #[given("branch input is {string}")]
-fn branch_input_is(repository_cloning_state: &RepositoryCloningState, string: String) {
+pub(crate) fn branch_input_is(repository_cloning_state: &RepositoryCloningState, string: String) {
     repository_cloning_state
         .branch_input
         .set(strip_quotes(&string));
 }
 
 #[given("workspace base directory is {string}")]
-fn workspace_base_directory_is(repository_cloning_state: &RepositoryCloningState, string: String) {
+pub(crate) fn workspace_base_directory_is(
+    repository_cloning_state: &RepositoryCloningState,
+    string: String,
+) {
     repository_cloning_state
         .workspace_base_dir
         .set(strip_quotes(&string));
 }
 
 #[given("git askpass helper path is {string}")]
-fn git_askpass_helper_path_is(repository_cloning_state: &RepositoryCloningState, string: String) {
+pub(crate) fn git_askpass_helper_path_is(
+    repository_cloning_state: &RepositoryCloningState,
+    string: String,
+) {
     repository_cloning_state
         .askpass_path
         .set(strip_quotes(&string));
 }
 
 #[given("repository clone execs will succeed")]
-fn repository_clone_execs_will_succeed(repository_cloning_state: &RepositoryCloningState) {
+pub(crate) fn repository_clone_execs_will_succeed(
+    repository_cloning_state: &RepositoryCloningState,
+) {
     repository_cloning_state.clone_exit_code.set(0);
     repository_cloning_state.verification_exit_code.set(0);
 }
 
 #[given("repository clone exec will fail")]
-fn repository_clone_exec_will_fail(repository_cloning_state: &RepositoryCloningState) {
+pub(crate) fn repository_clone_exec_will_fail(repository_cloning_state: &RepositoryCloningState) {
     repository_cloning_state.clone_exit_code.set(128);
 }
 
 #[given("repository branch verification will fail")]
-fn repository_branch_verification_will_fail(repository_cloning_state: &RepositoryCloningState) {
+pub(crate) fn repository_branch_verification_will_fail(
+    repository_cloning_state: &RepositoryCloningState,
+) {
     repository_cloning_state.verification_exit_code.set(1);
 }
 
 #[when("repository cloning is requested for container {container_id}")]
-fn repository_cloning_is_requested_for_container(
+pub(crate) fn repository_cloning_is_requested_for_container(
     repository_cloning_state: &RepositoryCloningState,
     container_id: String,
 ) -> StepResult<()> {
@@ -129,6 +141,7 @@ fn invoke_clone(
 ) -> Result<podbot::engine::RepositoryCloneResult, podbot::error::PodbotError> {
     let repository = RepositoryRef::parse(invocation.repository_input)?;
     let branch = BranchName::parse(invocation.branch_input)?;
+    let workspace = WorkspacePath::parse(invocation.workspace_base_dir)?;
     let client = mock_exec_client(
         repository_cloning_state.clone_exit_code.get().unwrap_or(0),
         repository_cloning_state
@@ -144,15 +157,18 @@ fn invoke_clone(
     })?;
     let handle = runtime.handle().clone();
 
-    clone_repository_into_workspace(&CloneRepositoryParams {
-        client: &client,
-        container_id: invocation.container_id,
-        repository,
-        branch,
-        workspace_base_dir: invocation.workspace_base_dir,
-        askpass_path: invocation.askpass_path,
-        runtime_handle: &handle,
-    })
+    clone_repository_into_workspace(
+        &handle,
+        &client,
+        &RepositoryCloneRequest {
+            container_id: invocation.container_id,
+            repository_owner: repository.owner(),
+            repository_name: repository.name(),
+            branch: branch.as_str(),
+            workspace_base_dir: workspace.as_str(),
+            askpass_path: invocation.askpass_path,
+        },
+    )
 }
 
 fn mock_exec_client(

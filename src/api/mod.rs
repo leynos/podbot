@@ -25,6 +25,7 @@ pub use configure_git_identity::{GitIdentityParams, configure_container_git_iden
 #[doc(hidden)]
 pub use exec::exec_with_client_for_tests;
 pub use exec::{ExecContext, ExecMode, ExecRequest, exec};
+pub use repository_clone::{BranchName, RepositoryRef, WorkspacePath};
 pub use run::RunRequest;
 
 #[cfg(feature = "experimental")]

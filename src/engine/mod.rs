@@ -26,8 +26,7 @@ pub use connection::{
 };
 #[cfg(not(any(feature = "internal", test)))]
 pub(crate) use connection::{
-    ContainerExecClient, EngineConnector, ExecMode, ExecRequest, RepositoryCloneRequest,
-    RepositoryCloneResult, SocketResolver, clone_repository_into_workspace,
+    ContainerExecClient, EngineConnector, ExecMode, ExecRequest, SocketResolver,
 };
 
 #[cfg(test)]

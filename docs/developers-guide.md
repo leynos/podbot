@@ -641,7 +641,9 @@ The semver-stable surface for library embedders is limited to three modules:
 | Module           | Contents                                               |
 | ---------------- | ------------------------------------------------------ |
 | `podbot::api`    | `exec`, `ExecRequest`, `ExecMode`, `ExecContext`,      |
-|                  | `RunRequest`, `CommandOutcome`                         |
+|                  | `RunRequest`, `CommandOutcome`, `RepositoryRef`,       |
+|                  | `BranchName`,                                          |
+|                  | `WorkspacePath`                                        |
 | `podbot::config` | `AppConfig`, `GitHubConfig`, and related configuration |
 |                  | types                                                  |
 | `podbot::error`  | `PodbotError`, `Result<T>`, error variant enums        |
@@ -1063,3 +1065,112 @@ When adding another identity field or related Git setting:
 7. Add BDD scenarios in `tests/features/git_identity.feature` and matching
    step definitions under `tests/bdd_git_identity_helpers/`.
 8. Update this section and the user-facing contract in `docs/users-guide.md`.
+
+
+## 18. Repository cloning subsystem
+
+The repository cloning subsystem validates operator-supplied GitHub repository
+coordinates, clones the repository into the sandbox workspace, and verifies the
+requested branch before later orchestration uses the workspace.
+
+It deliberately separates stable value objects from container execution. The
+public API exposes only domain values, while engine modules own the container
+client, runtime handle, `GIT_ASKPASS` path, and exec command construction.
+
+
+### 18.1. Module layout
+
+```plaintext
+src/api/
++-- repository_clone.rs              # RepositoryRef, BranchName, WorkspacePath
+
+src/engine/connection/repository_clone/
++-- mod.rs                           # RepositoryCloneRequest and clone flow
+
+tests/
++-- features/repository_cloning.feature       # Behavioural scenarios
++-- bdd_repository_cloning.rs                 # Scenario harness
++-- bdd_repository_cloning_helpers/           # Steps, assertions, and state
+```
+
+
+### 18.2. Boundary and entry points
+
+- **Stable API values**:
+  `RepositoryRef`, `BranchName`, and `WorkspacePath` in
+  `src/api/repository_clone.rs`. These types validate caller input without
+  depending on container infrastructure.
+- **Engine entry point**:
+  `engine::clone_repository_into_workspace(runtime, client, request)` in
+  `src/engine/connection/repository_clone/mod.rs`. This function is internal
+  and receives the container exec client, runtime handle, target container,
+  repository segments, branch, workspace path, and askpass helper path.
+- **Error boundary**: malformed repository, branch, and workspace values fail
+  before exec with configuration errors. Clone or branch-verification failures
+  cross the boundary as `PodbotError::Container(ContainerError::ExecFailed)`.
+
+This keeps embedders on a stable, domain-only surface while allowing the
+composition layer to wire container-specific details from configuration and
+runtime state.
+
+
+### 18.3. Key types and traits
+
+- **`RepositoryRef`**: validates `owner/name`, rejecting empty segments, extra
+  slashes, and segment-leading or segment-trailing whitespace.
+- **`BranchName`**: validates that a branch remains non-empty after trimming.
+  Branch syntax is otherwise left to Git and the remote repository.
+- **`WorkspacePath`**: validates an absolute container workspace path before
+  orchestration builds the clone request.
+- **`RepositoryCloneRequest`**: internal engine request containing the validated
+  domain values plus container-only fields such as `container_id` and
+  `askpass_path`.
+- **`ContainerExecClient`**: engine-owned port used by the clone helper to run
+  detached exec commands without depending on a concrete Bollard client.
+
+
+### 18.4. Execution flow
+
+For screen readers: The following flowchart shows repository clone validation
+and execution from caller input to branch verification.
+
+```mermaid
+flowchart TD
+    A["Caller input"] --> B["RepositoryRef::parse"]
+    A --> C["BranchName::parse"]
+    A --> D["WorkspacePath::parse"]
+    B & C & D --> E["Build RepositoryCloneRequest"]
+    E --> F["git clone via detached exec"]
+    F --> G["git -C workspace rev-parse --abbrev-ref HEAD"]
+    G --> H["RepositoryCloneResult"]
+```
+
+_Figure 4: Repository cloning validation and execution flow._
+
+
+### 18.5. Integration points
+
+- **Configuration layer**: `workspace.base_dir` supplies the container
+  destination and must remain an absolute path.
+- **GitHub authentication**: the engine request carries the internal
+  `GIT_ASKPASS` helper path and disables terminal prompts with
+  `GIT_TERMINAL_PROMPT=0`.
+- **Container exec subsystem**: clone and branch verification use detached exec
+  requests so exit status handling remains consistent with other container
+  operations.
+- **Behavioural tests**: repository cloning BDD scenarios exercise success,
+  malformed repository input, relative workspace paths, clone exec failure, and
+  branch verification failure.
+
+
+### 18.6. Extending the subsystem
+
+When adding another repository source or clone option:
+
+1. Add or extend public value objects only for stable domain input.
+2. Keep container IDs, runtime handles, clients, helper paths, and environment
+   construction in engine or composition modules.
+3. Add unit or property tests for new validation invariants.
+4. Add BDD scenarios for user-visible success and failure paths.
+5. Update this section, `docs/users-guide.md`, and any roadmap or ExecPlan that
+   describes the changed clone contract.

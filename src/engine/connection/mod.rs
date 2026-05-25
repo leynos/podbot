@@ -14,6 +14,7 @@ mod exec;
 mod git_identity;
 #[cfg(any(feature = "internal", test))]
 mod health_check;
+#[cfg(any(feature = "internal", test))]
 mod repository_clone;
 #[cfg(any(feature = "internal", test))]
 mod upload_credentials;
@@ -42,6 +43,7 @@ pub use git_identity::{
     GitIdentityResult, HostCommandRunner, HostGitIdentity, SystemCommandRunner,
     configure_git_identity, read_host_git_identity,
 };
+#[cfg(any(feature = "internal", test))]
 pub use repository_clone::{
     RepositoryCloneRequest, RepositoryCloneResult, clone_repository_into_workspace,
 };

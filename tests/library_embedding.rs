@@ -18,8 +18,8 @@ use mockall::mock;
 use rstest::{fixture, rstest};
 
 use podbot::api::{
-    BranchName, CloneRepositoryParams, CommandOutcome, ExecMode, ExecRequest, RepositoryRef,
-    RunRequest, clone_repository_into_workspace,
+    BranchName, CommandOutcome, ExecMode, ExecRequest, RepositoryRef, WorkspacePath,
+    RunRequest,
 };
 #[cfg(feature = "experimental")]
 use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
@@ -239,43 +239,37 @@ fn stub_orchestration_functions_return_success() {
     );
 }
 
-fn repository_clone_api_is_embeddable(
-    runtime: Result<tokio::runtime::Runtime, std::io::Error>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let rt = runtime?;
-    let mut client = MockEmbedClient::new();
-    configure_successful_detached_execs(&mut client, 2);
+// -------------------------------------------------------------------------
+// Repository cloning value objects
+// -------------------------------------------------------------------------
+
+#[rstest]
+fn repository_clone_values_are_embeddable() -> Result<(), Box<dyn std::error::Error>> {
     let repository = RepositoryRef::parse("leynos/podbot").expect("repository should parse");
     let branch = BranchName::parse("main").expect("branch should parse");
+    let workspace = WorkspacePath::parse("/work").expect("workspace should parse");
 
-    let result = clone_repository_into_workspace(&CloneRepositoryParams {
-        client: &client,
-        container_id: "embed-sandbox",
-        repository,
-        branch,
-        workspace_base_dir: "/work",
-        askpass_path: "/usr/local/bin/git-askpass",
-        runtime_handle: rt.handle(),
-    })
-    .expect("repository clone should succeed");
-
-    if result.workspace_path != "/work" {
-        return Err(format!(
-            "expected workspace path /work, got {}",
-            result.workspace_path
-        )
-        .into());
+    if repository.owner() != "leynos" {
+        return Err(format!("expected owner leynos, got {}", repository.owner()).into());
     }
-    if result.checked_out_branch != "main" {
-        return Err(format!(
-            "expected checked out branch main, got {}",
-            result.checked_out_branch
-        )
-        .into());
+    if repository.name() != "podbot" {
+        return Err(format!("expected repository podbot, got {}", repository.name()).into());
+    }
+    if branch.as_str() != "main" {
+        return Err(format!("expected branch main, got {}", branch.as_str()).into());
+    }
+    if workspace.as_str() != "/work" {
+        return Err(format!("expected workspace /work, got {}", workspace.as_str()).into());
     }
 
     Ok(())
 }
+
+// -------------------------------------------------------------------------
+// Test helpers
+// -------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy)]
 enum FailAt {
     Create,
     Start,
@@ -425,28 +419,6 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         let inspect = ExecInspectResponse {
             running: Some(false),
             exit_code: Some(exit_code),
-            ..ExecInspectResponse::default()
-        };
-        Box::pin(async move { Ok(inspect) })
-    });
-}
-
-fn configure_successful_detached_execs(client: &mut MockEmbedClient, count: usize) {
-    client.expect_create_exec().times(count).returning(|_, _| {
-        Box::pin(async {
-            Ok(CreateExecResults {
-                id: String::from("embed-exec-id"),
-            })
-        })
-    });
-    client
-        .expect_start_exec()
-        .times(count)
-        .returning(|_, _| Box::pin(async { Ok(StartExecResults::Detached) }));
-    client.expect_inspect_exec().times(count).returning(|_| {
-        let inspect = ExecInspectResponse {
-            running: Some(false),
-            exit_code: Some(0),
             ..ExecInspectResponse::default()
         };
         Box::pin(async move { Ok(inspect) })

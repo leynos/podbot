@@ -7,7 +7,7 @@ use rstest_bdd_macros::then;
 use super::state::{RepositoryCloningState, StepResult};
 
 #[then("repository cloning succeeds")]
-fn repository_cloning_succeeds(
+pub(crate) fn repository_cloning_succeeds(
     repository_cloning_state: &RepositoryCloningState,
 ) -> StepResult<()> {
     repository_cloning_state
@@ -20,7 +20,7 @@ fn repository_cloning_succeeds(
 }
 
 #[then("the workspace path is {string}")]
-fn the_workspace_path_is(
+pub(crate) fn the_workspace_path_is(
     repository_cloning_state: &RepositoryCloningState,
     string: String,
 ) -> StepResult<()> {
@@ -33,7 +33,7 @@ fn the_workspace_path_is(
 }
 
 #[then("the checked out branch is {string}")]
-fn the_checked_out_branch_is(
+pub(crate) fn the_checked_out_branch_is(
     repository_cloning_state: &RepositoryCloningState,
     string: String,
 ) -> StepResult<()> {
@@ -46,7 +46,7 @@ fn the_checked_out_branch_is(
 }
 
 #[then("the clone command used GIT_ASKPASS")]
-fn the_clone_command_used_git_askpass(
+pub(crate) fn the_clone_command_used_git_askpass(
     repository_cloning_state: &RepositoryCloningState,
 ) -> StepResult<()> {
     let observed_execs = repository_cloning_state
@@ -79,7 +79,7 @@ fn the_clone_command_used_git_askpass(
 }
 
 #[then("repository cloning fails with a configuration error")]
-fn repository_cloning_fails_with_a_configuration_error(
+pub(crate) fn repository_cloning_fails_with_a_configuration_error(
     repository_cloning_state: &RepositoryCloningState,
 ) -> StepResult<()> {
     assert_error(repository_cloning_state, |err| {
@@ -93,7 +93,7 @@ fn repository_cloning_fails_with_a_configuration_error(
 }
 
 #[then("repository cloning fails with an exec error")]
-fn repository_cloning_fails_with_an_exec_error(
+pub(crate) fn repository_cloning_fails_with_an_exec_error(
     repository_cloning_state: &RepositoryCloningState,
 ) -> StepResult<()> {
     assert_error(repository_cloning_state, |err| {
@@ -105,7 +105,7 @@ fn repository_cloning_fails_with_an_exec_error(
 }
 
 #[then("no repository clone exec was attempted")]
-fn no_repository_clone_exec_was_attempted(
+pub(crate) fn no_repository_clone_exec_was_attempted(
     repository_cloning_state: &RepositoryCloningState,
 ) -> StepResult<()> {
     let observed_execs = repository_cloning_state

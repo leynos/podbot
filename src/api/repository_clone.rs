@@ -1,12 +1,8 @@
 //! Repository-cloning API boundary.
 //!
-//! Validates user-supplied repository and branch values before delegating to
-//! the container engine helper that performs the clone inside the sandbox.
+//! Validates user-supplied repository, branch, and workspace values before
+//! internal engine code performs the clone inside the sandbox.
 
-use crate::engine::{
-    ContainerExecClient, RepositoryCloneRequest, RepositoryCloneResult,
-    clone_repository_into_workspace as engine_clone_repository,
-};
 use crate::error::{ConfigError, Result as PodbotResult};
 
 /// A GitHub repository in `owner/name` form.
@@ -120,50 +116,52 @@ impl BranchName {
     }
 }
 
-/// Parameters for repository cloning through the public API.
-pub struct CloneRepositoryParams<'a, C: ContainerExecClient> {
-    /// Pre-connected container engine client.
-    pub client: &'a C,
-    /// Target container identifier.
-    pub container_id: &'a str,
-    /// Repository in validated `owner/name` form.
-    pub repository: RepositoryRef,
-    /// Required branch to clone and verify.
-    pub branch: BranchName,
-    /// Exact workspace path inside the container.
-    pub workspace_base_dir: &'a str,
-    /// Path to the `GIT_ASKPASS` helper inside the container.
-    pub askpass_path: &'a str,
-    /// Tokio runtime handle for blocking execution.
-    pub runtime_handle: &'a tokio::runtime::Handle,
-}
+/// Absolute workspace path inside the sandbox container.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspacePath(String);
 
-/// Clone a repository into the configured sandbox workspace.
-///
-/// # Errors
-///
-/// Returns `ContainerError::ExecFailed` when the clone or verification command
-/// exits with a non-zero status, and returns validation errors when required
-/// values are missing.
-pub fn clone_repository_into_workspace<C: ContainerExecClient + Sync>(
-    params: &CloneRepositoryParams<'_, C>,
-) -> PodbotResult<RepositoryCloneResult> {
-    let request = RepositoryCloneRequest {
-        container_id: params.container_id,
-        repository_owner: params.repository.owner(),
-        repository_name: params.repository.name(),
-        branch: params.branch.as_str(),
-        workspace_base_dir: params.workspace_base_dir,
-        askpass_path: params.askpass_path,
-    };
+impl WorkspacePath {
+    /// Validate and construct an absolute workspace path.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConfigError::InvalidValue` when the path is empty or relative.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use podbot::api::WorkspacePath;
+    ///
+    /// let workspace = WorkspacePath::parse("/work")?;
+    /// assert_eq!(workspace.as_str(), "/work");
+    /// # Ok::<(), podbot::error::PodbotError>(())
+    /// ```
+    pub fn parse(value: impl AsRef<str>) -> PodbotResult<Self> {
+        let trimmed = value.as_ref().trim();
 
-    engine_clone_repository(params.runtime_handle, params.client, &request)
+        if trimmed.is_empty() || !trimmed.starts_with('/') {
+            return Err(ConfigError::InvalidValue {
+                field: String::from("workspace.base_dir"),
+                reason: String::from("expected an absolute container path"),
+            }
+            .into());
+        }
+
+        Ok(Self(String::from(trimmed)))
+    }
+
+    /// Return the workspace path as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{BranchName, RepositoryRef};
+    use super::{BranchName, RepositoryRef, WorkspacePath};
     use crate::error::{ConfigError, PodbotError};
+    use proptest::prelude::*;
     use rstest::rstest;
 
     #[rstest]
@@ -217,5 +215,83 @@ mod tests {
             result,
             Err(PodbotError::Config(ConfigError::MissingRequired { .. }))
         ));
+    }
+
+    #[rstest]
+    #[case("/work", "/work")]
+    #[case(" /workspace/project ", "/workspace/project")]
+    fn workspace_path_accepts_absolute_values(#[case] input: &str, #[case] expected: &str) {
+        let workspace = WorkspacePath::parse(input).expect("absolute workspace should parse");
+
+        assert_eq!(workspace.as_str(), expected);
+    }
+
+    #[rstest]
+    #[case("")]
+    #[case("   ")]
+    #[case("work")]
+    #[case("./work")]
+    fn workspace_path_rejects_relative_values(#[case] input: &str) {
+        let result = WorkspacePath::parse(input);
+
+        assert!(matches!(
+            result,
+            Err(PodbotError::Config(ConfigError::InvalidValue { .. }))
+        ));
+    }
+
+    proptest! {
+        #[test]
+        fn repository_ref_property_matches_segment_invariants(input in "\\PC*") {
+            let trimmed = input.trim();
+            let parsed = RepositoryRef::parse(&input);
+            let expected = trimmed
+                .split_once('/')
+                .filter(|(owner, name)| {
+                    !owner.is_empty()
+                        && !name.is_empty()
+                        && !name.contains('/')
+                        && *owner == owner.trim()
+                        && *name == name.trim()
+                });
+
+            match (parsed, expected) {
+                (Ok(repo), Some((owner, name))) => {
+                    prop_assert_eq!(repo.owner(), owner);
+                    prop_assert_eq!(repo.name(), name);
+                }
+                (Err(PodbotError::Config(ConfigError::InvalidValue { .. })), None) => {}
+                (other, expected_segments) => {
+                    prop_assert!(
+                        false,
+                        "unexpected repository parse result {other:?} for expected {expected_segments:?}"
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn branch_name_property_rejects_only_trimmed_empty(input in "\\PC*") {
+            let parsed = BranchName::parse(&input);
+            let trimmed = input.trim();
+
+            if trimmed.is_empty() {
+                match parsed {
+                    Err(PodbotError::Config(ConfigError::MissingRequired { .. })) => {}
+                    other => prop_assert!(
+                        false,
+                        "unexpected branch parse result {other:?} for empty input"
+                    ),
+                }
+            } else {
+                match parsed {
+                    Ok(branch) => prop_assert_eq!(branch.as_str(), trimmed),
+                    other => prop_assert!(
+                        false,
+                        "unexpected branch parse result {other:?} for non-empty input"
+                    ),
+                }
+            }
+        }
     }
 }
