@@ -77,14 +77,20 @@ pub enum CommandOutcome {
 #[cfg(feature = "experimental")]
 pub fn run_agent(config: &AppConfig, request: &RunRequest) -> PodbotResult<CommandOutcome> {
     validate_run_request_for_agent(request)?;
-    validate_github_config_for_run(config)?;
-    validate_configured_github_credentials(config)?;
+    validate_github_config_for_run(config, request)?;
+    validate_configured_github_credentials(config, request)?;
     Ok(CommandOutcome::Success)
 }
 
 #[cfg(feature = "experimental")]
 fn validate_run_request_for_agent(request: &RunRequest) -> PodbotResult<()> {
     if !is_owner_repository_name(request.repository()) {
+        tracing::debug!(
+            operation = "run_agent",
+            repository = request.repository(),
+            branch = request.branch(),
+            "run request repository format validation failed"
+        );
         return Err(ConfigError::InvalidValue {
             field: String::from("run.repository"),
             reason: String::from("run.repository must use owner/name format"),
@@ -119,22 +125,72 @@ fn is_repository_segment(segment: &str) -> bool {
 }
 
 #[cfg(feature = "experimental")]
-fn validate_github_config_for_run(config: &AppConfig) -> PodbotResult<()> {
+fn validate_github_config_for_run(config: &AppConfig, request: &RunRequest) -> PodbotResult<()> {
     if config.github.is_partially_configured() {
+        debug_github_config_validation_performed(request);
         config.github.validate()?;
+    } else {
+        debug_github_config_validation_skipped(request);
     }
     Ok(())
 }
 
 #[cfg(feature = "experimental")]
-fn validate_configured_github_credentials(config: &AppConfig) -> PodbotResult<()> {
+fn validate_configured_github_credentials(
+    config: &AppConfig,
+    request: &RunRequest,
+) -> PodbotResult<()> {
     if let (Some(app_id), Some(private_key_path)) = (
         config.github.app_id,
         config.github.private_key_path.as_ref(),
     ) {
+        debug_github_credential_validation_performed(request, app_id);
         validate_agent_github_credentials(app_id, private_key_path)?;
+    } else {
+        debug_github_credential_validation_skipped(request);
     }
     Ok(())
+}
+
+#[cfg(feature = "experimental")]
+fn debug_github_config_validation_performed(request: &RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        "GitHub configuration validation performed for run request"
+    );
+}
+
+#[cfg(feature = "experimental")]
+fn debug_github_config_validation_skipped(request: &RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        "GitHub configuration validation skipped for run request"
+    );
+}
+
+#[cfg(feature = "experimental")]
+fn debug_github_credential_validation_performed(request: &RunRequest, app_id: u64) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        app_id,
+        "GitHub credential validation performed for run request"
+    );
+}
+
+#[cfg(feature = "experimental")]
+fn debug_github_credential_validation_skipped(request: &RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        "GitHub credential validation skipped for run request"
+    );
 }
 
 /// List running podbot containers.

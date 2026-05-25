@@ -2,7 +2,7 @@
 
 #[cfg(feature = "experimental")]
 use chrono::TimeZone;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 #[cfg(feature = "experimental")]
 use podbot::api::CommandOutcome;
 use podbot::cli::{Cli, Commands, HostArgs};
@@ -70,6 +70,59 @@ fn run_dispatches_cli_request_to_run_agent_api() {
     assert_eq!(outcome, CommandOutcome::Success);
 }
 
+#[test]
+fn run_help_output_matches_snapshot() {
+    let mut command = Cli::command();
+    let run_help = command
+        .find_subcommand_mut("run")
+        .expect("run subcommand should be registered")
+        .render_long_help()
+        .to_string();
+
+    insta::assert_snapshot!(run_help, @r"
+Run an AI agent in a sandboxed container
+
+Usage: run [OPTIONS] --repo <REPO> --branch <BRANCH>
+
+Options:
+      --repo <REPO>
+          Repository to clone in owner/name format
+
+      --branch <BRANCH>
+          Branch to check out
+
+      --agent <AGENT>
+          Agent type to run
+
+          Possible values:
+          - claude: Claude Code agent
+          - codex:  `OpenAI` Codex agent
+          - custom: Custom operator-supplied agent launcher
+
+      --agent-mode <MODE>
+          Agent execution mode
+
+          Possible values:
+          - podbot:           Run the agent in podbot-managed mode
+          - codex_app_server: Run the agent as a Codex App Server
+          - acp:              Run the agent as an ACP server
+
+  -h, --help
+          Print help (see a summary with '-h')
+");
+}
+#[test]
+fn run_validation_error_matches_snapshot() {
+    let cli = Cli::try_parse_from(["podbot", "run", "--repo", "   ", "--branch", "main"])
+        .expect("run command should parse");
+    let error = run(&cli, &AppConfig::default()).expect_err("invalid run argument should fail");
+
+    insta::assert_snapshot!(
+        error.to_string(),
+        @"invalid configuration value for 'run.repository': run.repository must not be empty"
+    );
+}
+
 #[rstest]
 #[cfg(feature = "experimental")]
 #[case::success(RunObservabilityCase {
@@ -102,6 +155,32 @@ fn run_observability_logs_distinct_cli_request_values(
     assert_log_contains(&captured.logs, test_case.expected_log_substring);
     assert_log_contains(&captured.logs, test_case.repo);
     assert_log_contains(&captured.logs, test_case.branch);
+}
+
+#[test]
+#[cfg(feature = "experimental")]
+fn run_observability_logs_match_snapshot() {
+    let logs = capture_run_logs(|| {
+        let cli = Cli::try_parse_from([
+            "podbot",
+            "run",
+            "--repo",
+            "team/snapshot-service",
+            "--branch",
+            "feature/snapshot",
+        ])
+        .expect("run command should parse");
+
+        run(&cli, &AppConfig::default()).expect("run dispatch should succeed");
+    })
+    .expect("run logs should be captured");
+
+    insta::assert_snapshot!(logs, @r#"
+DEBUG podbot: validating run request before agent orchestration operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
+DEBUG podbot::api: GitHub configuration validation skipped for run request operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
+DEBUG podbot::api: GitHub credential validation skipped for run request operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
+DEBUG podbot: run_agent completed successfully operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot" outcome="success"
+"#);
 }
 
 #[test]
@@ -299,6 +378,7 @@ fn capture_run_logs(
     };
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
+        .without_time()
         .with_writer(writer)
         .finish();
 

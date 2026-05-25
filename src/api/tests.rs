@@ -90,6 +90,79 @@ proptest! {
             prop_assert_eq!(request.branch(), branch);
         }
     }
+
+    #[test]
+    #[cfg(feature = "experimental")]
+    fn run_agent_accepts_owner_name_repository_format(
+        owner in "[A-Za-z0-9._-]{1,32}",
+        name in "[A-Za-z0-9._-]{1,32}",
+        branch in "[A-Za-z0-9._/-]{1,32}",
+    ) {
+        let repository = format!("{owner}/{name}");
+        let request = RunRequest::new(repository, branch)
+            .unwrap_or_else(|error| panic!("valid request should be constructed: {error}"));
+
+        let outcome = run_agent(&AppConfig::default(), &request)
+            .unwrap_or_else(|error| panic!("valid request should be accepted: {error}"));
+
+        prop_assert_eq!(outcome, CommandOutcome::Success);
+    }
+
+    #[test]
+    #[cfg(feature = "experimental")]
+    fn run_agent_rejects_repository_segments_containing_whitespace(
+        prefix in "[A-Za-z0-9._-]{0,16}",
+        whitespace in "\\s+",
+        suffix in "[A-Za-z0-9._-]{0,16}",
+        valid_segment in "[A-Za-z0-9._-]{1,32}",
+        whitespace_in_owner in any::<bool>(),
+    ) {
+        let invalid_segment = format!("{prefix}{whitespace}{suffix}");
+        prop_assume!(!invalid_segment.trim().is_empty());
+        let repository = if whitespace_in_owner {
+            format!("{invalid_segment}/{valid_segment}")
+        } else {
+            format!("{valid_segment}/{invalid_segment}")
+        };
+        let request = RunRequest::new(repository, "main")
+            .unwrap_or_else(|error| panic!("non-empty request should be constructed: {error}"));
+
+        let error = run_agent(&AppConfig::default(), &request)
+            .expect_err("repository whitespace should be rejected");
+
+        let is_repository_error = matches!(
+            error,
+            PodbotError::Config(ConfigError::InvalidValue { field, .. })
+                if field == "run.repository"
+        );
+        prop_assert!(is_repository_error);
+    }
+
+    #[test]
+    #[cfg(feature = "experimental")]
+    fn run_agent_rejects_branch_whitespace(
+        owner in "[A-Za-z0-9._-]{1,32}",
+        name in "[A-Za-z0-9._-]{1,32}",
+        prefix in "[A-Za-z0-9._/-]{0,16}",
+        whitespace in "\\s+",
+        suffix in "[A-Za-z0-9._/-]{0,16}",
+    ) {
+        let repository = format!("{owner}/{name}");
+        let branch = format!("{prefix}{whitespace}{suffix}");
+        prop_assume!(!branch.trim().is_empty());
+        let request = RunRequest::new(repository, branch)
+            .unwrap_or_else(|error| panic!("non-empty request should be constructed: {error}"));
+
+        let error = run_agent(&AppConfig::default(), &request)
+            .expect_err("branch whitespace should be rejected");
+
+        let is_branch_error = matches!(
+            error,
+            PodbotError::Config(ConfigError::InvalidValue { field, .. })
+                if field == "run.branch"
+        );
+        prop_assert!(is_branch_error);
+    }
 }
 
 #[rstest]

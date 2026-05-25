@@ -58,6 +58,7 @@ rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["compile-time-validation"] }
 serde_json = "1.0.149"
 proptest = "1.9.0"
+insta = "1.44.1"
 serial_test = "3.2.0"
 tempfile = "3.25.0"
 toml = "0.9.11"
