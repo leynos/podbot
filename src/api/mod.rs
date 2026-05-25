@@ -99,6 +99,7 @@ fn validate_run_request_for_agent(request: &RunRequest) -> PodbotResult<()> {
     }
 
     if request.branch().chars().any(char::is_whitespace) {
+        debug_run_request_branch_validation_failed(request);
         return Err(ConfigError::InvalidValue {
             field: String::from("run.branch"),
             reason: String::from("run.branch must not contain whitespace"),
@@ -107,6 +108,16 @@ fn validate_run_request_for_agent(request: &RunRequest) -> PodbotResult<()> {
     }
 
     Ok(())
+}
+
+#[cfg(feature = "experimental")]
+fn debug_run_request_branch_validation_failed(request: &RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        "run request branch whitespace validation failed"
+    );
 }
 
 #[cfg(feature = "experimental")]
