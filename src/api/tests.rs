@@ -118,6 +118,30 @@ fn run_agent_requires_complete_github_config() {
 
 #[rstest]
 #[cfg(feature = "experimental")]
+#[case::missing_owner_separator("owner-only", "main", "run.repository")]
+#[case::empty_owner("/name", "main", "run.repository")]
+#[case::empty_name("owner/", "main", "run.repository")]
+#[case::branch_contains_whitespace("owner/name", "feature branch", "run.branch")]
+fn run_agent_rejects_invalid_request_values(
+    #[case] repository: &str,
+    #[case] branch: &str,
+    #[case] expected_field: &str,
+) {
+    let config = AppConfig::default();
+    let request = RunRequest::new(repository, branch)
+        .expect("request constructor should accept non-empty values");
+
+    let error = run_agent(&config, &request).expect_err("run_agent should validate request values");
+
+    assert!(matches!(
+        error,
+        PodbotError::Config(ConfigError::InvalidValue { field, .. })
+            if field == expected_field
+    ));
+}
+
+#[rstest]
+#[cfg(feature = "experimental")]
 #[case::feature_branch("owner/feature", "feature/run-request")]
 #[case::release_branch("team/service", "release-2026")]
 fn run_agent_accepts_distinct_run_requests(

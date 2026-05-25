@@ -28,6 +28,8 @@ pub use run::RunRequest;
 
 #[cfg(feature = "experimental")]
 use crate::config::AppConfig;
+#[cfg(feature = "experimental")]
+use crate::error::ConfigError;
 use crate::error::Result as PodbotResult;
 #[cfg(all(feature = "experimental", test))]
 type CredentialValidationFuture<'a> = std::pin::Pin<
@@ -63,6 +65,8 @@ pub enum CommandOutcome {
 /// # Errors
 ///
 /// Returns errors immediately when:
+/// - `request` does not identify a repository in `owner/name` format or uses
+///   a branch name containing whitespace
 /// - `config.github.validate()` rejects a partial or invalid `GitHub`
 ///   configuration in [`AppConfig`]
 /// - `validate_agent_github_credentials` rejects the configured `app_id` or
@@ -71,10 +75,41 @@ pub enum CommandOutcome {
 /// These validation failures are real runtime behaviour, not placeholder
 /// errors deferred until the rest of the orchestration flow is implemented.
 #[cfg(feature = "experimental")]
-pub fn run_agent(config: &AppConfig, _request: &RunRequest) -> PodbotResult<CommandOutcome> {
+pub fn run_agent(config: &AppConfig, request: &RunRequest) -> PodbotResult<CommandOutcome> {
+    validate_run_request_for_agent(request)?;
     validate_github_config_for_run(config)?;
     validate_configured_github_credentials(config)?;
     Ok(CommandOutcome::Success)
+}
+
+#[cfg(feature = "experimental")]
+fn validate_run_request_for_agent(request: &RunRequest) -> PodbotResult<()> {
+    if !is_owner_repository_name(request.repository()) {
+        return Err(ConfigError::InvalidValue {
+            field: String::from("run.repository"),
+            reason: String::from("run.repository must use owner/name format"),
+        }
+        .into());
+    }
+
+    if request.branch().chars().any(char::is_whitespace) {
+        return Err(ConfigError::InvalidValue {
+            field: String::from("run.branch"),
+            reason: String::from("run.branch must not contain whitespace"),
+        }
+        .into());
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "experimental")]
+fn is_owner_repository_name(repository: &str) -> bool {
+    let mut parts = repository.split('/');
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty()
+    )
 }
 
 #[cfg(feature = "experimental")]

@@ -81,11 +81,18 @@ fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
 }
 
 /// CLI adapter for running an AI agent in a sandboxed container.
-#[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn run_agent_cli(
     config: &AppConfig,
     request: &podbot::api::RunRequest,
 ) -> PodbotResult<CommandOutcome> {
+    print_run_agent_start(config, request);
+    let result = run_agent_api_with_observability(config, request, std::time::Instant::now)?;
+    print_run_agent_placeholder();
+    Ok(result)
+}
+
+#[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
+fn print_run_agent_start(config: &AppConfig, request: &podbot::api::RunRequest) {
     println!(
         "Running {:?} agent in {:?} mode for repository {} on branch {}",
         config.agent.kind,
@@ -99,17 +106,20 @@ fn run_agent_cli(
     if let Some(ref image) = config.image {
         println!("Using image: {image}");
     }
-    let result = run_agent_api_with_observability(config, request)?;
+}
+
+#[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
+fn print_run_agent_placeholder() {
     println!("Container orchestration not yet implemented.");
-    Ok(result)
 }
 
 fn run_agent_api_with_observability(
     config: &AppConfig,
     request: &podbot::api::RunRequest,
+    now: fn() -> std::time::Instant,
 ) -> PodbotResult<CommandOutcome> {
     debug_run_agent_validation_started(request);
-    let started_at = std::time::Instant::now();
+    let started_at = now();
     let result =
         run_agent_api(config, request).inspect_err(|error| warn_run_agent_failed(request, error));
     record_run_agent_metrics(&result, started_at.elapsed());
