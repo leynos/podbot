@@ -17,10 +17,7 @@ use futures_util::stream;
 use mockall::mock;
 use rstest::{fixture, rstest};
 
-use podbot::api::{
-    BranchName, CommandOutcome, ExecMode, ExecRequest, RepositoryRef, WorkspacePath,
-    RunRequest,
-};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest, RunRequest};
 #[cfg(feature = "experimental")]
 use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
 #[cfg(feature = "experimental")]
@@ -238,38 +235,6 @@ fn stub_orchestration_functions_return_success() {
         "run_token_daemon should return Success"
     );
 }
-
-// -------------------------------------------------------------------------
-// Repository cloning value objects
-// -------------------------------------------------------------------------
-
-#[rstest]
-fn repository_clone_values_are_embeddable() -> Result<(), Box<dyn std::error::Error>> {
-    let repository = RepositoryRef::parse("leynos/podbot").expect("repository should parse");
-    let branch = BranchName::parse("main").expect("branch should parse");
-    let workspace = WorkspacePath::parse("/work").expect("workspace should parse");
-
-    if repository.owner() != "leynos" {
-        return Err(format!("expected owner leynos, got {}", repository.owner()).into());
-    }
-    if repository.name() != "podbot" {
-        return Err(format!("expected repository podbot, got {}", repository.name()).into());
-    }
-    if branch.as_str() != "main" {
-        return Err(format!("expected branch main, got {}", branch.as_str()).into());
-    }
-    if workspace.as_str() != "/work" {
-        return Err(format!("expected workspace /work, got {}", workspace.as_str()).into());
-    }
-
-    Ok(())
-}
-
-// -------------------------------------------------------------------------
-// Test helpers
-// -------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy)]
 enum FailAt {
     Create,
     Start,

@@ -42,6 +42,8 @@ pub fn clone_repository_into_workspace<C: ContainerExecClient + Sync>(
     client: &C,
     request: &RepositoryCloneRequest<'_>,
 ) -> Result<RepositoryCloneResult, PodbotError> {
+    validate_repository_owner_name(request)?;
+    validate_branch(request.branch)?;
     validate_workspace_base_dir(request.workspace_base_dir)?;
     validate_non_empty("git.askpass_path", request.askpass_path)?;
 
@@ -170,12 +172,37 @@ fn validate_workspace_base_dir(value: &str) -> Result<(), PodbotError> {
     Ok(())
 }
 
+fn validate_repository_owner_name(request: &RepositoryCloneRequest<'_>) -> Result<(), PodbotError> {
+    validate_repository_segment("repo.owner", request.repository_owner)?;
+    validate_repository_segment("repo.name", request.repository_name)?;
+    Ok(())
+}
+
+fn validate_branch(value: &str) -> Result<(), PodbotError> {
+    validate_non_empty("branch", value)
+}
+
+fn validate_repository_segment(field: &str, value: &str) -> Result<(), PodbotError> {
+    validate_non_empty(field, value)?;
+
+    if value.contains('/') || value != value.trim() {
+        return Err(ConfigError::InvalidValue {
+            field: String::from(field),
+            reason: String::from("expected repository segment without slashes or whitespace"),
+        }
+        .into());
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
     use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
     use mockall::{mock, predicate::eq};
+    use rstest::rstest;
 
     mock! {
         ExecClient {}
@@ -339,5 +366,33 @@ mod tests {
             result,
             Err(PodbotError::Config(ConfigError::InvalidValue { .. }))
         ));
+    }
+
+    #[rstest]
+    #[case("", "podbot", "main")]
+    #[case(" leynos", "podbot", "main")]
+    #[case("leynos", "", "main")]
+    #[case("leynos", "podbot ", "main")]
+    #[case("leynos", "podbot", "")]
+    #[case("leynos", "podbot", "   ")]
+    #[case("leynos/extra", "podbot", "main")]
+    #[case("leynos", "podbot/extra", "main")]
+    fn invalid_repository_fields_return_config_error_without_exec(
+        #[case] repository_owner: &str,
+        #[case] repository_name: &str,
+        #[case] branch: &str,
+    ) {
+        let (_rt, handle) = runtime();
+        let client = MockExecClient::new();
+        let request = RepositoryCloneRequest {
+            repository_owner,
+            repository_name,
+            branch,
+            ..request("main")
+        };
+
+        let result = clone_repository_into_workspace(&handle, &client, &request);
+
+        assert!(matches!(result, Err(PodbotError::Config(_))));
     }
 }
