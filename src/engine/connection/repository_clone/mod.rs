@@ -179,7 +179,17 @@ fn validate_repository_owner_name(request: &RepositoryCloneRequest<'_>) -> Resul
 }
 
 fn validate_branch(value: &str) -> Result<(), PodbotError> {
-    validate_non_empty("branch", value)
+    validate_non_empty("branch", value)?;
+
+    if value != value.trim() {
+        return Err(ConfigError::InvalidValue {
+            field: String::from("branch"),
+            reason: String::from("expected branch without surrounding whitespace"),
+        }
+        .into());
+    }
+
+    Ok(())
 }
 
 fn validate_repository_segment(field: &str, value: &str) -> Result<(), PodbotError> {
@@ -373,6 +383,8 @@ mod tests {
     #[case(" leynos", "podbot", "main")]
     #[case("leynos", "", "main")]
     #[case("leynos", "podbot ", "main")]
+    #[case("leynos", "podbot", " main")]
+    #[case("leynos", "podbot", "main ")]
     #[case("leynos", "podbot", "")]
     #[case("leynos", "podbot", "   ")]
     #[case("leynos/extra", "podbot", "main")]
