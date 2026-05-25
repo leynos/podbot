@@ -18,6 +18,8 @@ use crate::error::{ConfigError, PodbotError};
 use camino::Utf8PathBuf;
 
 mod exec;
+#[cfg(feature = "experimental")]
+mod repository;
 
 #[rstest]
 fn command_outcome_success_equals_itself() {
@@ -93,36 +95,6 @@ proptest! {
 
     #[test]
     #[cfg(feature = "experimental")]
-    fn repository_segment_validation_follows_non_empty_whitespace_free_rule(
-        segment in "[\\sA-Za-z0-9._/-]{0,64}",
-    ) {
-        prop_assert_eq!(
-            super::is_repository_segment(&segment),
-            !segment.is_empty() && !segment.chars().any(char::is_whitespace)
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "experimental")]
-    fn owner_repository_validation_requires_two_valid_segments(
-        owner in "[\\sA-Za-z0-9._-]{0,32}",
-        name in "[\\sA-Za-z0-9._-]{0,32}",
-        extra in proptest::option::of("[\\sA-Za-z0-9._-]{0,32}"),
-    ) {
-        let has_extra_segment = extra.is_some();
-        let repository = extra.as_deref().map_or_else(
-            || format!("{owner}/{name}"),
-            |extra_segment| format!("{owner}/{name}/{extra_segment}"),
-        );
-        let expected = !has_extra_segment
-            && super::is_repository_segment(&owner)
-            && super::is_repository_segment(&name);
-
-        prop_assert_eq!(super::is_owner_repository_name(&repository), expected);
-    }
-
-    #[test]
-    #[cfg(feature = "experimental")]
     fn run_agent_accepts_owner_name_repository_format(
         owner in "[A-Za-z0-9._-]{1,32}",
         name in "[A-Za-z0-9._-]{1,32}",
@@ -193,6 +165,7 @@ proptest! {
         );
         prop_assert!(is_branch_error);
     }
+
 }
 
 #[rstest]
