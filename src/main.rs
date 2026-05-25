@@ -14,6 +14,7 @@ use std::io::IsTerminal;
 
 use clap::Parser;
 use eyre::{Report, Result as EyreResult};
+use mockable::DefaultClock;
 use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
 use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, StopArgs, TokenDaemonArgs};
 use podbot::config::{AppConfig, load_config};
@@ -86,7 +87,7 @@ fn run_agent_cli(
     request: &podbot::api::RunRequest,
 ) -> PodbotResult<CommandOutcome> {
     print_run_agent_start(config, request);
-    let result = run_agent_api_with_observability(config, request, std::time::Instant::now)?;
+    let result = run_agent_api_with_observability(config, request, &DefaultClock)?;
     print_run_agent_placeholder();
     Ok(result)
 }
@@ -116,13 +117,18 @@ fn print_run_agent_placeholder() {
 fn run_agent_api_with_observability(
     config: &AppConfig,
     request: &podbot::api::RunRequest,
-    now: fn() -> std::time::Instant,
+    clock: &dyn mockable::Clock,
 ) -> PodbotResult<CommandOutcome> {
     debug_run_agent_validation_started(request);
-    let started_at = now();
+    let started_at = clock.utc();
     let result =
         run_agent_api(config, request).inspect_err(|error| warn_run_agent_failed(request, error));
-    record_run_agent_metrics(&result, started_at.elapsed());
+    let elapsed = clock
+        .utc()
+        .signed_duration_since(started_at)
+        .to_std()
+        .unwrap_or_default();
+    record_run_agent_metrics(&result, elapsed);
     let outcome = result?;
     debug_run_agent_completed(request);
     Ok(outcome)

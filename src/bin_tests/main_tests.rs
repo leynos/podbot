@@ -1,5 +1,7 @@
 //! Tests for the `podbot` binary command dispatch and CLI-owned observability.
 
+#[cfg(feature = "experimental")]
+use chrono::TimeZone;
 use clap::Parser;
 #[cfg(feature = "experimental")]
 use podbot::api::CommandOutcome;
@@ -12,6 +14,8 @@ use rstest::rstest;
 #[cfg(feature = "experimental")]
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "experimental")]
+use super::run_agent_api_with_observability;
 use super::{normalize_process_exit_code, run};
 
 #[test]
@@ -98,6 +102,29 @@ fn run_observability_logs_distinct_cli_request_values(
     assert_log_contains(&captured.logs, test_case.expected_log_substring);
     assert_log_contains(&captured.logs, test_case.repo);
     assert_log_contains(&captured.logs, test_case.branch);
+}
+
+#[test]
+#[cfg(feature = "experimental")]
+fn run_observability_uses_injected_clock() {
+    let mut clock = mockable::MockClock::new();
+    let started_at = chrono::Utc
+        .with_ymd_and_hms(2026, 5, 25, 12, 0, 0)
+        .single()
+        .expect("start time should be valid");
+    let finished_at = chrono::Utc
+        .with_ymd_and_hms(2026, 5, 25, 12, 0, 2)
+        .single()
+        .expect("finish time should be valid");
+    clock.expect_utc().times(1).return_once(move || started_at);
+    clock.expect_utc().times(1).return_once(move || finished_at);
+
+    let request =
+        podbot::api::RunRequest::new("owner/name", "main").expect("run request should be valid");
+    let outcome = run_agent_api_with_observability(&AppConfig::default(), &request, &clock)
+        .expect("run dispatch should succeed");
+
+    assert_eq!(outcome, CommandOutcome::Success);
 }
 
 #[test]

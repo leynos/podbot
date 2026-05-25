@@ -45,11 +45,12 @@ smart-default = "0.7.1"
 clap = { version = "4.5.60", features = ["derive"], optional = true }
 
 # Environment abstraction for testability
-mockable = { version = "0.1.4", default-features = false }
+mockable = { version = "0.1.4", default-features = false, features = ["clock"] }
 metrics = "0.24.6"
+chrono = "0.4.43"
 
 [dev-dependencies]
-mockable = { version = "0.1.4", default-features = false, features = ["mock"] }
+mockable = { version = "0.1.4", default-features = false, features = ["clock", "mock"] }
 mockall = "0.14.0"
 snafu = "0.8.9"
 rstest = "0.26.1"
