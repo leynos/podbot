@@ -6,6 +6,8 @@ use podbot::api::CommandOutcome;
 use podbot::cli::{Cli, Commands, HostArgs};
 use podbot::config::AppConfig;
 use podbot::error::{ConfigError, PodbotError};
+#[cfg(feature = "experimental")]
+use rstest::fixture;
 use rstest::rstest;
 #[cfg(feature = "experimental")]
 use std::sync::{Arc, Mutex};
@@ -64,58 +66,38 @@ fn run_dispatches_cli_request_to_run_agent_api() {
     assert_eq!(outcome, CommandOutcome::Success);
 }
 
-#[test]
+#[rstest]
 #[cfg(feature = "experimental")]
-fn run_observability_logs_distinct_cli_request_values() {
-    let logs = capture_run_logs(|| {
-        let cli = Cli::try_parse_from([
-            "podbot",
-            "run",
-            "--repo",
-            "team/service",
-            "--branch",
-            "feature/observability",
-        ])
-        .expect("run command should parse");
+#[case::success(RunObservabilityCase {
+    repo: "team/service",
+    branch: "feature/observability",
+    expect_success: true,
+    expected_log_substring: "run_agent completed successfully",
+})]
+#[case::failure(RunObservabilityCase {
+    repo: "owner/failing-service",
+    branch: "release/failed-validation",
+    expect_success: false,
+    expected_log_substring: "run_agent validation failed for run request",
+})]
+fn run_observability_logs_distinct_cli_request_values(
+    capture_run_dispatch: impl Fn(
+        &str,
+        &str,
+        bool,
+    ) -> Result<
+        CapturedRunDispatch,
+        Box<dyn std::error::Error + Send + Sync>,
+    >,
+    #[case] test_case: RunObservabilityCase,
+) {
+    let captured = capture_run_dispatch(test_case.repo, test_case.branch, test_case.expect_success)
+        .expect("run logs should be captured");
 
-        run(&cli, &AppConfig::default()).expect("run dispatch should succeed");
-    })
-    .expect("logs should be captured");
-
-    assert_log_contains(&logs, "run_agent completed successfully");
-    assert_log_contains(&logs, "team/service");
-    assert_log_contains(&logs, "feature/observability");
-}
-
-#[test]
-#[cfg(feature = "experimental")]
-fn run_observability_logs_distinct_cli_request_values_on_failure() {
-    let logs = capture_run_logs(|| {
-        let cli = Cli::try_parse_from([
-            "podbot",
-            "run",
-            "--repo",
-            "owner/failing-service",
-            "--branch",
-            "release/failed-validation",
-        ])
-        .expect("run command should parse");
-        let config = AppConfig {
-            github: podbot::config::GitHubConfig {
-                app_id: Some(1),
-                installation_id: None,
-                private_key_path: None,
-            },
-            ..AppConfig::default()
-        };
-
-        run(&cli, &config).expect_err("incomplete GitHub config should fail");
-    })
-    .expect("logs should be captured");
-
-    assert_log_contains(&logs, "run_agent validation failed for run request");
-    assert_log_contains(&logs, "owner/failing-service");
-    assert_log_contains(&logs, "release/failed-validation");
+    assert_eq!(captured.succeeded, test_case.expect_success);
+    assert_log_contains(&captured.logs, test_case.expected_log_substring);
+    assert_log_contains(&captured.logs, test_case.repo);
+    assert_log_contains(&captured.logs, test_case.branch);
 }
 
 #[test]
@@ -185,6 +167,61 @@ fn assert_invalid_run_argument(error: PodbotError, expected_field: &str) {
             if field == expected_field
                 && reason == format!("{expected_field} must not be empty")
     ));
+}
+
+#[cfg(feature = "experimental")]
+struct RunObservabilityCase {
+    repo: &'static str,
+    branch: &'static str,
+    expect_success: bool,
+    expected_log_substring: &'static str,
+}
+
+#[cfg(feature = "experimental")]
+struct CapturedRunDispatch {
+    logs: String,
+    succeeded: bool,
+}
+
+#[cfg(feature = "experimental")]
+#[fixture]
+fn capture_run_dispatch()
+-> impl Fn(&str, &str, bool) -> Result<CapturedRunDispatch, Box<dyn std::error::Error + Send + Sync>>
+{
+    |repo, branch, expect_success| {
+        let mut succeeded = false;
+        let logs = capture_run_logs(|| {
+            let cli = Cli::try_parse_from(["podbot", "run", "--repo", repo, "--branch", branch])
+                .expect("run command should parse");
+            let config = run_observability_config(expect_success);
+            let result = run(&cli, &config);
+
+            if expect_success {
+                result.expect("run dispatch should succeed");
+                succeeded = true;
+            } else {
+                result.expect_err("incomplete GitHub config should fail");
+            }
+        })?;
+
+        Ok(CapturedRunDispatch { logs, succeeded })
+    }
+}
+
+#[cfg(feature = "experimental")]
+fn run_observability_config(expect_success: bool) -> AppConfig {
+    if expect_success {
+        AppConfig::default()
+    } else {
+        AppConfig {
+            github: podbot::config::GitHubConfig {
+                app_id: Some(1),
+                installation_id: None,
+                private_key_path: None,
+            },
+            ..AppConfig::default()
+        }
+    }
 }
 
 #[cfg(feature = "experimental")]
