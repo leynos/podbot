@@ -34,20 +34,31 @@ pub(super) fn capture_run_dispatch()
 -> impl Fn(&str, &str, bool) -> Result<CapturedRunDispatch, Box<dyn std::error::Error + Send + Sync>>
 {
     |repo, branch, expect_success| {
-        let mut succeeded = false;
+        let mut dispatch_result: Result<bool, Box<dyn std::error::Error + Send + Sync>> = Ok(false);
         let logs = capture_run_logs(|| {
-            let cli = Cli::try_parse_from(["podbot", "run", "--repo", repo, "--branch", branch])
-                .expect("run command should parse");
+            let cli =
+                match Cli::try_parse_from(["podbot", "run", "--repo", repo, "--branch", branch]) {
+                    Ok(cli) => cli,
+                    Err(error) => {
+                        dispatch_result = Err(Box::new(error));
+                        return;
+                    }
+                };
             let config = run_observability_config(expect_success);
             let result = run(&cli, &config);
 
-            if expect_success {
-                result.expect("run dispatch should succeed");
-                succeeded = true;
-            } else {
-                result.expect_err("incomplete GitHub config should fail");
+            match (expect_success, result) {
+                (true, Ok(_)) => dispatch_result = Ok(true),
+                (true, Err(error)) => dispatch_result = Err(Box::new(error)),
+                (false, Ok(outcome)) => {
+                    dispatch_result = Err(Box::new(std::io::Error::other(format!(
+                        "incomplete GitHub config should fail, got {outcome:?}"
+                    ))));
+                }
+                (false, Err(_)) => dispatch_result = Ok(false),
             }
         })?;
+        let succeeded = dispatch_result?;
 
         Ok(CapturedRunDispatch { logs, succeeded })
     }
