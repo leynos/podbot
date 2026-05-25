@@ -108,8 +108,14 @@ fn is_owner_repository_name(repository: &str) -> bool {
     let mut parts = repository.split('/');
     matches!(
         (parts.next(), parts.next(), parts.next()),
-        (Some(owner), Some(name), None) if !owner.is_empty() && !name.is_empty()
+        (Some(owner), Some(name), None)
+            if is_repository_segment(owner) && is_repository_segment(name)
     )
+}
+
+#[cfg(feature = "experimental")]
+fn is_repository_segment(segment: &str) -> bool {
+    !segment.is_empty() && !segment.chars().any(char::is_whitespace)
 }
 
 #[cfg(feature = "experimental")]

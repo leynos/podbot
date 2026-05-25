@@ -121,6 +121,8 @@ fn run_agent_requires_complete_github_config() {
 #[case::missing_owner_separator("owner-only", "main", "run.repository")]
 #[case::empty_owner("/name", "main", "run.repository")]
 #[case::empty_name("owner/", "main", "run.repository")]
+#[case::owner_contains_whitespace("own er/name", "main", "run.repository")]
+#[case::name_contains_whitespace("owner/na me", "main", "run.repository")]
 #[case::branch_contains_whitespace("owner/name", "feature branch", "run.branch")]
 fn run_agent_rejects_invalid_request_values(
     #[case] repository: &str,
