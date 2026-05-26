@@ -33,6 +33,15 @@ All quality gates must pass before committing. The canonical targets are:
 Run long commands through `tee` and `set -o pipefail` so truncated output can
 be reviewed from the log file.
 
+### 2.1. Security audit ignores
+
+Security audit jobs may set `CARGO_AUDIT_IGNORES=RUSTSEC-2023-0071`. This
+ignore covers SQLx's transitive MySQL RSA password-authentication advisory.
+Podbot does not use SQLx or MySQL at runtime; the advisory enters the graph
+through tooling dependencies rather than an application database path. Keep the
+ignore scoped to `RUSTSEC-2023-0071`, and remove it if SQLx leaves the tool
+dependency graph or if Podbot adds a MySQL runtime integration.
+
 ## 3. Repository layout (exec subsystem)
 
 The exec subsystem lives under `src/engine/connection/exec/` and implements
@@ -445,6 +454,18 @@ error frames on container stdin). Synthesized JSON-RPC error responses use code
 `-32001` and the `data.reason = "podbot_capability_policy"` discriminator;
 assertions should compare on parsed structure, not on byte equality, since key
 ordering inside the JSON is not stable.
+
+The policy I/O adapter signature is intentionally narrow:
+
+- `OutboundPolicyAdapter::new(assembler, sender, container_id)` receives the
+  frame assembler, a bounded `mpsc::Sender<WriteCmd>`, and the container ID
+  used in diagnostics.
+- `handle_chunk(&mut self, chunk, host_stdout)` is the error-returning method.
+  It writes permitted bytes to `host_stdout`, queues synthesized errors on the
+  sink channel, and returns `io::Result<()>` for host-stdout write failures.
+- `finish(&mut self)` is the end-of-stream method. It reports any residual
+  partial-frame drop through diagnostics and deliberately returns `()`, because
+  no further I/O is attempted after stream exit.
 
 #### 8.2.3. ACP runtime observability contract
 
