@@ -1,11 +1,10 @@
 # Step 3.2.1: Acquire installation tokens with an expiry buffer
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`,
-`Decision log`, and `Outcomes & retrospective` must be kept up to date as
-work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+and `Outcomes & retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose and big picture
 
@@ -30,9 +29,9 @@ continue milestone by milestone within the tolerances below.
 ## Constraints
 
 - Follow roadmap item 3.2.1 in `docs/podbot-roadmap.md`: use
-  `installation_token_with_buffer`, return the token string for Git
-  operations, handle acquisition failures semantically, and log expiry timing
-  without logging token values.
+  `installation_token_with_buffer`, return the token string for Git operations,
+  handle acquisition failures semantically, and log expiry timing without
+  logging token values.
 - Preserve the security boundary in `docs/podbot-design.md`: the GitHub App
   private key remains host-side, and the sandbox sees only a short-lived
   installation token through later read-only token-file work.
@@ -45,9 +44,8 @@ continue milestone by milestone within the tolerances below.
   GitHub module may adapt Octocrab, but orchestration and public API code must
   not grow direct Octocrab coupling.
 - Do not expose `octocrab::Octocrab`,
-  `octocrab::models::InstallationId`, or `secrecy::SecretString` through
-  stable public modules. Keep Octocrab types in the internal GitHub adapter
-  boundary.
+  `octocrab::models::InstallationId`, or `secrecy::SecretString` through stable
+  public modules. Keep Octocrab types in the internal GitHub adapter boundary.
 - Use `rstest` for unit tests and `rstest-bdd` for behavioural tests. Use
   dependency injection and `mockall` rather than real GitHub network calls.
 - Do not add property tests, Kani harnesses, or Verus proofs for this slice
@@ -83,8 +81,8 @@ continue milestone by milestone within the tolerances below.
 - Octocrab limitation: if exact GitHub `expires_at` from the REST response is
   required rather than conservative metadata derived from a freshly minted
   one-hour token, stop and present options. Octocrab 0.49.5's public
-  `installation_token_with_buffer` method returns a `SecretString`, not the
-  raw `InstallationToken` response.
+  `installation_token_with_buffer` method returns a `SecretString`, not the raw
+  `InstallationToken` response.
 - Repository scoping: if this task must restrict the token to a single
   repository through GitHub's `repositories`, `repository_ids`, or
   `permissions` request body fields, stop and escalate. Octocrab's required
@@ -108,10 +106,9 @@ continue milestone by milestone within the tolerances below.
   it would no longer rely solely on the required helper.
 
 - Risk: Adding a direct `chrono` dependency may be needed even though Chrono
-  is already present transitively through Octocrab. Severity: low.
-  Likelihood: high. Mitigation: first check whether the existing Octocrab
-  version exposes a re-export or helper that avoids a direct dependency. If
-  not, add
+  is already present transitively through Octocrab. Severity: low. Likelihood:
+  high. Mitigation: first check whether the existing Octocrab version exposes a
+  re-export or helper that avoids a direct dependency. If not, add
   `chrono = "0.4.43"` as a direct caret dependency and document that this names
   the type required by Octocrab's public API.
 
@@ -165,8 +162,7 @@ continue milestone by milestone within the tolerances below.
 - [x] (2026-05-26T00:00:00Z) Add behavioural coverage with `rstest-bdd` in
   `tests/features/github_installation_token.feature` and
   `tests/bdd_github_installation_token.rs`. `make test` passed with output
-  logged to
-  `/tmp/test-podbot-3-2-1-installation-token-with-buffer-bdd.out`.
+  logged to `/tmp/test-podbot-3-2-1-installation-token-with-buffer-bdd.out`.
 - [x] (2026-05-26T00:00:00Z) Run code milestone gates after Rust formatting:
   `make check-fmt`, `make lint`, and `make test` all passed with output logged
   under `/tmp/*podbot-3-2-1-installation-token-with-buffer-code.out`.
@@ -175,9 +171,19 @@ continue milestone by milestone within the tolerances below.
   one-line formatting suggestions and `rstest-bdd`-breaking underscore fixture
   renames unapplied after validating with `make check-fmt`, `make lint`, and
   `make test`.
-- [ ] Update design, user, developer, and roadmap documentation.
-- [ ] Run gates, CodeRabbit review, commit, push, and open the implementation
-  pull request.
+- [x] (2026-05-26T00:00:00Z) Update design, user, developer, and roadmap
+  documentation. `docs/podbot-design.md` records the token-acquisition contract
+  and conservative expiry metadata; `docs/users-guide.md` records user-facing
+  token behaviour and failure messages; `docs/developers-guide.md` records
+  adapter and BDD conventions; `docs/podbot-roadmap.md` marks 3.2.1 done.
+- [x] (2026-05-26T00:00:00Z) Run documentation gates. `make markdownlint` and
+  `make nixie` passed. `make fmt` still reports pre-existing line-length
+  issues across unrelated documentation after running the repository-wide
+  Markdown formatter; unrelated formatter edits were restored and only
+  task-related documentation changes remain.
+- [x] (2026-05-26T00:00:00Z) Run final CodeRabbit review after documentation
+  and final gates. CodeRabbit reported zero findings.
+- [ ] Commit, push, and update the implementation pull request.
 
 ## Surprises & discoveries
 
@@ -195,9 +201,9 @@ continue milestone by milestone within the tolerances below.
   `repositories`, `repository_ids`, and `permissions`. Evidence: Firecrawl
   scrape of GitHub Docs for generating installation access tokens and the REST
   endpoint. Impact: this plan treats repository/permission narrowing as a
-  future or escalated concern because the roadmap explicitly requires
-  Octocrab's `installation_token_with_buffer`, whose current implementation
-  uses an empty request body.
+  future or escalated concern because the roadmap explicitly requires Octocrab's
+   `installation_token_with_buffer`, whose current implementation uses an empty
+  request body.
 
 - Observation: Firecrawl and local crate source confirmed that Octocrab
   0.49.5's `installation_token_with_buffer` returns `SecretString` and uses a
@@ -213,6 +219,13 @@ continue milestone by milestone within the tolerances below.
   token into a Git-credential string. Impact: `secrecy = "0.10.3"` is now a
   direct dependency, alongside `chrono = "0.4.43"`, rather than only a
   transitive Octocrab dependency.
+
+- Observation: `make fmt` invokes repository-wide Markdown fixing and still
+  reports many pre-existing MD013 line-length failures in unrelated
+  documentation. Impact: this implementation records the failure, restores
+  unrelated formatter churn, and relies on `make markdownlint` plus
+  `make nixie` as the successful documentation gates for the files changed by
+  this task.
 
 ## Decision log
 
@@ -244,8 +257,8 @@ continue milestone by milestone within the tolerances below.
 
 - Decision: Move this ExecPlan from draft to implementation after explicit
   user approval. Rationale: The user asked to proceed with implementation of
-  the planned functionality and to keep this document current with findings
-  and progress. Date/Author: 2026-05-26T00:00:00Z / Codex.
+  the planned functionality and to keep this document current with findings and
+  progress. Date/Author: 2026-05-26T00:00:00Z / Codex.
 
 - Decision: Add direct `chrono` and `secrecy` dependencies for the GitHub
   adapter. Rationale: Octocrab's public token helper requires
@@ -256,9 +269,21 @@ continue milestone by milestone within the tolerances below.
 
 ## Outcomes & retrospective
 
-This section is intentionally empty while the plan is in draft. During
-implementation, update it after each major milestone with what changed, what
-was learned, and what remains for roadmap steps 3.3 and 3.4.
+Implemented roadmap item 3.2.1. Podbot now has an internal GitHub
+installation-token acquisition adapter that calls Octocrab's
+`installation_token_with_buffer`, returns a Podbot-owned
+`InstallationAccessToken` for Git credential delivery, maps acquisition
+failures into `GitHubError::TokenAcquisitionFailed`, and logs only non-secret
+expiry metadata.
+
+The implementation adds `rstest` unit coverage and `rstest-bdd` behavioural
+coverage for successful acquisition, refresh-buffer metadata, semantic failure,
+and token redaction. Documentation now records the adapter contract, user
+behaviour, developer testing conventions, and roadmap completion.
+
+Remaining work belongs to roadmap steps 3.3 and 3.4: the token daemon runtime
+directory, atomic token-file writer, refresh loop, `GIT_ASKPASS`, and
+end-to-end clone flow are not implemented by this slice.
 
 ## Context and orientation
 
@@ -600,3 +625,5 @@ Octocrab's public method.
   implementation has begun.
 - 2026-05-26: Plan approved for implementation and status changed to
   `IN PROGRESS`.
+- 2026-05-26: Implementation completed, CodeRabbit reported zero final
+  findings, and status changed to `COMPLETE`.

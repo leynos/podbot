@@ -164,8 +164,8 @@ Execution behaviour:
   stdin reaches EOF, podbot flushes and closes container stdin before waiting
   for the command to finish.
 - podbot polls exec status until the command exits, then uses the daemon exit
-  code as the CLI outcome. Exit code `0` returns success. Non-zero values in
-  the `1..=255` range are returned directly, negative values are mapped to `1`,
+  code as the CLI outcome. Exit code `0` returns success. Non-zero values in the
+   `1..=255` range are returned directly, negative values are mapped to `1`,
   and values above `255` are clamped to `255`.
 - If the daemon reports completion without an exit code, podbot returns an exec
   failure instead of guessing the result.
@@ -316,6 +316,28 @@ actionable error messages with remediation hints:
 | "App not found (HTTP 404)"                  | The App ID is incorrect or the App has been deleted. Verify that `github.app_id` is correct.                                                                                     |
 | "GitHub API unavailable (HTTP 5xx)"         | GitHub is experiencing an outage or maintenance. Check <https://www.githubstatus.com> for service status. Retry after the service recovers.                                      |
 | "failed to validate GitHub App credentials" | A network error occurred or the API returned an unexpected status. Check network connectivity and DNS resolution. Review the detailed error message for the specific cause.      |
+
+
+### Installation token acquisition
+
+For `workspace.source = "github_clone"`, podbot acquires a short-lived GitHub
+App installation access token on the host before later clone and fetch work.
+The token is scoped by the GitHub App installation and expires after about one
+hour. Podbot keeps the GitHub App private key on the host; later token-file
+work will expose only the short-lived installation token to the sandbox.
+
+Token acquisition uses a refresh buffer so podbot can schedule renewal before
+expiry. The token string is available to Git credential delivery, but logs and
+debug output include only non-secret timing metadata such as acquisition time,
+derived expiry time, refresh time, and buffer duration.
+
+Common token acquisition errors:
+
+- `"failed to acquire installation token"`: GitHub rejected token acquisition,
+  the installation ID is wrong, the App installation is unavailable, or the
+  network failed.
+- `"invalid token expiry buffer"`: the configured buffer could not be converted
+  for the GitHub client. Use a smaller positive buffer.
 
 ### Environment variables
 

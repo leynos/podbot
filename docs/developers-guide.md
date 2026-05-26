@@ -335,8 +335,8 @@ _Figure 2: Backpressure propagation from host stdout to container._
 
 ## 6. Stdin forwarding lifecycle
 
-Protocol-mode stdin forwarding runs as a spawned Tokio task
-(`spawn_stdin_forwarding_task`). The lifecycle is:
+Protocol-mode stdin forwarding runs as a spawned Tokio task (
+`spawn_stdin_forwarding_task`). The lifecycle is:
 
 1. Task reads from host stdin via `BufReader` and copies to container
    input.
@@ -653,8 +653,8 @@ runtime handles are not part of the semver-stable API surface.
 
 For the design rationale and full constraint set, see
 [docs/execplans/5-3-1-stabilize-public-library-boundaries.md](execplans/5-3-1-stabilize-public-library-boundaries.md)
- and Architecture Decision Record (ADR) 001
-([adr-001-define-the-stable-public-library-boundary.md](adr-001-define-the-stable-public-library-boundary.md)).
+ and Architecture Decision Record (ADR) 001 (
+[adr-001-define-the-stable-public-library-boundary.md](adr-001-define-the-stable-public-library-boundary.md)).
 
 ### 11.1. Adding a new stable item
 
@@ -704,8 +704,8 @@ public API surface:
   unit tests but not part of the public library API
 - `is_rate_limited` is private (`fn`) — implementation detail
 
-Integration tests (in `tests/`) are outside the crate boundary and cannot
-import `pub(crate)` items. The `test_classify_error_message` function in
+Integration tests (in `tests/`) are outside the crate boundary and cannot import
+ `pub(crate)` items. The `test_classify_error_message` function in
 `src/github/mod.rs` provides a `#[doc(hidden)]` public wrapper for BDD tests
 that need to construct mock error messages matching production output.
 
@@ -773,6 +773,29 @@ All step functions return `StepResult<()>` (a type alias for
 `Result<(), String>`) to satisfy clippy's `expect_used` lint. Use
 `.ok_or_else(|| String::from("error message"))` instead of `.expect()` when
 extracting `Slot` values from scenario state.
+
+
+### 13.3. Installation token testing conventions
+
+Installation-token behaviour follows the same helper layout as credential
+validation, with `tests/bdd_github_installation_token.rs` and the
+`tests/bdd_github_installation_token_helpers/` modules. Scenario entry-point
+parameters must keep the exact fixture name, such as
+`github_installation_token_state`; renaming them with an underscore prefix
+breaks rstest-bdd fixture matching even if the Rust compiler would otherwise
+accept the parameter as intentionally unused.
+
+Use a local `mockall::mock!` implementation of `GitHubInstallationTokenClient`
+in BDD helper code. Unit tests inside `src/github/installation_token_tests.rs`
+may use the crate-local automock. Tests must verify both the token string path
+for Git operations and the redaction boundary: formatted errors, `Debug`
+output, and log-field structures must not contain fixture token values.
+
+The production adapter lives in `src/github/installation_token.rs`. Keep
+Octocrab's `InstallationId`, `Octocrab`, and `secrecy::SecretString` inside
+that GitHub adapter boundary. Higher-level orchestration should depend on
+Podbot-owned types such as `InstallationAccessToken` and
+`GitHubInstallationTokenClient`.
 
 ## 14. Dev-dependencies for test construction
 
@@ -863,8 +886,8 @@ parameterized integration tests. The two test styles serve complementary
 purposes:
 
 - **BDD scenario tests** (`tests/bdd_*.rs`) are driven by Gherkin feature
-  files in `tests/features/`. Each scenario test file declares a helper module
-  (`tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
+  files in `tests/features/`. Each scenario test file declares a helper module (
+  `tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
   `then`), shared state, and assertion helpers. Feature files are read at
   compile time; changes to `.feature` content may require
   `cargo clean -p podbot` to invalidate incremental compilation caches.
