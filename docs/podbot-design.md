@@ -404,7 +404,9 @@ Octocrab v0.49.5's `installation_token_with_buffer` helper returns only a
 conservative metadata from GitHub's documented one-hour token lifetime. The
 adapter samples the host clock when acquiring the token, computes
 `expires_at = acquired_at + 1 hour`, and computes
-`refresh_after = expires_at - expiry_buffer`.
+`refresh_after = expires_at - expiry_buffer`. Token metadata is rejected if the
+expiry time precedes acquisition or if the configured buffer would schedule a
+refresh before acquisition.
 
 Token values must not be logged, included in formatted errors, or exposed in
 debug output. Logs may include only the installation ID, acquisition time,
@@ -472,7 +474,6 @@ example, TLS backend failure), or other builder errors. The App ID is not
 validated at construction time; GitHub validates it when the client attempts to
 acquire a token.
 
-
 #### Installation token acquisition contract
 
 The `GitHubInstallationTokenClient` trait is the internal port for acquiring a
@@ -487,9 +488,9 @@ accessor methods for the Git token string and scheduling metadata. Octocrab's
 client type, installation ID wrapper, and `secrecy::SecretString` stay inside
 the GitHub adapter.
 
-The adapter logs token timing through a non-secret `InstallationTokenLogFields`
-value. `InstallationAccessToken` implements `Debug` manually so fixture or
-production token values are redacted.
+The adapter logs token timing through `InstallationAccessToken::log_timing`,
+which emits only non-secret timing fields. `InstallationAccessToken` implements
+`Debug` manually so fixture or production token values are redacted.
 
 ### Credential validation contract
 

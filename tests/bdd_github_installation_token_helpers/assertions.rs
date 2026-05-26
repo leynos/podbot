@@ -98,20 +98,7 @@ fn observable_metadata_redacts_token(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
     let observed = match get_outcome(github_installation_token_state)? {
-        TokenOutcome::Success { token } => format!(
-            "{:?} {:?}",
-            token,
-            token.log_fields(
-                github_installation_token_state
-                    .installation_id
-                    .get()
-                    .ok_or_else(|| String::from("installation_id should be set"))?,
-                github_installation_token_state
-                    .expiry_buffer
-                    .get()
-                    .ok_or_else(|| String::from("expiry_buffer should be set"))?,
-            )
-        ),
+        TokenOutcome::Success { token } => format!("{token:?}"),
         TokenOutcome::Failed { message } => message,
     };
 

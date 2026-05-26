@@ -317,7 +317,6 @@ actionable error messages with remediation hints:
 | "GitHub API unavailable (HTTP 5xx)"         | GitHub is experiencing an outage or maintenance. Check <https://www.githubstatus.com> for service status. Retry after the service recovers.                                      |
 | "failed to validate GitHub App credentials" | A network error occurred or the API returned an unexpected status. Check network connectivity and DNS resolution. Review the detailed error message for the specific cause.      |
 
-
 ### Installation token acquisition
 
 For `workspace.source = "github_clone"`, podbot acquires a short-lived GitHub

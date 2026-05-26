@@ -28,7 +28,7 @@ use octocrab::models::{AppId, InstallationId};
 
 use crate::error::GitHubError;
 use classify::classify_github_api_error;
-pub use installation_token::{InstallationAccessToken, InstallationTokenLogFields};
+pub use installation_token::InstallationAccessToken;
 use pem_validation::parse_rsa_pem;
 
 /// A boxed future for async trait methods.
@@ -191,7 +191,6 @@ impl GitHubInstallationTokenClient for OctocrabAppClient {
                 &installation,
                 installation_id,
                 expiry_buffer,
-                std::time::SystemTime::now(),
             )
             .await
         })

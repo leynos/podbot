@@ -41,7 +41,11 @@ impl InstallationAccessToken {
     ) -> Result<Self, GitHubError> {
         let expires_at = acquired_at
             .checked_add(GITHUB_INSTALLATION_TOKEN_LIFETIME)
-            .ok_or_else(|| token_metadata_error("expiry time overflowed"))?;
+            .ok_or_else(|| GitHubError::TokenAcquisitionFailed {
+                message: String::from(
+                    "failed to compute installation token metadata: expiry time overflowed",
+                ),
+            })?;
         Self::from_metadata(token, acquired_at, expires_at, expiry_buffer)
     }
 
@@ -52,17 +56,38 @@ impl InstallationAccessToken {
     ///
     /// # Errors
     ///
-    /// Returns [`GitHubError::TokenAcquisitionFailed`] if `refresh_after`
-    /// would be earlier than the representable [`SystemTime`] range.
+    /// Returns [`GitHubError::TokenAcquisitionFailed`] if the expiry or
+    /// refresh metadata is not internally consistent.
     pub fn from_metadata(
         token: String,
         acquired_at: SystemTime,
         expires_at: SystemTime,
         expiry_buffer: Duration,
     ) -> Result<Self, GitHubError> {
-        let refresh_after = expires_at
-            .checked_sub(expiry_buffer)
-            .ok_or_else(|| token_metadata_error("refresh time underflowed"))?;
+        if expires_at.duration_since(acquired_at).is_err() {
+            return Err(GitHubError::TokenAcquisitionFailed {
+                message: String::from(
+                    "failed to compute installation token metadata: expiry time precedes acquisition time",
+                ),
+            });
+        }
+
+        let refresh_after = expires_at.checked_sub(expiry_buffer).ok_or_else(|| {
+            GitHubError::TokenAcquisitionFailed {
+                message: String::from(
+                    "failed to compute installation token metadata: refresh time underflowed",
+                ),
+            }
+        })?;
+
+        if refresh_after.duration_since(acquired_at).is_err() {
+            return Err(GitHubError::TokenAcquisitionFailed {
+                message: String::from(
+                    "failed to compute installation token metadata: refresh time precedes acquisition time",
+                ),
+            });
+        }
+
         Ok(Self {
             token,
             acquired_at,
@@ -95,20 +120,16 @@ impl InstallationAccessToken {
         self.refresh_after
     }
 
-    /// Returns non-secret fields suitable for structured logging.
-    #[must_use]
-    pub const fn log_fields(
-        &self,
-        installation_id: u64,
-        expiry_buffer: Duration,
-    ) -> InstallationTokenLogFields {
-        InstallationTokenLogFields {
+    /// Logs token timing metadata without exposing the token value.
+    pub fn log_timing(&self, installation_id: u64, expiry_buffer: Duration) {
+        info!(
             installation_id,
-            acquired_at: self.acquired_at,
-            expires_at: self.expires_at,
-            refresh_after: self.refresh_after,
-            expiry_buffer,
-        }
+            acquired_at = ?self.acquired_at,
+            expires_at = ?self.expires_at,
+            refresh_after = ?self.refresh_after,
+            expiry_buffer_seconds = expiry_buffer.as_secs(),
+            "acquired GitHub App installation token"
+        );
     }
 }
 
@@ -124,39 +145,12 @@ impl fmt::Debug for InstallationAccessToken {
     }
 }
 
-/// Non-secret token acquisition metadata suitable for logs.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct InstallationTokenLogFields {
-    /// GitHub App installation ID used to acquire the token.
-    pub installation_id: u64,
-    /// Host clock time sampled when token acquisition began.
-    pub acquired_at: SystemTime,
-    /// Conservative expiry time derived from GitHub's one-hour token lifetime.
-    pub expires_at: SystemTime,
-    /// Time at which refresh should begin.
-    pub refresh_after: SystemTime,
-    /// Buffer required before expiry.
-    pub expiry_buffer: Duration,
-}
-
-/// Logs installation token timing without exposing the token value.
-pub fn log_installation_token_timing(fields: InstallationTokenLogFields) {
-    info!(
-        installation_id = fields.installation_id,
-        acquired_at = ?fields.acquired_at,
-        expires_at = ?fields.expires_at,
-        refresh_after = ?fields.refresh_after,
-        expiry_buffer_seconds = fields.expiry_buffer.as_secs(),
-        "acquired GitHub App installation token"
-    );
-}
-
 pub(super) async fn acquire_with_octocrab_installation(
     installation: &Octocrab,
     installation_id: u64,
     expiry_buffer: Duration,
-    acquired_at: SystemTime,
 ) -> Result<InstallationAccessToken, GitHubError> {
+    let acquired_at = SystemTime::now();
     let chrono_buffer = chrono::Duration::from_std(expiry_buffer).map_err(|error| {
         GitHubError::TokenAcquisitionFailed {
             message: format!("invalid token expiry buffer: {error}"),
@@ -169,7 +163,7 @@ pub(super) async fn acquire_with_octocrab_installation(
         .map_err(classify_token_error)?;
     let token = secret.expose_secret().to_owned();
     let access_token = InstallationAccessToken::new(token, acquired_at, expiry_buffer)?;
-    log_installation_token_timing(access_token.log_fields(installation_id, expiry_buffer));
+    access_token.log_timing(installation_id, expiry_buffer);
     Ok(access_token)
 }
 
@@ -181,12 +175,6 @@ fn classify_token_error(error: octocrab::Error) -> GitHubError {
         other => GitHubError::TokenAcquisitionFailed {
             message: other.to_string(),
         },
-    }
-}
-
-fn token_metadata_error(message: &str) -> GitHubError {
-    GitHubError::TokenAcquisitionFailed {
-        message: format!("failed to compute installation token metadata: {message}"),
     }
 }
 

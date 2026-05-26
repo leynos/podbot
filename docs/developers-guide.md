@@ -774,7 +774,6 @@ All step functions return `StepResult<()>` (a type alias for
 `.ok_or_else(|| String::from("error message"))` instead of `.expect()` when
 extracting `Slot` values from scenario state.
 
-
 ### 13.3. Installation token testing conventions
 
 Installation-token behaviour follows the same helper layout as credential

@@ -177,14 +177,21 @@ continue milestone by milestone within the tolerances below.
   token behaviour and failure messages; `docs/developers-guide.md` records
   adapter and BDD conventions; `docs/podbot-roadmap.md` marks 3.2.1 done.
 - [x] (2026-05-26T00:00:00Z) Run documentation gates. `make markdownlint` and
-  `make nixie` passed. `make fmt` still reports pre-existing line-length
-  issues across unrelated documentation after running the repository-wide
-  Markdown formatter; unrelated formatter edits were restored and only
-  task-related documentation changes remain.
+  `make nixie` passed. `make fmt` still reports pre-existing line-length issues
+  across unrelated documentation after running the repository-wide Markdown
+  formatter; unrelated formatter edits were restored and only task-related
+  documentation changes remain.
 - [x] (2026-05-26T00:00:00Z) Run final CodeRabbit review after documentation
   and final gates. CodeRabbit reported zero findings.
 - [x] (2026-05-26T00:00:00Z) Commit implementation and documentation
   milestones, push the branch, and update draft PR #99.
+- [x] (2026-05-26T00:00:00Z) Address follow-up code review by tightening
+  `InstallationAccessToken::from_metadata` invariants, collapsing non-secret
+  timing logging onto `InstallationAccessToken::log_timing`, and adding
+  regression coverage for inconsistent expiry and refresh metadata.
+- [x] (2026-05-26T00:00:00Z) Validate the follow-up review changes with
+  `make check-fmt`, `make test`, `make typecheck`, `make lint`,
+  `make markdownlint`, and `make nixie`.
 
 ## Surprises & discoveries
 
@@ -227,6 +234,13 @@ continue milestone by milestone within the tolerances below.
   unrelated formatter churn, and relies on `make markdownlint` plus
   `make nixie` as the successful documentation gates for the files changed by
   this task.
+
+- Observation: `rstest-bdd` supports async scenario wrappers, but the current
+  user guide still documents step functions as synchronous and recommends a
+  per-step runtime when a synchronous scenario must call async code. Impact:
+  the GitHub installation-token BDD step keeps its local runtime rather than
+  converting the scenario to an async wrapper that cannot make the step itself
+  `await` the acquisition.
 
 ## Decision log
 

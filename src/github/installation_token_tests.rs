@@ -2,6 +2,7 @@
 
 use std::time::{Duration, SystemTime};
 
+use proptest::prelude::*;
 use rstest::{fixture, rstest};
 
 use super::*;
@@ -44,6 +45,87 @@ fn token_metadata_subtracts_refresh_buffer(acquired_at: SystemTime, expiry_buffe
 }
 
 #[rstest]
+fn token_metadata_rejects_expiry_before_acquisition(
+    acquired_at: SystemTime,
+    expiry_buffer: Duration,
+) {
+    let expires_at = acquired_at - Duration::from_secs(1);
+
+    let result = InstallationAccessToken::from_metadata(
+        String::from(FIXTURE_TOKEN),
+        acquired_at,
+        expires_at,
+        expiry_buffer,
+    );
+
+    match result {
+        Err(GitHubError::TokenAcquisitionFailed { message }) => {
+            assert!(message.contains("expiry time precedes acquisition time"));
+        }
+        other => panic!("expected token metadata failure, got: {other:?}"),
+    }
+}
+
+#[rstest]
+fn token_metadata_rejects_refresh_before_acquisition(acquired_at: SystemTime) {
+    let expires_at = acquired_at + Duration::from_secs(60);
+    let expiry_buffer = Duration::from_secs(120);
+
+    let result = InstallationAccessToken::from_metadata(
+        String::from(FIXTURE_TOKEN),
+        acquired_at,
+        expires_at,
+        expiry_buffer,
+    );
+
+    match result {
+        Err(GitHubError::TokenAcquisitionFailed { message }) => {
+            assert!(message.contains("refresh time precedes acquisition time"));
+        }
+        other => panic!("expected token metadata failure, got: {other:?}"),
+    }
+}
+
+proptest! {
+    #[test]
+    fn token_metadata_refresh_never_precedes_acquisition(
+        lifetime_secs in 0_u64..=7_200,
+        buffer_secs in 0_u64..=7_200,
+    ) {
+        let acquired_at = SystemTime::UNIX_EPOCH + Duration::from_secs(10_000);
+        let expires_at = acquired_at + Duration::from_secs(lifetime_secs);
+        let expiry_buffer = Duration::from_secs(buffer_secs);
+
+        let result = InstallationAccessToken::from_metadata(
+            String::from(FIXTURE_TOKEN),
+            acquired_at,
+            expires_at,
+            expiry_buffer,
+        );
+
+        if buffer_secs <= lifetime_secs {
+            match result {
+                Ok(token) => {
+                    prop_assert!(token.refresh_after().duration_since(acquired_at).is_ok());
+                }
+                Err(error) => {
+                    prop_assert!(
+                        false,
+                        "expected internally consistent metadata, got {error}"
+                    );
+                }
+            }
+        } else {
+            let is_error = matches!(
+                result,
+                Err(GitHubError::TokenAcquisitionFailed { .. })
+            );
+            prop_assert!(is_error);
+        }
+    }
+}
+
+#[rstest]
 fn token_debug_redacts_secret(acquired_at: SystemTime, expiry_buffer: Duration) {
     let token =
         InstallationAccessToken::new(String::from(FIXTURE_TOKEN), acquired_at, expiry_buffer)
@@ -58,23 +140,6 @@ fn token_debug_redacts_secret(acquired_at: SystemTime, expiry_buffer: Duration) 
     assert!(
         debug_output.contains("<redacted>"),
         "debug output should signpost redaction: {debug_output}"
-    );
-}
-
-#[rstest]
-fn log_fields_omit_secret(acquired_at: SystemTime, expiry_buffer: Duration) {
-    let token =
-        InstallationAccessToken::new(String::from(FIXTURE_TOKEN), acquired_at, expiry_buffer)
-            .expect("token metadata should be representable");
-
-    let fields = token.log_fields(INSTALLATION_ID, expiry_buffer);
-    let debug_output = format!("{fields:?}");
-
-    assert_eq!(fields.installation_id, INSTALLATION_ID);
-    assert_eq!(fields.expiry_buffer, expiry_buffer);
-    assert!(
-        !debug_output.contains(FIXTURE_TOKEN),
-        "log fields must not expose token: {debug_output}"
     );
 }
 
