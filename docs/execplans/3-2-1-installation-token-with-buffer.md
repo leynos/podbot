@@ -183,7 +183,8 @@ continue milestone by milestone within the tolerances below.
   task-related documentation changes remain.
 - [x] (2026-05-26T00:00:00Z) Run final CodeRabbit review after documentation
   and final gates. CodeRabbit reported zero findings.
-- [ ] Commit, push, and update the implementation pull request.
+- [x] (2026-05-26T00:00:00Z) Commit implementation and documentation
+  milestones, push the branch, and update draft PR #99.
 
 ## Surprises & discoveries
 
