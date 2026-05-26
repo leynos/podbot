@@ -4,6 +4,21 @@ use rstest_bdd_macros::then;
 
 use super::state::{FIXTURE_TOKEN, GitHubInstallationTokenState, StepResult, TokenOutcome};
 
+enum ExpectedTokenOutcome {
+    Success,
+    Failure,
+}
+
+impl ExpectedTokenOutcome {
+    const fn matches(&self, outcome: &TokenOutcome) -> bool {
+        matches!(
+            (self, outcome),
+            (Self::Success, TokenOutcome::Success { .. })
+                | (Self::Failure, TokenOutcome::Failed { .. })
+        )
+    }
+}
+
 fn get_outcome(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<TokenOutcome> {
@@ -13,28 +28,45 @@ fn get_outcome(
         .ok_or_else(|| String::from("outcome should be set"))
 }
 
+fn assert_token_outcome(
+    github_installation_token_state: &GitHubInstallationTokenState,
+    expected: ExpectedTokenOutcome,
+) -> StepResult<()> {
+    let outcome = get_outcome(github_installation_token_state)?;
+    if expected.matches(&outcome) {
+        return Ok(());
+    }
+
+    match (expected, outcome) {
+        (ExpectedTokenOutcome::Success, TokenOutcome::Failed { message }) => Err(format!(
+            "expected token acquisition to succeed, got: {message}"
+        )),
+        (ExpectedTokenOutcome::Failure, TokenOutcome::Success { token }) => Err(format!(
+            "expected token acquisition to fail, got: {token:?}"
+        )),
+        (ExpectedTokenOutcome::Success, TokenOutcome::Success { .. })
+        | (ExpectedTokenOutcome::Failure, TokenOutcome::Failed { .. }) => Ok(()),
+    }
+}
+
 #[then("token acquisition succeeds")]
 fn token_acquisition_succeeds(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match get_outcome(github_installation_token_state)? {
-        TokenOutcome::Success { .. } => Ok(()),
-        TokenOutcome::Failed { message } => Err(format!(
-            "expected token acquisition to succeed, got: {message}"
-        )),
-    }
+    assert_token_outcome(
+        github_installation_token_state,
+        ExpectedTokenOutcome::Success,
+    )
 }
 
 #[then("token acquisition fails")]
 fn token_acquisition_fails(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match get_outcome(github_installation_token_state)? {
-        TokenOutcome::Success { token } => Err(format!(
-            "expected token acquisition to fail, got: {token:?}"
-        )),
-        TokenOutcome::Failed { .. } => Ok(()),
-    }
+    assert_token_outcome(
+        github_installation_token_state,
+        ExpectedTokenOutcome::Failure,
+    )
 }
 
 #[then("the token string is available for Git operations")]
@@ -43,9 +75,7 @@ fn token_string_available(
 ) -> StepResult<()> {
     match get_outcome(github_installation_token_state)? {
         TokenOutcome::Success { token } if token.token() == FIXTURE_TOKEN => Ok(()),
-        TokenOutcome::Success { token } => {
-            Err(format!("expected fixture token, got: {}", token.token()))
-        }
+        TokenOutcome::Success { token } => Err(format!("expected fixture token, got: {token:?}")),
         TokenOutcome::Failed { message } => Err(format!(
             "expected token acquisition to succeed, got: {message}"
         )),

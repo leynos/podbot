@@ -668,6 +668,8 @@ supported semver contract for embedders.
 | `podbot::api::ExecContext::connect(…)`       | Reuse a runtime handle and engine connection |
 | `podbot::api::RunRequest::new(repo, branch)` | Build the library-owned run request          |
 
+Table: Podbot API functions for executing and connecting to containers.
+
 ### Return type
 
 The stable execution entry points `podbot::api::exec(config, request)` and

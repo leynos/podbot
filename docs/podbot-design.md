@@ -107,8 +107,8 @@ workspace preparation, and agent execution through seven steps.
    host and executing `git config --global` within the container.
 
 4. **If `workspace.source = "github_clone"`**, create a GitHub App installation
-   access token using Octocrab.[^2] Installation tokens expire after one hour.[
-   ^3]
+   access token using Octocrab.[^2] Installation tokens expire after one
+   hour.[^3]
 
 5. **If `workspace.source = "github_clone"`**, start a token renewal daemon that
    refreshes the installation token before expiry. Rather than repeatedly
