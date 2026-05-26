@@ -127,6 +127,13 @@ pub trait GitHubAppClient: Send + Sync {
     fn validate_credentials(&self) -> BoxFuture<'_, Result<(), GitHubError>>;
 }
 
+/// Trait for GitHub App installation-token acquisition.
+///
+/// This trait abstracts the Octocrab installation-token path so token policy
+/// can be tested without network calls. Production code uses
+/// [`OctocrabAppClient`], while tests inject mock implementations via
+/// `mockall`.
+#[cfg_attr(test, mockall::automock)]
 pub trait GitHubInstallationTokenClient: Send + Sync {
     /// Acquires an installation access token for Git operations.
     ///
@@ -140,6 +147,7 @@ pub trait GitHubInstallationTokenClient: Send + Sync {
         expiry_buffer: std::time::Duration,
     ) -> BoxFuture<'_, Result<InstallationAccessToken, GitHubError>>;
 }
+
 /// Production implementation of [`GitHubAppClient`] using Octocrab.
 pub struct OctocrabAppClient {
     client: Octocrab,
@@ -189,6 +197,7 @@ impl GitHubInstallationTokenClient for OctocrabAppClient {
         })
     }
 }
+
 /// Validates GitHub App credentials by loading the private key, building
 /// the App client, and verifying credentials are accepted by GitHub.
 ///
