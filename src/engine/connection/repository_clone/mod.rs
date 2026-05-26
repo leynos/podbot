@@ -158,18 +158,32 @@ fn validate_non_empty(field: &str, value: &str) -> Result<(), PodbotError> {
     Ok(())
 }
 
-fn validate_workspace_base_dir(value: &str) -> Result<(), PodbotError> {
-    validate_non_empty("workspace.base_dir", value)?;
+fn validate_field_value(
+    field: &str,
+    value: &str,
+    is_invalid: impl Fn(&str) -> bool,
+    reason: &str,
+) -> Result<(), PodbotError> {
+    validate_non_empty(field, value)?;
 
-    if !value.starts_with('/') {
+    if is_invalid(value) {
         return Err(ConfigError::InvalidValue {
-            field: String::from("workspace.base_dir"),
-            reason: String::from("expected absolute container path"),
+            field: String::from(field),
+            reason: String::from(reason),
         }
         .into());
     }
 
     Ok(())
+}
+
+fn validate_workspace_base_dir(value: &str) -> Result<(), PodbotError> {
+    validate_field_value(
+        "workspace.base_dir",
+        value,
+        |v| !v.starts_with('/'),
+        "expected absolute container path",
+    )
 }
 
 fn validate_repository_owner_name(request: &RepositoryCloneRequest<'_>) -> Result<(), PodbotError> {
@@ -179,31 +193,21 @@ fn validate_repository_owner_name(request: &RepositoryCloneRequest<'_>) -> Resul
 }
 
 fn validate_branch(value: &str) -> Result<(), PodbotError> {
-    validate_non_empty("branch", value)?;
-
-    if value != value.trim() {
-        return Err(ConfigError::InvalidValue {
-            field: String::from("branch"),
-            reason: String::from("expected branch without surrounding whitespace"),
-        }
-        .into());
-    }
-
-    Ok(())
+    validate_field_value(
+        "branch",
+        value,
+        |v| v != v.trim(),
+        "expected branch without surrounding whitespace",
+    )
 }
 
 fn validate_repository_segment(field: &str, value: &str) -> Result<(), PodbotError> {
-    validate_non_empty(field, value)?;
-
-    if value.contains('/') || value != value.trim() {
-        return Err(ConfigError::InvalidValue {
-            field: String::from(field),
-            reason: String::from("expected repository segment without slashes or whitespace"),
-        }
-        .into());
-    }
-
-    Ok(())
+    validate_field_value(
+        field,
+        value,
+        |v| v.contains('/') || v != v.trim(),
+        "expected repository segment without slashes or whitespace",
+    )
 }
 
 #[cfg(test)]
