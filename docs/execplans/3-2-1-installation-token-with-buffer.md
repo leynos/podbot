@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, and `Outcomes & retrospective` must be kept up to date as
 work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose and big picture
 
@@ -24,8 +24,8 @@ used for refresh scheduling. If acquisition fails, the caller receives a
 semantic `GitHubError::TokenAcquisitionFailed` message with enough context to
 act, and no error or log output contains the token value.
 
-This plan is pre-implementation. Do not implement it until the user explicitly
-approves the plan.
+This plan was approved for implementation on 2026-05-26. Implementation must
+continue milestone by milestone within the tolerances below.
 
 ## Constraints
 
@@ -150,11 +150,31 @@ approves the plan.
   boundaries and validation strategy.
 - [x] (2026-05-19T23:10:54Z) Rename the local branch to
   `3-2-1-installation-token-with-buffer`.
-- [ ] Draft this ExecPlan and request approval.
-- [ ] After approval, establish red tests for token acquisition, expiry
-  metadata, semantic failures, and token redaction.
-- [ ] Implement the GitHub installation-token acquisition adapter.
-- [ ] Add behavioural coverage with `rstest-bdd`.
+- [x] (2026-05-19T23:10:54Z) Draft this ExecPlan and request approval.
+- [x] (2026-05-26T00:00:00Z) Receive explicit user approval to proceed with
+  implementation.
+- [x] (2026-05-26T00:00:00Z) Establish a green baseline before adding
+  implementation tests. `make test` passed with output logged to
+  `/tmp/test-podbot-3-2-1-installation-token-with-buffer-baseline.out`.
+- [x] (2026-05-26T00:00:00Z) Add unit coverage for token acquisition, expiry
+  metadata, semantic failures, and token redaction in
+  `src/github/installation_token_tests.rs`.
+- [x] (2026-05-26T00:00:00Z) Implement the GitHub installation-token
+  acquisition adapter in `src/github/installation_token.rs` and expose the
+  internal `GitHubInstallationTokenClient` seam from `src/github/mod.rs`.
+- [x] (2026-05-26T00:00:00Z) Add behavioural coverage with `rstest-bdd` in
+  `tests/features/github_installation_token.feature` and
+  `tests/bdd_github_installation_token.rs`. `make test` passed with output
+  logged to
+  `/tmp/test-podbot-3-2-1-installation-token-with-buffer-bdd.out`.
+- [x] (2026-05-26T00:00:00Z) Run code milestone gates after Rust formatting:
+  `make check-fmt`, `make lint`, and `make test` all passed with output logged
+  under `/tmp/*podbot-3-2-1-installation-token-with-buffer-code.out`.
+- [x] (2026-05-26T00:00:00Z) Run CodeRabbit review for the code milestone.
+  Fixed the substantive fixture-buffer issue. Left `rustfmt`-conflicting
+  one-line formatting suggestions and `rstest-bdd`-breaking underscore fixture
+  renames unapplied after validating with `make check-fmt`, `make lint`, and
+  `make test`.
 - [ ] Update design, user, developer, and roadmap documentation.
 - [ ] Run gates, CodeRabbit review, commit, push, and open the implementation
   pull request.
@@ -188,6 +208,12 @@ approves the plan.
   expiry is not available from this helper, so the plan derives conservative
   metadata only when acquiring from a fresh installation client.
 
+- Observation: Octocrab's `installation_token_with_buffer` returns
+  `secrecy::SecretString`, and Podbot must call `ExposeSecret` to copy the
+  token into a Git-credential string. Impact: `secrecy = "0.10.3"` is now a
+  direct dependency, alongside `chrono = "0.4.43"`, rather than only a
+  transitive Octocrab dependency.
+
 ## Decision log
 
 - Decision: Keep this ExecPlan in `Status: DRAFT` and require explicit user
@@ -215,6 +241,18 @@ approves the plan.
   duration arithmetic, not a broad state machine, unsafe code, or contractual
   lemma. Unit and behavioural tests provide proportionate rigour. Date/Author:
   2026-05-19T23:10:54Z / Codex, aligned with Wyvern validation review.
+
+- Decision: Move this ExecPlan from draft to implementation after explicit
+  user approval. Rationale: The user asked to proceed with implementation of
+  the planned functionality and to keep this document current with findings
+  and progress. Date/Author: 2026-05-26T00:00:00Z / Codex.
+
+- Decision: Add direct `chrono` and `secrecy` dependencies for the GitHub
+  adapter. Rationale: Octocrab's public token helper requires
+  `chrono::Duration`, and returning the token string for Git operations
+  requires the `secrecy::ExposeSecret` trait. Both crates were already present
+  through Octocrab; making them direct dependencies makes the adapter contract
+  explicit. Date/Author: 2026-05-26T00:00:00Z / Codex.
 
 ## Outcomes & retrospective
 
@@ -560,3 +598,5 @@ Octocrab's public method.
   Firecrawl findings, Wyvern review input, expected implementation boundaries,
   validation strategy, and the Octocrab expiry-metadata trade-off. No feature
   implementation has begun.
+- 2026-05-26: Plan approved for implementation and status changed to
+  `IN PROGRESS`.
