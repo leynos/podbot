@@ -26,6 +26,7 @@ All quality gates must pass before committing. The canonical targets are:
 | `make fmt`          | `cargo fmt --workspace`                                                | Apply formatting fixes        |
 | `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Lint with all warnings denied |
 | `make test`         | `cargo test --workspace`                                               | Run full test suite           |
+| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                 | Type-check the workspace      |
 | `make markdownlint` | markdownlint-cli                                                       | Validate Markdown files       |
 | `make nixie`        | Mermaid diagram validator                                              | Validate diagrams in Markdown |
 
@@ -515,29 +516,38 @@ these to `eyre::Report` for operator-facing display.
 
 #### `run_agent`
 
-`run_agent(config: &AppConfig)` performs credential validation before starting
-the agent loop:
+`run_agent(config: &AppConfig, request: &RunRequest)` performs credential
+validation before starting the agent loop. The request carries the library-owned
+`podbot run` repository and branch inputs, so embedders can construct the same
+operation without importing CLI or Clap types:
 
-1. If none of `config.github.app_id`, `config.github.installation_id`, or
+1. The request is validated at the API boundary. `run.repository` must use
+   `owner/name` format, and `run.branch` must not contain whitespace.
+2. If none of `config.github.app_id`, `config.github.installation_id`, or
    `config.github.private_key_path` is set (`is_partially_configured()` returns
    `false`), the function returns `CommandOutcome::Success` immediately without
    performing any network calls.
-2. If any field is set, `config.github.validate()` is called. This returns a
+3. If any field is set, `config.github.validate()` is called. This returns a
    `PodbotError::Config(ConfigError::MissingRequired { .. })` if any required
    field is absent or zero.
-3. If all three credential fields are present and non-zero, the function calls
+4. If all three credential fields are present and non-zero, the function calls
    `validate_agent_github_credentials`, which:
-   - Spawns a scoped thread when a Tokio runtime is already active (to avoid a
-     nested `block_on` panic).
-   - Creates its own single-thread Tokio runtime and calls
+   - Spawns a scoped helper thread so credential validation cannot nest
+     `block_on` inside a caller's Tokio runtime.
+   - Creates a single-thread Tokio runtime on that helper thread and calls
      `crate::github::validate_app_credentials` on it.
    - Maps thread-join failures to
      `PodbotError::GitHub(GitHubError::AuthenticationFailed { .. })`.
-4. On success, returns `CommandOutcome::Success`.
+5. On success, returns `CommandOutcome::Success`.
 
 > **Note:** The agent execution loop beyond credential validation is currently a
 > stub. The function returns `CommandOutcome::Success` after successful
 > validation without launching a persistent process.
+
+The CLI adapter records `podbot.run_agent.validation.total` and
+`podbot.run_agent.validation.duration_seconds` around the `run_agent` API call.
+Both metrics are labelled with `operation` and `status` (`success` or
+`failure`) so operational side effects stay at the process boundary.
 
 #### `run_token_daemon`
 
@@ -631,7 +641,7 @@ The semver-stable surface for library embedders is limited to three modules:
 | Module           | Contents                                               |
 | ---------------- | ------------------------------------------------------ |
 | `podbot::api`    | `exec`, `ExecRequest`, `ExecMode`, `ExecContext`,      |
-|                  | `CommandOutcome`                                       |
+|                  | `RunRequest`, `CommandOutcome`                         |
 | `podbot::config` | `AppConfig`, `GitHubConfig`, and related configuration |
 |                  | types                                                  |
 | `podbot::error`  | `PodbotError`, `Result<T>`, error variant enums        |
@@ -772,6 +782,8 @@ The `Cargo.toml` `[dev-dependencies]` section includes:
   `octocrab::Error::Service` variants in unit tests. This dependency is already
   in the transitive dependency graph via octocrab, so adding it as an explicit
   dev-dependency does not increase the total dependency count.
+- **proptest** — supports property-based tests for request validation and stays
+  confined to the test-only dependency set.
 
 The unit tests do not directly import `http` types despite octocrab's use of
 `http::StatusCode`, because the tests access status codes through octocrab's

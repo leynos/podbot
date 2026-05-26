@@ -190,6 +190,12 @@ pub async fn validate_app_credentials(
     app_id: u64,
     private_key_path: &Utf8Path,
 ) -> Result<(), GitHubError> {
+    let redacted_private_key_path = private_key_path.file_name().unwrap_or("<redacted>");
+    tracing::debug!(
+        app_id,
+        private_key_path = %redacted_private_key_path,
+        "validating GitHub App credentials"
+    );
     let private_key = load_private_key(private_key_path)?;
     let octocrab = build_app_client(app_id, private_key)?;
     let client = OctocrabAppClient::new(octocrab);

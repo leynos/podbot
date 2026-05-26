@@ -14,8 +14,9 @@ use std::io::IsTerminal;
 
 use clap::Parser;
 use eyre::{Report, Result as EyreResult};
+use mockable::DefaultClock;
 use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
-use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, RunArgs, StopArgs, TokenDaemonArgs};
+use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, StopArgs, TokenDaemonArgs};
 use podbot::config::{AppConfig, load_config};
 use podbot::error::ConfigError;
 use podbot::error::Result as PodbotResult;
@@ -50,7 +51,18 @@ fn main() -> EyreResult<()> {
 /// conversion to `eyre::Report`.
 fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
     match &cli.command {
-        Commands::Run(args) => run_agent_cli(config, args),
+        Commands::Run(args) => {
+            let request = args.to_run_request().inspect_err(|error| {
+                tracing::warn!(
+                    operation = "run",
+                    repository = args.repo,
+                    branch = args.branch,
+                    %error,
+                    "failed to build run request from CLI arguments"
+                );
+            })?;
+            run_agent_cli(config, &request)
+        }
         Commands::Host(_args) => {
             // TODO: Re-enable `host_agent_cli` once it emits diagnostics to
             // stderr only and cannot corrupt stdout protocol traffic.
@@ -70,11 +82,24 @@ fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
 }
 
 /// CLI adapter for running an AI agent in a sandboxed container.
+fn run_agent_cli(
+    config: &AppConfig,
+    request: &podbot::api::RunRequest,
+) -> PodbotResult<CommandOutcome> {
+    print_run_agent_start(config, request);
+    let result = run_agent_api_with_observability(config, request, &DefaultClock)?;
+    print_run_agent_placeholder();
+    Ok(result)
+}
+
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutcome> {
+fn print_run_agent_start(config: &AppConfig, request: &podbot::api::RunRequest) {
     println!(
         "Running {:?} agent in {:?} mode for repository {} on branch {}",
-        config.agent.kind, config.agent.mode, args.repo, args.branch
+        config.agent.kind,
+        config.agent.mode,
+        request.repository(),
+        request.branch()
     );
     if let Some(ref socket) = config.engine_socket {
         println!("Using engine socket: {socket}");
@@ -82,15 +107,82 @@ fn run_agent_cli(config: &AppConfig, args: &RunArgs) -> PodbotResult<CommandOutc
     if let Some(ref image) = config.image {
         println!("Using image: {image}");
     }
-    let result = run_agent_api(config)?;
+}
+
+#[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
+fn print_run_agent_placeholder() {
     println!("Container orchestration not yet implemented.");
-    Ok(result)
+}
+
+fn run_agent_api_with_observability(
+    config: &AppConfig,
+    request: &podbot::api::RunRequest,
+    clock: &dyn mockable::Clock,
+) -> PodbotResult<CommandOutcome> {
+    debug_run_agent_validation_started(request);
+    let started_at = clock.utc();
+    let result =
+        run_agent_api(config, request).inspect_err(|error| warn_run_agent_failed(request, error));
+    let elapsed = clock
+        .utc()
+        .signed_duration_since(started_at)
+        .to_std()
+        .unwrap_or_default();
+    record_run_agent_metrics(&result, elapsed);
+    let outcome = result?;
+    debug_run_agent_completed(request);
+    Ok(outcome)
+}
+
+fn debug_run_agent_validation_started(request: &podbot::api::RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        "validating run request before agent orchestration"
+    );
+}
+
+fn warn_run_agent_failed(request: &podbot::api::RunRequest, error: &podbot::error::PodbotError) {
+    tracing::warn!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        %error,
+        "run_agent validation failed for run request"
+    );
+}
+
+fn debug_run_agent_completed(request: &podbot::api::RunRequest) {
+    tracing::debug!(
+        operation = "run_agent",
+        repository = request.repository(),
+        branch = request.branch(),
+        outcome = "success",
+        "run_agent completed successfully"
+    );
+}
+
+fn record_run_agent_metrics(result: &PodbotResult<CommandOutcome>, elapsed: std::time::Duration) {
+    let status = if result.is_ok() { "success" } else { "failure" };
+    metrics::counter!(
+        "podbot.run_agent.validation.total",
+        "operation" => "run_agent",
+        "status" => status,
+    )
+    .increment(1);
+    metrics::histogram!(
+        "podbot.run_agent.validation.duration_seconds",
+        "operation" => "run_agent",
+        "status" => status,
+    )
+    .record(elapsed.as_secs_f64());
 }
 
 /// CLI adapter for hosted app-server execution.
 #[expect(
     dead_code,
-    reason = "temporarily disabled until stdout-safe diagnostics are implemented"
+    reason = "FIXME(https://github.com/leynos/podbot/issues/51): temporarily disabled until stdout-safe diagnostics are implemented"
 )]
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
@@ -165,18 +257,30 @@ fn normalize_process_exit_code(code: i64) -> i32 {
     i32::try_from(code).unwrap_or(1)
 }
 
+/// Returns an `experimental`-feature-gate error for the given command name.
+#[cfg(not(feature = "experimental"))]
+fn experimental_only(command: &str) -> PodbotResult<CommandOutcome> {
+    Err(ConfigError::InvalidValue {
+        field: String::from("command"),
+        reason: format!("the {command} command requires feature = \"experimental\""),
+    }
+    .into())
+}
+
 #[cfg(feature = "experimental")]
-fn run_agent_api(config: &AppConfig) -> PodbotResult<CommandOutcome> {
-    podbot::api::run_agent(config)
+fn run_agent_api(
+    config: &AppConfig,
+    request: &podbot::api::RunRequest,
+) -> PodbotResult<CommandOutcome> {
+    podbot::api::run_agent(config, request)
 }
 
 #[cfg(not(feature = "experimental"))]
-fn run_agent_api(_config: &AppConfig) -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
-        field: String::from("command"),
-        reason: String::from("the run command requires feature = \"experimental\""),
-    }
-    .into())
+fn run_agent_api(
+    _config: &AppConfig,
+    _request: &podbot::api::RunRequest,
+) -> PodbotResult<CommandOutcome> {
+    experimental_only("run")
 }
 
 #[cfg(feature = "experimental")]
@@ -186,11 +290,7 @@ fn run_token_daemon_api(container_id: &str) -> PodbotResult<CommandOutcome> {
 
 #[cfg(not(feature = "experimental"))]
 fn run_token_daemon_api(_container_id: &str) -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
-        field: String::from("command"),
-        reason: String::from("the token-daemon command requires feature = \"experimental\""),
-    }
-    .into())
+    experimental_only("token-daemon")
 }
 
 #[cfg(feature = "experimental")]
@@ -200,11 +300,7 @@ fn list_containers_api() -> PodbotResult<CommandOutcome> {
 
 #[cfg(not(feature = "experimental"))]
 fn list_containers_api() -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
-        field: String::from("command"),
-        reason: String::from("the ps command requires feature = \"experimental\""),
-    }
-    .into())
+    experimental_only("ps")
 }
 
 #[cfg(feature = "experimental")]
@@ -214,58 +310,9 @@ fn stop_container_api(container: &str) -> PodbotResult<CommandOutcome> {
 
 #[cfg(not(feature = "experimental"))]
 fn stop_container_api(_container: &str) -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
-        field: String::from("command"),
-        reason: String::from("the stop command requires feature = \"experimental\""),
-    }
-    .into())
+    experimental_only("stop")
 }
 
 #[cfg(test)]
-mod tests {
-    use podbot::cli::{Cli, Commands, HostArgs};
-    use podbot::config::AppConfig;
-
-    use super::{normalize_process_exit_code, run};
-
-    #[test]
-    fn normalize_process_exit_code_preserves_valid_range() {
-        assert_eq!(normalize_process_exit_code(0), 0);
-        assert_eq!(normalize_process_exit_code(42), 42);
-        assert_eq!(normalize_process_exit_code(255), 255);
-    }
-
-    #[test]
-    fn normalize_process_exit_code_maps_negative_values_to_one() {
-        assert_eq!(normalize_process_exit_code(-1), 1);
-        assert_eq!(normalize_process_exit_code(i64::MIN), 1);
-    }
-
-    #[test]
-    fn normalize_process_exit_code_clamps_oversized_values() {
-        assert_eq!(normalize_process_exit_code(256), 255);
-        assert_eq!(normalize_process_exit_code(i64::MAX), 255);
-    }
-
-    #[test]
-    fn run_rejects_host_subcommand_until_stdout_is_safe() {
-        let cli = Cli {
-            command: Commands::Host(HostArgs {
-                agent: None,
-                mode: None,
-            }),
-            config: None,
-            engine_socket: None,
-            image: None,
-        };
-
-        let error = run(&cli, &AppConfig::default()).expect_err("host command should be disabled");
-
-        assert!(
-            error
-                .to_string()
-                .contains("host subcommand is temporarily disabled"),
-            "unexpected error: {error}",
-        );
-    }
-}
+#[path = "bin_tests/main_tests.rs"]
+mod tests;

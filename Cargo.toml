@@ -45,20 +45,25 @@ smart-default = "0.7.1"
 clap = { version = "4.5.60", features = ["derive"], optional = true }
 
 # Environment abstraction for testability
-mockable = { version = "0.1.4", default-features = false }
+mockable = { version = "0.1.4", default-features = false, features = ["clock"] }
+metrics = "0.24.6"
+chrono = "0.4.43"
 
 [dev-dependencies]
-mockable = { version = "0.1.4", default-features = false, features = ["mock"] }
+mockable = { version = "0.1.4", default-features = false, features = ["clock", "mock"] }
 mockall = "0.14.0"
 snafu = "0.8.9"
 rstest = "0.26.1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["compile-time-validation"] }
 serde_json = "1.0.149"
+proptest = "1.9.0"
+insta = "1.44.1"
 serial_test = "3.2.0"
 tempfile = "3.25.0"
 toml = "0.9.11"
 trybuild = { version = "1.0.116", features = ["diff"] }
+tracing-subscriber = { version = "0.3.22", features = ["fmt"] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

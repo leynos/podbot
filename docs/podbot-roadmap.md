@@ -703,6 +703,14 @@ specific work. See podbot-design.md §Dual delivery model.
 - [ ] 6.1.1. Implement subcommand dispatch for `run`, `host`,
   `token-daemon`, `ps`, `stop`, and `exec`.
   - Requires 5.3.1.
+  - Implemented scope:
+    - [x] `run` dispatch is implemented through the library-owned request
+      boundary in docs/execplans/6-1-1-run-subcommand.md.
+    - [ ] `host` dispatch remains pending.
+    - [ ] `token-daemon` dispatch remains pending.
+    - [ ] `ps` dispatch remains pending.
+    - [ ] `stop` dispatch remains pending.
+    - [ ] `exec` dispatch remains pending.
   - Success: help text describes each command, invalid arguments produce clear
     errors, and dispatch does not duplicate library orchestration.
 

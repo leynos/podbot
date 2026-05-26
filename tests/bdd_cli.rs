@@ -9,6 +9,8 @@ use podbot::cli::Cli;
 use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, scenario, then};
+#[cfg(feature = "experimental")]
+use std::process::Command;
 
 /// State shared across CLI test scenarios.
 #[derive(Default, ScenarioState)]
@@ -46,6 +48,17 @@ fn invoke_with_version(cli_state: &CliState) {
     cli_state.success.set(true);
 }
 
+#[given("the CLI is invoked with run --help")]
+fn invoke_run_with_help(cli_state: &CliState) {
+    let mut cmd = Cli::command();
+    let help_text = cmd.find_subcommand_mut("run").map_or_else(
+        || String::from("run subcommand missing"),
+        |run| run.render_help().to_string(),
+    );
+    cli_state.output.set(help_text);
+    cli_state.error.set(String::new());
+    cli_state.success.set(true);
+}
 #[given("the CLI is invoked with run")]
 fn invoke_run_without_args(cli_state: &CliState) {
     // Try to parse "run" without required arguments
@@ -78,11 +91,16 @@ fn invoke_run_with_repo(cli_state: &CliState) {
 }
 
 #[then("the output contains {text}")]
+fn output_contains(cli_state: &CliState, text: String) {
+    stdout_contains(cli_state, text);
+}
+
+#[then("stdout contains {text}")]
 #[expect(
     clippy::expect_used,
     reason = "test assertion - panic on missing state is intentional"
 )]
-fn output_contains(cli_state: &CliState, text: String) {
+fn stdout_contains(cli_state: &CliState, text: String) {
     let output = cli_state
         .output
         .get()
@@ -90,6 +108,19 @@ fn output_contains(cli_state: &CliState, text: String) {
     assert!(
         output.contains(&text),
         "Expected output to contain '{text}', but got:\n{output}"
+    );
+}
+
+#[then("stderr is empty")]
+#[expect(
+    clippy::expect_used,
+    reason = "test assertion - panic on missing state is intentional"
+)]
+fn stderr_is_empty(cli_state: &CliState) {
+    let error = cli_state.error.get().expect("stderr was not captured");
+    assert!(
+        error.is_empty(),
+        "Expected stderr to be empty, but got:\n{error}"
     );
 }
 
@@ -151,6 +182,24 @@ fn invoke_run_with_all_args(cli_state: &CliState) {
             cli_state.success.set(false);
         }
     }
+}
+
+#[given("the CLI run command is executed with repository owner/name and branch main")]
+#[cfg(feature = "experimental")]
+fn execute_run_with_all_args(cli_state: &CliState) -> Result<(), String> {
+    let output = Command::new(env!("CARGO_BIN_EXE_podbot"))
+        .args(["run", "--repo", "owner/name", "--branch", "main"])
+        .output()
+        .map_err(|error| format!("podbot binary should execute: {error}"))?;
+
+    cli_state.success.set(output.status.success());
+    cli_state
+        .output
+        .set(String::from_utf8_lossy(&output.stdout).into_owned());
+    cli_state
+        .error
+        .set(String::from_utf8_lossy(&output.stderr).into_owned());
+    Ok(())
 }
 
 #[given("the CLI is invoked with ps")]
@@ -268,6 +317,23 @@ fn run_requires_branch(cli_state: CliState) {
     name = "Run command succeeds with required arguments"
 )]
 fn run_succeeds_with_all_args(cli_state: CliState) {
+    let _ = cli_state;
+}
+
+#[scenario(
+    path = "tests/features/cli.feature",
+    name = "Run command dispatches to orchestration"
+)]
+#[cfg(feature = "experimental")]
+fn run_dispatches_to_orchestration(cli_state: CliState) {
+    let _ = cli_state;
+}
+
+#[scenario(
+    path = "tests/features/cli.feature",
+    name = "Run command help documents required arguments"
+)]
+fn run_help_documents_required_arguments(cli_state: CliState) {
     let _ = cli_state;
 }
 

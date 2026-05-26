@@ -4,7 +4,15 @@
 fn stable_exec_context_signatures_compile() {
     let test_cases = trybuild::TestCases::new();
     test_cases.pass("tests/ui/stable_exec_context_signatures.rs");
+    test_cases.pass("tests/ui/stable_run_request_signatures.rs");
     test_cases.pass("tests/ui/stable_embedder_uses_only_stable_modules.rs");
+}
+
+#[test]
+#[cfg(feature = "experimental")]
+fn experimental_run_agent_signature_compiles() {
+    let test_cases = trybuild::TestCases::new();
+    test_cases.pass("tests/ui/experimental_run_agent_signatures.rs");
 }
 
 #[test]
