@@ -1066,7 +1066,6 @@ When adding another identity field or related Git setting:
    step definitions under `tests/bdd_git_identity_helpers/`.
 8. Update this section and the user-facing contract in `docs/users-guide.md`.
 
-
 ## 18. Repository cloning subsystem
 
 The repository cloning subsystem validates operator-supplied GitHub repository
@@ -1076,7 +1075,6 @@ requested branch before later orchestration uses the workspace.
 It deliberately separates stable value objects from container execution. The
 public API exposes only domain values, while engine modules own the container
 client, runtime handle, `GIT_ASKPASS` path, and exec command construction.
-
 
 ### 18.1. Module layout
 
@@ -1092,7 +1090,6 @@ tests/
 +-- bdd_repository_cloning.rs                 # Scenario harness
 +-- bdd_repository_cloning_helpers/           # Steps, assertions, and state
 ```
-
 
 ### 18.2. Boundary and entry points
 
@@ -1113,7 +1110,6 @@ This keeps embedders on a stable, domain-only surface while allowing the
 composition layer to wire container-specific details from configuration and
 runtime state.
 
-
 ### 18.3. Key types and traits
 
 - **`RepositoryRef`**: validates `owner/name`, rejecting empty segments, extra
@@ -1127,7 +1123,6 @@ runtime state.
   `askpass_path`.
 - **`ContainerExecClient`**: engine-owned port used by the clone helper to run
   detached exec commands without depending on a concrete Bollard client.
-
 
 ### 18.4. Execution flow
 
@@ -1147,7 +1142,6 @@ flowchart TD
 
 _Figure 4: Repository cloning validation and execution flow._
 
-
 ### 18.5. Integration points
 
 - **Configuration layer**: `workspace.base_dir` supplies the container
@@ -1161,7 +1155,6 @@ _Figure 4: Repository cloning validation and execution flow._
 - **Behavioural tests**: repository cloning BDD scenarios exercise success,
   malformed repository input, relative workspace paths, clone exec failure, and
   branch verification failure.
-
 
 ### 18.6. Extending the subsystem
 

@@ -720,7 +720,6 @@ parameters and results depend on internal engine-owned traits and types.
 Library embedders should treat it as an internal shim rather than a semver
 stable API.
 
-
 ### Repository cloning
 
 `clone_repository_into_workspace` returns
