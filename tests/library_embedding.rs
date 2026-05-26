@@ -235,6 +235,8 @@ fn stub_orchestration_functions_return_success() {
         "run_token_daemon should return Success"
     );
 }
+
+#[derive(Debug, Clone, Copy)]
 enum FailAt {
     Create,
     Start,
