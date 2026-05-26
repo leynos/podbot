@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime};
 
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
+use snafu::GenerateImplicitData;
 
 use super::*;
 use crate::github::{MockGitHubInstallationTokenClient, acquire_installation_token_with_client};
@@ -188,6 +189,32 @@ async fn acquire_with_client_maps_semantic_failure(expiry_buffer: Duration) {
             assert!(
                 !message.contains(FIXTURE_TOKEN),
                 "error message must not expose token: {message}"
+            );
+        }
+        other => panic!("expected token acquisition failure, got: {other:?}"),
+    }
+}
+
+#[rstest]
+fn token_error_mapping_preserves_transport_failure_context() {
+    let io_error = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
+    let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_error);
+    let error = octocrab::Error::Service {
+        source: boxed,
+        backtrace: snafu::Backtrace::generate(),
+    };
+
+    let classified = classify_token_error(error);
+
+    match classified {
+        GitHubError::TokenAcquisitionFailed { message } => {
+            assert!(
+                message.contains("connectivity") || message.contains("network"),
+                "expected transport remediation context in: {message}"
+            );
+            assert!(
+                !message.contains("GitHub rejected installation token acquisition"),
+                "transport failures must not be reported as GitHub rejections: {message}"
             );
         }
         other => panic!("expected token acquisition failure, got: {other:?}"),

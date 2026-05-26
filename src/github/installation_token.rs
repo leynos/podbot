@@ -168,13 +168,15 @@ pub(super) async fn acquire_with_octocrab_installation(
 }
 
 fn classify_token_error(error: octocrab::Error) -> GitHubError {
-    match classify_github_api_error(error) {
-        GitHubError::AuthenticationFailed { message } => GitHubError::TokenAcquisitionFailed {
+    let is_github_response = matches!(&error, octocrab::Error::GitHub { .. });
+    let message = classify_github_api_error(error).to_string();
+
+    if is_github_response {
+        GitHubError::TokenAcquisitionFailed {
             message: format!("GitHub rejected installation token acquisition: {message}"),
-        },
-        other => GitHubError::TokenAcquisitionFailed {
-            message: other.to_string(),
-        },
+        }
+    } else {
+        GitHubError::TokenAcquisitionFailed { message }
     }
 }
 

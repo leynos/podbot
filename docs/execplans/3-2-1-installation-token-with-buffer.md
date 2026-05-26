@@ -192,6 +192,9 @@ continue milestone by milestone within the tolerances below.
 - [x] (2026-05-26T00:00:00Z) Validate the follow-up review changes with
   `make check-fmt`, `make test`, `make typecheck`, `make lint`,
   `make markdownlint`, and `make nixie`.
+- [x] (2026-05-26T00:00:00Z) Preserve transport failure context when mapping
+  Octocrab installation-token errors, so network failures are not reported as
+  GitHub API rejections.
 
 ## Surprises & discoveries
 
