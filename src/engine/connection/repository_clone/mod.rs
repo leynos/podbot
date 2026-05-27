@@ -3,6 +3,7 @@
 //! Builds Git commands with credential-free argv and uses `GIT_ASKPASS` to let
 //! Git obtain credentials from the mounted helper inside the container.
 
+use crate::api::{BranchName, RepositoryRef, WorkspacePath};
 use crate::engine::{ContainerExecClient, EngineConnector, ExecMode, ExecRequest};
 use crate::error::{ConfigError, ContainerError, PodbotError};
 
@@ -10,15 +11,13 @@ use crate::error::{ConfigError, ContainerError, PodbotError};
 pub struct RepositoryCloneRequest<'a> {
     /// Target container identifier.
     pub container_id: &'a str,
-    /// Repository owner segment.
-    pub repository_owner: &'a str,
-    /// Repository name segment.
-    pub repository_name: &'a str,
-    /// Required branch.
-    pub branch: &'a str,
-    /// Exact destination path inside the container.
-    pub workspace_base_dir: &'a str,
-    /// Path to the in-container `GIT_ASKPASS` helper.
+    /// Validated repository coordinates.
+    pub repository: &'a RepositoryRef,
+    /// Validated target branch.
+    pub branch: &'a BranchName,
+    /// Validated absolute in-container workspace path.
+    pub workspace_base_dir: &'a WorkspacePath,
+    /// In-container path to the `GIT_ASKPASS` helper.
     pub askpass_path: &'a str,
 }
 
@@ -42,17 +41,14 @@ pub fn clone_repository_into_workspace<C: ContainerExecClient + Sync>(
     client: &C,
     request: &RepositoryCloneRequest<'_>,
 ) -> Result<RepositoryCloneResult, PodbotError> {
-    validate_repository_owner_name(request)?;
-    validate_branch(request.branch)?;
-    validate_workspace_base_dir(request.workspace_base_dir)?;
     validate_non_empty("git.askpass_path", request.askpass_path)?;
 
     run_clone(runtime, client, request)?;
     verify_checked_out_branch(runtime, client, request)?;
 
     Ok(RepositoryCloneResult {
-        workspace_path: String::from(request.workspace_base_dir),
-        checked_out_branch: String::from(request.branch),
+        workspace_path: String::from(request.workspace_base_dir.as_str()),
+        checked_out_branch: String::from(request.branch.as_str()),
     })
 }
 
@@ -66,10 +62,10 @@ fn run_clone<C: ContainerExecClient + Sync>(
         String::from("git"),
         String::from("clone"),
         String::from("--branch"),
-        String::from(request.branch),
+        String::from(request.branch.as_str()),
         String::from("--single-branch"),
         github_remote(request),
-        String::from(request.workspace_base_dir),
+        String::from(request.workspace_base_dir.as_str()),
     ];
     run_git_command(&runner, command, "git clone")
 }
@@ -85,8 +81,8 @@ fn verify_checked_out_branch<C: ContainerExecClient + Sync>(
         String::from("-c"),
         String::from(r#"test "$(git -C "$1" rev-parse --abbrev-ref HEAD)" = "$2""#),
         String::from("podbot-verify-branch"),
-        String::from(request.workspace_base_dir),
-        String::from(request.branch),
+        String::from(request.workspace_base_dir.as_str()),
+        String::from(request.branch.as_str()),
     ];
     run_git_command(&runner, command, "branch verification")
 }
@@ -143,7 +139,8 @@ impl<'a, C: ContainerExecClient + Sync> GitCommandRunner<'a, C> {
 fn github_remote(request: &RepositoryCloneRequest<'_>) -> String {
     format!(
         "https://github.com/{}/{}.git",
-        request.repository_owner, request.repository_name
+        request.repository.owner(),
+        request.repository.name()
     )
 }
 
@@ -158,65 +155,12 @@ fn validate_non_empty(field: &str, value: &str) -> Result<(), PodbotError> {
     Ok(())
 }
 
-fn validate_field_value(
-    field: &str,
-    value: &str,
-    is_invalid: impl Fn(&str) -> bool,
-    reason: &str,
-) -> Result<(), PodbotError> {
-    validate_non_empty(field, value)?;
-
-    if is_invalid(value) {
-        return Err(ConfigError::InvalidValue {
-            field: String::from(field),
-            reason: String::from(reason),
-        }
-        .into());
-    }
-
-    Ok(())
-}
-
-fn validate_workspace_base_dir(value: &str) -> Result<(), PodbotError> {
-    validate_field_value(
-        "workspace.base_dir",
-        value,
-        |v| !v.starts_with('/'),
-        "expected absolute container path",
-    )
-}
-
-fn validate_repository_owner_name(request: &RepositoryCloneRequest<'_>) -> Result<(), PodbotError> {
-    validate_repository_segment("repo.owner", request.repository_owner)?;
-    validate_repository_segment("repo.name", request.repository_name)?;
-    Ok(())
-}
-
-fn validate_branch(value: &str) -> Result<(), PodbotError> {
-    validate_field_value(
-        "branch",
-        value,
-        |v| v != v.trim(),
-        "expected branch without surrounding whitespace",
-    )
-}
-
-fn validate_repository_segment(field: &str, value: &str) -> Result<(), PodbotError> {
-    validate_field_value(
-        field,
-        value,
-        |v| v.contains('/') || v != v.trim(),
-        "expected repository segment without slashes or whitespace",
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
     use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
     use mockall::{mock, predicate::eq};
-    use rstest::rstest;
 
     mock! {
         ExecClient {}
@@ -246,13 +190,24 @@ mod tests {
         (rt, handle)
     }
 
-    fn request(branch: &str) -> RepositoryCloneRequest<'_> {
+    fn typed_request_values(branch: &str) -> (RepositoryRef, BranchName, WorkspacePath) {
+        (
+            RepositoryRef::parse("leynos/podbot").expect("test repository should parse"),
+            BranchName::parse(branch).expect("test branch should parse"),
+            WorkspacePath::parse("/work").expect("test workspace should parse"),
+        )
+    }
+
+    fn request<'a>(
+        repository: &'a RepositoryRef,
+        branch_name: &'a BranchName,
+        workspace: &'a WorkspacePath,
+    ) -> RepositoryCloneRequest<'a> {
         RepositoryCloneRequest {
             container_id: "sandbox-clone",
-            repository_owner: "leynos",
-            repository_name: "podbot",
-            branch,
-            workspace_base_dir: "/work",
+            repository,
+            branch: branch_name,
+            workspace_base_dir: workspace,
             askpass_path: "/usr/local/bin/git-askpass",
         }
     }
@@ -306,6 +261,8 @@ mod tests {
     fn clones_repository_and_verifies_branch() {
         let (_rt, handle) = runtime();
         let mut client = MockExecClient::new();
+        let (repository, branch, workspace) = typed_request_values("main");
+        let clone_request = request(&repository, &branch, &workspace);
         expect_exec(
             &mut client,
             vec![
@@ -332,7 +289,7 @@ mod tests {
             0,
         );
 
-        let result = clone_repository_into_workspace(&handle, &client, &request("main"))
+        let result = clone_repository_into_workspace(&handle, &client, &clone_request)
             .expect("clone should succeed");
 
         assert_eq!(result.workspace_path, "/work");
@@ -343,6 +300,8 @@ mod tests {
     fn clone_failure_returns_exec_error() {
         let (_rt, handle) = runtime();
         let mut client = MockExecClient::new();
+        let (repository, branch, workspace) = typed_request_values("main");
+        let clone_request = request(&repository, &branch, &workspace);
         expect_exec(
             &mut client,
             vec![
@@ -357,58 +316,11 @@ mod tests {
             128,
         );
 
-        let result = clone_repository_into_workspace(&handle, &client, &request("main"));
+        let result = clone_repository_into_workspace(&handle, &client, &clone_request);
 
         assert!(matches!(
             result,
             Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
         ));
-    }
-
-    #[test]
-    fn relative_workspace_base_dir_returns_config_error_without_exec() {
-        let (_rt, handle) = runtime();
-        let client = MockExecClient::new();
-        let request = RepositoryCloneRequest {
-            workspace_base_dir: "work",
-            ..request("main")
-        };
-
-        let result = clone_repository_into_workspace(&handle, &client, &request);
-
-        assert!(matches!(
-            result,
-            Err(PodbotError::Config(ConfigError::InvalidValue { .. }))
-        ));
-    }
-
-    #[rstest]
-    #[case("", "podbot", "main")]
-    #[case(" leynos", "podbot", "main")]
-    #[case("leynos", "", "main")]
-    #[case("leynos", "podbot ", "main")]
-    #[case("leynos", "podbot", " main")]
-    #[case("leynos", "podbot", "main ")]
-    #[case("leynos", "podbot", "")]
-    #[case("leynos", "podbot", "   ")]
-    #[case("leynos/extra", "podbot", "main")]
-    #[case("leynos", "podbot/extra", "main")]
-    fn invalid_repository_fields_return_config_error_without_exec(
-        #[case] repository_owner: &str,
-        #[case] repository_name: &str,
-        #[case] branch: &str,
-    ) {
-        let (_rt, handle) = runtime();
-        let client = MockExecClient::new();
-        let request = RepositoryCloneRequest {
-            repository_owner,
-            repository_name,
-            branch,
-            ..request("main")
-        };
-
-        let result = clone_repository_into_workspace(&handle, &client, &request);
-
-        assert!(matches!(result, Err(PodbotError::Config(_))));
     }
 }

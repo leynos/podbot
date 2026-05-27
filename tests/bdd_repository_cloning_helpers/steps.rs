@@ -162,10 +162,9 @@ fn invoke_clone(
         &client,
         &RepositoryCloneRequest {
             container_id: invocation.container_id,
-            repository_owner: repository.owner(),
-            repository_name: repository.name(),
-            branch: branch.as_str(),
-            workspace_base_dir: workspace.as_str(),
+            repository: &repository,
+            branch: &branch,
+            workspace_base_dir: &workspace,
             askpass_path: invocation.askpass_path,
         },
     )

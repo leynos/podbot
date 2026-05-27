@@ -36,7 +36,7 @@ be reviewed from the log file.
 ### 2.1. Security audit ignores
 
 Security audit jobs may set `CARGO_AUDIT_IGNORES=RUSTSEC-2023-0071`. This
-ignore covers SQLx's transitive MySQL RSA password-authentication advisory.
+ignore rule covers SQLx's transitive MySQL RSA password-authentication advisory.
 Podbot does not use SQLx or MySQL at runtime; the advisory enters the graph
 through tooling dependencies rather than an application database path. Keep the
 ignore scoped to `RUSTSEC-2023-0071`, and remove it if SQLx leaves the tool

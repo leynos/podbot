@@ -293,5 +293,28 @@ mod tests {
                 }
             }
         }
+
+        #[test]
+        fn workspace_path_property_accepts_only_absolute_non_empty(s in "\\PC*") {
+            let trimmed = s.trim();
+            let result = WorkspacePath::parse(&s);
+            if trimmed.is_empty() || !trimmed.starts_with('/') {
+                prop_assert!(
+                    result.is_err(),
+                    "expected WorkspacePath::parse to reject {:?} but it succeeded",
+                    s
+                );
+            } else {
+                match result {
+                    Ok(_) => {}
+                    Err(error) => prop_assert!(
+                        false,
+                        "expected WorkspacePath::parse to accept {:?} but it failed: {:?}",
+                        s,
+                        error
+                    ),
+                }
+            }
+        }
     }
 }

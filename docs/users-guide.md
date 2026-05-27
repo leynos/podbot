@@ -83,7 +83,7 @@ notifications). Permitted methods pass through byte-for-byte. Both the
 initialization-time masking and the runtime denylist apply only to the
 protocol/library path used by hosted mode and ACP until `podbot host` is
 implemented; the operator override to opt back in to host-side delegation is
-tracked in roadmap Step 2.6.4.
+tracked in roadmap Step 2.6.3.
 
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |

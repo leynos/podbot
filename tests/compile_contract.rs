@@ -9,6 +9,12 @@ fn stable_exec_context_signatures_compile() {
 }
 
 #[test]
+fn stable_repository_clone_signatures_compile() {
+    let test_cases = trybuild::TestCases::new();
+    test_cases.pass("tests/ui/stable_repository_clone_signatures.rs");
+}
+
+#[test]
 #[cfg(feature = "experimental")]
 fn experimental_run_agent_signature_compiles() {
     let test_cases = trybuild::TestCases::new();
