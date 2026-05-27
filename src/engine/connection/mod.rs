@@ -90,7 +90,8 @@ impl SocketPath {
     /// Consumes the `SocketPath` and returns the inner `String`.
     #[expect(
         dead_code,
-        reason = "public API for completeness; callers may need owned String"
+        reason = "public API for completeness; callers may need owned String; \
+                  see leynos/podbot#101"
     )]
     #[must_use]
     pub fn into_inner(self) -> String {
