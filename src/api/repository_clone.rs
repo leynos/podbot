@@ -188,7 +188,7 @@ impl AskpassPath {
 
 #[cfg(test)]
 mod tests {
-    use super::{BranchName, RepositoryRef, WorkspacePath};
+    use super::{AskpassPath, BranchName, RepositoryRef, WorkspacePath};
     use crate::error::{ConfigError, PodbotError};
     use proptest::prelude::*;
     use rstest::rstest;
@@ -256,6 +256,27 @@ mod tests {
     }
 
     #[rstest]
+    #[case("/usr/local/bin/git-askpass", "/usr/local/bin/git-askpass")]
+    #[case("  /helper  ", "/helper")]
+    fn askpass_path_accepts_non_empty_values(#[case] input: &str, #[case] expected: &str) {
+        let askpass = AskpassPath::parse(input).expect("valid askpass path should parse");
+
+        assert_eq!(askpass.as_str(), expected);
+    }
+
+    #[rstest]
+    #[case("")]
+    #[case("   ")]
+    fn askpass_path_rejects_empty_values(#[case] input: &str) {
+        let result = AskpassPath::parse(input);
+
+        assert!(matches!(
+            result,
+            Err(PodbotError::Config(ConfigError::MissingRequired { .. }))
+        ));
+    }
+
+    #[rstest]
     #[case("")]
     #[case("   ")]
     #[case("work")]
@@ -318,6 +339,30 @@ mod tests {
                     other => prop_assert!(
                         false,
                         "unexpected branch parse result {other:?} for non-empty input"
+                    ),
+                }
+            }
+        }
+
+        #[test]
+        fn askpass_path_property_rejects_only_trimmed_empty(input in "\\PC*") {
+            let parsed = AskpassPath::parse(&input);
+            let trimmed = input.trim();
+
+            if trimmed.is_empty() {
+                match parsed {
+                    Err(PodbotError::Config(ConfigError::MissingRequired { .. })) => {}
+                    other => prop_assert!(
+                        false,
+                        "unexpected askpass parse result {other:?} for empty input"
+                    ),
+                }
+            } else {
+                match parsed {
+                    Ok(askpass) => prop_assert_eq!(askpass.as_str(), trimmed),
+                    other => prop_assert!(
+                        false,
+                        "unexpected askpass parse result {other:?} for non-empty input"
                     ),
                 }
             }
