@@ -157,6 +157,37 @@ impl WorkspacePath {
     }
 }
 
+/// In-container path to the `GIT_ASKPASS` helper.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AskpassPath(String);
+
+impl AskpassPath {
+    /// Validate and construct an askpass helper path.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConfigError::MissingRequired` when the path is empty after
+    /// trimming whitespace.
+    pub fn parse(value: impl AsRef<str>) -> PodbotResult<Self> {
+        let trimmed = value.as_ref().trim();
+
+        if trimmed.is_empty() {
+            return Err(ConfigError::MissingRequired {
+                field: String::from("git.askpass_path"),
+            }
+            .into());
+        }
+
+        Ok(Self(String::from(trimmed)))
+    }
+
+    /// Return the path as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BranchName, RepositoryRef, WorkspacePath};

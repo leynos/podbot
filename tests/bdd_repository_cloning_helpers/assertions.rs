@@ -60,10 +60,16 @@ pub(crate) fn the_clone_command_used_git_askpass(
         return Err(String::from("no execs were observed"));
     };
 
+    let askpass_path = repository_cloning_state
+        .askpass_path
+        .get()
+        .ok_or_else(|| String::from("askpass_path not set"))?;
+    let expected_askpass_entry = format!("GIT_ASKPASS={askpass_path}");
+
     if first_exec
         .env
         .iter()
-        .any(|entry| entry == "GIT_ASKPASS=/usr/local/bin/git-askpass")
+        .any(|entry| entry == &expected_askpass_entry)
         && first_exec
             .env
             .iter()

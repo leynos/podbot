@@ -722,13 +722,12 @@ stable API.
 
 ### Repository cloning
 
-`clone_repository_into_workspace` returns
-`podbot::error::Result<RepositoryCloneResult>`, which reports the workspace
-path and checked-out branch when cloning succeeds. Embedders construct the
-request via `RepositoryRef::parse` and `BranchName::parse` together with a
-pre-connected `ContainerExecClient` and a Tokio runtime handle. Validation
-failures surface as `ConfigError`, while clone or branch verification failures
-surface as `ContainerError::ExecFailed`.
+`clone_repository_into_workspace` is available via the `internal` Cargo
+feature and is not part of the stable embedding contract. Stable embedders
+interact with repository cloning exclusively through the validated value
+types: `RepositoryRef::parse`, `BranchName::parse`, and `WorkspacePath::parse`.
+Validation failures surface as `ConfigError`; clone or branch verification
+failures surface as `ContainerError::ExecFailed`.
 
 ### Library embedding
 

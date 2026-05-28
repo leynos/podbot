@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
 use mockall::mock;
-use podbot::api::{BranchName, RepositoryRef, WorkspacePath};
+use podbot::api::{AskpassPath, BranchName, RepositoryRef, WorkspacePath};
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, InspectExecFuture, RepositoryCloneRequest,
     ResizeExecFuture, StartExecFuture, clone_repository_into_workspace,
@@ -142,6 +142,7 @@ fn invoke_clone(
     let repository = RepositoryRef::parse(invocation.repository_input)?;
     let branch = BranchName::parse(invocation.branch_input)?;
     let workspace = WorkspacePath::parse(invocation.workspace_base_dir)?;
+    let askpass = AskpassPath::parse(invocation.askpass_path)?;
     let client = mock_exec_client(
         repository_cloning_state.clone_exit_code.get().unwrap_or(0),
         repository_cloning_state
@@ -165,7 +166,7 @@ fn invoke_clone(
             repository: &repository,
             branch: &branch,
             workspace_base_dir: &workspace,
-            askpass_path: invocation.askpass_path,
+            askpass_path: &askpass,
         },
     )
 }
@@ -180,12 +181,14 @@ fn mock_exec_client(
     let observed = Arc::clone(observed_execs);
 
     client.expect_create_exec().returning(move |_, options| {
-        if let Ok(mut execs) = observed.lock() {
-            execs.push(ObservedExec {
-                command: options.cmd.unwrap_or_default(),
-                env: options.env.unwrap_or_default(),
-            });
-        }
+        let mut execs = match observed.lock() {
+            Ok(guard) => guard,
+            Err(poison) => panic!("observed_execs lock poisoned during create_exec: {poison}"),
+        };
+        execs.push(ObservedExec {
+            command: options.cmd.unwrap_or_default(),
+            env: options.env.unwrap_or_default(),
+        });
 
         Box::pin(async {
             Ok(bollard::exec::CreateExecResults {

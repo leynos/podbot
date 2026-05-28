@@ -64,8 +64,8 @@ escalation, not workarounds.
 - Use `rstest` for unit coverage and `rstest-bdd` v0.5.0 for behavioural
   coverage.
 - Behavioural test steps must use the repository’s `StepResult<T> = Result<T,
-  String>` pattern and must not use `expect()` or `panic!()
-  ` for ordinary failure paths.
+  String>` pattern and must not use `expect()` or `panic!()` for ordinary
+  failure paths.
 - Library code must not print to stdout or stderr and must not call
   `std::process::exit`.
 - All changed documentation must be formatted and linted.

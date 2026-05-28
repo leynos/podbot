@@ -3,9 +3,9 @@
 //! Builds Git commands with credential-free argv and uses `GIT_ASKPASS` to let
 //! Git obtain credentials from the mounted helper inside the container.
 
-use crate::api::{BranchName, RepositoryRef, WorkspacePath};
+use crate::api::{AskpassPath, BranchName, RepositoryRef, WorkspacePath};
 use crate::engine::{ContainerExecClient, EngineConnector, ExecMode, ExecRequest};
-use crate::error::{ConfigError, ContainerError, PodbotError};
+use crate::error::{ContainerError, PodbotError};
 
 /// Request for cloning a repository into a container workspace.
 pub struct RepositoryCloneRequest<'a> {
@@ -17,8 +17,8 @@ pub struct RepositoryCloneRequest<'a> {
     pub branch: &'a BranchName,
     /// Validated absolute in-container workspace path.
     pub workspace_base_dir: &'a WorkspacePath,
-    /// In-container path to the `GIT_ASKPASS` helper.
-    pub askpass_path: &'a str,
+    /// Validated in-container path to the `GIT_ASKPASS` helper.
+    pub askpass_path: &'a AskpassPath,
 }
 
 /// Successful repository clone result.
@@ -41,8 +41,6 @@ pub fn clone_repository_into_workspace<C: ContainerExecClient + Sync>(
     client: &C,
     request: &RepositoryCloneRequest<'_>,
 ) -> Result<RepositoryCloneResult, PodbotError> {
-    validate_non_empty("git.askpass_path", request.askpass_path)?;
-
     run_clone(runtime, client, request)?;
     verify_checked_out_branch(runtime, client, request)?;
 
@@ -118,7 +116,7 @@ impl<'a, C: ContainerExecClient + Sync> GitCommandRunner<'a, C> {
         let exec_request =
             ExecRequest::new(self.request.container_id, command, ExecMode::Detached)?.with_env(
                 Some(vec![
-                    format!("GIT_ASKPASS={}", self.request.askpass_path),
+                    format!("GIT_ASKPASS={}", self.request.askpass_path.as_str()),
                     String::from("GIT_TERMINAL_PROMPT=0"),
                 ]),
             );
@@ -142,17 +140,6 @@ fn github_remote(request: &RepositoryCloneRequest<'_>) -> String {
         request.repository.owner(),
         request.repository.name()
     )
-}
-
-fn validate_non_empty(field: &str, value: &str) -> Result<(), PodbotError> {
-    if value.trim().is_empty() {
-        return Err(ConfigError::MissingRequired {
-            field: String::from(field),
-        }
-        .into());
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -202,14 +189,19 @@ mod tests {
         repository: &'a RepositoryRef,
         branch_name: &'a BranchName,
         workspace: &'a WorkspacePath,
+        askpass: &'a AskpassPath,
     ) -> RepositoryCloneRequest<'a> {
         RepositoryCloneRequest {
             container_id: "sandbox-clone",
             repository,
             branch: branch_name,
             workspace_base_dir: workspace,
-            askpass_path: "/usr/local/bin/git-askpass",
+            askpass_path: askpass,
         }
+    }
+
+    fn typed_askpass() -> AskpassPath {
+        AskpassPath::parse("/usr/local/bin/git-askpass").expect("test askpass should parse")
     }
 
     fn expect_exec(client: &mut MockExecClient, command: Vec<&'static str>, exit_code: i64) {
@@ -262,7 +254,8 @@ mod tests {
         let (_rt, handle) = runtime();
         let mut client = MockExecClient::new();
         let (repository, branch, workspace) = typed_request_values("main");
-        let clone_request = request(&repository, &branch, &workspace);
+        let askpass = typed_askpass();
+        let clone_request = request(&repository, &branch, &workspace, &askpass);
         expect_exec(
             &mut client,
             vec![
@@ -301,7 +294,8 @@ mod tests {
         let (_rt, handle) = runtime();
         let mut client = MockExecClient::new();
         let (repository, branch, workspace) = typed_request_values("main");
-        let clone_request = request(&repository, &branch, &workspace);
+        let askpass = typed_askpass();
+        let clone_request = request(&repository, &branch, &workspace, &askpass);
         expect_exec(
             &mut client,
             vec![
@@ -322,5 +316,52 @@ mod tests {
             result,
             Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
         ));
+    }
+
+    #[test]
+    fn branch_verification_failure_returns_exec_error() {
+        let (_rt, handle) = runtime();
+        let mut client = MockExecClient::new();
+        let (repository, branch, workspace) = typed_request_values("main");
+        let askpass = typed_askpass();
+        let clone_request = request(&repository, &branch, &workspace, &askpass);
+
+        // Clone succeeds (exit code 0).
+        expect_exec(
+            &mut client,
+            vec![
+                "git",
+                "clone",
+                "--branch",
+                "main",
+                "--single-branch",
+                "https://github.com/leynos/podbot.git",
+                "/work",
+            ],
+            0,
+        );
+        // Branch verification fails (exit code 1).
+        expect_exec(
+            &mut client,
+            vec![
+                "sh",
+                "-c",
+                r#"test "$(git -C "$1" rev-parse --abbrev-ref HEAD)" = "$2""#,
+                "podbot-verify-branch",
+                "/work",
+                "main",
+            ],
+            1,
+        );
+
+        let result = clone_repository_into_workspace(&handle, &client, &clone_request);
+
+        assert!(
+            matches!(
+                result,
+                Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
+            ),
+            "expected ExecFailed on branch verification failure, got {result:?}"
+        );
     }
 }
