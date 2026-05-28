@@ -912,46 +912,90 @@ comment explaining its purpose.
 Module docs should be concise (2–4 lines) and focus on what the module does,
 not how it works. Implementation details belong in function-level `///` docs.
 
-### 16.1. Contract-level versus end-to-end BDD coverage
+### 16.1. Required standard: testcontainers-rs for container-touching BDD
 
-Most BDD scenario suites under `tests/bdd_*.rs` inject a mocked
-`ContainerExecClient` (`mockall::mock!`) and drive the production engine
-helpers without a live container. Treat these as **contract-level**
-behavioural tests: they assert the public API's externally observable contract
-(error mapping, environment propagation, command shape) without binding the
-test to a real container daemon.
+Behavioural tests that exercise container functionality **must** drive a real
+container engine through
+[`testcontainers`](https://crates.io/crates/testcontainers). A mocked
+`ContainerExecClient` (`mockall::mock!`) is supplementary contract-level
+coverage only; it must not stand in for behavioural coverage of any code that
+talks to the engine. This applies to every behavioural slice whose
+production path reaches the container, including (non-exhaustively) workspace
+preparation, repository cloning, credential injection, git identity
+configuration, container creation, interactive exec, protocol exec, and
+hosted-session lifecycle.
 
-For the repository-cloning slice the contract-level coverage in
-`tests/bdd_repository_cloning.rs` is complemented by an **end-to-end** BDD
-suite in `tests/bdd_repository_cloning_e2e.rs` that:
+"Container functionality" means any code path whose public contract observably
+depends on running, exec'ing into, or inspecting a container — that is, any
+code that ultimately calls a method on `ContainerExecClient`, mutates
+container state, or asserts a property that only a real container can
+exhibit. If you cannot demonstrate the assertion against a real container, the
+test is not behavioural and must be labelled as contract-level (see §16.2).
 
-- starts an `alpine/git` container through
-  [`testcontainers`](https://crates.io/crates/testcontainers),
-- pre-populates a local bare repository inside the container and rewrites
-  `https://github.com/` URLs through `git config --global url.<file>.insteadOf`
-  so the clone resolves offline,
-- drives `clone_repository_into_workspace` through a real Bollard `Docker`
-  client connected to the same socket, and
-- verifies the cloned workspace by exec'ing into the container.
+Required structure for testcontainers-backed BDD suites:
 
-The e2e suite resolves the container socket from `DOCKER_HOST`, falling back
-to `/var/run/docker.sock` and `$XDG_RUNTIME_DIR/podman/podman.sock` for
-rootless Podman environments. CI runners with Docker pre-installed therefore
-need no extra configuration. The mutation of `DOCKER_HOST` is gated by a
-`OnceLock` so concurrent test threads cannot race on the unsafe env write.
+- Name the scenario file `tests/bdd_<domain>_e2e.rs` and the helper module
+  `tests/bdd_<domain>_e2e_helpers/` to distinguish it from any contract-level
+  companion.
+- Split helpers across `mod.rs`, `state.rs`, `container.rs`, `steps.rs`, and
+  `assertions.rs`. `container.rs` owns the testcontainers wiring: image
+  selection, setup script, socket resolution, and the Bollard client. The
+  other files stay focused on scenario state and step definitions, in line
+  with the layout in §16.
+- Bundle the runtime, container, Bollard client, and container ID in a
+  single fixture type (the canonical example is `SandboxBundle` in
+  `tests/bdd_repository_cloning_e2e_helpers/state.rs`). The bundle's `Drop`
+  must call `runtime.block_on(container.rm())` so the `testcontainers`
+  async-drop helper has a live reactor.
+- Resolve the container socket through `DOCKER_HOST`, then
+  `/var/run/docker.sock`, then `$XDG_RUNTIME_DIR/podman/podman.sock`. Wrap
+  any `DOCKER_HOST` mutation in a `OnceLock` (or equivalent) so concurrent
+  test threads cannot race on the unsafe env write. Continuous integration
+  runners with Docker pre-installed and developers with rootless Podman both
+  pick the right socket without manual configuration.
+- Construct the Bollard `Docker` client against the same socket the fixture
+  resolved, so production exec calls route through the live container.
+- Pin the image tag (do **not** rely on `latest`) and prefer a small image
+  with the required tools pre-installed; bake any setup the production path
+  expects (helpers, configuration files, prepared remotes) into the
+  container during start, not into the production code under test.
 
-Scenarios that cannot be reproduced through `git clone` against a live
-filesystem remote (for example, the contract-level "branch verification
-failure" scenario, which depends on a specific exec exit code) remain in the
-mocked suite. Document any such gap in the relevant ExecPlan instead of
-silently dropping coverage.
+Reach for testcontainers even when the live container makes the test slower.
+Behavioural coverage is the place to spend that cost.
 
-When adding new behavioural coverage for slices that already have a mocked
-suite, prefer adding the e2e companion suite rather than expanding the mocked
-suite past its contract role. Keep the helper module layout consistent: name
-the e2e helpers `tests/bdd_<domain>_e2e_helpers/` and split container
-lifecycle code into a dedicated `container.rs` so `state.rs`, `steps.rs`, and
-`assertions.rs` stay focused on scenario state and step definitions.
+For the canonical implementation, see
+`tests/bdd_repository_cloning_e2e.rs`, the helper module under
+`tests/bdd_repository_cloning_e2e_helpers/`, and the feature file at
+`tests/features/repository_cloning_e2e.feature`.
+
+### 16.2. Contract-level BDD as supplementary coverage
+
+A mocked `ContainerExecClient` suite is permitted **only** as a supplement to
+a testcontainers-backed suite, and only for assertions that cannot be
+reproduced through a live container — for example, exec exit codes that real
+Git will not produce, error-mapping paths gated on specific daemon
+responses, or validation paths that fail before any exec runs and therefore
+do not need an engine at all.
+
+When adding contract-level coverage:
+
+- The corresponding behavioural slice must already have (or gain in the same
+  change) a testcontainers-backed suite covering its observable workflows.
+- The contract-level suite must not duplicate any scenario the testcontainers
+  suite already covers; it should focus exclusively on paths the live
+  container cannot reach.
+- The scope and rationale for keeping a scenario in the contract-level suite
+  must be recorded in the relevant ExecPlan, naming each scenario and why a
+  real container cannot exercise it. "Slower to run" is not a sufficient
+  reason.
+
+The repository-cloning slice illustrates the split: the contract-level
+scenarios in `tests/bdd_repository_cloning.rs` cover input validation that
+short-circuits before exec and the "branch verification failure" path, which
+depends on an exec exit code that `git clone --branch X --single-branch` will
+not produce against a real filesystem remote. The behavioural workflows —
+successful clone and clone-time exec failure — live in the testcontainers
+suite described in §16.1.
 
 ## 17. Git identity subsystem
 
@@ -1090,8 +1134,13 @@ This yields three testing seams:
 
 - host Git reads can be unit tested with a mocked `HostCommandRunner`;
 - container mutation can be unit tested with a mocked `ContainerExecClient`;
-- orchestration can be exercised end-to-end through the BDD harness without a
-  real Git binary or live container daemon.
+- orchestration is exercised through the BDD harness.
+
+The existing git-identity BDD suite drives orchestration through a mocked
+`ContainerExecClient`. Treat that suite as contract-level coverage per
+§16.2: behavioural coverage of the git-identity subsystem must move to a
+testcontainers-backed suite, per the standard set out in §16.1, the next time
+the subsystem is touched.
 
 ### 17.7. Error handling and warning semantics
 
@@ -1214,9 +1263,13 @@ _Figure 4: Repository cloning validation and execution flow._
 - **Container exec subsystem**: clone and branch verification use detached exec
   requests so exit status handling remains consistent with other container
   operations.
-- **Behavioural tests**: repository cloning BDD scenarios exercise success,
-  malformed repository input, relative workspace paths, clone exec failure, and
-  branch verification failure.
+- **Behavioural tests**: repository cloning BDD coverage follows the
+  testcontainers-backed standard set out in §16.1. The end-to-end suite in
+  `tests/bdd_repository_cloning_e2e.rs` exercises successful clone and clone-
+  time exec failure against a real container; the contract-level companion
+  in `tests/bdd_repository_cloning.rs` covers input validation that short-
+  circuits before exec and the branch-verification-failure path that a real
+  remote cannot reproduce (see §16.2).
 
 ### 18.6. Extending the subsystem
 
