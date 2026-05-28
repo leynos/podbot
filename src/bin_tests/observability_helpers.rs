@@ -129,6 +129,7 @@ pub(super) fn capture_run_logs(
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .without_time()
+        .with_ansi(false)
         .with_writer(writer)
         .finish();
 
