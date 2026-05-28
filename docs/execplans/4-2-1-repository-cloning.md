@@ -140,6 +140,13 @@ escalation, not workarounds.
 - [x] 2026-05-01: Fixed post-turn hook path failures by making Makefile
   defaults fall back to the installed `cargo` and `markdownlint-cli2` paths
   when the hook does not provide a login-shell PATH.
+- [x] 2026-05-29: Added end-to-end BDD coverage in
+  `tests/bdd_repository_cloning_e2e.rs` driving
+  `clone_repository_into_workspace` against a real `alpine/git` container
+  started through `testcontainers`. Pre-baked a local bare repository inside
+  the container and rewrote GitHub URLs to `file:///srv/test-repos/` so the
+  clone resolves offline. Documented the contract-level versus end-to-end
+  split in `docs/developers-guide.md` §16.1.
 - [ ] Resolve or explicitly waive the `make fmt` failure caused by the
   repository's `markdownlint --fix` invocation reporting pre-existing
   line-length and table-format issues across unrelated documentation.
@@ -166,6 +173,23 @@ escalation, not workarounds.
 - The post-turn hook runs Make targets without `/home/leynos/.cargo/bin` or
   `/home/leynos/.bun/bin` in PATH, so `cargo` and `markdownlint-cli2` were not
   found even though the checks pass in an interactive shell.
+- `rstest-bdd` 0.5.0 derives step-argument fixtures from parameter names. A
+  step pattern with two identical typed placeholders (for example,
+  `{string}` twice) requires two distinct parameter names whose fixture
+  lookups will fail at runtime. Named placeholders such as `{repository}` and
+  `{branch}` work in the same way as the existing `bdd_library_boundary`
+  scenarios and avoid the collision.
+- `testcontainers` 0.27 routes `ContainerAsync::drop` through a shared
+  helper that panics with "there is no reactor running" when no tokio
+  runtime is current. Sync-test fixtures must therefore retain the runtime
+  used to start the container and release the container inside a
+  `runtime.block_on(...)` call (the e2e helper uses `SandboxBundle::drop`).
+- `testcontainers` resolves Docker host candidates in this order: properties
+  file, `DOCKER_HOST`, `/var/run/docker.sock`, `$XDG_RUNTIME_DIR/.docker/`,
+  and `$HOME/.docker/`. Rootless Podman sockets at
+  `$XDG_RUNTIME_DIR/podman/podman.sock` are not in that list, so the e2e
+  helper sets `DOCKER_HOST` once via `OnceLock` when the rootless socket is
+  the only available endpoint.
 
 ## Decision log
 
@@ -219,6 +243,30 @@ escalation, not workarounds.
   orchestration concern, while embedders can already exercise the clone
   primitive with validated library-owned inputs.
 
+- Decision (2026-05-29): respond to the review feedback that the BDD suite
+  disguised mocked unit tests as behavioural coverage by adding an
+  end-to-end BDD suite under `tests/bdd_repository_cloning_e2e.rs` driven by
+  `testcontainers`, and keeping the existing mocked suite as documented
+  contract-level coverage. Rationale: the reviewer offered "add end-to-end
+  integration tests exercising the public API against a real integration
+  boundary (test container), or document BDD as supplementary." Adding the
+  e2e suite eliminates the gap directly while preserving the cheaper
+  contract-level scenarios (which run without a daemon). The e2e suite resolves
+  `DOCKER_HOST`, `/var/run/docker.sock`, and the rootless Podman socket
+  candidate in turn so contributors with Podman do not need extra
+  configuration. The `ContainerAsync` guard is wrapped in a custom `Drop`
+  that re-enters the test runtime to release the container, since
+  `testcontainers`'s asynchronous drop helper otherwise panics when the
+  reactor is no longer current.
+
+- Decision (2026-05-29): scope the e2e BDD suite to the success path and an
+  exec-failure path. Rationale: the "branch verification failure" scenario
+  in the mocked suite requires a successful clone followed by an in-container
+  Git command that reports a different `--abbrev-ref HEAD`, which cannot be
+  reproduced naturally through `git clone --branch X --single-branch` against
+  a real remote. Keeping that scenario in the mocked suite preserves error-
+  mapping coverage without inventing artificial in-container state.
+
 ## Outcomes and retrospective
 
 Implementation landed the repository-preparation slice described by this plan:
@@ -246,6 +294,19 @@ The implementation stayed under the scope tolerance. No new dependencies were
 added. Step 3.x token acquisition and helper installation remain external
 prerequisites; Step 4.2 consumes the helper path instead of reimplementing that
 work.
+
+Follow-up on review feedback (2026-05-29): the review observed that the
+contract-level BDD scenarios mock the container exec client and so behave like
+unit tests. Resolution: a new end-to-end BDD suite,
+`tests/bdd_repository_cloning_e2e.rs`, now exercises
+`clone_repository_into_workspace` against a real `alpine/git` sandbox
+container started through `testcontainers`. A local bare repository is
+pre-baked into the container and `git config --global url.<file>.insteadOf`
+rewrites the GitHub URL so the clone resolves without network access. The new
+dev-dependency `testcontainers = "0.27.3"` carries the integration boundary.
+The contract-level suite remains in place for cheap validation and error-
+mapping coverage that does not justify a live container; the two suites are
+documented in `docs/developers-guide.md` §16.1.
 
 ## Context and orientation
 

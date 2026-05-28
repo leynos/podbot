@@ -912,6 +912,47 @@ comment explaining its purpose.
 Module docs should be concise (2–4 lines) and focus on what the module does,
 not how it works. Implementation details belong in function-level `///` docs.
 
+### 16.1. Contract-level versus end-to-end BDD coverage
+
+Most BDD scenario suites under `tests/bdd_*.rs` inject a mocked
+`ContainerExecClient` (`mockall::mock!`) and drive the production engine
+helpers without a live container. Treat these as **contract-level**
+behavioural tests: they assert the public API's externally observable contract
+(error mapping, environment propagation, command shape) without binding the
+test to a real container daemon.
+
+For the repository-cloning slice the contract-level coverage in
+`tests/bdd_repository_cloning.rs` is complemented by an **end-to-end** BDD
+suite in `tests/bdd_repository_cloning_e2e.rs` that:
+
+- starts an `alpine/git` container through
+  [`testcontainers`](https://crates.io/crates/testcontainers),
+- pre-populates a local bare repository inside the container and rewrites
+  `https://github.com/` URLs through `git config --global url.<file>.insteadOf`
+  so the clone resolves offline,
+- drives `clone_repository_into_workspace` through a real Bollard `Docker`
+  client connected to the same socket, and
+- verifies the cloned workspace by exec'ing into the container.
+
+The e2e suite resolves the container socket from `DOCKER_HOST`, falling back
+to `/var/run/docker.sock` and `$XDG_RUNTIME_DIR/podman/podman.sock` for
+rootless Podman environments. CI runners with Docker pre-installed therefore
+need no extra configuration. The mutation of `DOCKER_HOST` is gated by a
+`OnceLock` so concurrent test threads cannot race on the unsafe env write.
+
+Scenarios that cannot be reproduced through `git clone` against a live
+filesystem remote (for example, the contract-level "branch verification
+failure" scenario, which depends on a specific exec exit code) remain in the
+mocked suite. Document any such gap in the relevant ExecPlan instead of
+silently dropping coverage.
+
+When adding new behavioural coverage for slices that already have a mocked
+suite, prefer adding the e2e companion suite rather than expanding the mocked
+suite past its contract role. Keep the helper module layout consistent: name
+the e2e helpers `tests/bdd_<domain>_e2e_helpers/` and split container
+lifecycle code into a dedicated `container.rs` so `state.rs`, `steps.rs`, and
+`assertions.rs` stay focused on scenario state and step definitions.
+
 ## 17. Git identity subsystem
 
 The `git_identity` subsystem propagates host Git identity (`user.name` and
