@@ -269,9 +269,10 @@ dispositions.
   - See docs/execplans/2-6-1-intercept-acp-initialization.md.
   - Success: ACP initialization no longer advertises host-executed tool
     families unless an explicit policy allows them.
-- [ ] 2.6.2. Enforce runtime denial for blocked ACP methods.
+- [x] 2.6.2. Enforce runtime denial for blocked ACP methods.
   - Requires 2.6.1.
   - Return protocol errors for blocked methods and record denials on stderr.
+  - See docs/execplans/2-6-2-runtime-denylist.md.
   - Success: blocked ACP method calls fail deterministically after
     initialization without contaminating stdout.
 - [ ] 2.6.3. Add the explicit ACP delegation override.
