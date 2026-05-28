@@ -200,17 +200,17 @@ fn mock_exec_client(
         .expect_start_exec()
         .returning(|_, _| Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) }));
     client.expect_inspect_exec().returning(move |_| {
-        let code = exits
-            .lock()
-            .ok()
-            .and_then(|mut exit_codes| {
-                if exit_codes.is_empty() {
-                    None
-                } else {
-                    Some(exit_codes.remove(0))
-                }
-            })
-            .unwrap_or(1);
+        let code = {
+            let mut exit_codes = match exits.lock() {
+                Ok(guard) => guard,
+                Err(poison) => panic!("exit_codes lock poisoned during inspect_exec: {poison}"),
+            };
+            if exit_codes.is_empty() {
+                1
+            } else {
+                exit_codes.remove(0)
+            }
+        };
 
         Box::pin(async move {
             Ok(bollard::models::ExecInspectResponse {

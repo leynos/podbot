@@ -164,8 +164,10 @@ impl WorkspacePath {
 
 /// In-container path to the `GIT_ASKPASS` helper.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(any(feature = "internal", test))]
 pub struct AskpassPath(String);
 
+#[cfg(any(feature = "internal", test))]
 impl AskpassPath {
     /// Validate and construct an askpass helper path.
     ///
