@@ -75,6 +75,20 @@ fn has_invalid_segments(owner: &str, name: &str) -> bool {
         || name != name.trim()
 }
 
+/// Trim `value` and reject it if empty, returning the trimmed string.
+///
+/// `field` is used verbatim in the `ConfigError::MissingRequired` payload.
+fn parse_required_trimmed(value: impl AsRef<str>, field: &'static str) -> PodbotResult<String> {
+    let trimmed = value.as_ref().trim();
+    if trimmed.is_empty() {
+        return Err(ConfigError::MissingRequired {
+            field: String::from(field),
+        }
+        .into());
+    }
+    Ok(String::from(trimmed))
+}
+
 /// A required Git branch name supplied by the caller.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BranchName(String);
@@ -97,16 +111,7 @@ impl BranchName {
     /// # Ok::<(), podbot::error::PodbotError>(())
     /// ```
     pub fn parse(value: impl AsRef<str>) -> PodbotResult<Self> {
-        let trimmed = value.as_ref().trim();
-
-        if trimmed.is_empty() {
-            return Err(ConfigError::MissingRequired {
-                field: String::from("branch"),
-            }
-            .into());
-        }
-
-        Ok(Self(String::from(trimmed)))
+        parse_required_trimmed(value, "branch").map(Self)
     }
 
     /// Return the branch as a string slice.
@@ -169,16 +174,7 @@ impl AskpassPath {
     /// Returns `ConfigError::MissingRequired` when the path is empty after
     /// trimming whitespace.
     pub fn parse(value: impl AsRef<str>) -> PodbotResult<Self> {
-        let trimmed = value.as_ref().trim();
-
-        if trimmed.is_empty() {
-            return Err(ConfigError::MissingRequired {
-                field: String::from("git.askpass_path"),
-            }
-            .into());
-        }
-
-        Ok(Self(String::from(trimmed)))
+        parse_required_trimmed(value, "git.askpass_path").map(Self)
     }
 
     /// Return the path as a string slice.
