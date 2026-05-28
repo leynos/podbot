@@ -249,15 +249,9 @@ mod tests {
         });
     }
 
-    #[test]
-    fn clones_repository_and_verifies_branch() {
-        let (_rt, handle) = runtime();
-        let mut client = MockExecClient::new();
-        let (repository, branch, workspace) = typed_request_values("main");
-        let askpass = typed_askpass();
-        let clone_request = request(&repository, &branch, &workspace, &askpass);
+    fn arrange_successful_clone(client: &mut MockExecClient) {
         expect_exec(
-            &mut client,
+            client,
             vec![
                 "git",
                 "clone",
@@ -269,6 +263,16 @@ mod tests {
             ],
             0,
         );
+    }
+
+    #[test]
+    fn clones_repository_and_verifies_branch() {
+        let (_rt, handle) = runtime();
+        let mut client = MockExecClient::new();
+        let (repository, branch, workspace) = typed_request_values("main");
+        let askpass = typed_askpass();
+        let clone_request = request(&repository, &branch, &workspace, &askpass);
+        arrange_successful_clone(&mut client);
         expect_exec(
             &mut client,
             vec![
@@ -325,21 +329,7 @@ mod tests {
         let (repository, branch, workspace) = typed_request_values("main");
         let askpass = typed_askpass();
         let clone_request = request(&repository, &branch, &workspace, &askpass);
-
-        // Clone succeeds (exit code 0).
-        expect_exec(
-            &mut client,
-            vec![
-                "git",
-                "clone",
-                "--branch",
-                "main",
-                "--single-branch",
-                "https://github.com/leynos/podbot.git",
-                "/work",
-            ],
-            0,
-        );
+        arrange_successful_clone(&mut client);
         // Branch verification fails (exit code 1).
         expect_exec(
             &mut client,
