@@ -35,21 +35,25 @@ pub(crate) fn repository_cloning_fails_with_an_exec_error(
         .ok_or_else(|| String::from("outcome not set"))?
 }
 
-#[then("the workspace at {string} contains a git repository")]
-pub(crate) fn the_workspace_at_contains_a_git_repository(
-    repository_cloning_e2e_state: &RepositoryCloningE2eState,
-    string: String,
-) -> StepResult<()> {
-    let path = strip_quotes(&string);
-    let bundle = required_bundle(repository_cloning_e2e_state)?;
-    let exit_code = exec_in_container(
+fn check_git_dir(state: &RepositoryCloningE2eState, path: &str) -> StepResult<i64> {
+    let bundle = required_bundle(state)?;
+    exec_in_container(
         &bundle,
         vec![
             String::from("test"),
             String::from("-d"),
             format!("{path}/.git"),
         ],
-    )?;
+    )
+}
+
+#[then("the workspace at {string} contains a git repository")]
+pub(crate) fn the_workspace_at_contains_a_git_repository(
+    repository_cloning_e2e_state: &RepositoryCloningE2eState,
+    string: String,
+) -> StepResult<()> {
+    let path = strip_quotes(&string);
+    let exit_code = check_git_dir(repository_cloning_e2e_state, &path)?;
     if exit_code == 0 {
         Ok(())
     } else {
@@ -65,15 +69,7 @@ pub(crate) fn the_workspace_at_does_not_contain_a_git_repository(
     string: String,
 ) -> StepResult<()> {
     let path = strip_quotes(&string);
-    let bundle = required_bundle(repository_cloning_e2e_state)?;
-    let exit_code = exec_in_container(
-        &bundle,
-        vec![
-            String::from("test"),
-            String::from("-d"),
-            format!("{path}/.git"),
-        ],
-    )?;
+    let exit_code = check_git_dir(repository_cloning_e2e_state, &path)?;
     if exit_code == 0 {
         Err(format!(
             "expected {path}/.git directory to be absent, but it exists"
@@ -122,7 +118,12 @@ fn required_bundle(state: &RepositoryCloningE2eState) -> StepResult<Arc<SandboxB
         .ok_or_else(|| String::from("bundle not set"))
 }
 
-fn exec_in_container(bundle: &SandboxBundle, cmd: Vec<String>) -> StepResult<i64> {
+struct ExecOutput {
+    exit_code: i64,
+    stdout: Vec<u8>,
+}
+
+fn exec_raw(bundle: &SandboxBundle, cmd: Vec<String>) -> StepResult<ExecOutput> {
     let container = bundle
         .container
         .as_ref()
@@ -132,33 +133,26 @@ fn exec_in_container(bundle: &SandboxBundle, cmd: Vec<String>) -> StepResult<i64
             .exec(ExecCommand::new(cmd))
             .await
             .map_err(|err| format!("container.exec failed: {err}"))?;
-        let _ = exec
+        let stdout = exec
             .stdout_to_vec()
             .await
             .map_err(|err| format!("stdout drain failed: {err}"))?;
-        exec.exit_code()
+        let exit_code = exec
+            .exit_code()
             .await
             .map_err(|err| format!("exit_code failed: {err}"))?
-            .ok_or_else(|| String::from("exec exit code missing"))
+            .ok_or_else(|| String::from("exec exit code missing"))?;
+        Ok(ExecOutput { exit_code, stdout })
     })
 }
 
+fn exec_in_container(bundle: &SandboxBundle, cmd: Vec<String>) -> StepResult<i64> {
+    exec_raw(bundle, cmd).map(|out| out.exit_code)
+}
+
 fn exec_capture_stdout(bundle: &SandboxBundle, cmd: Vec<String>) -> StepResult<String> {
-    let container = bundle
-        .container
-        .as_ref()
-        .ok_or_else(|| String::from("container has already been torn down"))?;
-    bundle.runtime.block_on(async move {
-        let mut exec = container
-            .exec(ExecCommand::new(cmd))
-            .await
-            .map_err(|err| format!("container.exec failed: {err}"))?;
-        let bytes = exec
-            .stdout_to_vec()
-            .await
-            .map_err(|err| format!("stdout drain failed: {err}"))?;
-        String::from_utf8(bytes).map_err(|err| format!("stdout was not utf-8: {err}"))
-    })
+    let out = exec_raw(bundle, cmd)?;
+    String::from_utf8(out.stdout).map_err(|err| format!("stdout was not utf-8: {err}"))
 }
 
 fn strip_quotes(value: &str) -> String {
