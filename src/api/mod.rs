@@ -16,6 +16,7 @@
 #[cfg(any(feature = "internal", test))]
 mod configure_git_identity;
 mod exec;
+mod repository_clone;
 mod run;
 
 #[cfg(any(feature = "internal", test))]
@@ -24,6 +25,9 @@ pub use configure_git_identity::{GitIdentityParams, configure_container_git_iden
 #[doc(hidden)]
 pub use exec::exec_with_client_for_tests;
 pub use exec::{ExecContext, ExecMode, ExecRequest, exec};
+#[cfg(any(feature = "internal", test))]
+pub use repository_clone::AskpassPath;
+pub use repository_clone::{BranchName, RepositoryRef, WorkspacePath};
 pub use run::RunRequest;
 
 #[cfg(feature = "experimental")]

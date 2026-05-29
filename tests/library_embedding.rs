@@ -236,10 +236,6 @@ fn stub_orchestration_functions_return_success() {
     );
 }
 
-// -------------------------------------------------------------------------
-// Test helpers
-// -------------------------------------------------------------------------
-
 #[derive(Debug, Clone, Copy)]
 enum FailAt {
     Create,

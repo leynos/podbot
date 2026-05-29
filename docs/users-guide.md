@@ -83,7 +83,7 @@ notifications). Permitted methods pass through byte-for-byte. Both the
 initialization-time masking and the runtime denylist apply only to the
 protocol/library path used by hosted mode and ACP until `podbot host` is
 implemented; the operator override to opt back in to host-side delegation is
-tracked in roadmap Step 2.6.4.
+tracked in roadmap Step 2.6.3.
 
 | Option         | Required | Default         | Description                                |
 | -------------- | -------- | --------------- | ------------------------------------------ |
@@ -238,7 +238,8 @@ env_allowlist = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
 [workspace]
 # Workspace source: "github_clone" or "host_mount"
 source = "github_clone"
-# Base directory for cloned repositories inside the container
+
+# Exact clone destination for github_clone workspaces
 base_dir = "/work"
 # Host path mounted into the sandbox when source = "host_mount"
 host_path = "/abs/path/to/project"
@@ -274,6 +275,12 @@ Semantic validation rules:
 - `workspace.source = "host_mount"` requires `workspace.host_path` and
   defaults `workspace.container_path` to `"/workspace"` when omitted.
 - `workspace.source = "github_clone"` rejects host-mount-only fields.
+
+For `podbot run`, `--repo` must use GitHub `owner/name` form, such as
+`leynos/podbot`. The `--branch` flag is required and has no default; Podbot
+does not guess the default branch. When `workspace.source = "github_clone"`,
+Podbot clones that repository directly into `workspace.base_dir` inside the
+container and treats that path as the workspace root.
 
 ### Private key file requirements
 
@@ -639,13 +646,16 @@ The `cli` module is optional behind the `cli` feature. Hidden compatibility
 modules such as `engine` and `GitHub` integration shims are not part of the
 supported semver contract for embedders.
 
-### Available functions
+### Available API items
 
-| Function                                     | Description                                  |
-| -------------------------------------------- | -------------------------------------------- |
-| `podbot::api::exec(config, request)`         | Execute a command in a running container     |
-| `podbot::api::ExecContext::connect(…)`       | Reuse a runtime handle and engine connection |
-| `podbot::api::RunRequest::new(repo, branch)` | Build the library-owned run request          |
+| Item                                           | Description                         |
+| ---------------------------------------------- | ----------------------------------- |
+| `podbot::api::exec(config, request)`           | Execute in a container              |
+| `podbot::api::ExecContext::connect(…)`         | Reuse runtime and engine state      |
+| `podbot::api::RunRequest::new(repo, branch)`   | Build the library-owned run request |
+| `podbot::api::RepositoryRef`                   | Validate repository `owner/name`    |
+| `podbot::api::BranchName`                      | Validate a branch value             |
+| `podbot::api::WorkspacePath`                   | Validate a workspace path           |
 
 ### Return type
 
@@ -709,6 +719,15 @@ but it is not part of the stable embedding contract described here because its
 parameters and results depend on internal engine-owned traits and types.
 Library embedders should treat it as an internal shim rather than a semver
 stable API.
+
+### Repository cloning
+
+`clone_repository_into_workspace` is available via the `internal` Cargo
+feature and is not part of the stable embedding contract. Stable embedders
+interact with repository cloning exclusively through the validated value
+types: `RepositoryRef::parse`, `BranchName::parse`, and `WorkspacePath::parse`.
+Validation failures surface as `ConfigError`; clone or branch verification
+failures surface as `ContainerError::ExecFailed`.
 
 ### Library embedding
 

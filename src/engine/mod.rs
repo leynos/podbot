@@ -19,8 +19,9 @@ pub use connection::{
     ContainerCreator, ContainerExecClient, ContainerSecurityOptions, ContainerUploader,
     CreateContainerFuture, CreateContainerRequest, CreateExecFuture, CredentialUploadRequest,
     CredentialUploadResult, EngineConnector, ExecMode, ExecRequest, ExecResult, GitIdentityResult,
-    HostCommandRunner, HostGitIdentity, InspectExecFuture, ResizeExecFuture, SelinuxLabelMode,
-    SocketResolver, StartExecFuture, SystemCommandRunner, UploadToContainerFuture,
+    HostCommandRunner, HostGitIdentity, InspectExecFuture, RepositoryCloneRequest,
+    RepositoryCloneResult, ResizeExecFuture, SelinuxLabelMode, SocketResolver, StartExecFuture,
+    SystemCommandRunner, UploadToContainerFuture, clone_repository_into_workspace,
     configure_git_identity, read_host_git_identity,
 };
 #[cfg(not(any(feature = "internal", test)))]

@@ -52,15 +52,16 @@ chrono = "0.4.43"
 [dev-dependencies]
 mockable = { version = "0.1.4", default-features = false, features = ["clock", "mock"] }
 mockall = "0.14.0"
+proptest = "1.9.0"
 snafu = "0.8.9"
 rstest = "0.26.1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["compile-time-validation"] }
 serde_json = "1.0.149"
-proptest = "1.9.0"
 insta = "1.44.1"
 serial_test = "3.2.0"
 tempfile = "3.25.0"
+testcontainers = "0.27.3"
 toml = "0.9.11"
 trybuild = { version = "1.0.116", features = ["diff"] }
 tracing-subscriber = { version = "0.3.22", features = ["fmt"] }

@@ -403,11 +403,12 @@ both clone-backed and mount-backed launches. The result informs interactive
 startup, app-server startup, and MCP helper-container sharing. See
 podbot-design.md §§Execution flow, Host-mount path safety policy.
 
-- [ ] 4.2.1. Implement authenticated repository cloning for
+- [x] 4.2.1. Implement authenticated repository cloning for
   `workspace.source = "github_clone"`.
-  - Requires 3.4.1 and 4.1.1.
+  - Requires 4.1.1.
   - Accept `owner/name`, require an explicit branch, clone to
     `workspace.base_dir`, and authenticate through `GIT_ASKPASS`.
+  - See docs/execplans/4-2-1-repository-cloning.md.
   - Success: the specified branch is checked out without exposing credentials
     in process arguments.
 - [ ] 4.2.2. Implement safe host-mounted workspaces.

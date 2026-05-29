@@ -33,6 +33,15 @@ All quality gates must pass before committing. The canonical targets are:
 Run long commands through `tee` and `set -o pipefail` so truncated output can
 be reviewed from the log file.
 
+### 2.1. Security audit ignores
+
+Security audit jobs may set `CARGO_AUDIT_IGNORES=RUSTSEC-2023-0071`. This
+ignore rule covers SQLx's transitive MySQL RSA password-authentication advisory.
+Podbot does not use SQLx or MySQL at runtime; the advisory enters the graph
+through tooling dependencies rather than an application database path. Keep the
+ignore scoped to `RUSTSEC-2023-0071`, and remove it if SQLx leaves the tool
+dependency graph or if Podbot adds a MySQL runtime integration.
+
 ## 3. Repository layout (exec subsystem)
 
 The exec subsystem lives under `src/engine/connection/exec/` and implements
@@ -446,6 +455,18 @@ error frames on container stdin). Synthesized JSON-RPC error responses use code
 assertions should compare on parsed structure, not on byte equality, since key
 ordering inside the JSON is not stable.
 
+The policy I/O adapter signature is intentionally narrow:
+
+- `OutboundPolicyAdapter::new(assembler, sender, container_id)` receives the
+  frame assembler, a bounded `mpsc::Sender<WriteCmd>`, and the container ID
+  used in diagnostics.
+- `handle_chunk(&mut self, chunk, host_stdout)` is the error-returning method.
+  It writes permitted bytes to `host_stdout`, queues synthesized errors on the
+  sink channel, and returns `io::Result<()>` for host-stdout write failures.
+- `finish(&mut self)` is the end-of-stream method. It reports any residual
+  partial-frame drop through diagnostics and deliberately returns `()`, because
+  no further I/O is attempted after stream exit.
+
 #### 8.2.3. ACP runtime observability contract
 
 Step 2.6.2 ships stderr and `tracing::warn!` diagnostics for each denied ACP
@@ -641,7 +662,9 @@ The semver-stable surface for library embedders is limited to three modules:
 | Module           | Contents                                               |
 | ---------------- | ------------------------------------------------------ |
 | `podbot::api`    | `exec`, `ExecRequest`, `ExecMode`, `ExecContext`,      |
-|                  | `RunRequest`, `CommandOutcome`                         |
+|                  | `RunRequest`, `CommandOutcome`, `RepositoryRef`,       |
+|                  | `BranchName`,                                          |
+|                  | `WorkspacePath`                                        |
 | `podbot::config` | `AppConfig`, `GitHubConfig`, and related configuration |
 |                  | types                                                  |
 | `podbot::error`  | `PodbotError`, `Result<T>`, error variant enums        |
@@ -889,6 +912,91 @@ comment explaining its purpose.
 Module docs should be concise (2–4 lines) and focus on what the module does,
 not how it works. Implementation details belong in function-level `///` docs.
 
+### 16.1. Required standard: testcontainers-rs for container-touching BDD
+
+Behavioural tests that exercise container functionality **must** drive a real
+container engine through
+[`testcontainers`](https://crates.io/crates/testcontainers). A mocked
+`ContainerExecClient` (`mockall::mock!`) is supplementary contract-level
+coverage only; it must not stand in for behavioural coverage of any code that
+talks to the engine. This applies to every behavioural slice whose
+production path reaches the container, including (non-exhaustively) workspace
+preparation, repository cloning, credential injection, git identity
+configuration, container creation, interactive exec, protocol exec, and
+hosted-session lifecycle.
+
+"Container functionality" means any code path whose public contract observably
+depends on running, exec'ing into, or inspecting a container — that is, any
+code that ultimately calls a method on `ContainerExecClient`, mutates
+container state, or asserts a property that only a real container can
+exhibit. Assertions that cannot be demonstrated against a real container are
+not behavioural tests and must be labelled as contract-level (see §16.2).
+
+Required structure for testcontainers-backed BDD suites:
+
+- Name the scenario file `tests/bdd_<domain>_e2e.rs` and the helper module
+  `tests/bdd_<domain>_e2e_helpers/` to distinguish it from any contract-level
+  companion.
+- Split helpers across `mod.rs`, `state.rs`, `container.rs`, `steps.rs`, and
+  `assertions.rs`. `container.rs` owns the testcontainers wiring: image
+  selection, setup script, socket resolution, and the Bollard client. The
+  other files stay focused on scenario state and step definitions, in line
+  with the layout in §16.
+- Bundle the runtime, container, Bollard client, and container ID in a
+  single fixture type (the canonical example is `SandboxBundle` in
+  `tests/bdd_repository_cloning_e2e_helpers/state.rs`). The bundle's `Drop`
+  must call `runtime.block_on(container.rm())` so the `testcontainers`
+  async-drop helper has a live reactor.
+- Resolve the container socket through `DOCKER_HOST`, then
+  `/var/run/docker.sock`, then `$XDG_RUNTIME_DIR/podman/podman.sock`. Wrap
+  any `DOCKER_HOST` mutation in a `OnceLock` (or equivalent) so concurrent
+  test threads cannot race on the unsafe env write. Continuous integration
+  runners with Docker pre-installed and developers with rootless Podman both
+  pick the right socket without manual configuration.
+- Construct the Bollard `Docker` client against the same socket the fixture
+  resolved, so production exec calls route through the live container.
+- Pin the image tag (do **not** rely on `latest`) and prefer a small image
+  with the required tools pre-installed; bake any setup the production path
+  expects (helpers, configuration files, prepared remotes) into the
+  container during start, not into the production code under test.
+
+Reach for testcontainers even when the live container makes the test slower.
+Behavioural coverage is the place to spend that cost.
+
+For the canonical implementation, see
+`tests/bdd_repository_cloning_e2e.rs`, the helper module under
+`tests/bdd_repository_cloning_e2e_helpers/`, and the feature file at
+`tests/features/repository_cloning_e2e.feature`.
+
+### 16.2. Contract-level BDD as supplementary coverage
+
+A mocked `ContainerExecClient` suite is permitted **only** as a supplement to
+a testcontainers-backed suite, and only for assertions that cannot be
+reproduced through a live container — for example, exec exit codes that real
+Git will not produce, error-mapping paths gated on specific daemon
+responses, or validation paths that fail before any exec runs and therefore
+do not need an engine at all.
+
+When adding contract-level coverage:
+
+- The corresponding behavioural slice must already have (or gain in the same
+  change) a testcontainers-backed suite covering its observable workflows.
+- The contract-level suite must not duplicate any scenario the testcontainers
+  suite already covers; it should focus exclusively on paths the live
+  container cannot reach.
+- The scope and rationale for keeping a scenario in the contract-level suite
+  must be recorded in the relevant ExecPlan, naming each scenario and why a
+  real container cannot exercise it. "Slower to run" is not a sufficient
+  reason.
+
+The repository-cloning slice illustrates the split: the contract-level
+scenarios in `tests/bdd_repository_cloning.rs` cover input validation that
+short-circuits before exec and the "branch verification failure" path, which
+depends on an exec exit code that `git clone --branch X --single-branch` will
+not produce against a real filesystem remote. The behavioural workflows —
+successful clone and clone-time exec failure — live in the testcontainers
+suite described in §16.1.
+
 ## 17. Git identity subsystem
 
 The `git_identity` subsystem propagates host Git identity (`user.name` and
@@ -1026,8 +1134,13 @@ This yields three testing seams:
 
 - host Git reads can be unit tested with a mocked `HostCommandRunner`;
 - container mutation can be unit tested with a mocked `ContainerExecClient`;
-- orchestration can be exercised end-to-end through the BDD harness without a
-  real Git binary or live container daemon.
+- orchestration is exercised through the BDD harness.
+
+The existing git-identity BDD suite drives orchestration through a mocked
+`ContainerExecClient`. Treat that suite as contract-level coverage per
+§16.2: behavioural coverage of the git-identity subsystem must move to a
+testcontainers-backed suite, per the standard set out in §16.1, the next time
+the subsystem is touched.
 
 ### 17.7. Error handling and warning semantics
 
@@ -1063,3 +1176,109 @@ When adding another identity field or related Git setting:
 7. Add BDD scenarios in `tests/features/git_identity.feature` and matching
    step definitions under `tests/bdd_git_identity_helpers/`.
 8. Update this section and the user-facing contract in `docs/users-guide.md`.
+
+## 18. Repository cloning subsystem
+
+The repository cloning subsystem validates operator-supplied GitHub repository
+coordinates, clones the repository into the sandbox workspace, and verifies the
+requested branch before later orchestration uses the workspace.
+
+It deliberately separates stable value objects from container execution. The
+public API exposes only domain values, while engine modules own the container
+client, runtime handle, `GIT_ASKPASS` path, and exec command construction.
+
+### 18.1. Module layout
+
+```plaintext
+src/api/
++-- repository_clone.rs              # RepositoryRef, BranchName, WorkspacePath
+
+src/engine/connection/repository_clone/
++-- mod.rs                           # RepositoryCloneRequest and clone flow
+
+tests/
++-- features/repository_cloning.feature       # Behavioural scenarios
++-- bdd_repository_cloning.rs                 # Scenario harness
++-- bdd_repository_cloning_helpers/           # Steps, assertions, and state
+```
+
+### 18.2. Boundary and entry points
+
+- **Stable API values**:
+  `RepositoryRef`, `BranchName`, and `WorkspacePath` in
+  `src/api/repository_clone.rs`. These types validate caller input without
+  depending on container infrastructure.
+- **Engine entry point**:
+  `engine::clone_repository_into_workspace(runtime, client, request)` in
+  `src/engine/connection/repository_clone/mod.rs`. This function is internal
+  and receives the container exec client, runtime handle, target container,
+  repository segments, branch, workspace path, and askpass helper path.
+- **Error boundary**: malformed repository, branch, and workspace values fail
+  before exec with configuration errors. Clone or branch-verification failures
+  cross the boundary as `PodbotError::Container(ContainerError::ExecFailed)`.
+
+This keeps embedders on a stable, domain-only surface while allowing the
+composition layer to wire container-specific details from configuration and
+runtime state.
+
+### 18.3. Key types and traits
+
+- **`RepositoryRef`**: validates `owner/name`, rejecting empty segments, extra
+  slashes, and segment-leading or segment-trailing whitespace.
+- **`BranchName`**: validates that a branch remains non-empty after trimming.
+  Branch syntax is otherwise left to Git and the remote repository.
+- **`WorkspacePath`**: validates an absolute container workspace path before
+  orchestration builds the clone request.
+- **`RepositoryCloneRequest`**: internal engine request containing the validated
+  domain values plus container-only fields such as `container_id` and
+  `askpass_path`.
+- **`ContainerExecClient`**: engine-owned port used by the clone helper to run
+  detached exec commands without depending on a concrete Bollard client.
+
+### 18.4. Execution flow
+
+For screen readers: The following flowchart shows repository clone validation
+and execution from caller input to branch verification.
+
+```mermaid
+flowchart TD
+    A["Caller input"] --> B["RepositoryRef::parse"]
+    A --> C["BranchName::parse"]
+    A --> D["WorkspacePath::parse"]
+    B & C & D --> E["Build RepositoryCloneRequest"]
+    E --> F["git clone via detached exec"]
+    F --> G["git -C workspace rev-parse --abbrev-ref HEAD"]
+    G --> H["RepositoryCloneResult"]
+```
+
+_Figure 4: Repository cloning validation and execution flow._
+
+### 18.5. Integration points
+
+- **Configuration layer**: `workspace.base_dir` supplies the container
+  destination and must remain an absolute path.
+- **GitHub authentication**: the engine request carries the internal
+  `GIT_ASKPASS` helper path and disables terminal prompts with
+  `GIT_TERMINAL_PROMPT=0`.
+- **Container exec subsystem**: clone and branch verification use detached exec
+  requests so exit status handling remains consistent with other container
+  operations.
+- **Behavioural tests**: repository cloning BDD coverage follows the
+  testcontainers-backed standard set out in §16.1. The end-to-end suite in
+  `tests/bdd_repository_cloning_e2e.rs` exercises successful clone and clone-
+  time exec failure against a real container; the contract-level companion
+  in `tests/bdd_repository_cloning.rs` covers input validation that short-
+  circuits before exec and the branch-verification-failure path that a real
+  remote cannot reproduce (see §16.2).
+
+### 18.6. Extending the subsystem
+
+When adding another repository source or clone option:
+
+1. Add or extend public value objects only for stable domain input.
+2. Keep container IDs, runtime handles, clients, helper paths, and environment
+   construction in engine or composition modules.
+3. Add unit or property tests for new validation invariants.
+4. Add BDD scenarios for user-visible success and failure paths.
+5. Update this section, `docs/users-guide.md`, and any roadmap or ExecPlan that
+   describes the changed clone contract.

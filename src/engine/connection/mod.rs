@@ -15,6 +15,8 @@ mod git_identity;
 #[cfg(any(feature = "internal", test))]
 mod health_check;
 #[cfg(any(feature = "internal", test))]
+mod repository_clone;
+#[cfg(any(feature = "internal", test))]
 mod upload_credentials;
 
 use std::fmt;
@@ -40,6 +42,10 @@ pub(crate) use exec::{ContainerExecClient, ExecMode, ExecRequest};
 pub use git_identity::{
     GitIdentityResult, HostCommandRunner, HostGitIdentity, SystemCommandRunner,
     configure_git_identity, read_host_git_identity,
+};
+#[cfg(any(feature = "internal", test))]
+pub use repository_clone::{
+    RepositoryCloneRequest, RepositoryCloneResult, clone_repository_into_workspace,
 };
 #[cfg(any(feature = "internal", test))]
 pub use upload_credentials::{
@@ -84,7 +90,8 @@ impl SocketPath {
     /// Consumes the `SocketPath` and returns the inner `String`.
     #[expect(
         dead_code,
-        reason = "public API for completeness; callers may need owned String"
+        reason = "public API for completeness; callers may need owned String; \
+                  see leynos/podbot#101"
     )]
     #[must_use]
     pub fn into_inner(self) -> String {
