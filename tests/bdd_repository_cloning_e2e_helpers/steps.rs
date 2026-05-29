@@ -49,14 +49,22 @@ pub(crate) fn a_local_bare_repository_has_branch(
     let _ = repository_cloning_e2e_state;
     if repository != FIXTURE_BARE_REPOSITORY {
         return Err(format!(
-            "container setup script only prepares the {FIXTURE_BARE_REPOSITORY:?} \
-             bare repository, scenario requested {repository:?}"
+            concat!(
+                "container setup script only prepares the {expected:?} ",
+                "bare repository, scenario requested {actual:?}",
+            ),
+            expected = FIXTURE_BARE_REPOSITORY,
+            actual = repository,
         ));
     }
     if branch != FIXTURE_BARE_BRANCH {
         return Err(format!(
-            "container setup script only prepares branch {FIXTURE_BARE_BRANCH:?}, \
-             scenario requested {branch:?}"
+            concat!(
+                "container setup script only prepares branch {expected:?}, ",
+                "scenario requested {actual:?}",
+            ),
+            expected = FIXTURE_BARE_BRANCH,
+            actual = branch,
         ));
     }
     Ok(())
