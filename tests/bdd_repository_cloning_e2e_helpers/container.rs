@@ -67,39 +67,56 @@ struct DockerHostSocket {
 
 /// Pick a usable Docker-compatible socket, preferring an existing `DOCKER_HOST`
 /// or system socket and falling back to the rootless Podman socket under
-/// `$XDG_RUNTIME_DIR`.
-///
-/// Mutating `DOCKER_HOST` is gated through a `OnceLock` so concurrent test
-/// threads cannot race on the unsafe env mutation.
-fn ensure_docker_host() -> StepResult<DockerHostSocket> {
-    static INIT: OnceLock<Result<String, String>> = OnceLock::new();
+/// `$XDG_RUNTIME_DIR`. The result is cached for the lifetime of the test
+/// binary so concurrent scenarios share one detection pass.
+fn resolve_docker_host_endpoint() -> StepResult<String> {
+    static CACHED: OnceLock<Result<String, String>> = OnceLock::new();
+    CACHED
+        .get_or_init(|| {
+            if let Ok(existing) = std::env::var("DOCKER_HOST")
+                && !existing.is_empty()
+            {
+                return Ok(existing);
+            }
+            detect_local_socket().ok_or_else(|| {
+                String::from(
+                    "no Docker- or Podman-compatible socket found; \
+                 set DOCKER_HOST to use the e2e tests",
+                )
+            })
+        })
+        .clone()
+}
 
-    let result = INIT.get_or_init(|| {
-        if let Ok(existing) = std::env::var("DOCKER_HOST")
-            && !existing.is_empty()
-        {
-            return Ok(existing);
-        }
-        if let Some(endpoint) = detect_local_socket() {
-            // SAFETY: Synchronised through `OnceLock::get_or_init`, which
-            // serialises the env mutation across concurrent callers.
+/// Ensure `DOCKER_HOST` reflects the resolved socket so `testcontainers` can
+/// pick it up at client construction time.
+///
+/// `testcontainers` 0.27 has no programmatic API for injecting a Docker host;
+/// it reads `DOCKER_HOST` (or `tc.host` from `~/.testcontainers.properties`)
+/// during client init. When the surrounding test environment has not already
+/// set `DOCKER_HOST` but a Podman or Docker socket is present, this helper
+/// mirrors the resolved endpoint into the process environment exactly once,
+/// gated through a dedicated `OnceLock<()>` so the one-shot unsafe write is
+/// serialised across concurrent test threads.
+fn ensure_docker_host() -> StepResult<DockerHostSocket> {
+    static ENV_INIT: OnceLock<()> = OnceLock::new();
+    let endpoint = resolve_docker_host_endpoint()?;
+    ENV_INIT.get_or_init(|| {
+        let already_set = std::env::var("DOCKER_HOST")
+            .map(|existing| !existing.is_empty())
+            .unwrap_or(false);
+        if !already_set {
+            // SAFETY: The surrounding `OnceLock::get_or_init` guarantees that
+            // this branch executes exactly once per process, serialised
+            // against concurrent test threads. The write is required because
+            // `testcontainers` reads `DOCKER_HOST` during client construction
+            // and exposes no in-process alternative.
             unsafe {
                 std::env::set_var("DOCKER_HOST", &endpoint);
             }
-            return Ok(endpoint);
         }
-        Err(String::from(
-            "no Docker- or Podman-compatible socket found; \
-             set DOCKER_HOST to use the e2e tests",
-        ))
     });
-
-    match result {
-        Ok(endpoint) => Ok(DockerHostSocket {
-            endpoint: endpoint.clone(),
-        }),
-        Err(message) => Err(message.clone()),
-    }
+    Ok(DockerHostSocket { endpoint })
 }
 
 fn detect_local_socket() -> Option<String> {

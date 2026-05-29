@@ -929,8 +929,8 @@ hosted-session lifecycle.
 depends on running, exec'ing into, or inspecting a container — that is, any
 code that ultimately calls a method on `ContainerExecClient`, mutates
 container state, or asserts a property that only a real container can
-exhibit. If you cannot demonstrate the assertion against a real container, the
-test is not behavioural and must be labelled as contract-level (see §16.2).
+exhibit. Assertions that cannot be demonstrated against a real container are
+not behavioural tests and must be labelled as contract-level (see §16.2).
 
 Required structure for testcontainers-backed BDD suites:
 

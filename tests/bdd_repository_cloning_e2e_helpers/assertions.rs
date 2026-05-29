@@ -47,20 +47,41 @@ fn check_git_dir(state: &RepositoryCloningE2eState, path: &str) -> StepResult<i6
     )
 }
 
+/// Assert that `<path>/.git` is present or absent inside the sandbox
+/// container.
+///
+/// `test -d` returns `0` for present and `1` for absent. Any other exit code
+/// indicates that the command or runtime itself failed and is surfaced
+/// immediately so a broken fixture cannot masquerade as either presence or
+/// absence.
+fn assert_git_repo_presence(
+    state: &RepositoryCloningE2eState,
+    path: &str,
+    expected_exists: bool,
+) -> StepResult<()> {
+    let exit_code = check_git_dir(state, path)?;
+    match exit_code {
+        0 if expected_exists => Ok(()),
+        0 => Err(format!(
+            "expected {path}/.git directory to be absent, but it exists"
+        )),
+        1 if !expected_exists => Ok(()),
+        1 => Err(format!(
+            "expected {path}/.git directory to exist, test exited {exit_code}"
+        )),
+        other => Err(format!(
+            "test -d {path}/.git returned unexpected exit code {other}"
+        )),
+    }
+}
+
 #[then("the workspace at {string} contains a git repository")]
 pub(crate) fn the_workspace_at_contains_a_git_repository(
     repository_cloning_e2e_state: &RepositoryCloningE2eState,
     string: String,
 ) -> StepResult<()> {
     let path = strip_quotes(&string);
-    let exit_code = check_git_dir(repository_cloning_e2e_state, &path)?;
-    if exit_code == 0 {
-        Ok(())
-    } else {
-        Err(format!(
-            "expected {path}/.git directory to exist, test exited {exit_code}"
-        ))
-    }
+    assert_git_repo_presence(repository_cloning_e2e_state, &path, true)
 }
 
 #[then("the workspace at {string} does not contain a git repository")]
@@ -69,14 +90,7 @@ pub(crate) fn the_workspace_at_does_not_contain_a_git_repository(
     string: String,
 ) -> StepResult<()> {
     let path = strip_quotes(&string);
-    let exit_code = check_git_dir(repository_cloning_e2e_state, &path)?;
-    if exit_code == 0 {
-        Err(format!(
-            "expected {path}/.git directory to be absent, but it exists"
-        ))
-    } else {
-        Ok(())
-    }
+    assert_git_repo_presence(repository_cloning_e2e_state, &path, false)
 }
 
 #[then("the checked out branch in the workspace is {string}")]

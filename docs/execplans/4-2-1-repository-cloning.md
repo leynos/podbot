@@ -147,9 +147,13 @@ escalation, not workarounds.
   the container and rewrote GitHub URLs to `file:///srv/test-repos/` so the
   clone resolves offline. Documented the contract-level versus end-to-end
   split in `docs/developers-guide.md` §16.1.
-- [ ] Resolve or explicitly waive the `make fmt` failure caused by the
-  repository's `markdownlint --fix` invocation reporting pre-existing
-  line-length and table-format issues across unrelated documentation.
+- [x] 2026-05-29: Waived the `make fmt` failure caused by the repository's
+  `markdownlint --fix` invocation reporting pre-existing line-length and
+  table-format issues across unrelated documentation. The dedicated
+  `make markdownlint` target passes with `markdownlint-cli2`, no repository-
+  cloning Markdown errors remain, and the unrelated formatter churn is
+  recorded in `Outcomes and retrospective` rather than carried as an open
+  Step 4.2 task.
 
 ## Surprises and discoveries
 

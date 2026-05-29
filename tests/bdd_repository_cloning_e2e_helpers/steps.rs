@@ -31,16 +31,30 @@ pub(crate) fn a_sandbox_container_running_with_git_installed(
     Ok(())
 }
 
+/// The bare repository name the container setup script prepares.
+const FIXTURE_BARE_REPOSITORY: &str = "leynos/podbot";
+/// The branch the prepared bare repository advertises.
+const FIXTURE_BARE_BRANCH: &str = "main";
+
 #[given("a local bare repository {repository} has branch {branch}")]
 pub(crate) fn a_local_bare_repository_has_branch(
     repository_cloning_e2e_state: &RepositoryCloningE2eState,
     repository: String,
     branch: String,
 ) {
-    // The bare repository at /srv/test-repos/leynos/podbot.git is pre-populated
-    // by the container setup script with branch `main`. The step keeps the
-    // feature file readable; the parameters document the precondition.
-    let _ = (repository_cloning_e2e_state, repository, branch);
+    // The bare repository at /srv/test-repos/leynos/podbot.git is pre-baked
+    // by the container setup script with branch `main`. Fail fast if a
+    // scenario asks for any other coordinates so the feature text stays
+    // coupled to the fixture rather than silently no-op'ing on a mismatch.
+    let _ = repository_cloning_e2e_state;
+    assert_eq!(
+        repository, FIXTURE_BARE_REPOSITORY,
+        "container setup script only prepares the {FIXTURE_BARE_REPOSITORY:?} bare repository",
+    );
+    assert_eq!(
+        branch, FIXTURE_BARE_BRANCH,
+        "container setup script only prepares branch {FIXTURE_BARE_BRANCH:?}",
+    );
 }
 
 #[given("the container rewrites GitHub URLs to the local repository server")]
