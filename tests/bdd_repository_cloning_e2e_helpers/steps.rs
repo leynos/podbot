@@ -80,44 +80,46 @@ pub(crate) fn repository_cloning_is_requested(
     branch: String,
 ) -> StepResult<()> {
     let inputs = read_request_inputs(repository_cloning_e2e_state)?;
-    let outcome = execute_clone(&inputs, &repository, &branch);
+    let repository_ref =
+        RepositoryRef::parse(&repository).map_err(|e| format!("invalid repository: {e}"))?;
+    let branch_name = BranchName::parse(&branch).map_err(|e| format!("invalid branch: {e}"))?;
+    let outcome = execute_clone(&inputs, &repository_ref, &branch_name);
     repository_cloning_e2e_state.outcome.set(outcome);
     Ok(())
 }
 
 struct CloneRequestInputs {
     bundle: Arc<SandboxBundle>,
-    workspace_base_dir: String,
-    askpass_path: String,
+    workspace_base_dir: WorkspacePath,
+    askpass_path: AskpassPath,
 }
 
 fn read_request_inputs(state: &RepositoryCloningE2eState) -> StepResult<CloneRequestInputs> {
+    let workspace_raw = required_slot(state.workspace_base_dir.get(), "workspace_base_dir")?;
+    let askpass_raw = required_slot(state.askpass_path.get(), "askpass_path")?;
     Ok(CloneRequestInputs {
         bundle: required_slot(state.bundle.get(), "bundle")?,
-        workspace_base_dir: required_slot(state.workspace_base_dir.get(), "workspace_base_dir")?,
-        askpass_path: required_slot(state.askpass_path.get(), "askpass_path")?,
+        workspace_base_dir: WorkspacePath::parse(&workspace_raw)
+            .map_err(|e| format!("invalid workspace_base_dir: {e}"))?,
+        askpass_path: AskpassPath::parse(&askpass_raw)
+            .map_err(|e| format!("invalid askpass_path: {e}"))?,
     })
 }
 
 fn execute_clone(
     inputs: &CloneRequestInputs,
-    repository_input: &str,
-    branch_input: &str,
+    repository: &RepositoryRef,
+    branch: &BranchName,
 ) -> Result<podbot::engine::RepositoryCloneResult, podbot::error::PodbotError> {
-    let repository = RepositoryRef::parse(repository_input)?;
-    let branch = BranchName::parse(branch_input)?;
-    let workspace = WorkspacePath::parse(&inputs.workspace_base_dir)?;
-    let askpass = AskpassPath::parse(&inputs.askpass_path)?;
-
     clone_repository_into_workspace(
         inputs.bundle.runtime.handle(),
         inputs.bundle.docker.as_ref(),
         &RepositoryCloneRequest {
             container_id: &inputs.bundle.container_id,
-            repository: &repository,
-            branch: &branch,
-            workspace_base_dir: &workspace,
-            askpass_path: &askpass,
+            repository,
+            branch,
+            workspace_base_dir: &inputs.workspace_base_dir,
+            askpass_path: &inputs.askpass_path,
         },
     )
 }
