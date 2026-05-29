@@ -41,20 +41,25 @@ pub(crate) fn a_local_bare_repository_has_branch(
     repository_cloning_e2e_state: &RepositoryCloningE2eState,
     repository: String,
     branch: String,
-) {
+) -> StepResult<()> {
     // The bare repository at /srv/test-repos/leynos/podbot.git is pre-baked
-    // by the container setup script with branch `main`. Fail fast if a
-    // scenario asks for any other coordinates so the feature text stays
-    // coupled to the fixture rather than silently no-op'ing on a mismatch.
+    // by the container setup script with branch `main`. Surface mismatches as
+    // step errors so the feature text stays coupled to the fixture rather
+    // than silently no-op'ing on a mismatch.
     let _ = repository_cloning_e2e_state;
-    assert_eq!(
-        repository, FIXTURE_BARE_REPOSITORY,
-        "container setup script only prepares the {FIXTURE_BARE_REPOSITORY:?} bare repository",
-    );
-    assert_eq!(
-        branch, FIXTURE_BARE_BRANCH,
-        "container setup script only prepares branch {FIXTURE_BARE_BRANCH:?}",
-    );
+    if repository != FIXTURE_BARE_REPOSITORY {
+        return Err(format!(
+            "container setup script only prepares the {FIXTURE_BARE_REPOSITORY:?} \
+             bare repository, scenario requested {repository:?}"
+        ));
+    }
+    if branch != FIXTURE_BARE_BRANCH {
+        return Err(format!(
+            "container setup script only prepares branch {FIXTURE_BARE_BRANCH:?}, \
+             scenario requested {branch:?}"
+        ));
+    }
+    Ok(())
 }
 
 #[given("the container rewrites GitHub URLs to the local repository server")]
