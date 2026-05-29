@@ -3,21 +3,7 @@
 use rstest_bdd_macros::then;
 
 use super::state::{FIXTURE_TOKEN, GitHubInstallationTokenState, StepResult, TokenOutcome};
-
-enum ExpectedTokenOutcome {
-    Success,
-    Failure,
-}
-
-impl ExpectedTokenOutcome {
-    const fn matches(&self, outcome: &TokenOutcome) -> bool {
-        matches!(
-            (self, outcome),
-            (Self::Success, TokenOutcome::Success { .. })
-                | (Self::Failure, TokenOutcome::Failed { .. })
-        )
-    }
-}
+use podbot::github::InstallationAccessToken;
 
 fn get_outcome(
     github_installation_token_state: &GitHubInstallationTokenState,
@@ -28,24 +14,21 @@ fn get_outcome(
         .ok_or_else(|| String::from("outcome should be set"))
 }
 
-fn assert_token_outcome(
-    github_installation_token_state: &GitHubInstallationTokenState,
-    expected: ExpectedTokenOutcome,
-) -> StepResult<()> {
-    let outcome = get_outcome(github_installation_token_state)?;
-    if expected.matches(&outcome) {
-        return Ok(());
-    }
-
-    match (expected, outcome) {
-        (ExpectedTokenOutcome::Success, TokenOutcome::Failed { message }) => Err(format!(
+fn require_success(outcome: TokenOutcome) -> StepResult<InstallationAccessToken> {
+    match outcome {
+        TokenOutcome::Success { token } => Ok(token),
+        TokenOutcome::Failed { message } => Err(format!(
             "expected token acquisition to succeed, got: {message}"
         )),
-        (ExpectedTokenOutcome::Failure, TokenOutcome::Success { token }) => Err(format!(
+    }
+}
+
+fn require_failure(outcome: TokenOutcome) -> StepResult<String> {
+    match outcome {
+        TokenOutcome::Success { token } => Err(format!(
             "expected token acquisition to fail, got: {token:?}"
         )),
-        (ExpectedTokenOutcome::Success, TokenOutcome::Success { .. })
-        | (ExpectedTokenOutcome::Failure, TokenOutcome::Failed { .. }) => Ok(()),
+        TokenOutcome::Failed { message } => Ok(message),
     }
 }
 
@@ -53,32 +36,25 @@ fn assert_token_outcome(
 fn token_acquisition_succeeds(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    assert_token_outcome(
-        github_installation_token_state,
-        ExpectedTokenOutcome::Success,
-    )
+    require_success(get_outcome(github_installation_token_state)?).map(|_| ())
 }
 
 #[then("token acquisition fails")]
 fn token_acquisition_fails(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    assert_token_outcome(
-        github_installation_token_state,
-        ExpectedTokenOutcome::Failure,
-    )
+    require_failure(get_outcome(github_installation_token_state)?).map(|_| ())
 }
 
 #[then("the token string is available for Git operations")]
 fn token_string_available(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match get_outcome(github_installation_token_state)? {
-        TokenOutcome::Success { token } if token.token() == FIXTURE_TOKEN => Ok(()),
-        TokenOutcome::Success { token } => Err(format!("expected fixture token, got: {token:?}")),
-        TokenOutcome::Failed { message } => Err(format!(
-            "expected token acquisition to succeed, got: {message}"
-        )),
+    let token = require_success(get_outcome(github_installation_token_state)?)?;
+    if token.token() == FIXTURE_TOKEN {
+        Ok(())
+    } else {
+        Err(format!("expected fixture token, got: {token:?}"))
     }
 }
 
@@ -90,19 +66,13 @@ fn expiry_metadata_includes_buffer(
         .expiry_buffer
         .get()
         .ok_or_else(|| String::from("expiry_buffer should be set"))?;
-    match get_outcome(github_installation_token_state)? {
-        TokenOutcome::Success { token } => {
-            if token.refresh_after() == token.expires_at() - expiry_buffer {
-                Ok(())
-            } else {
-                Err(format!(
-                    "expected refresh_after to equal expires_at minus {expiry_buffer:?}"
-                ))
-            }
-        }
-        TokenOutcome::Failed { message } => Err(format!(
-            "expected token acquisition to succeed, got: {message}"
-        )),
+    let token = require_success(get_outcome(github_installation_token_state)?)?;
+    if token.refresh_after() == token.expires_at() - expiry_buffer {
+        Ok(())
+    } else {
+        Err(format!(
+            "expected refresh_after to equal expires_at minus {expiry_buffer:?}"
+        ))
     }
 }
 
@@ -110,16 +80,13 @@ fn expiry_metadata_includes_buffer(
 fn error_mentions_token_acquisition(
     github_installation_token_state: &GitHubInstallationTokenState,
 ) -> StepResult<()> {
-    match get_outcome(github_installation_token_state)? {
-        TokenOutcome::Success { token } => Err(format!(
-            "expected token acquisition to fail, got: {token:?}"
-        )),
-        TokenOutcome::Failed { message } if message.contains("installation token acquisition") => {
-            Ok(())
-        }
-        TokenOutcome::Failed { message } => Err(format!(
+    let message = require_failure(get_outcome(github_installation_token_state)?)?;
+    if message.contains("installation token acquisition") {
+        Ok(())
+    } else {
+        Err(format!(
             "expected error to mention installation token acquisition, got: {message}"
-        )),
+        ))
     }
 }
 
