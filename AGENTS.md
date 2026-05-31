@@ -1,5 +1,6 @@
 # Assistant instructions
 
+
 ## Code style and structure
 
 - **Code is for humans.** Write code with clarity and empathy—assume a
@@ -33,6 +34,7 @@
   feature and constituents colocated with targets. Large blocks of test data
   should be moved to external data files.
 
+
 ## Change quality and committing
 
 - **Atomicity:** Aim for small, focused, atomic changes. Each change (and
@@ -62,6 +64,7 @@
     - **Formatting:** Use Markdown for any formatted text (like bullet points or
       code snippets) within the commit message body.
   - Do not commit changes that fail any of the quality gates.
+
 
 ## Refactoring heuristics and workflow
 
@@ -93,7 +96,6 @@
   - Ensure refactoring adheres to the testing guidelines (behavioural tests
     pass before and after, unit tests added for new units).
   - Ensure the refactoring commit itself passes all quality gates.
-
 ### Testing
 
 - Use `rstest` fixtures for shared setup.
@@ -144,7 +146,6 @@
 - Consume fallible fixtures in `rstest` by **making the test return `Result`**
   and applying `?` to the fixture.
 
-
 ### Observability
 
 - Use `tracing` for logging and diagnostics. Prefer structured
@@ -166,9 +167,8 @@
   user input, request IDs, paths with unbounded parameters, or raw error
   strings into labels.
 - Libraries may emit `metrics` and `tracing` instrumentation, but must not
-  install global recorders or subscribers. Applications should initialise
+  install global recorders or subscribers. Applications should initialize
   exporters/subscribers once, as early as practical in startup.
-
 
 ## Markdown guidance
 
@@ -263,6 +263,7 @@ The following tooling is available in this environment:
 
 These practices help maintain a high-quality codebase and facilitate
 collaboration.
+
 ## Key takeaway
 
 These practices help maintain a high-quality codebase and facilitate
