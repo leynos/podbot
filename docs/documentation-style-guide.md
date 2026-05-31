@@ -342,6 +342,12 @@ proposal:
 
 <Description, consequences, and trade-offs.>
 
+| Topic     | Option A | Option B |
+| --------- | -------- | -------- |
+| <Factor>  | <Value>  | <Value>  |
+
+_Table 1: Comparison of options._
+
 ## Open questions
 
 - <Open question 1>
@@ -629,7 +635,7 @@ This hierarchy should align with the GIST framework:
   - Phases: 1, 2, 3, …
   - Steps: 1.1, 1.2, 1.3, …
   - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
-- **Checkboxes:** Precede task and sub-task items with a GitHub-flavoured
+- **Checkboxes:** Precede task and sub-task items with a GitHub Flavored
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency
