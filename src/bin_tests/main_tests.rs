@@ -180,11 +180,11 @@ fn run_observability_logs_match_snapshot() {
     .expect("run logs should be captured");
 
     insta::assert_snapshot!(logs, @r#"
-    [34mDEBUG[0m [2mpodbot[0m[2m:[0m validating run request before agent orchestration [3moperation[0m[2m=[0m"run_agent" [3mrepository[0m[2m=[0m"team/snapshot-service" [3mbranch[0m[2m=[0m"feature/snapshot"
-    [34mDEBUG[0m [2mpodbot::api[0m[2m:[0m GitHub configuration validation skipped for run request [3moperation[0m[2m=[0m"run_agent" [3mrepository[0m[2m=[0m"team/snapshot-service" [3mbranch[0m[2m=[0m"feature/snapshot"
-    [34mDEBUG[0m [2mpodbot::api[0m[2m:[0m GitHub credential validation skipped for run request [3moperation[0m[2m=[0m"run_agent" [3mrepository[0m[2m=[0m"team/snapshot-service" [3mbranch[0m[2m=[0m"feature/snapshot"
-    [34mDEBUG[0m [2mpodbot[0m[2m:[0m run_agent completed successfully [3moperation[0m[2m=[0m"run_agent" [3mrepository[0m[2m=[0m"team/snapshot-service" [3mbranch[0m[2m=[0m"feature/snapshot" [3moutcome[0m[2m=[0m"success"
-    "#);
+DEBUG podbot: validating run request before agent orchestration operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
+DEBUG podbot::api: GitHub configuration validation skipped for run request operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
+DEBUG podbot::api: GitHub credential validation skipped for run request operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
+DEBUG podbot: run_agent completed successfully operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot" outcome="success"
+"#);
 }
 
 #[test]
