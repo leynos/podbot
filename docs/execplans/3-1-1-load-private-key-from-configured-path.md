@@ -195,10 +195,9 @@ Key files for this task:
   `private_key_path: Option<Utf8PathBuf>`. Already has `validate()` and
   `is_configured()` methods.
 
-- `src/error.rs` (467 lines): defines `GitHubError::PrivateKeyLoadFailed {
-  path: PathBuf, message: String }
-  `. This variant already exists and propagates through `PodbotError` via `
-  #[from]`.
+- `src/error.rs` (467 lines): defines
+  `GitHubError::PrivateKeyLoadFailed { path: PathBuf, message: String }`. This
+  variant already exists and propagates through `PodbotError` via `#[from]`.
 
 - `Cargo.toml`: lists `octocrab = "0.49.5"` which transitively depends on
   `jsonwebtoken = "10.2.0"` with `use_pem` feature. The `jsonwebtoken` crate is
@@ -292,11 +291,10 @@ Internal structure uses four private helpers:
    `PRIVATE KEY` (PKCS#8). Since `PRIVATE KEY` is ambiguous, delegate to
    `from_rsa_pem` for the definitive check.
 
-4. `parse_rsa_pem(pem_contents, display_path) ->
-   Result<EncodingKey, GitHubError>`: calls `validate_rsa_pem` first, then `
-   EncodingKey::from_rsa_pem(pem_contents.as_bytes())
-    `, mapping `jsonwebtoken::errors::Error` to `
-   GitHubError::PrivateKeyLoadFailed`.
+4. `parse_rsa_pem(pem_contents, display_path) -> Result<EncodingKey, GitHubError>`:
+   calls `validate_rsa_pem` first, then
+   `EncodingKey::from_rsa_pem(pem_contents.as_bytes())`, mapping
+   `jsonwebtoken::errors::Error` to `GitHubError::PrivateKeyLoadFailed`.
 
 A separate private function is used for testability:
 

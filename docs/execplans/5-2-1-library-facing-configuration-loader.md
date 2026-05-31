@@ -148,9 +148,16 @@ escalation, not workarounds.
   while preserving existing precedence semantics. Date/Author: 2026-03-03
   (agent)
 
-- Decision: Add `load_config_with_env(&impl mockable::Env, ..)` as a
-  deterministic
-  test seam. Rationale: Avoids mutating the process environment in tests and
+- Decision: Add a deterministic test seam with the implementation signature:
+
+  ```rust
+  pub fn load_config_with_env<E: mockable::Env>(
+      env: &E,
+      options: &ConfigLoadOptions,
+  ) -> Result<AppConfig>
+  ```
+
+  Rationale: Avoids mutating the process environment in tests and
   aligns with the repository dependency-injection guidance. Date/Author:
   2026-03-03 (agent)
 
