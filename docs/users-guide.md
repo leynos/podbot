@@ -165,7 +165,7 @@ Execution behaviour:
   for the command to finish.
 - podbot polls exec status until the command exits, then uses the daemon exit
   code as the CLI outcome. Exit code `0` returns success. Non-zero values in the
-   `1..=255` range are returned directly, negative values are mapped to `1`,
+  `1..=255` range are returned directly, negative values are mapped to `1`,
   and values above `255` are clamped to `255`.
 - If the daemon reports completion without an exit code, podbot returns an exec
   failure instead of guessing the result.

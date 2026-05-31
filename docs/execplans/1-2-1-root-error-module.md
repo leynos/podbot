@@ -125,11 +125,11 @@ documentation updates required by the roadmap. Relevant references:
 
 ## Plan of Work
 
-Stage A: inspect and confirm requirements. Review `src/error.rs`,
-`src/main.rs`, `src/lib.rs`, and related modules to confirm the existing error
-handling pattern matches the roadmap. Use ripgrep to confirm there are no
-`unwrap` or `expect` calls outside test code. Capture any gaps (missing error
-variants, missing Result alias, missing module exports).
+Stage A: inspect and confirm requirements. Review `src/error.rs`, `src/main.rs`,
+`src/lib.rs`, and related modules to confirm the existing error handling
+pattern matches the roadmap. Use ripgrep to confirm there are no `unwrap` or
+`expect` calls outside test code. Capture any gaps (missing error variants,
+missing Result alias, missing module exports).
 
 Stage B: implement or refine the root error module. If gaps exist, adjust
 `src/error.rs` to define the canonical semantic error enums, the top-level

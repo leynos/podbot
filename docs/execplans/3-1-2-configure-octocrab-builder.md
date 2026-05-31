@@ -1,9 +1,8 @@
 # Step 3.1.2: Configure OctocrabBuilder with app\_id and private\_key
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -346,8 +345,8 @@ Add three new unit tests after the existing tests (after line 236). The tests
 use the existing `valid_rsa_pem` and `temp_key_dir` fixtures.
 
 Test 1 (`build_app_client_with_valid_key_succeeds`): load the test RSA key via
-`load_private_key_from_dir`, then call `build_app_client(12345, key)` and
-assert `is_ok()`.
+`load_private_key_from_dir`, then call `build_app_client(12345, key)` and assert
+`is_ok()`.
 
 Test 2 (`build_app_client_with_zero_app_id_succeeds`): call
 `build_app_client(0, key)` and verify it returns `Ok`. This documents the known

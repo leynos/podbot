@@ -1,9 +1,8 @@
 # Step 3.1.3: Validate credentials produce a valid App token on startup
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: DONE
 
@@ -162,11 +161,10 @@ will be added here.
 - `TokenAcquisitionFailed { message: String }` - for token request failures
 - `PrivateKeyLoadFailed { path: PathBuf, message: String }` - for key loading
 
-`src/config/types.rs` defines `GitHubConfig` with fields:
-`app_id: Option<u64>`, `installation_id: Option<u64>`,
-`private_key_path: Option<Utf8PathBuf>`. The `validate()` method checks that
-all required fields are present and non-zero. The `is_configured()` method
-returns true if credentials are fully configured.
+`src/config/types.rs` defines `GitHubConfig` with fields: `app_id: Option<u64>`,
+`installation_id: Option<u64>`, `private_key_path: Option<Utf8PathBuf>`. The
+`validate()` method checks that all required fields are present and non-zero.
+The `is_configured()` method returns true if credentials are fully configured.
 
 `tests/features/github_app_client.feature` and
 `tests/bdd_github_app_client_helpers/` are the existing BDD harness for App

@@ -10,8 +10,8 @@ PLANS.md is not present in the repository root, so this plan stands alone.
 
 ## Purpose / Big Picture
 
-Podbot's current configuration model only supports the legacy interactive
-shape: `agent.mode = "podbot"` and a clone-oriented workspace rooted at
+Podbot's current configuration model only supports the legacy interactive shape:
+`agent.mode = "podbot"` and a clone-oriented workspace rooted at
 `workspace.base_dir`. Step 1.4 extends that schema so hosted app-server
 configurations can be represented, loaded, normalized, and validated as the
 project moves from the initial interactive-only shape toward the hosted design.
@@ -349,9 +349,9 @@ tests and the new compatibility scenarios.
 
 6. Extend library-facing overrides and/or validation inputs if needed.
 
-   If subcommand legality needs explicit intent, introduce a shared type such
-   as `CommandIntent` or a config-validation request model rather than hiding
-   the rule inside `main.rs`.
+   If subcommand legality needs explicit intent, introduce a shared type such as
+   `CommandIntent` or a config-validation request model rather than hiding the
+   rule inside `main.rs`.
 
 7. Implement normalization and validation.
 
@@ -524,8 +524,8 @@ Expected primary edit set:
 - `docs/users-guide.md`
 - `docs/podbot-roadmap.md` after completion
 
-No new dependencies are expected. The implementation should rely on the
-existing `ortho_config`, `mockable`, `rstest`, and `rstest-bdd` stack.
+No new dependencies are expected. The implementation should rely on the existing
+`ortho_config`, `mockable`, `rstest`, and `rstest-bdd` stack.
 
 ## Revision Note
 

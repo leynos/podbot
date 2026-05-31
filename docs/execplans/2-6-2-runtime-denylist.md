@@ -1,12 +1,12 @@
 # Step 2.6.2: Enforce a runtime denylist for blocked Agentic Control Protocol (ACP) methods
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises and discoveries`,
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises and discoveries`,
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
-Status: COMPLETE (2026-05-02). All Stage I gates pass; the second
-Step 2.6 roadmap checkbox is now marked done.
+Status: COMPLETE (2026-05-02). All Stage I gates pass; the second Step 2.6
+roadmap checkbox is now marked done.
 
 No `PLANS.md` file exists in this repository as of 2026-05-02, so this ExecPlan
 is the governing implementation document for this task.
@@ -14,15 +14,15 @@ is the governing implementation document for this task.
 ## Purpose and big picture
 
 Step 2.6.1 closed the door on the Agentic Control Protocol (ACP) handshake by
-stripping `terminal/*` and `fs/*` capability advertisements from the
-client-side `initialize` request before they reach the sandboxed agent. Step
-2.6.2 closes the second door: a hosted agent may still attempt to call those
-host-delegated methods (`terminal/create`, `terminal/wait_for_exit`,
-`fs/read_text_file`, `fs/write_text_file`, and so on) through the protocol
-proxy after initialization. Without enforcement at the proxy seam, those calls
-would either reach the IDE host (defeating the sandbox) or stall (because the
-IDE will not service capabilities it never advertised). Either outcome breaks
-the trust boundary that `docs/podbot-design.md` records:
+stripping `terminal/*` and `fs/*` capability advertisements from the client-side
+`initialize` request before they reach the sandboxed agent. Step 2.6.2 closes
+the second door: a hosted agent may still attempt to call those host-delegated
+methods (`terminal/create`, `terminal/wait_for_exit`, `fs/read_text_file`,
+`fs/write_text_file`, and so on) through the protocol proxy after
+initialization. Without enforcement at the proxy seam, those calls would either
+reach the IDE host (defeating the sandbox) or stall (because the IDE will not
+service capabilities it never advertised). Either outcome breaks the trust
+boundary that `docs/podbot-design.md` records:
 
 > Podbot must maintain a runtime denylist for blocked ACP methods and
 > return a protocol error if those methods are attempted later in the
@@ -70,8 +70,8 @@ Observable success for this task:
   Runtime enforcement must compose with init masking, not replace it.
 - Default behaviour of `ExecMode::Protocol` must remain a raw byte proxy.
   Enforcement activates only when the existing
-  `ExecSessionOptions::with_capability_policy` opt-in is set
-  (potentially renamed in this step to reflect both responsibilities).
+  `ExecSessionOptions::with_capability_policy` opt-in is set (potentially
+  renamed in this step to reflect both responsibilities).
 - Do not add new runtime dependencies. Reuse `serde_json` (re-exported via
   `ortho_config::serde_json`), `tokio::sync::mpsc`, and `tracing`, all of which
   are already in the workspace.
@@ -190,11 +190,11 @@ Stop and escalate (do not improvise) when any of the following occurs.
 - Risk: prefix-based matching (`terminal/`, `fs/`) may both block too
   much (an unrelated `terminal-monitor` method, hypothetically) and miss future
   ACP methods that do not share the prefix. Severity: medium. Likelihood: low.
-  Mitigation: the ACP specification scopes capability families with the
-  trailing `/` separator, so prefix matching with a literal `/` delimiter is
-  the correct rule. Encode the families as `&[&str] = &["terminal/", "fs/"]` in
-  one place so future families can be added in a single edit. Cover boundary
-  cases (`terminal`, `terminalx`, `terminal/`, `terminal/create`) in unit tests.
+  Mitigation: the ACP specification scopes capability families with the trailing
+  `/` separator, so prefix matching with a literal `/` delimiter is the
+  correct rule. Encode the families as `&[&str] = &["terminal/", "fs/"]` in one
+  place so future families can be added in a single edit. Cover boundary cases
+  (`terminal`, `terminalx`, `terminal/`, `terminal/create`) in unit tests.
 
 - Risk: feature-file edits for `rstest-bdd` are compile-time inputs;
   stale generated bindings can mask scenario-name mismatches. Severity: medium.
@@ -366,7 +366,7 @@ Add unit tests under `src/engine/connection/exec/acp_policy_tests.rs` covering:
 
 Validation:
 `cargo test -p podbot --lib acp_policy_tests 2>&1 | tee /tmp/test-podbot-session-e445b19d.out`
- passes; new tests fail before the module is implemented and pass after.
+passes; new tests fail before the module is implemented and pass after.
 
 ### Stage C: Add the frame assembler
 
@@ -470,7 +470,7 @@ Modify `src/engine/connection/exec/protocol.rs`:
 
 Validation:
 `cargo build --workspace --all-targets --all-features 2>&1 | tee /tmp/build-podbot-session-e445b19d.out`
- succeeds, and `cargo test -p podbot --lib 2>&1 | tee ...` passes new unit
+succeeds, and `cargo test -p podbot --lib 2>&1 | tee ...` passes new unit
 tests for the adapter and sink covering:
 
 - blocked request followed by permitted frame: only the permitted frame
@@ -719,8 +719,8 @@ report; they must not write to the working tree.
   an explicit shutdown command, eliminating a race where a misordered shutdown
   could drop queued items.
 - [x] (2026-05-02) Stage E session-options wiring (`CapabilityPolicy`
-  enum). `ProtocolSessionOptions::with_capability_policy` replaces the
-  earlier boolean opt-in and the protocol session splits into
+  enum). `ProtocolSessionOptions::with_capability_policy` replaces the earlier
+  boolean opt-in and the protocol session splits into
   `run_session_with_runtime_enforcement` (channel-based sink path) and
   `run_session_without_runtime_enforcement` (existing byte-transparent path).
   All 448 workspace unit tests pass.
@@ -742,18 +742,17 @@ report; they must not write to the working tree.
   policy, sink-task model, frame ceiling, and `CapabilityPolicy` enum are now
   described in `docs/podbot-design.md`. The user-facing behaviour (synthesized
   error response, stderr denial line, byte-identical permitted forwards, opt-in
-  until `podbot host` ships) is in `docs/users-guide.md`. A new section 8.2.2
-  in `docs/developers-guide.md` documents the four-module split, the
+  until `podbot host` ships) is in `docs/users-guide.md`. A new section 8.2.2 in
+  `docs/developers-guide.md` documents the four-module split, the
   `CapabilityPolicy` selector, and the recommended testing pattern. All four
   touched Markdown files pass `markdownlint`.
 - [x] (2026-05-02) Stage I roadmap update and full gate stack. The
   second Step 2.6 roadmap checkbox is marked done. Final results:
-  `make check-fmt` ✓, `make lint` ✓ (clippy `-D warnings`),
-  `make test` ✓ (492 library tests, all integration suites pass with
-  0 failures), `make markdownlint` ✓, `make nixie` ✓. Pre-existing
-  `make fmt` failures in `users-guide.md` (lines 407-446 and
-  640-817) predate this branch and were verified by running
-  `make fmt` against `git stash`'d state.
+  `make check-fmt` ✓, `make lint` ✓ (clippy `-D warnings`), `make test` ✓ (492
+  library tests, all integration suites pass with 0 failures),
+  `make markdownlint` ✓, `make nixie` ✓. Pre-existing `make fmt` failures in
+  `users-guide.md` (lines 407-446 and 640-817) predate this branch and were
+  verified by running `make fmt` against `git stash`'d state.
 
 ## Surprises and discoveries
 
@@ -802,28 +801,27 @@ report; they must not write to the working tree.
   the proposed `enforce_acp_method_denylist: bool` into a single
   `CapabilityPolicy::{Disabled, MaskOnly, MaskAndDeny}` enum on
   `ExecSessionOptions`, with `with_capability_policy(policy)`. Rationale: the
-  Logisphere review
-  observed that two booleans for one trust-boundary decision invite drift; the
-  explicit `MaskOnly` mode is also useful for diagnostic sessions that want
-  init masking without runtime denial. The enum keeps every combination
-  representable through one constructor.
+  Logisphere review observed that two booleans for one trust-boundary decision
+  invite drift; the explicit `MaskOnly` mode is also useful for diagnostic
+  sessions that want init masking without runtime denial. The enum keeps every
+  combination representable through one constructor.
 - Decision: introduce a dedicated container-stdin sink task driven by a
-  `WriteCmd::{Forward, Synthesized}` channel, rather than having the
-  existing host-stdin forwarder drain a secondary mpsc alongside its
-  `tokio::io::copy` loop. Rationale: the Logisphere `Doggylump` analysis showed
-  that draining a secondary queue from inside a `tokio::io::copy` loop is
-  awkward and collides with the `STDIN_SETTLE_TIMEOUT` race. A dedicated sink
-  task is the single ordering authority: it drains until every sender has been
-  dropped, so the output adapter can guarantee that synthesized errors are
-  flushed before container stdin closes. Both the host-stdin forwarder and the
-  output adapter become *senders* with no shared writer ownership.
+  `WriteCmd::{Forward, Synthesized}` channel, rather than having the existing
+  host-stdin forwarder drain a secondary mpsc alongside its `tokio::io::copy`
+  loop. Rationale: the Logisphere `Doggylump` analysis showed that draining a
+  secondary queue from inside a `tokio::io::copy` loop is awkward and collides
+  with the `STDIN_SETTLE_TIMEOUT` race. A dedicated sink task is the single
+  ordering authority: it drains until every sender has been dropped, so the
+  output adapter can guarantee that synthesized errors are flushed before
+  container stdin closes. Both the host-stdin forwarder and the output adapter
+  become *senders* with no shared writer ownership.
 - Decision: keep parsing pure and never re-serialize permitted frames.
   Rationale: byte-identical forwarding preserves any agent-side integrity
   assumptions (key ordering, whitespace, embedded hashes) and avoids
   weaponizing the proxy against ACP extensions that depend on byte-stable
-  frames. The `OutboundFrameAssembler` retains the original byte slice for
-  every `Forward` decision; `serde_json::from_slice` is used only for the
-  decision step.
+  frames. The `OutboundFrameAssembler` retains the original byte slice for every
+  `Forward` decision; `serde_json::from_slice` is used only for the decision
+  step.
 - Decision: prefix-match capability families using a trailing `/`
   delimiter (`terminal/`, `fs/`), encoded as
   `MethodFamily { prefix: &'static str }` values. Rationale: ACP scopes
@@ -864,12 +862,11 @@ report; they must not write to the working tree.
   agents. Recording the fallback once on stderr keeps the operator informed
   without spamming a tight loop.
 - Decision: insert a Stage A.5 architecture spike that times-boxes a
-  comparison between the dedicated sink task and a single
-  `tokio::select!`-driven bidirectional task. Rationale: the Logisphere review
-  explicitly named the single-task fold as the alternative most worth a
-  checkpoint before committing to the sink design. A bounded spike costs little
-  and prevents re-architecture later if the simpler shape fits inside the
-  400-line guidance.
+  comparison between the dedicated sink task and a single `tokio::select!`
+  -driven bidirectional task. Rationale: the Logisphere review explicitly named
+  the single-task fold as the alternative most worth a checkpoint before
+  committing to the sink design. A bounded spike costs little and prevents
+  re-architecture later if the simpler shape fits inside the 400-line guidance.
 - Decision: keep the new ACP modules (`acp_policy`, and the upcoming
   `acp_frame` and `acp_runtime`) as children of `protocol` via `#[path]`
   attributes, matching the established 2.6.1 pattern for `acp_helpers`, instead
@@ -910,16 +907,14 @@ Shipped behaviour matches every observable success criterion captured in
   `-32001` / `data.reason = "podbot_capability_policy"` shape, and emits one
   `tracing::warn!` per denial on the `podbot::acp::policy` target.
 - Permitted frames (including those split across Bollard chunk boundaries)
-  are forwarded byte-identically. The `acp_frame` exhaustive parameterized
-  test confirms reassembly equality at every byte split in a multi-frame
-  stream.
+  are forwarded byte-identically. The `acp_frame` exhaustive parameterized test
+  confirms reassembly equality at every byte split in a multi-frame stream.
 - Malformed JSON, response/batch shapes, and methods outside the blocked
   families pass through unchanged, in keeping with the Step 2.6.1 tolerant
   policy.
 - Stage 2.5 invariants hold: stdout purity, bounded buffering (now with a
-  128 KiB runtime ceiling and a 64 KiB input ceiling), and accurate
-  exit-code reporting through `settle_stdin_forwarding_task` plus the
-  sink-task drain.
+  128 KiB runtime ceiling and a 64 KiB input ceiling), and accurate exit-code
+  reporting through `settle_stdin_forwarding_task` plus the sink-task drain.
 - `Disabled` and `MaskOnly` paths skip the sink and adapter wiring entirely,
   so the byte-transparent contract is preserved when enforcement is off.
 
@@ -932,12 +927,11 @@ Adjustments from the original draft:
 - Refactoring for clippy's tight `cognitive-complexity-threshold = 9` and
   `too_many_arguments = 4` introduced several extra helper functions inside
   `acp_runtime` (`finalize_sink_writer`, `command_bytes`,
-  `classify_pipe_outcome`, `log_shutdown_outcome`,
-  `send_synthesized_or_log`, `log_send_failure`, `log_synthesis_failure`,
-  `log_denial`, `emit_fallback_warning`, `warn_buffer_overflow`,
-  `warn_partial_frame_drop`) and an `AdapterOutputIo` parameter struct in
-  `protocol.rs`. The decomposition makes each function single-purpose and
-  trivially testable.
+  `classify_pipe_outcome`, `log_shutdown_outcome`, `send_synthesized_or_log`,
+  `log_send_failure`, `log_synthesis_failure`, `log_denial`,
+  `emit_fallback_warning`, `warn_buffer_overflow`, `warn_partial_frame_drop`)
+  and an `AdapterOutputIo` parameter struct in `protocol.rs`. The decomposition
+  makes each function single-purpose and trivially testable.
 
 Follow-on work (deliberately out of scope for 2.6.2):
 
@@ -949,28 +943,27 @@ Follow-on work (deliberately out of scope for 2.6.2):
   `CapabilityPolicy`.
 - Step 2.6.4: explicit operator override that flips selected blocked
   methods back to `Forward`. The `MethodDenylist` struct already models the
-  family list as a `&'static [MethodFamily]`, so the override surface can
-  be added without changing the policy's decision shape. Reserve JSON-RPC
-  application code `-32002` for an "override required" variant when the
-  policy is partially relaxed.
+  family list as a `&'static [MethodFamily]`, so the override surface can be
+  added without changing the policy's decision shape. Reserve JSON-RPC
+  application code `-32002` for an "override required" variant when the policy
+  is partially relaxed.
 - Step 2.6.5: end-to-end tests that drive a real ACP session through the
   full `podbot host` pipeline once that command lands; the existing
-  `OutboundPolicyAdapter` and sink task already provide the seams those
-  tests will need.
+  `OutboundPolicyAdapter` and sink task already provide the seams those tests
+  will need.
 
 Lessons:
 
 - Bidirectional injection problems are genuinely solved by a single
-  ordering authority. The dedicated sink task removed every cancellation
-  and shutdown race the original two-boolean design would have left open,
-  and the `WriteCmd` enum makes the queue contents trivially diffable in
-  tests.
+  ordering authority. The dedicated sink task removed every cancellation and
+  shutdown race the original two-boolean design would have left open, and the
+  `WriteCmd` enum makes the queue contents trivially diffable in tests.
 - `cognitive-complexity-threshold = 9` is unforgiving for handlers with
-  multiple `tracing::warn!` arms; extracting per-arm log helpers is worth
-  it because every helper becomes individually inspectable.
+  multiple `tracing::warn!` arms; extracting per-arm log helpers is worth it
+  because every helper becomes individually inspectable.
 - The Logisphere review caught the agent-vs-host polarity confusion early;
-  naming the policy function `evaluate_agent_outbound_frame` fixed the
-  polarity at the type level rather than relying on doc comments.
+  naming the policy function `evaluate_agent_outbound_frame` fixed the polarity
+  at the type level rather than relying on doc comments.
 
 ## Interfaces and dependencies
 

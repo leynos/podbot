@@ -442,7 +442,7 @@ reads the file, validates the PEM format, and returns a
 `jsonwebtoken::EncodingKey` suitable for `OctocrabBuilder::app()`.
 
 Only RSA keys are accepted. Octocrab v0.49.5 hardcodes `Algorithm::RS256` in its
- `create_jwt` function, and the GitHub API only supports RS256 for App
+`create_jwt` function, and the GitHub API only supports RS256 for App
 authentication. Ed25519 and ECDSA keys are rejected at load time with clear
 error messages rather than deferring failure to JWT signing. Supported PEM
 formats are PKCS#1 (`RSA PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`); the latter

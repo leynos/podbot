@@ -277,9 +277,9 @@ At completion, the root configuration interface should be available at
     }
 
 Nested types should live in `src/config.rs` and remain serializable with
-`serde`. Any path fields should use `camino::Utf8PathBuf`. If this task
-requires `OrthoConfig` derive attributes, they should be minimal and compatible
-with the layered precedence described in `docs/ortho-config-users-guide.md`.
+`serde`. Any path fields should use `camino::Utf8PathBuf`. If this task requires
+`OrthoConfig` derive attributes, they should be minimal and compatible with
+the layered precedence described in `docs/ortho-config-users-guide.md`.
 
 ## Revision note (required when editing an ExecPlan)
 

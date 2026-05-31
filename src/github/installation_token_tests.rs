@@ -70,33 +70,22 @@ fn assert_metadata_rejects(
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-enum RejectionVariant {
-    ExpiryBeforeAcquisition,
-    RefreshBeforeAcquisition,
-}
-
 #[rstest]
-#[case(RejectionVariant::ExpiryBeforeAcquisition)]
-#[case(RejectionVariant::RefreshBeforeAcquisition)]
-fn token_metadata_rejects_invalid_metadata(
+#[case::expiry_before_acquisition(-1_i64, 300_u64, "expiry time precedes acquisition time")]
+#[case::refresh_before_acquisition(60_i64, 120_u64, "refresh time precedes acquisition time")]
+fn token_metadata_rejects_invalid_ordering(
     acquired_at: SystemTime,
-    expiry_buffer: Duration,
-    #[case] variant: RejectionVariant,
+    #[case] expires_offset_secs: i64,
+    #[case] expiry_buffer_secs: u64,
+    #[case] expected_fragment: &'static str,
 ) {
-    let (expires_at, buffer, expected_fragment) = match variant {
-        RejectionVariant::ExpiryBeforeAcquisition => (
-            acquired_at - Duration::from_secs(1),
-            expiry_buffer,
-            "expiry time precedes acquisition time",
-        ),
-        RejectionVariant::RefreshBeforeAcquisition => (
-            acquired_at + Duration::from_secs(60),
-            Duration::from_secs(120),
-            "refresh time precedes acquisition time",
-        ),
+    let expires_at = if expires_offset_secs >= 0 {
+        acquired_at + Duration::from_secs(expires_offset_secs.unsigned_abs())
+    } else {
+        acquired_at - Duration::from_secs(expires_offset_secs.unsigned_abs())
     };
-    assert_metadata_rejects(acquired_at, expires_at, buffer, expected_fragment);
+    let expiry_buffer = Duration::from_secs(expiry_buffer_secs);
+    assert_metadata_rejects(acquired_at, expires_at, expiry_buffer, expected_fragment);
 }
 
 proptest! {

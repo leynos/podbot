@@ -137,9 +137,9 @@ hooks:
     workspace_access: read_only  # none | read_only | read_write
 ```
 
-The `apiVersion` field uses a versioned namespace to allow schema evolution.
-The `v1alpha1` version indicates this schema is experimental and may change
-before stabilization.
+The `apiVersion` field uses a versioned namespace to allow schema evolution. The
+`v1alpha1` version indicates this schema is experimental and may change before
+stabilization.
 
 ## Ingestion contract
 

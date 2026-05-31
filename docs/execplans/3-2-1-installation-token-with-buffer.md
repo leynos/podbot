@@ -1,7 +1,7 @@
 # Step 3.2.1: Acquire installation tokens with an expiry buffer
 
 This ExecPlan (execution plan) is a living document. The sections `Constraints`,
- `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
 and `Outcomes & retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
@@ -213,7 +213,7 @@ continue milestone by milestone within the tolerances below.
   scrape of GitHub Docs for generating installation access tokens and the REST
   endpoint. Impact: this plan treats repository/permission narrowing as a
   future or escalated concern because the roadmap explicitly requires Octocrab's
-   `installation_token_with_buffer`, whose current implementation uses an empty
+  `installation_token_with_buffer`, whose current implementation uses an empty
   request body.
 
 - Observation: Firecrawl and local crate source confirmed that Octocrab
