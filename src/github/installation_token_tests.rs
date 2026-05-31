@@ -45,46 +45,55 @@ fn token_metadata_subtracts_refresh_buffer(acquired_at: SystemTime, expiry_buffe
     assert_eq!(token.refresh_after(), token.expires_at() - expiry_buffer);
 }
 
-#[rstest]
-fn token_metadata_rejects_expiry_before_acquisition(
+/// Asserts that [`InstallationAccessToken::from_metadata`] returns a
+/// [`GitHubError::TokenAcquisitionFailed`] whose message contains `expected_fragment`.
+fn assert_metadata_rejects(
     acquired_at: SystemTime,
+    expires_at: SystemTime,
     expiry_buffer: Duration,
+    expected_fragment: &str,
 ) {
-    let expires_at = acquired_at - Duration::from_secs(1);
-
     let result = InstallationAccessToken::from_metadata(
         String::from(FIXTURE_TOKEN),
         acquired_at,
         expires_at,
         expiry_buffer,
     );
-
     match result {
         Err(GitHubError::TokenAcquisitionFailed { message }) => {
-            assert!(message.contains("expiry time precedes acquisition time"));
+            assert!(
+                message.contains(expected_fragment),
+                "expected message to contain {expected_fragment:?}, got: {message}"
+            );
         }
         other => panic!("expected token metadata failure, got: {other:?}"),
     }
 }
 
 #[rstest]
-fn token_metadata_rejects_refresh_before_acquisition(acquired_at: SystemTime) {
-    let expires_at = acquired_at + Duration::from_secs(60);
-    let expiry_buffer = Duration::from_secs(120);
-
-    let result = InstallationAccessToken::from_metadata(
-        String::from(FIXTURE_TOKEN),
+fn token_metadata_rejects_expiry_before_acquisition(
+    acquired_at: SystemTime,
+    expiry_buffer: Duration,
+) {
+    let expires_at = acquired_at - Duration::from_secs(1);
+    assert_metadata_rejects(
         acquired_at,
         expires_at,
         expiry_buffer,
+        "expiry time precedes acquisition time",
     );
+}
 
-    match result {
-        Err(GitHubError::TokenAcquisitionFailed { message }) => {
-            assert!(message.contains("refresh time precedes acquisition time"));
-        }
-        other => panic!("expected token metadata failure, got: {other:?}"),
-    }
+#[rstest]
+fn token_metadata_rejects_refresh_before_acquisition(acquired_at: SystemTime) {
+    let expires_at = acquired_at + Duration::from_secs(60);
+    let expiry_buffer = Duration::from_secs(120);
+    assert_metadata_rejects(
+        acquired_at,
+        expires_at,
+        expiry_buffer,
+        "refresh time precedes acquisition time",
+    );
 }
 
 proptest! {
