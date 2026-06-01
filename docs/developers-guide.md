@@ -20,16 +20,16 @@ For user-facing behaviour and configuration reference, see
 
 All quality gates must pass before committing. The canonical targets are:
 
-| Target              | Command                                                                                                          | Purpose                                                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `make check-fmt`    | `cargo fmt --workspace -- --check`                                                                               | Verify formatting                                                                               |
-| `make fmt`          | `cargo fmt --workspace`                                                                                          | Apply formatting fixes                                                                          |
-| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings`                                           | Lint with all warnings denied                                                                   |
-| `make test`         | `cargo test --workspace`                                                                                         | Run full test suite                                                                             |
-| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                                                           | Type-check the workspace                                                                        |
-| `make audit`        | `find . \( -path '*/target/*' \) -prune -o -name Cargo.toml -execdir cargo audit --manifest-path Cargo.toml ';'` | Canonical `make audit` target: prune target directories and run `cargo audit` for each manifest |
-| `make markdownlint` | markdownlint-cli                                                                                                 | Validate Markdown files                                                                         |
-| `make nixie`        | Mermaid diagram validator                                                                                        | Validate diagrams in Markdown                                                                   |
+| Target              | Command                                                                                                          | Purpose                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `make check-fmt`    | `cargo fmt --workspace -- --check`                                                                               | Verify formatting                                                                                  |
+| `make fmt`          | `cargo fmt --workspace`                                                                                          | Apply formatting fixes                                                                             |
+| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings`                                           | Lint with all warnings denied                                                                      |
+| `make test`         | `cargo test --workspace`                                                                                         | Run full test suite                                                                                |
+| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                                                           | Type-check the workspace                                                                           |
+| `make audit`        | `find . \( -path '*/target/*' -o -path '*/node_modules/*' -o -path '*/.venv/*' \) -prune -o -name Cargo.toml`    | Canonical `make audit` target: prune generated directories and run `cargo audit` for each manifest |
+| `make markdownlint` | markdownlint-cli                                                                                                 | Validate Markdown files                                                                            |
+| `make nixie`        | Mermaid diagram validator                                                                                        | Validate diagrams in Markdown                                                                      |
 
 _Table 1: Quality gates and corresponding commands._
 

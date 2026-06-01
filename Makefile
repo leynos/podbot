@@ -50,7 +50,7 @@ audit: rust-audit ## Audit dependencies for known vulnerabilities
 
 rust-audit: ## Audit every Rust manifest for known vulnerabilities
 	find . \
-		\( -path '*/target/*' \) -prune -o \
+		\( -path '*/target/*' -o -path '*/node_modules/*' -o -path '*/.venv/*' \) -prune -o \
 		-name Cargo.toml -exec sh -c 'set -e; for manifest do \
 			manifest_dir=$$(dirname "$$manifest"); \
 			printf "Auditing Rust manifest %s\n" "$$manifest"; \
