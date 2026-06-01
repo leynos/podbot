@@ -1,9 +1,8 @@
 # Extract command orchestration into a public `api/` library module
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -175,9 +174,9 @@ All acceptance criteria met:
 
 Key deviation from plan: `exec()` uses `ExecParams<'a, C>` struct (where
 `C: ContainerExecClient`) instead of 7 positional parameters, due to clippy
-`too_many_arguments`. The struct accepts a pre-connected `connector` rather
-than `config`/`env` fields, pushing socket resolution to the caller (CLI
-adapter) and enabling direct mock injection in tests.
+`too_many_arguments`. The struct accepts a pre-connected `connector` rather than
+`config`/`env` fields, pushing socket resolution to the caller (CLI adapter)
+and enabling direct mock injection in tests.
 
 ## Context and orientation
 
@@ -297,8 +296,8 @@ pub fn exec<C: ContainerExecClient>(
 Key design points:
 
 - Accepts `connector: &C` where `C: ContainerExecClient` — the CLI adapter
-  connects via `EngineConnector::connect_with_fallback` and passes the
-  resulting `Docker` client; tests supply a mock implementation.
+  connects via `EngineConnector::connect_with_fallback` and passes the resulting
+  `Docker` client; tests supply a mock implementation.
 - Accepts `tty: bool` — caller decides, not the library.
 - Returns `PodbotResult<CommandOutcome>` — typed outcome, no printing.
 - No clap types in the signature.

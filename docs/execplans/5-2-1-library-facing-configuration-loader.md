@@ -1,9 +1,8 @@
 # Decouple configuration loading from Clap for library embedders
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -17,9 +16,9 @@ conventions, which contradicts the dual-delivery model in
 `docs/podbot-design.md`.
 
 After this change, library consumers can load `podbot::config::AppConfig`
-without constructing any Clap parse types. The CLI adapter keeps
-Clap-dependent parsing structures and performs a conversion step into
-library-owned load options.
+without constructing any Clap parse types. The CLI adapter keeps Clap-dependent
+parsing structures and performs a conversion step into library-owned load
+options.
 
 Observable success:
 
@@ -106,27 +105,21 @@ escalation, not workarounds.
 
 - Risk: moving Clap parse types out of `podbot::config` may require touching
   more call sites than expected (e.g., tests importing `podbot::config::Cli`).
-  Severity: medium
-  Likelihood: medium
-  Mitigation: use `rg "podbot::config::Cli"` to enumerate call sites up-front,
-  then update them in one focused pass.
+  Severity: medium Likelihood: medium Mitigation: use
+  `rg "podbot::config::Cli"` to enumerate call sites up-front, then update them
+  in one focused pass.
 
 - Risk: configuration discovery semantics may subtly change when introducing
   explicit load options (especially behaviour for a missing explicit config
-  path).
-  Severity: medium
-  Likelihood: medium
-  Mitigation: keep discovery order identical unless explicitly changed, and
-  add tests for any changed behaviour. If behaviour changes, update
-  `docs/users-guide.md`.
+  path). Severity: medium Likelihood: medium Mitigation: keep discovery order
+  identical unless explicitly changed, and add tests for any changed behaviour.
+  If behaviour changes, update `docs/users-guide.md`.
 
 - Risk: behavioural tests for config loading may be tempted to mutate process
-  environment variables.
-  Severity: low
-  Likelihood: medium
-  Mitigation: prefer a library loader API that accepts explicit environment
-  values or an injected environment abstraction (`mockable::Env`), so tests do
-  not require process-global environment mutation.
+  environment variables. Severity: low Likelihood: medium Mitigation: prefer a
+  library loader API that accepts explicit environment values or an injected
+  environment abstraction (`mockable::Env`), so tests do not require
+  process-global environment mutation.
 
 ## Progress
 
@@ -144,29 +137,34 @@ escalation, not workarounds.
 
 - Observation: Integration test crates inherit `missing_docs = "deny"` from
   workspace lints, so `pub` `rstest` fixtures in helper modules require doc
-  comments.
-  Impact: New BDD helper fixture initially failed compilation until a doc
-  comment was added.
+  comments. Impact: New BDD helper fixture initially failed compilation until a
+  doc comment was added.
 
 ## Decision log
 
 - Decision: Introduce `ConfigLoadOptions` and `ConfigOverrides` as the
-  library-facing inputs for configuration loading.
-  Rationale: Makes configuration loading usable for embedders without creating
-  Clap parse types, while preserving existing precedence semantics.
-  Date/Author: 2026-03-03 (agent)
+  library-facing inputs for configuration loading. Rationale: Makes
+  configuration loading usable for embedders without creating Clap parse types,
+  while preserving existing precedence semantics. Date/Author: 2026-03-03
+  (agent)
 
-- Decision: Add `load_config_with_env(&impl mockable::Env, ..)` as a deterministic
-  test seam.
-  Rationale: Avoids mutating the process environment in tests and aligns with
-  the repository dependency-injection guidance.
-  Date/Author: 2026-03-03 (agent)
+- Decision: Add a deterministic test seam with the implementation signature:
+
+  ```rust
+  pub fn load_config_with_env<E: mockable::Env>(
+      env: &E,
+      options: &ConfigLoadOptions,
+  ) -> Result<AppConfig>
+  ```
+
+  Rationale: Avoids mutating the process environment in tests and
+  aligns with the repository dependency-injection guidance. Date/Author:
+  2026-03-03 (agent)
 
 - Decision: Keep Clap-dependent parse structures in `podbot::cli` and remove
-  Clap derives from `podbot::config` model enums.
-  Rationale: Separates CLI concerns from the library configuration surface and
-  keeps the path open for future feature-gating of CLI-only code.
-  Date/Author: 2026-03-03 (agent)
+  Clap derives from `podbot::config` model enums. Rationale: Separates CLI
+  concerns from the library configuration surface and keeps the path open for
+  future feature-gating of CLI-only code. Date/Author: 2026-03-03 (agent)
 
 ## Outcomes & retrospective
 
@@ -184,7 +182,8 @@ escalation, not workarounds.
 Key current state (as of 2026-03-03):
 
 1. The library config module is `src/config/`.
-2. Clap parse structs live in `src/cli/mod.rs` and are exported as `podbot::cli`.
+2. Clap parse structs live in `src/cli/mod.rs` and are exported as
+   `podbot::cli`.
 3. Library configuration loading is implemented in `src/config/loader.rs`:
    - `pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig>`
    - `pub fn load_config_with_env(env: &impl mockable::Env, options: &ConfigLoadOptions)
@@ -193,8 +192,8 @@ Key current state (as of 2026-03-03):
    `ConfigLoadOptions` via `Cli::config_load_options()`, and calls
    `podbot::config::load_config(&options)`.
 
-The roadmap target is Phase 5, Step 5.2 in `docs/podbot-roadmap.md`:
-"Decouple configuration APIs from Clap".
+The roadmap target is Phase 5, Step 5.2 in `docs/podbot-roadmap.md`: "Decouple
+configuration APIs from Clap".
 
 ## Plan of work
 
@@ -261,8 +260,8 @@ Validation at end of Stage B:
 ### Stage C: Keep Clap-dependent structures in the CLI adapter layer
 
 1. Move Clap parse structs (`Cli`, `Commands`, `ExecArgs`, etc.) into a
-   dedicated CLI adapter module (`src/cli/mod.rs`) so `podbot::config` stays free
-   of Clap parse types.
+   dedicated CLI adapter module (`src/cli/mod.rs`) so `podbot::config` stays
+   free of Clap parse types.
 2. Add conversion helpers that map parsed CLI flags to
    `podbot::config::ConfigLoadOptions` and `podbot::config::ConfigOverrides`.
 3. Update `src/main.rs`:
@@ -326,8 +325,8 @@ make lint 2>&1 | tee /tmp/podbot-lint.log
 make test 2>&1 | tee /tmp/podbot-test.log
 ```
 
-If any gate fails, fix the underlying issue (do not silence lints unless a
-last resort, tightly scoped, with a clear reason).
+If any gate fails, fix the underlying issue (do not silence lints unless a last
+resort, tightly scoped, with a clear reason).
 
 ## Concrete steps
 

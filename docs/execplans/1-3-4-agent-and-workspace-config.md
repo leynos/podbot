@@ -1,7 +1,7 @@
 # Step 1.3.4: Agent and workspace configuration
 
 This Execution Plan (ExecPlan) is a living document. The sections `Constraints`,
- `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE

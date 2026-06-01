@@ -1,9 +1,8 @@
 # Step 3.1.1: Load the private key from the configured path
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: DONE
 
@@ -62,9 +61,9 @@ Step 3.1, tasks 2-4).
 
 - Risk: `jsonwebtoken` version drift between octocrab's transitive
   dependency and the direct dependency could cause duplicate compilation or
-  type mismatches. Severity: medium. Likelihood: low. Mitigation: pin to
-  exactly `10.2.0` with `features = ["use_pem", "rust_crypto"]`, matching the
-  existing `Cargo.lock` entry.
+  type mismatches. Severity: medium. Likelihood: low. Mitigation: pin to exactly
+  `10.2.0` with `features = ["use_pem", "rust_crypto"]`, matching the existing
+  `Cargo.lock` entry.
 
 - Risk: `EncodingKey` does not implement `Debug` or `Clone`, complicating
   storage or logging. Severity: low. Likelihood: medium. Mitigation: return by
@@ -196,10 +195,9 @@ Key files for this task:
   `private_key_path: Option<Utf8PathBuf>`. Already has `validate()` and
   `is_configured()` methods.
 
-- `src/error.rs` (467 lines): defines `GitHubError::PrivateKeyLoadFailed {
-  path: PathBuf, message: String
-  }`. This variant already exists and propagates through `PodbotError` via `
-  #[from]`.
+- `src/error.rs` (467 lines): defines
+  `GitHubError::PrivateKeyLoadFailed { path: PathBuf, message: String }`. This
+  variant already exists and propagates through `PodbotError` via `#[from]`.
 
 - `Cargo.toml`: lists `octocrab = "0.49.5"` which transitively depends on
   `jsonwebtoken = "10.2.0"` with `use_pem` feature. The `jsonwebtoken` crate is
@@ -293,11 +291,10 @@ Internal structure uses four private helpers:
    `PRIVATE KEY` (PKCS#8). Since `PRIVATE KEY` is ambiguous, delegate to
    `from_rsa_pem` for the definitive check.
 
-4. `parse_rsa_pem(pem_contents, display_path) ->
-   Result<EncodingKey,
-   GitHubError>`: calls `validate_rsa_pem` first, then `EncodingKey::from_rsa_pem(pem_contents.as_bytes())
-    `, mapping `jsonwebtoken::errors::Error` to `
-   GitHubError::PrivateKeyLoadFailed`.
+4. `parse_rsa_pem(pem_contents, display_path) -> Result<EncodingKey, GitHubError>`:
+   calls `validate_rsa_pem` first, then
+   `EncodingKey::from_rsa_pem(pem_contents.as_bytes())`, mapping
+   `jsonwebtoken::errors::Error` to `GitHubError::PrivateKeyLoadFailed`.
 
 A separate private function is used for testability:
 

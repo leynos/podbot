@@ -398,6 +398,23 @@ std::fs::write(&temp_path, token.as_str())?;
 std::fs::rename(&temp_path, &token_path)?;
 ```
 
+The token-acquisition adapter returns a Podbot-owned `InstallationAccessToken`
+value rather than exposing Octocrab or secrecy types across the boundary. The
+value contains the token string for later Git credential delivery plus
+non-secret timing metadata: `acquired_at`, `expires_at`, and `refresh_after`.
+Octocrab v0.49.5's `installation_token_with_buffer` helper returns only a
+`SecretString`, not the raw REST response's `expires_at`, so Podbot derives
+conservative metadata from GitHub's documented one-hour token lifetime. The
+adapter samples the host clock when acquiring the token, computes
+`expires_at = acquired_at + 1 hour`, and computes
+`refresh_after = expires_at - expiry_buffer`. Token metadata is rejected if the
+expiry time precedes acquisition or if the configured buffer would schedule a
+refresh before acquisition.
+
+Token values must not be logged, included in formatted errors, or exposed in
+debug output. Logs may include only the installation ID, acquisition time,
+derived expiry time, refresh time, and buffer duration.
+
 ## Crate selection
 
 The implementation relies on three primary crates.
@@ -427,8 +444,8 @@ the parent directory using `cap_std::fs_utf8::Dir` with ambient authority,
 reads the file, validates the PEM format, and returns a
 `jsonwebtoken::EncodingKey` suitable for `OctocrabBuilder::app()`.
 
-Only RSA keys are accepted. Octocrab v0.49.5 hardcodes `Algorithm::RS256` in
-its `create_jwt` function, and the GitHub API only supports RS256 for App
+Only RSA keys are accepted. Octocrab v0.49.5 hardcodes `Algorithm::RS256` in its
+`create_jwt` function, and the GitHub API only supports RS256 for App
 authentication. Ed25519 and ECDSA keys are rejected at load time with clear
 error messages rather than deferring failure to JWT signing. Supported PEM
 formats are PKCS#1 (`RSA PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`); the latter
@@ -459,6 +476,24 @@ three cases: missing Tokio runtime, HTTP client initialization failure (for
 example, TLS backend failure), or other builder errors. The App ID is not
 validated at construction time; GitHub validates it when the client attempts to
 acquire a token.
+
+#### Installation token acquisition contract
+
+The `GitHubInstallationTokenClient` trait is the internal port for acquiring a
+GitHub App installation access token. Production code implements it on
+`OctocrabAppClient`, which converts the configured `installation_id` into
+Octocrab's `InstallationId`, calls `installation_token_with_buffer`, and maps
+failures into `GitHubError::TokenAcquisitionFailed { message }`.
+
+The public shape at this boundary remains Podbot-owned: callers pass primitive
+IDs and `std::time::Duration`, and receive an `InstallationAccessToken` with
+accessor methods for the Git token string and scheduling metadata. Octocrab's
+client type, installation ID wrapper, and `secrecy::SecretString` stay inside
+the GitHub adapter.
+
+The adapter logs token timing through `InstallationAccessToken::log_timing`,
+which emits only non-secret timing fields. `InstallationAccessToken` implements
+`Debug` manually so fixture or production token values are redacted.
 
 ### Credential validation contract
 
@@ -529,8 +564,8 @@ _Table 2: Supported connection protocols and their Bollard dispatch._
 Bollard does not natively accept `tcp://` schemes. The `EngineConnector`
 rewrites `tcp://` to `http://` before calling `connect_with_http`. This matches
 the behaviour of the Docker command-line interface (CLI), which treats `tcp://`
-as an alias for `http://`. The rewriting is a simple string replacement
-(`tcp://` to `http://`) applied once during connection establishment.
+as an alias for `http://`. The rewriting is a simple string replacement (
+`tcp://` to `http://`) applied once during connection establishment.
 
 ### Lazy versus eager connection
 
@@ -929,8 +964,8 @@ service, to manage token refresh independently of active sessions.
 - Detached mode (`--detach`) starts the exec session without stream
   attachment and waits for completion.
 
-The engine/library layer also has an internal protocol path
-(`ExecMode::Protocol`) used by `podbot host` to proxy bytes between an IDE
+The engine/library layer also has an internal protocol path (
+`ExecMode::Protocol`) used by `podbot host` to proxy bytes between an IDE
 client and a containerized app server. Protocol mode keeps stdin/stdout/stderr
 attached like interactive exec, but permanently disables TTY allocation so the
 byte stream is not corrupted by terminal framing. Because `tty` is always

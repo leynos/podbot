@@ -1,9 +1,8 @@
 # Stabilize public library boundaries for embedding
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: IMPLEMENTED
 
@@ -79,8 +78,8 @@ may execute every role, but the responsibilities should remain distinct.
   en-GB-oxendict spelling, and no source file may exceed 400 lines.
 - Before the turn ends, run the applicable quality gates with `tee` and
   `set -o pipefail` so exit codes survive truncation. Because this step updates
-  code and docs, the implementation turn must run `make check-fmt`,
-  `make lint`, `make test`, and the relevant Markdown gates.
+  code and docs, the implementation turn must run `make check-fmt`, `make lint`,
+  `make test`, and the relevant Markdown gates.
 
 ## Tolerances
 
@@ -314,9 +313,9 @@ feature, with the binary target requiring that feature. If that proves too
 disruptive, stop at the tolerance gate and ask whether a package split is
 acceptable.
 
-This stage must also deal with any helper code the binary currently imports
-from `engine` and `github`. The binary may keep using feature-gated support
-paths, but those paths must not be documented as stable for embedders.
+This stage must also deal with any helper code the binary currently imports from
+`engine` and `github`. The binary may keep using feature-gated support paths,
+but those paths must not be documented as stable for embedders.
 
 ### Stage C: Refactor public request/response types to remove engine leakage
 

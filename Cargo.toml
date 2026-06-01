@@ -25,7 +25,9 @@ bollard = "0.20.1"
 tar = "0.4.44"
 
 # GitHub integration
+chrono = "0.4.43"
 octocrab = "0.49.5"
+secrecy = "0.10.3"
 jsonwebtoken = { version = "10.3.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 
 # Error handling
@@ -47,7 +49,6 @@ clap = { version = "4.5.60", features = ["derive"], optional = true }
 # Environment abstraction for testability
 mockable = { version = "0.1.4", default-features = false, features = ["clock"] }
 metrics = "0.24.6"
-chrono = "0.4.43"
 
 [dev-dependencies]
 mockable = { version = "0.1.4", default-features = false, features = ["clock", "mock"] }
@@ -130,6 +131,8 @@ result_large_err                    = "deny"
 
 [lints.rust]
 missing_docs                        = "deny"
+
+[lints.rustdoc]
 missing_crate_level_docs            = "deny"
 
 [[bin]]

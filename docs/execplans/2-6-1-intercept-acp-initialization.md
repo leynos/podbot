@@ -1,7 +1,7 @@
 # Step 2.6.1: Intercept Agentic Control Protocol (ACP) initialization
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises and discoveries`,
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises and discoveries`,
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
@@ -13,9 +13,8 @@ is the governing implementation document for this task.
 ## Purpose and big picture
 
 Complete the first implementation task under Step 2.6 from
-`docs/podbot-roadmap.md`: intercept ACP initialization and mask `terminal/*`
-and `fs/*` capabilities before forwarding capability metadata into the
-container.
+`docs/podbot-roadmap.md`: intercept ACP initialization and mask `terminal/*` and
+`fs/*` capabilities before forwarding capability metadata into the container.
 
 Podbot already had a protocol-safe exec path in
 `src/engine/connection/exec/protocol.rs`, but that path was intentionally a raw

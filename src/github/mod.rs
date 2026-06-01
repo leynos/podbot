@@ -11,6 +11,7 @@
 //! change as the GitHub integration stabilizes.
 
 mod classify;
+mod installation_token;
 mod pem_validation;
 
 use std::future::Future;
@@ -23,10 +24,11 @@ use cap_std::fs_utf8::Dir;
 use jsonwebtoken::EncodingKey;
 
 use octocrab::Octocrab;
-use octocrab::models::AppId;
+use octocrab::models::{AppId, InstallationId};
 
 use crate::error::GitHubError;
 use classify::classify_github_api_error;
+pub use installation_token::InstallationAccessToken;
 use pem_validation::parse_rsa_pem;
 
 /// A boxed future for async trait methods.
@@ -125,6 +127,27 @@ pub trait GitHubAppClient: Send + Sync {
     fn validate_credentials(&self) -> BoxFuture<'_, Result<(), GitHubError>>;
 }
 
+/// Trait for GitHub App installation-token acquisition.
+///
+/// This trait abstracts the Octocrab installation-token path so token policy
+/// can be tested without network calls. Production code uses
+/// [`OctocrabAppClient`], while tests inject mock implementations via
+/// `mockall`.
+#[cfg_attr(test, mockall::automock)]
+pub trait GitHubInstallationTokenClient: Send + Sync {
+    /// Acquires an installation access token for Git operations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GitHubError::TokenAcquisitionFailed`] if the expiry buffer
+    /// cannot be converted for Octocrab or GitHub rejects token acquisition.
+    fn acquire_installation_token(
+        &self,
+        installation_id: u64,
+        expiry_buffer: std::time::Duration,
+    ) -> BoxFuture<'_, Result<InstallationAccessToken, GitHubError>>;
+}
+
 /// Production implementation of [`GitHubAppClient`] using Octocrab.
 pub struct OctocrabAppClient {
     client: Octocrab,
@@ -147,6 +170,29 @@ impl GitHubAppClient for OctocrabAppClient {
                 .await
                 .map_err(classify_github_api_error)?;
             Ok(())
+        })
+    }
+}
+
+impl GitHubInstallationTokenClient for OctocrabAppClient {
+    fn acquire_installation_token(
+        &self,
+        installation_id: u64,
+        expiry_buffer: std::time::Duration,
+    ) -> BoxFuture<'_, Result<InstallationAccessToken, GitHubError>> {
+        Box::pin(async move {
+            let installation = self
+                .client
+                .installation(InstallationId(installation_id))
+                .map_err(|error| GitHubError::TokenAcquisitionFailed {
+                    message: format!("failed to prepare GitHub installation client: {error}"),
+                })?;
+            installation_token::acquire_with_octocrab_installation(
+                &installation,
+                installation_id,
+                expiry_buffer,
+            )
+            .await
         })
     }
 }
@@ -216,19 +262,23 @@ pub async fn validate_with_client(client: &dyn GitHubAppClient) -> Result<(), Gi
     client.validate_credentials().await
 }
 
-/// Validates credentials with an injected client factory.
+/// Acquires an installation token using the provided client.
 ///
-/// This function exercises the full orchestration path (key loading, client
-/// building, validation) while allowing tests to inject a mock client. The
-/// factory receives the App ID and encoding key, returning a client for
-/// validation.
+/// This helper separates orchestration from client construction and is the
+/// preferred test seam for token acquisition.
 ///
 /// # Errors
 ///
-/// Returns [`GitHubError::PrivateKeyLoadFailed`] if the key cannot be loaded.
-/// Returns [`GitHubError::AuthenticationFailed`] if the client cannot be
-/// built or if GitHub rejects the credentials.
-#[cfg(any(feature = "internal", test))]
+/// Returns [`GitHubError::TokenAcquisitionFailed`] if token acquisition fails.
+pub async fn acquire_installation_token_with_client(
+    client: &dyn GitHubInstallationTokenClient,
+    installation_id: u64,
+    expiry_buffer: std::time::Duration,
+) -> Result<InstallationAccessToken, GitHubError> {
+    client
+        .acquire_installation_token(installation_id, expiry_buffer)
+        .await
+}
 pub async fn validate_with_factory<F, C>(
     app_id: u64,
     private_key_path: &Utf8Path,

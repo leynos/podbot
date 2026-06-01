@@ -325,8 +325,9 @@ without exposing GitHub App private key material to the container. The result
 unblocks the token daemon and clone flow. See podbot-design.md §Token
 management.
 
-- [ ] 3.2.1. Implement installation token acquisition with an expiry buffer.
+- [x] 3.2.1. Implement installation token acquisition with an expiry buffer.
   - Requires 3.1.4.
+  - See docs/execplans/3-2-1-installation-token-with-buffer.md.
   - Use `installation_token_with_buffer`, return the token string for Git
     operations, handle acquisition failures semantically, and log expiry
     timing without logging token values.

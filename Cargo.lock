@@ -2539,6 +2539,7 @@ dependencies = [
  "rstest",
  "rstest-bdd",
  "rstest-bdd-macros",
+ "secrecy",
  "serde",
  "serde_json",
  "serial_test",

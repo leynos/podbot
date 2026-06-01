@@ -1,9 +1,8 @@
 # Step 3.1.4: Handle invalid or expired App credentials with clear errors
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -468,8 +467,8 @@ pattern: `Success`, `Failed { message: String }`.
 `steps.rs` defines Given and When step functions. The Given steps set up mock
 responses with specific HTTP status codes, RSA key files, and App IDs. The When
 step creates a mock `GitHubAppClient`, configures it to return the classified
-error message (matching the classifier's output for each HTTP status), and
-calls `validate_with_factory`.
+error message (matching the classifier's output for each HTTP status), and calls
+`validate_with_factory`.
 
 `assertions.rs` defines Then step functions that verify the error messages
 contain the expected classification keywords and remediation hints.

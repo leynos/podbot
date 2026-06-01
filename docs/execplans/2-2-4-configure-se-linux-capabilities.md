@@ -1,7 +1,7 @@
 # Step 2.2.4: Configure Security-Enhanced Linux (SELinux) capabilities and security options
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises and discoveries`,
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises and discoveries`,
 `Decision log`, and `Outcomes and retrospective` must be kept up to date as
 work proceeds.
 
@@ -213,9 +213,9 @@ Quality method:
 
 ## Idempotence and recovery
 
-All changes are additive and safe to revert. The `selinux_label_mode` field
-uses `#[serde(default)]` on `SandboxConfig`, so existing config files continue
-to work without changes.
+All changes are additive and safe to revert. The `selinux_label_mode` field uses
+`#[serde(default)]` on `SandboxConfig`, so existing config files continue to
+work without changes.
 
 ## Artifacts and notes
 

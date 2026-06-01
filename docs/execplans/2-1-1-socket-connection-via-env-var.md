@@ -26,9 +26,9 @@ fallback chain:
    `//./pipe/docker_engine` (Windows)
 
 The first three sources are already handled by the existing configuration layer
-system (`loader.rs`). This implementation adds support for the
-industry-standard `DOCKER_HOST`, `CONTAINER_HOST`, and `PODMAN_HOST`
-environment variables as fallbacks, and connects to the engine using Bollard.
+system (`loader.rs`). This implementation adds support for the industry-standard
+`DOCKER_HOST`, `CONTAINER_HOST`, and `PODMAN_HOST` environment variables as
+fallbacks, and connects to the engine using Bollard.
 
 ______________________________________________________________________
 

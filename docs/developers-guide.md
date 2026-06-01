@@ -344,8 +344,8 @@ _Figure 2: Backpressure propagation from host stdout to container._
 
 ## 6. Stdin forwarding lifecycle
 
-Protocol-mode stdin forwarding runs as a spawned Tokio task
-(`spawn_stdin_forwarding_task`). The lifecycle is:
+Protocol-mode stdin forwarding runs as a spawned Tokio task (
+`spawn_stdin_forwarding_task`). The lifecycle is:
 
 1. Task reads from host stdin via `BufReader` and copies to container
    input.
@@ -471,10 +471,10 @@ The policy I/O adapter signature is intentionally narrow:
 
 Step 2.6.2 ships stderr and `tracing::warn!` diagnostics for each denied ACP
 method attempt. Metrics and span-based tracing instrumentation are deferred to
-Step 2.6.3 or the production rollout before `MaskAndDeny` is enabled by
-default or selected through a user-facing override. The metric names below
-capture the intended contract for that later work, so the adapter, host
-command, and dashboards converge on one shape when it lands:
+Step 2.6.3 or the production rollout before `MaskAndDeny` is enabled by default
+or selected through a user-facing override. The metric names below capture the
+intended contract for that later work, so the adapter, host command, and
+dashboards converge on one shape when it lands:
 
 - `podbot_acp_policy_state`: gauge labelled by `container_id` and `policy`
   (`disabled`, `mask_only`, or `mask_and_deny`), set once when the protocol
@@ -483,20 +483,20 @@ command, and dashboards converge on one shape when it lands:
   `container_id`, `method_family`, and `has_request_id`, incremented for every
   `FrameDecision::BlockRequest` and `FrameDecision::BlockNotification`.
 - `podbot_acp_writecmd_queue_depth`: gauge labelled by `container_id`,
-  sampled around sends into the bounded `WriteCmd` channel so operators can
-  see sustained backpressure before synthesized errors are delayed.
+  sampled around sends into the bounded `WriteCmd` channel so operators can see
+  sustained backpressure before synthesized errors are delayed.
 - `podbot_acp_writecmd_send_failures_total`: counter labelled by
   `container_id` and `command_kind`, incremented when the sink channel closes
   before a forwarded or synthesized frame can be queued.
 - `podbot_acp_frame_buffer_overflows_total`: counter labelled by
-  `container_id`, incremented when `OutboundFrameAssembler` enters raw
-  fallback because `MAX_RUNTIME_FRAME_BYTES` is exceeded before a newline.
+  `container_id`, incremented when `OutboundFrameAssembler` enters raw fallback
+  because `MAX_RUNTIME_FRAME_BYTES` is exceeded before a newline.
 - `podbot_acp_partial_frames_dropped_total`: counter labelled by
-  `container_id`, incremented when end-of-stream drops a residual partial
-  frame that could not be classified safely.
+  `container_id`, incremented when end-of-stream drops a residual partial frame
+  that could not be classified safely.
 
-When that instrumentation is introduced, every ACP runtime session should
-also attach a tracing span that carries the container ID, the selected
+When that instrumentation is introduced, every ACP runtime session should also
+attach a tracing span that carries the container ID, the selected
 `CapabilityPolicy`, the `SINK_CHANNEL_CAPACITY` value, and the runtime frame
 limit. Denial events, send failures, buffer overflow events, and partial-frame
 drops should be emitted inside that span so logs and metrics can be correlated
@@ -676,8 +676,8 @@ runtime handles are not part of the semver-stable API surface.
 
 For the design rationale and full constraint set, see
 [docs/execplans/5-3-1-stabilize-public-library-boundaries.md](execplans/5-3-1-stabilize-public-library-boundaries.md)
- and Architecture Decision Record (ADR) 001
-([adr-001-define-the-stable-public-library-boundary.md](adr-001-define-the-stable-public-library-boundary.md)).
+and Architecture Decision Record (ADR) 001 (
+[adr-001-define-the-stable-public-library-boundary.md](adr-001-define-the-stable-public-library-boundary.md)).
 
 ### 11.1. Adding a new stable item
 
@@ -727,8 +727,8 @@ public API surface:
   unit tests but not part of the public library API
 - `is_rate_limited` is private (`fn`) — implementation detail
 
-Integration tests (in `tests/`) are outside the crate boundary and cannot
-import `pub(crate)` items. The `test_classify_error_message` function in
+Integration tests (in `tests/`) are outside the crate boundary and cannot import
+`pub(crate)` items. The `test_classify_error_message` function in
 `src/github/mod.rs` provides a `#[doc(hidden)]` public wrapper for BDD tests
 that need to construct mock error messages matching production output.
 
@@ -796,6 +796,28 @@ All step functions return `StepResult<()>` (a type alias for
 `Result<(), String>`) to satisfy clippy's `expect_used` lint. Use
 `.ok_or_else(|| String::from("error message"))` instead of `.expect()` when
 extracting `Slot` values from scenario state.
+
+### 13.3. Installation token testing conventions
+
+Installation-token behaviour follows the same helper layout as credential
+validation, with `tests/bdd_github_installation_token.rs` and the
+`tests/bdd_github_installation_token_helpers/` modules. Scenario entry-point
+parameters must keep the exact fixture name, such as
+`github_installation_token_state`; renaming them with an underscore prefix
+breaks rstest-bdd fixture matching even if the Rust compiler would otherwise
+accept the parameter as intentionally unused.
+
+Use a local `mockall::mock!` implementation of `GitHubInstallationTokenClient`
+in BDD helper code. Unit tests inside `src/github/installation_token_tests.rs`
+may use the crate-local automock. Tests must verify both the token string path
+for Git operations and the redaction boundary: formatted errors, `Debug`
+output, and log-field structures must not contain fixture token values.
+
+The production adapter lives in `src/github/installation_token.rs`. Keep
+Octocrab's `InstallationId`, `Octocrab`, and `secrecy::SecretString` inside
+that GitHub adapter boundary. Higher-level orchestration should depend on
+Podbot-owned types such as `InstallationAccessToken` and
+`GitHubInstallationTokenClient`.
 
 ## 14. Dev-dependencies for test construction
 
@@ -886,8 +908,8 @@ parameterized integration tests. The two test styles serve complementary
 purposes:
 
 - **BDD scenario tests** (`tests/bdd_*.rs`) are driven by Gherkin feature
-  files in `tests/features/`. Each scenario test file declares a helper module
-  (`tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
+  files in `tests/features/`. Each scenario test file declares a helper module (
+  `tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
   `then`), shared state, and assertion helpers. Feature files are read at
   compile time; changes to `.feature` content may require
   `cargo clean -p podbot` to invalidate incremental compilation caches.
@@ -1041,7 +1063,7 @@ and several engine-level collaborators:
 
 - **API entry point**:
   `configure_container_git_identity(&GitIdentityParams<'_, C, R>) -> PodbotResult<GitIdentityResult>`
-   in `src/api/configure_git_identity.rs`. This is the top-level function that
+  in `src/api/configure_git_identity.rs`. This is the top-level function that
   callers use when they already have a container identifier, a connected exec
   client, and a host command runner.
 - **Engine entry points**:
@@ -1126,7 +1148,7 @@ The subsystem integrates with the rest of podbot at these boundaries:
 
 Following the project's dependency injection convention (see
 [reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md)),
- all external process calls are abstracted behind `HostCommandRunner`. The
+all external process calls are abstracted behind `HostCommandRunner`. The
 container side similarly depends on the `ContainerExecClient` trait rather than
 on a concrete Bollard client.
 
@@ -1154,7 +1176,7 @@ the subsystem is touched.
 - Container-side failures are strict. If `git config --global` returns a
   non-zero exit code, the subsystem raises
   `PodbotError::Container(ContainerError::ExecFailed { container_id, message })`
-   via the `git_identity_exec_failed` helper in `mod.rs`.
+  via the `git_identity_exec_failed` helper in `mod.rs`.
 - This asymmetry is intentional: missing identity should not block execution,
   but an explicit attempt to write the Git config inside the container must
   fail loudly when the container environment cannot honour it.
