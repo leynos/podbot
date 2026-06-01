@@ -1,5 +1,6 @@
 //! Scenario state for GitHub installation-token BDD tests.
 
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use podbot::github::InstallationAccessToken;
@@ -50,10 +51,15 @@ pub struct GitHubInstallationTokenState {
     pub(crate) acquired_at: Slot<SystemTime>,
     /// Outcome of the most recent acquisition attempt.
     pub(crate) outcome: Slot<TokenOutcome>,
+    /// Shared Tokio runtime for async step execution.
+    pub runtime: Slot<Arc<tokio::runtime::Runtime>>,
 }
 
 /// Fixture providing fresh state for each scenario.
 #[rstest::fixture]
 pub fn github_installation_token_state() -> GitHubInstallationTokenState {
-    GitHubInstallationTokenState::default()
+    let state = GitHubInstallationTokenState::default();
+    let rt = tokio::runtime::Runtime::new().expect("failed to create scenario tokio runtime");
+    state.runtime.set(Arc::new(rt));
+    state
 }

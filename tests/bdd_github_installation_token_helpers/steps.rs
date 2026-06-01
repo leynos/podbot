@@ -1,5 +1,6 @@
 //! Given and When steps for GitHub installation-token BDD tests.
 
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use podbot::error::GitHubError;
@@ -30,6 +31,7 @@ struct TokenInputs {
     expiry_buffer: Duration,
     acquired_at: SystemTime,
     mock_response: MockTokenResponse,
+    runtime: Arc<tokio::runtime::Runtime>,
 }
 
 fn read_inputs(
@@ -51,11 +53,16 @@ fn read_inputs(
         .mock_response
         .get()
         .ok_or_else(|| String::from("mock_response should be set"))?;
+    let runtime = github_installation_token_state
+        .runtime
+        .get()
+        .ok_or_else(|| String::from("runtime should be set"))?;
     Ok(TokenInputs {
         installation_id,
         expiry_buffer,
         acquired_at,
         mock_response,
+        runtime,
     })
 }
 
@@ -104,9 +111,7 @@ fn configure_mock_client(inputs: &TokenInputs) -> StepResult<MockGitHubInstallat
 
 fn run_acquisition(inputs: &TokenInputs) -> StepResult<TokenOutcome> {
     let mock_client = configure_mock_client(inputs)?;
-    let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| format!("failed to create tokio runtime: {e}"))?;
-    let result = rt.block_on(async {
+    let result = inputs.runtime.block_on(async {
         acquire_installation_token_with_client(
             &mock_client,
             inputs.installation_id,
