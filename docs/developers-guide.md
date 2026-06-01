@@ -31,6 +31,8 @@ All quality gates must pass before committing. The canonical targets are:
 | `make markdownlint` | markdownlint-cli                                                                                                 | Validate Markdown files                                                                         |
 | `make nixie`        | Mermaid diagram validator                                                                                        | Validate diagrams in Markdown                                                                   |
 
+_Table 1: Quality gates and corresponding commands._
+
 Run long commands through `tee` and `set -o pipefail` so truncated output can
 be reviewed from the log file.
 
@@ -135,7 +137,7 @@ src/engine/connection/exec/
 | Detached | `ExecMode::Detached` | No          | None      | No     | Fire-and-forget commands (`podbot exec --detach`) |
 | Protocol | `ExecMode::Protocol` | No          | Forwarded | No     | Byte-preserving proxy (`podbot host`)             |
 
-_Table 1: Execution modes and their behavioural properties._
+_Table 2: Execution modes and their behavioural properties._
 
 Attached mode enables TTY only when both local stdin and stdout are terminals.
 Protocol mode permanently disables TTY, so the byte stream is not corrupted by
@@ -297,7 +299,7 @@ remains visible to the hosted server. All buffer sizes are set to 64 KiB
 | `PROTOCOL_OUTPUT_CAPACITY` | `mod.rs`      | 65,536 B | Bollard `output_capacity` per `LogOutput` chunk           |
 | `STDIN_SETTLE_TIMEOUT`     | `protocol.rs` | 50 ms    | Grace period before aborting stdin forwarding at shutdown |
 
-_Table 2: Bounded buffering constants for protocol-mode exec sessions._
+_Table 3: Bounded buffering constants for protocol-mode exec sessions._
 
 The 64 KiB size aligns with common JSON Remote Procedure Call (JSON-RPC) frame
 buffers and typical operating system (OS) pipe buffer defaults.
