@@ -347,8 +347,8 @@ _Figure 2: Backpressure propagation from host stdout to container._
 
 ## 6. Stdin forwarding lifecycle
 
-Protocol-mode stdin forwarding runs as a spawned Tokio task (
-`spawn_stdin_forwarding_task`). The lifecycle is:
+Protocol-mode stdin forwarding runs as a spawned Tokio task
+(`spawn_stdin_forwarding_task`). The lifecycle is:
 
 1. Task reads from host stdin via `BufReader` and copies to container
    input.
@@ -679,8 +679,8 @@ runtime handles are not part of the semver-stable API surface.
 
 For the design rationale and full constraint set, see
 [docs/execplans/5-3-1-stabilize-public-library-boundaries.md](execplans/5-3-1-stabilize-public-library-boundaries.md)
-and Architecture Decision Record (ADR) 001 (
-[adr-001-define-the-stable-public-library-boundary.md](adr-001-define-the-stable-public-library-boundary.md)).
+and Architecture Decision Record (ADR) 001
+([adr-001-define-the-stable-public-library-boundary.md](adr-001-define-the-stable-public-library-boundary.md)).
 
 ### 11.1. Adding a new stable item
 
@@ -911,8 +911,8 @@ parameterized integration tests. The two test styles serve complementary
 purposes:
 
 - **BDD scenario tests** (`tests/bdd_*.rs`) are driven by Gherkin feature
-  files in `tests/features/`. Each scenario test file declares a helper module (
-  `tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
+  files in `tests/features/`. Each scenario test file declares a helper module
+  (`tests/bdd_*_helpers/`) containing step definitions (`given`, `when`,
   `then`), shared state, and assertion helpers. Feature files are read at
   compile time; changes to `.feature` content may require
   `cargo clean -p podbot` to invalidate incremental compilation caches.
@@ -1064,11 +1064,17 @@ tests/
 The subsystem has one Application Programming Interface (API)-level entry point
 and several engine-level collaborators:
 
-- **API entry point**:
-  `configure_container_git_identity(&GitIdentityParams<'_, C, R>) -> PodbotResult<GitIdentityResult>`
-  in `src/api/configure_git_identity.rs`. This is the top-level function that
-  callers use when they already have a container identifier, a connected exec
-  client, and a host command runner.
+- **API entry point**: `configure_container_git_identity`. Its full signature is:
+
+  ```rust
+  configure_container_git_identity(
+      &GitIdentityParams<'_, C, R>,
+  ) -> PodbotResult<GitIdentityResult>
+  ```
+
+  The function lives in `src/api/configure_git_identity.rs`. This is the
+  top-level function that callers use when they already have a container
+  identifier, a connected exec client, and a host command runner.
 - **Engine entry points**:
   - `read_host_git_identity(&impl HostCommandRunner) -> HostGitIdentity`
   - `configure_git_identity(runtime, client, container_id, identity) ->

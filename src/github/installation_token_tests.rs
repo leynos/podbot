@@ -181,3 +181,20 @@ fn token_error_mapping_preserves_transport_failure_context() {
         other => panic!("expected token acquisition failure, got: {other:?}"),
     }
 }
+
+#[rstest]
+#[case::timed_out(std::io::ErrorKind::TimedOut, true)]
+#[case::connection_refused(std::io::ErrorKind::ConnectionRefused, false)]
+fn token_error_timeout_detection_checks_service_io_errors(
+    #[case] error_kind: std::io::ErrorKind,
+    #[case] expected_timeout: bool,
+) {
+    let io_error = std::io::Error::new(error_kind, "transport failure");
+    let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_error);
+    let error = octocrab::Error::Service {
+        source: boxed,
+        backtrace: snafu::Backtrace::generate(),
+    };
+
+    assert_eq!(is_timeout_error(&error), expected_timeout);
+}

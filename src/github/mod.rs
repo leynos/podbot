@@ -17,6 +17,7 @@ mod pem_validation;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use camino::Utf8Path;
 use cap_std::ambient_authority;
@@ -25,6 +26,7 @@ use jsonwebtoken::EncodingKey;
 
 use octocrab::Octocrab;
 use octocrab::models::{AppId, InstallationId};
+use octocrab::service::middleware::retry::{RateLimitMetrics, RetryConfig};
 
 use crate::error::GitHubError;
 use classify::classify_github_api_error;
@@ -36,6 +38,67 @@ use pem_validation::parse_rsa_pem;
 /// This type alias enables `mockall::automock` compatibility and trait object
 /// usage for async methods in [`GitHubAppClient`].
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+struct PodbotOctocrabRetryMetrics;
+
+impl RateLimitMetrics for PodbotOctocrabRetryMetrics {
+    fn retry_after_error(
+        &self,
+        req: &http::Request<octocrab::OctoBody>,
+        status_code: http::StatusCode,
+        retries_remaining: usize,
+    ) {
+        tracing::warn!(
+            operation = "github_api",
+            method = %req.method(),
+            request_path = req.uri().path(),
+            status_code = status_code.as_u16(),
+            retries_remaining,
+            "Octocrab retry policy observed a retryable GitHub API response"
+        );
+        record_octocrab_retry_event("retryable_response", status_code);
+    }
+
+    fn rate_limited(
+        &self,
+        req: &http::Request<octocrab::OctoBody>,
+        status_code: http::StatusCode,
+        retries_remaining: usize,
+        waiting_seconds: u64,
+    ) {
+        tracing::warn!(
+            operation = "github_api",
+            method = %req.method(),
+            request_path = req.uri().path(),
+            status_code = status_code.as_u16(),
+            retries_remaining,
+            waiting_seconds,
+            "Octocrab retry policy is waiting before retrying a GitHub API request"
+        );
+        record_octocrab_retry_event("rate_limited", status_code);
+    }
+}
+
+fn record_octocrab_retry_event(event: &'static str, status_code: http::StatusCode) {
+    metrics::counter!(
+        "podbot.github.octocrab.retry.events.total",
+        "operation" => "github_api",
+        "event" => event,
+        "status_class" => github_status_class(status_code),
+    )
+    .increment(1);
+}
+
+const fn github_status_class(status_code: http::StatusCode) -> &'static str {
+    match status_code.as_u16() {
+        100..=199 => "1xx",
+        200..=299 => "2xx",
+        300..=399 => "3xx",
+        400..=499 => "4xx",
+        500..=599 => "5xx",
+        _ => "other",
+    }
+}
 
 /// Load a GitHub App RSA private key from the configured path.
 ///
@@ -103,6 +166,11 @@ pub fn build_app_client(app_id: u64, private_key: EncodingKey) -> Result<Octocra
 
     Octocrab::builder()
         .app(AppId(app_id), private_key)
+        .add_retry_config(RetryConfig::HandleRateLimits {
+            metrics: Arc::new(PodbotOctocrabRetryMetrics),
+            max_retries: 3,
+            min_wait_seconds: 1,
+        })
         .build()
         .map_err(|error| GitHubError::AuthenticationFailed {
             message: format!("failed to build GitHub App client: {error}"),

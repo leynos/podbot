@@ -2326,6 +2326,7 @@ dependencies = [
  "clap",
  "eyre",
  "futures-util",
+ "http",
  "insta",
  "jsonwebtoken",
  "metrics",

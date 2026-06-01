@@ -19,6 +19,7 @@ experimental = []
 tokio = { version = "1.49.0", features = ["full"] }
 futures-util = "0.3.32"
 tracing = "0.1.44"
+http = "1.4.0"
 
 # Container management
 bollard = "0.20.1"

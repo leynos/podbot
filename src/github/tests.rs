@@ -294,6 +294,17 @@ fn build_app_client_without_runtime_returns_error(
 }
 
 #[rstest]
+#[case::client_error(http::StatusCode::TOO_MANY_REQUESTS, "4xx")]
+#[case::server_error(http::StatusCode::INTERNAL_SERVER_ERROR, "5xx")]
+#[case::redirect(http::StatusCode::TEMPORARY_REDIRECT, "3xx")]
+fn github_status_class_groups_status_codes(
+    #[case] status_code: http::StatusCode,
+    #[case] expected_class: &str,
+) {
+    assert_eq!(github_status_class(status_code), expected_class);
+}
+
+#[rstest]
 #[case::builder_context(
     "failed to build GitHub App client: test error",
     "failed to build GitHub App client"
