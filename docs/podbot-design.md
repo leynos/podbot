@@ -402,7 +402,7 @@ The token-acquisition adapter returns a Podbot-owned `InstallationAccessToken`
 value rather than exposing Octocrab or secrecy types across the boundary. The
 value contains the token string for later Git credential delivery plus
 non-secret timing metadata: `acquired_at`, `expires_at`, and `refresh_after`.
-Octocrab v0.49.5's `installation_token_with_buffer` helper returns only a
+Octocrab v0.51.0's `installation_token_with_buffer` helper returns only a
 `SecretString`, not the raw REST response's `expires_at`, so Podbot derives
 conservative metadata from GitHub's documented one-hour token lifetime. The
 adapter samples the host clock when acquiring the token, computes
@@ -444,13 +444,15 @@ the parent directory using `cap_std::fs_utf8::Dir` with ambient authority,
 reads the file, validates the PEM format, and returns a
 `jsonwebtoken::EncodingKey` suitable for `OctocrabBuilder::app()`.
 
-Only RSA keys are accepted. Octocrab v0.49.5 hardcodes `Algorithm::RS256` in its
-`create_jwt` function, and the GitHub API only supports RS256 for App
-authentication. Ed25519 and ECDSA keys are rejected at load time with clear
-error messages rather than deferring failure to JWT signing. Supported PEM
-formats are PKCS#1 (`RSA PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`); the latter
-is ambiguous across key types so validation is deferred to
-`EncodingKey::from_rsa_pem`.
+Only RSA keys are accepted. Octocrab v0.51.0 signs GitHub App JWTs with RS256,
+and the GitHub API only supports RS256 for App authentication. Podbot enables
+Octocrab's `jwt-aws-lc-rs` feature and uses `jsonwebtoken` with the
+`aws_lc_rs` backend so JWT signing avoids the deprecated RustCrypto RSA path
+flagged by RustSec while keeping PEM parsing support through `use_pem`.
+Ed25519 and ECDSA keys are rejected at load time with clear error messages
+rather than deferring failure to JWT signing. Supported PEM formats are PKCS#1
+(`RSA PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`); the latter is ambiguous across
+key types so validation is deferred to `EncodingKey::from_rsa_pem`.
 
 Errors are reported via `GitHubError::PrivateKeyLoadFailed { path, message }`
 with diagnostic messages covering: missing parent directory, unreadable file,

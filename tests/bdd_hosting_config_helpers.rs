@@ -1,8 +1,4 @@
 //! Behavioural step definitions for hosted-era configuration semantics.
-#![allow(
-    unfulfilled_lint_expectations,
-    reason = "the task requires preserving step-level expectations after extracting the shared setup helper"
-)]
 
 use camino::Utf8PathBuf;
 use podbot::config::{AgentKind, AgentMode, AppConfig, CommandIntent, WorkspaceSource};
@@ -87,10 +83,6 @@ macro_rules! given_hosting_step {
         }
     ) => {
         #[given($given_str)]
-        #[expect(
-            clippy::unnecessary_wraps,
-            reason = "rstest-bdd step functions return StepResult for consistency"
-        )]
         fn $fn_name(hosting_config_state: &HostingConfigState) -> StepResult<()> {
             configure_hosting_state(
                 hosting_config_state,
@@ -110,10 +102,6 @@ macro_rules! given_hosting_step {
         { $($field:ident: $value:expr),* $(,)? }
     ) => {
         #[given($given_str)]
-        #[expect(
-            clippy::unnecessary_wraps,
-            reason = "rstest-bdd step functions return StepResult for consistency"
-        )]
         fn $fn_name(hosting_config_state: &HostingConfigState) -> StepResult<()> {
             configure_hosting_state(
                 hosting_config_state,
