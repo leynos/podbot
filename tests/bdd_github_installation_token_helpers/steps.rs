@@ -56,7 +56,7 @@ fn read_inputs(
     let runtime = github_installation_token_state
         .runtime
         .get()
-        .ok_or_else(|| String::from("runtime should be set"))?;
+        .ok_or_else(|| String::from("runtime should be set"))??;
     Ok(TokenInputs {
         installation_id,
         expiry_buffer,

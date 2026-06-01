@@ -52,14 +52,16 @@ pub struct GitHubInstallationTokenState {
     /// Outcome of the most recent acquisition attempt.
     pub(crate) outcome: Slot<TokenOutcome>,
     /// Shared Tokio runtime for async step execution.
-    pub runtime: Slot<Arc<tokio::runtime::Runtime>>,
+    pub runtime: Slot<StepResult<Arc<tokio::runtime::Runtime>>>,
 }
 
 /// Fixture providing fresh state for each scenario.
 #[rstest::fixture]
 pub fn github_installation_token_state() -> GitHubInstallationTokenState {
     let state = GitHubInstallationTokenState::default();
-    let rt = tokio::runtime::Runtime::new().expect("failed to create scenario tokio runtime");
-    state.runtime.set(Arc::new(rt));
+    let runtime = tokio::runtime::Runtime::new()
+        .map(Arc::new)
+        .map_err(|e| format!("failed to create scenario tokio runtime: {e}"));
+    state.runtime.set(runtime);
     state
 }
