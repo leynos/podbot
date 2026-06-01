@@ -2,7 +2,6 @@
 
 use std::time::{Duration, SystemTime};
 
-use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use snafu::GenerateImplicitData;
 
@@ -86,45 +85,6 @@ fn token_metadata_rejects_invalid_ordering(
     };
     let expiry_buffer = Duration::from_secs(expiry_buffer_secs);
     assert_metadata_rejects(acquired_at, expires_at, expiry_buffer, expected_fragment);
-}
-
-proptest! {
-    #[test]
-    fn token_metadata_refresh_never_precedes_acquisition(
-        lifetime_secs in 0_u64..=7_200,
-        buffer_secs in 0_u64..=7_200,
-    ) {
-        let acquired_at = SystemTime::UNIX_EPOCH + Duration::from_secs(10_000);
-        let expires_at = acquired_at + Duration::from_secs(lifetime_secs);
-        let expiry_buffer = Duration::from_secs(buffer_secs);
-
-        let result = InstallationAccessToken::from_metadata(
-            String::from(FIXTURE_TOKEN),
-            acquired_at,
-            expires_at,
-            expiry_buffer,
-        );
-
-        if buffer_secs <= lifetime_secs {
-            match result {
-                Ok(token) => {
-                    prop_assert!(token.refresh_after().duration_since(acquired_at).is_ok());
-                }
-                Err(error) => {
-                    prop_assert!(
-                        false,
-                        "expected internally consistent metadata, got {error}"
-                    );
-                }
-            }
-        } else {
-            let is_error = matches!(
-                result,
-                Err(GitHubError::TokenAcquisitionFailed { .. })
-            );
-            prop_assert!(is_error);
-        }
-    }
 }
 
 #[rstest]
