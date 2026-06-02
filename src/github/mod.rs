@@ -41,36 +41,46 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 struct PodbotOctocrabRetryMetrics;
 
-impl PodbotOctocrabRetryMetrics {
-    fn emit_retry_warning(
-        req: &http::Request<octocrab::OctoBody>,
+struct RetryEventContext<'a> {
+    req: &'a http::Request<octocrab::OctoBody>,
+    status_code: http::StatusCode,
+    retries_remaining: usize,
+}
+
+impl<'a> RetryEventContext<'a> {
+    const fn new(
+        req: &'a http::Request<octocrab::OctoBody>,
         status_code: http::StatusCode,
         retries_remaining: usize,
-        waiting_seconds: Option<u64>,
-        event: &'static str,
-        message: &'static str,
-    ) {
-        if let Some(secs) = waiting_seconds {
-            tracing::warn!(
-                operation = "github_api",
-                method = %req.method(),
-                request_path = req.uri().path(),
-                status_code = status_code.as_u16(),
-                retries_remaining,
-                waiting_seconds = secs,
-                "{message}"
-            );
-        } else {
-            tracing::warn!(
-                operation = "github_api",
-                method = %req.method(),
-                request_path = req.uri().path(),
-                status_code = status_code.as_u16(),
-                retries_remaining,
-                "{message}"
-            );
+    ) -> Self {
+        Self {
+            req,
+            status_code,
+            retries_remaining,
         }
-        record_octocrab_retry_event(event, status_code);
+    }
+
+    fn log_warn(&self, message: &'static str) {
+        tracing::warn!(
+            operation = "github_api",
+            method = %self.req.method(),
+            request_path = self.req.uri().path(),
+            status_code = self.status_code.as_u16(),
+            retries_remaining = self.retries_remaining,
+            "{message}"
+        );
+    }
+
+    fn log_warn_with_wait(&self, message: &'static str, waiting_seconds: u64) {
+        tracing::warn!(
+            operation = "github_api",
+            method = %self.req.method(),
+            request_path = self.req.uri().path(),
+            status_code = self.status_code.as_u16(),
+            retries_remaining = self.retries_remaining,
+            waiting_seconds,
+            "{message}"
+        );
     }
 }
 
@@ -81,14 +91,9 @@ impl RateLimitMetrics for PodbotOctocrabRetryMetrics {
         status_code: http::StatusCode,
         retries_remaining: usize,
     ) {
-        Self::emit_retry_warning(
-            req,
-            status_code,
-            retries_remaining,
-            None,
-            "retryable_response",
-            "Octocrab retry policy observed a retryable GitHub API response",
-        );
+        RetryEventContext::new(req, status_code, retries_remaining)
+            .log_warn("Octocrab retry policy observed a retryable GitHub API response");
+        record_octocrab_retry_event("retryable_response", status_code);
     }
 
     fn rate_limited(
@@ -98,14 +103,11 @@ impl RateLimitMetrics for PodbotOctocrabRetryMetrics {
         retries_remaining: usize,
         waiting_seconds: u64,
     ) {
-        Self::emit_retry_warning(
-            req,
-            status_code,
-            retries_remaining,
-            Some(waiting_seconds),
-            "rate_limited",
+        RetryEventContext::new(req, status_code, retries_remaining).log_warn_with_wait(
             "Octocrab retry policy is waiting before retrying a GitHub API request",
+            waiting_seconds,
         );
+        record_octocrab_retry_event("rate_limited", status_code);
     }
 }
 
