@@ -1,29 +1,5 @@
 # Assistant instructions
 
-## Documentation maintenance
-
-- **Reference:** Use the markdown files within the `docs/` directory as a
-  knowledge base and source of truth for project requirements, dependency
-  choices, and architectural decisions. Start with
-  [documentation contents](docs/contents.md) and
-  [repository layout](docs/repository-layout.md) when orienting within the
-  project.
-- **Update:** When new decisions are made, requirements change, libraries are
-  added/removed, or architectural patterns evolve, **proactively update** the
-  relevant file(s) in the `docs/` directory to reflect the latest state. Ensure
-  the documentation remains accurate and current.
-- **Design decisions:** Record design decisions in the relevant design
-  document. When a decision is substantive, capture it in an Architectural
-  Decision Record (ADR) following the documentation style guide, and reference
-  that ADR from the design document.
-- **User-facing behaviour:** Update [users' guide](docs/users-guide.md) for
-  behaviour or user-interface changes that users should know about.
-- **Internal interfaces:** Document internally facing interfaces in the
-  relevant component architecture document. Document internally facing
-  conventions and practices in [developers' guide](docs/developers-guide.md).
-- **Style:** All documentation must adhere to the
-  [documentation style guide](docs/documentation-style-guide.md).
-
 ## Code style and structure
 
 - **Code is for humans.** Write code with clarity and empathy—assume a
@@ -57,7 +33,31 @@
   feature and constituents colocated with targets. Large blocks of test data
   should be moved to external data files.
 
-## Change quality and committing
+## Documentation maintenance
+
+- **Reference:** Use the markdown files within the `docs/` directory as a
+  knowledge base and source of truth for project requirements, dependency
+  choices, and architectural decisions. Start with
+  [documentation contents](docs/contents.md) and
+  [repository layout](docs/repository-layout.md) when orienting within the
+  project.
+- **Update:** When new decisions are made, requirements change, libraries are
+  added/removed, or architectural patterns evolve, **proactively update** the
+  relevant file(s) in the `docs/` directory to reflect the latest state. Ensure
+  the documentation remains accurate and current.
+- **Design decisions:** Record design decisions in the relevant design
+  document. When a decision is substantive, capture it in an Architectural
+  Decision Record (ADR) following the documentation style guide, and reference
+  that ADR from the design document.
+- **User-facing behaviour:** Update [users' guide](docs/users-guide.md) for
+  behaviour or user-interface changes that users should know about.
+- **Internal interfaces:** Document internally facing interfaces in the
+  relevant component architecture document. Document internally facing
+  conventions and practices in [developers' guide](docs/developers-guide.md).
+- **Style:** All documentation must adhere to the
+  [documentation style guide](docs/documentation-style-guide.md).
+
+## Change quality & committing
 
 - **Atomicity:** Aim for small, focused, atomic changes. Each change (and
   subsequent commit) should represent a single logical unit of work.
@@ -86,6 +86,46 @@
     - **Formatting:** Use Markdown for any formatted text (like bullet points or
       code snippets) within the commit message body.
   - Do not commit changes that fail any of the quality gates.
+
+## Refactoring heuristics & workflow
+
+- **Recognizing Refactoring Needs:** Regularly assess the codebase for potential
+  refactoring opportunities. Perform refactoring when observing:
+  - **Long Methods/Functions:** Functions or methods that are excessively long
+    or try to do too many things.
+  - **Duplicated Code:** Identical or very similar code blocks appearing in
+    multiple places.
+  - **Complex Conditionals:** Deeply nested or overly complex `if`/`else` or
+    `switch` statements (high cyclomatic complexity).
+  - **Large Code Blocks for Single Values:** Significant chunks of logic
+    dedicated solely to calculating or deriving a single value.
+  - **Primitive Obsession / Data Clumps:** Groups of simple variables (strings,
+    numbers, booleans) that are frequently passed around together, often
+    indicating a missing class or object structure.
+  - **Excessive Parameters:** Functions or methods requiring a very long list of
+    parameters.
+  - **Feature Envy:** Methods that seem more interested in the data of another
+    class/object than their own.
+  - **Shotgun Surgery:** A single change requiring small modifications in many
+    different classes or functions.
+- **Abstraction / port / helper policy:** Before implementing an abstraction,
+  port, or extracted helper, the agent must:
+  1. Sweep the repository to confirm there is no existing equivalent helper,
+     port, or abstraction.
+  2. Document the new abstraction's intended scope and re-use policy
+     (ownership boundaries, permitted call-sites, and composition rules).
+  3. Record the decision in the appropriate architecture, design, or
+     developers-guide document using `docs/contents.md` as the index to select
+     the correct location.
+- **Post-Commit Review:** After committing a functional change or bug fix (that
+  meets all quality gates), review the changed code and surrounding areas using
+  the heuristics above.
+- **Separate Atomic Refactors:** If refactoring is deemed necessary:
+  - Perform the refactoring as a **separate, atomic commit** *after* the
+    functional change commit.
+  - Ensure refactoring adheres to the testing guidelines (behavioural tests
+    pass before and after, unit tests added for new units).
+  - Ensure the refactoring commit itself passes all quality gates.
 
 ## Rust specific guidance
 
@@ -132,6 +172,8 @@ project:
 - Ensure that new features are validated with unit tests using `rstest` and
   behavioural tests using `rstest-bdd` where applicable. Cover happy paths,
   unhappy paths, and relevant edge cases.
+- Add snapshot tests using `insta` where multivariant output format consistency
+  is relevant to the requirements.
 - Add end-to-end tests where a change affects externally observable workflows,
   integration contracts, persistence, command-line behaviour, network
   boundaries, UI flows, or other system-level behaviour.
@@ -188,36 +230,146 @@ project:
   `newt-hype` for the common case, tuple structs for outliers, and
   `the-newtype` to unify behaviour when owning the trait definitions.
 - Use `cap_std` and `cap_std::fs_utf8` / `camino` in place of `std::fs` and
-  `std::path` for enhanced cross platform support and capabilities oriented
+  `std::path` for enhanced cross-platform support and capabilities oriented
   filesystem access.
 
-## Refactoring heuristics and workflow
+### Testing
 
-- **Recognizing Refactoring Needs:** Regularly assess the codebase for potential
-  refactoring opportunities. Perform refactoring when observing:
-  - **Long Methods/Functions:** Functions or methods that are excessively long
-    or try to do too many things.
-  - **Duplicated Code:** Identical or very similar code blocks appearing in
-    multiple places.
-  - **Complex Conditionals:** Deeply nested or overly complex `if`/`else` or
-    `switch` statements (high cyclomatic complexity).
-  - **Large Code Blocks for Single Values:** Significant chunks of logic
-    dedicated solely to calculating or deriving a single value.
-  - **Primitive Obsession / Data Clumps:** Groups of simple variables (strings,
-    numbers, booleans) that are frequently passed around together, often
-    indicating a missing class or object structure.
-  - **Excessive Parameters:** Functions or methods requiring a very long list of
-    parameters.
-  - **Feature Envy:** Methods that seem more interested in the data of another
-    class/object than their own.
-  - **Shotgun Surgery:** A single change requiring small modifications in many
-    different classes or functions.
-- **Post-Commit Review:** After committing a functional change or bug fix (that
-  meets all quality gates), review the changed code and surrounding areas using
-  the heuristics above.
-- **Separate Atomic Refactors:** If refactoring is deemed necessary:
-  - Perform the refactoring as a **separate, atomic commit** *after* the
-    functional change commit.
-  - Ensure refactoring adheres to the testing guidelines (behavioural tests
-    pass before and after, unit tests added for new units).
-  - Ensure the refactoring commit itself passes all quality gates.
+- Use `rstest` fixtures for shared setup.
+- Replace duplicated tests with `#[rstest(...)]` parameterized cases.
+- Prefer `mockall` for ad hoc mocks/stubs.
+- For testing of functionality depending upon environment variables, dependency
+  injection and the `mockable` crate are the preferred option.
+- If mockable cannot be used, env mutations in tests MUST be wrapped in shared
+  guards and mutexes placed in a shared `test_utils` or `test_helpers` crate.
+  Direct environment mutation is FORBIDDEN in tests.
+
+### Dependency management
+
+- **Mandate caret requirements for all dependencies.** All crate versions
+  specified in `Cargo.toml` must use SemVer-compatible caret requirements (e.g.,
+   `some-crate = "1.2.3"` (equivalent to `^1.2.3`). This is Cargo's default and
+   allows for safe,
+  non-breaking updates to minor and patch versions while preventing breaking
+  changes from new major versions. This approach is critical for ensuring build
+  stability and reproducibility.
+- **Prohibit unstable version specifiers.** The use of wildcard (`*`) or
+  open-ended inequality (`>=`) version requirements is strictly forbidden, as
+  they introduce unacceptable risk and unpredictability. Tilde requirements (
+  `~`) should only be used where a dependency must be locked to patch-level
+  updates for a specific, documented reason.
+
+### Error handling
+
+- **Prefer semantic error enums**. Derive `std::error::Error` (via the
+  `thiserror` crate) for any condition the caller might inspect, retry, or map
+  to an HTTP status.
+- **Use an *opaque* error only at the app boundary**. Use `eyre::Report` for
+  human-readable logs; these should not be exposed in public APIs.
+- **Never export the opaque type from a library**. Convert to domain enums at
+  API boundaries, and to `eyre` only in the main `main()` entrypoint or
+  top-level async task.
+- In tests, prefer `.expect(...)` over `.unwrap()` to surface clearer failure
+  diagnostics.
+- In production code and shared fixtures, avoid `.expect()` entirely: return
+  `Result` and use `?` to propagate errors instead of panicking.
+- Keep `expect_used` **strict**; do not suppress the lint.
+- Recognize that `allow-expect-in-tests = true` **doesn’t cover** helpers
+  outside `#[cfg(test)]` or `#[test]`; avoid `expect` in such fixtures.
+- Use `anyhow`/`eyre` with `.context(...)` to **preserve backtraces** and
+  provide clear, typed failure paths.
+- Update helpers (e.g., `set_dir`) to **return errors** rather than panicking.
+- Consume fallible fixtures in `rstest` by **making the test return `Result`**
+  and applying `?` to the fixture.
+
+### Observability
+
+- Use `tracing` for logging and diagnostics. Prefer structured
+  `tracing::{trace, debug, info, warn, error}` events and spans over `println!`,
+   `eprintln!`, or direct `log` macros. Add fields for identifiers, state, and
+  error context so downstream subscribers can filter and correlate events
+  without parsing message text.
+- Use `#[tracing::instrument]` or explicit spans around request handling,
+  command execution, retries, background jobs, and other meaningful units of
+  work. Do not hold `Span::enter()` guards across `.await`; use
+  `Instrument::instrument` or scoped synchronous spans instead.
+- Use the `metrics` crate for metric emission where usage, uptake, failure,
+  or mitigation metrics are required. Prefer `counter!` for cumulative events,
+  `gauge!` for values that rise and fall, and `histogram!` for distributions
+  such as latency or payload size.
+- Describe emitted metrics with `describe_counter!`, `describe_gauge!`, or
+  `describe_histogram!` where the unit or purpose is not obvious from the
+  metric name. Keep metric names stable and labels low-cardinality; do not put
+  user input, request IDs, paths with unbounded parameters, or raw error
+  strings into labels.
+- Libraries may emit `metrics` and `tracing` instrumentation, but must not
+  install global recorders or subscribers. Applications should initialize
+  exporters/subscribers once, as early as practical in startup.
+
+## Markdown guidance
+
+- Validate Markdown files using `make markdownlint`.
+- Run `make fmt` after any documentation changes to format all Markdown
+  files and fix table markup.
+- Validate Mermaid diagrams in Markdown files by running `make nixie`.
+- Markdown paragraphs and bullet points must be wrapped at 80 columns.
+- Code blocks must be wrapped at 120 columns.
+- Tables and headings must not be wrapped.
+- Use dashes (`-`) for list bullets.
+- Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
+  footnotes.
+
+## Project documentation
+
+Record design decisions in the design document. Where a decision is
+substantive, record it in an ADR document following the documentation style
+guide, then reference that ADR from the design document.
+
+Update `docs/users-guide.md` for any change to application behaviour or user
+interface that a user should know about. Document internally facing interfaces
+or practices in the relevant component architecture document. Document
+internally facing conventions or practices in `docs/developers-guide.md`.
+
+## Additional tooling
+
+The following tooling is available in this environment:
+
+- `mbake` — A Makefile validator. Run using `mbake validate Makefile`.
+- `strace` — Traces system calls and signals made by a process; useful for
+  debugging runtime behaviour and syscalls.
+- `gdb` — The GNU Debugger, for inspecting and controlling programs as they
+  execute (or post-mortem via core dumps).
+- `ripgrep` — Fast, recursive text search tool (`grep` alternative) that
+  respects `.gitignore` files.
+- `ltrace` — Traces calls to dynamic library functions made by a process.
+- `valgrind` — Suite for detecting memory leaks, profiling, and debugging
+  low-level memory errors.
+- `bpftrace` — High-level tracing tool for eBPF, using a custom scripting
+  language for kernel and application tracing.
+- `lsof` — Lists open files and the processes using them.
+- `htop` — Interactive process viewer (visual upgrade to `top`).
+- `iotop` — Displays and monitors I/O usage by processes.
+- `ncdu` — NCurses-based disk usage viewer for finding large files/folders.
+- `tree` — Displays directory structure as a tree.
+- `bat` — `cat` clone with syntax highlighting, Git integration, and paging.
+- `delta` — Syntax-highlighted pager for Git and diff output.
+- `tcpdump` — Captures and analyses network traffic at the packet level.
+- `nmap` — Network scanner for host discovery, port scanning, and service
+  identification.
+- `lldb` — LLVM debugger, alternative to `gdb`.
+- `eza` — Modern `ls` replacement with more features and better defaults.
+- `fzf` — Interactive fuzzy finder for selecting files, commands, etc.
+- `hyperfine` — Command-line benchmarking tool with statistical output.
+- `shellcheck` — Linter for shell scripts, identifying errors and bad practices.
+- `fd` — Fast, user-friendly `find` alternative with sensible defaults.
+- `checkmake` — Linter for `Makefile`s, ensuring they follow best practices and
+  conventions.
+- `srgn` — [Structural grep](https://github.com/alexpovel/srgn), searches code
+  and enables editing by syntax tree patterns.
+- `difft` **(Difftastic)** — Semantic diff tool that compares code structure
+  rather than just text differences.
+
+## Key takeaway
+
+These practices help maintain a high-quality codebase and facilitate
+collaboration.
