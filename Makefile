@@ -49,13 +49,14 @@ nixie: ## Validate Mermaid diagrams
 audit: rust-audit ## Audit dependencies for known vulnerabilities
 
 rust-audit: ## Audit every Rust manifest for known vulnerabilities
-	find . \
-		\( -path '*/target/*' -o -path '*/node_modules/*' -o -path '*/.venv/*' \) -prune -o \
-		-name Cargo.toml -exec sh -c 'set -e; for manifest do \
-			manifest_dir=$$(dirname "$$manifest"); \
-			printf "Auditing Rust manifest %s\n" "$$manifest"; \
-			(cd "$$manifest_dir" && $(CARGO) audit); \
-		done' sh {} +
+	manifest_list=$$(mktemp); \
+	trap 'rm -f "$$manifest_list"' EXIT; \
+	$(CARGO) metadata --no-deps --format-version 1 | python3 -c 'import json, sys; metadata = json.load(sys.stdin); members = set(metadata["workspace_members"]); [print(package["manifest_path"]) for package in metadata["packages"] if package["id"] in members]' > "$$manifest_list"; \
+	while IFS= read -r manifest; do \
+		manifest_dir=$$(dirname "$$manifest"); \
+		printf "Auditing Rust manifest %s\n" "$$manifest"; \
+		(cd "$$manifest_dir" && $(CARGO) audit); \
+	done < "$$manifest_list"
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

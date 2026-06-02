@@ -40,7 +40,7 @@ contributors, and maintainers.
   defines prompt metadata and rendering rules.
 - [ADR 006: Validate surface and capability disposition model](adr-006-define-the-validate-surface-and-capability-disposition-model.md)
   defines validation and capability disposition concepts.
-- [ADR 007: Session composition and artefact materialisation](adr-007-define-session-composition-and-artefact-materialisation.md)
+- [ADR 007: Session composition and artefact materialization](adr-007-define-session-composition-and-artefact-materialisation.md)
   defines session composition and generated artefacts.
 - [ADR 008: Secrets and trust boundaries](adr-008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md)
   defines secret-handling and trust-boundary rules.

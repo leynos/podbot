@@ -479,24 +479,24 @@ or selected through a user-facing override. The metric names below capture the
 intended contract for that later work, so the adapter, host command, and
 dashboards converge on one shape when it lands:
 
-- `podbot_acp_policy_state`: gauge labelled by `container_id` and `policy`
-  (`disabled`, `mask_only`, or `mask_and_deny`), set once when the protocol
-  session starts and cleared when it ends.
+- `podbot_acp_policy_state`: gauge labelled by `policy` (`disabled`,
+  `mask_only`, or `mask_and_deny`), set once when the protocol session starts
+  and cleared when it ends.
 - `podbot_acp_blocked_method_attempts_total`: counter labelled by
-  `container_id`, `method_family`, and `has_request_id`, incremented for every
+  `method_family` and `has_request_id`, incremented for every
   `FrameDecision::BlockRequest` and `FrameDecision::BlockNotification`.
-- `podbot_acp_writecmd_queue_depth`: gauge labelled by `container_id`,
-  sampled around sends into the bounded `WriteCmd` channel so operators can see
+- `podbot_acp_writecmd_queue_depth`: gauge labelled by `outcome`, sampled
+  around sends into the bounded `WriteCmd` channel so operators can see
   sustained backpressure before synthesized errors are delayed.
 - `podbot_acp_writecmd_send_failures_total`: counter labelled by
-  `container_id` and `command_kind`, incremented when the sink channel closes
-  before a forwarded or synthesized frame can be queued.
-- `podbot_acp_frame_buffer_overflows_total`: counter labelled by
-  `container_id`, incremented when `OutboundFrameAssembler` enters raw fallback
-  because `MAX_RUNTIME_FRAME_BYTES` is exceeded before a newline.
-- `podbot_acp_partial_frames_dropped_total`: counter labelled by
-  `container_id`, incremented when end-of-stream drops a residual partial frame
-  that could not be classified safely.
+  `command_kind`, incremented when the sink channel closes before a forwarded
+  or synthesized frame can be queued.
+- `podbot_acp_frame_buffer_overflows_total`: counter without labels,
+  incremented when `OutboundFrameAssembler` enters raw fallback because
+  `MAX_RUNTIME_FRAME_BYTES` is exceeded before a newline.
+- `podbot_acp_partial_frames_dropped_total`: counter without labels,
+  incremented when end-of-stream drops a residual partial frame that could not
+  be classified safely.
 
 When that instrumentation is introduced, every ACP runtime session should also
 attach a tracing span that carries the container ID, the selected
