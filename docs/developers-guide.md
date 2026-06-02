@@ -771,6 +771,38 @@ avoid allocating a lowercased string on the error path. It scans for the
 substring "rate limit" using `as_bytes().windows().eq_ignore_ascii_case()`.
 This is safe because GitHub's error messages are ASCII.
 
+### 12.6. Octocrab retry observability contract
+
+`PodbotOctocrabRetryMetrics` in `src/github/retry_metrics.rs` implements
+Octocrab's `RateLimitMetrics` trait and is wired into `build_app_client` via
+`RetryConfig::HandleRateLimits`. It provides two observability outputs for
+every retry event:
+
+1. **`tracing::warn!`** — emits a structured warning with fields
+   `operation = "github_api"`, `method`, `request_path`, `status_code`, and
+   `retries_remaining`. The `rate_limited` branch additionally includes
+   `waiting_seconds`.
+2. **`metrics::counter!`** — increments
+   `podbot.github.octocrab.retry.events.total` with labels:
+   - `operation = "github_api"`
+   - `event` — `"retryable_response"` or `"rate_limited"`
+   - `status_class` — one of `"1xx"`…`"5xx"` or `"other"`, derived from the
+     HTTP status code by `github_status_class`
+
+The counter uses low-cardinality labels only; no per-request data (paths,
+methods, or tokens) appear in metric label values.
+
+Installation-token acquisition emits two additional metric shapes in
+`src/github/installation_token.rs`:
+
+- `podbot.github.installation_token.acquisitions.total` — counter labelled
+  `operation = "installation_token"`, `status = "success" | "failure"`.
+- `podbot.github.installation_token.latency_seconds` — histogram labelled
+  identically, recording the wall-clock duration of the Octocrab call.
+- `podbot.github.installation_token.timeout_failures.total` — counter
+  labelled `operation = "installation_token"`, incremented only when the
+  failure is classified as a transport timeout (`ErrorKind::TimedOut`).
+
 ## 13. BDD testing patterns for credential validation
 
 Credential validation scenarios use the rstest-bdd framework with a four-file
@@ -822,6 +854,42 @@ that GitHub adapter boundary. Higher-level orchestration should depend on
 Podbot-owned types such as `InstallationAccessToken` and
 `GitHubInstallationTokenClient`.
 
+### 13.4. Shared test-support types (`src/github/test_support.rs`)
+
+`src/github/test_support.rs` is gated by
+`#[cfg(any(test, feature = "internal"))]` and provides recorder types that
+unit and integration tests share without duplicating implementations:
+
+| Type | Purpose |
+| :-- | :-- |
+| `CounterEvent` | Captures one `counter!` increment: metric name, labels, and value |
+| `HistogramEvent` | Captures one `histogram!` observation: metric name, labels, and value |
+| `RecordingMetrics` | Implements `metrics::Recorder`; collects counter and histogram events |
+| `RecordedCounter` | Backing `CounterFn` used by `RecordingMetrics` |
+| `RecordedHistogram` | Backing `HistogramFn` used by `RecordingMetrics` |
+
+Use `metrics::with_local_recorder(&recorder, || { ... })` to scope metric
+assertions to a single test without installing a global recorder:
+
+```rust
+let recorder = RecordingMetrics::default();
+metrics::with_local_recorder(&recorder, || {
+    // call production code that emits metrics
+});
+let events = recorder.events(); // Vec<CounterEvent>
+let hists = recorder.histogram_events(); // Vec<HistogramEvent>
+```
+
+Integration tests that require the `internal` feature import these types as
+`podbot::github::test_support::{CounterEvent, RecordingMetrics}`.
+
+Unit tests within `src/github/` import them as
+`crate::github::test_support::{CounterEvent, RecordingMetrics}`.
+
+Gauge registrations are intentionally no-ops; extend `RecordingMetrics` only
+if a production code path under test emits gauge values that require
+assertion.
+
 ## 14. Dev-dependencies for test construction
 
 The `Cargo.toml` `[dev-dependencies]` section includes:
@@ -832,6 +900,18 @@ The `Cargo.toml` `[dev-dependencies]` section includes:
   dev-dependency does not increase the total dependency count.
 - **proptest** — supports property-based tests for request validation and stays
   confined to the test-only dependency set.
+- **rstest** — parameterised tests and fixtures; use `#[rstest]` with
+  `#[case]` for table-driven tests and `#[fixture]` for shared test state.
+- **insta** — snapshot testing for structured outputs such as log lines and
+  serialised payloads; run `cargo insta review` after changing snapshot-tested
+  output.
+- **tempfile** — creates temporary directories for integration tests that
+  write to the filesystem; used by key-loading and audit-target tests.
+- **tracing-subscriber** — used in unit tests to capture `tracing` output
+  via a custom `MakeWriter` without installing a global subscriber.
+- **http** — provides `http::StatusCode` for constructing Octocrab error
+  variants in unit tests; kept as a direct dev-dependency to avoid relying on
+  transitive re-exports.
 
 The unit tests do not directly import `http` types despite octocrab's use of
 `http::StatusCode`, because the tests access status codes through octocrab's
