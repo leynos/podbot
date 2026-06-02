@@ -27,27 +27,31 @@ impl<'a> RetryEventContext<'a> {
         }
     }
 
-    fn log_warn(&self, message: &'static str) {
-        tracing::warn!(
-            operation = "github_api",
-            method = %self.req.method(),
-            request_path = self.req.uri().path(),
-            status_code = self.status_code.as_u16(),
-            retries_remaining = self.retries_remaining,
-            "{message}"
-        );
-    }
-
-    fn log_warn_with_wait(&self, message: &'static str, waiting_seconds: u64) {
-        tracing::warn!(
-            operation = "github_api",
-            method = %self.req.method(),
-            request_path = self.req.uri().path(),
-            status_code = self.status_code.as_u16(),
-            retries_remaining = self.retries_remaining,
-            waiting_seconds,
-            "{message}"
-        );
+    // The two `tracing::warn!` arms expand into many branches that inflate
+    // clippy's cognitive-complexity score, but merging them is the point of
+    // this function and splitting them back out would defeat that.
+    #[expect(clippy::cognitive_complexity, reason = "macro-expansion artefact")]
+    fn log_warn(&self, message: &'static str, waiting_seconds: Option<u64>) {
+        if let Some(secs) = waiting_seconds {
+            tracing::warn!(
+                operation = "github_api",
+                method = %self.req.method(),
+                request_path = self.req.uri().path(),
+                status_code = self.status_code.as_u16(),
+                retries_remaining = self.retries_remaining,
+                waiting_seconds = secs,
+                "{message}"
+            );
+        } else {
+            tracing::warn!(
+                operation = "github_api",
+                method = %self.req.method(),
+                request_path = self.req.uri().path(),
+                status_code = self.status_code.as_u16(),
+                retries_remaining = self.retries_remaining,
+                "{message}"
+            );
+        }
     }
 }
 
@@ -58,8 +62,10 @@ impl RateLimitMetrics for PodbotOctocrabRetryMetrics {
         status_code: http::StatusCode,
         retries_remaining: usize,
     ) {
-        RetryEventContext::new(req, status_code, retries_remaining)
-            .log_warn("Octocrab retry policy observed a retryable GitHub API response");
+        RetryEventContext::new(req, status_code, retries_remaining).log_warn(
+            "Octocrab retry policy observed a retryable GitHub API response",
+            None,
+        );
         record_octocrab_retry_event("retryable_response", status_code);
     }
 
@@ -70,9 +76,9 @@ impl RateLimitMetrics for PodbotOctocrabRetryMetrics {
         retries_remaining: usize,
         waiting_seconds: u64,
     ) {
-        RetryEventContext::new(req, status_code, retries_remaining).log_warn_with_wait(
+        RetryEventContext::new(req, status_code, retries_remaining).log_warn(
             "Octocrab retry policy is waiting before retrying a GitHub API request",
-            waiting_seconds,
+            Some(waiting_seconds),
         );
         record_octocrab_retry_event("rate_limited", status_code);
     }
