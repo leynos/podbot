@@ -6,6 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
+use rstest::rstest;
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -133,48 +134,44 @@ fn rust_audit_invokes_cargo_audit_once_at_workspace_root() {
     );
 }
 
-#[test]
-fn rust_audit_fails_when_cargo_audit_fails() {
+#[rstest]
+#[case(42, 0, "rust-audit should propagate cargo audit failure", true)]
+#[case(0, 23, "rust-audit should propagate cargo metadata failure", false)]
+fn rust_audit_propagates_failure(
+    #[case] audit_exit_status: i32,
+    #[case] metadata_exit_status: i32,
+    #[case] failure_message: &str,
+    #[case] audit_ran: bool,
+) {
     let temp = TempDir::new().expect("temporary workspace should be created");
     let workspace = temp.path();
     create_manifest(&workspace.join("Cargo.toml")).expect("root manifest should be created");
 
     let log_path = workspace.join("cargo-audit.log");
-    let fake_cargo = write_fake_cargo(&workspace.join("bin"), &log_path, 42, 0)
-        .expect("failing fake cargo should be built");
+    let fake_cargo = write_fake_cargo(
+        &workspace.join("bin"),
+        &log_path,
+        audit_exit_status,
+        metadata_exit_status,
+    )
+    .expect("fake cargo should be built");
     let metadata = cargo_metadata_for(workspace, &[&workspace.join("Cargo.toml")]);
 
     let output =
         run_rust_audit(workspace, &fake_cargo, &metadata).expect("make rust-audit should run");
 
-    assert!(
-        !output.status.success(),
-        "rust-audit should propagate cargo audit failure"
-    );
-    let log = fs::read_to_string(log_path).expect("fake cargo log should be readable");
-    assert_eq!(log, format!("{}|audit\n", workspace.display()));
-}
-
-#[test]
-fn rust_audit_fails_when_cargo_metadata_fails() {
-    let temp = TempDir::new().expect("temporary workspace should be created");
-    let workspace = temp.path();
-    create_manifest(&workspace.join("Cargo.toml")).expect("root manifest should be created");
-
-    let log_path = workspace.join("cargo-audit.log");
-    let fake_cargo = write_fake_cargo(&workspace.join("bin"), &log_path, 0, 23)
-        .expect("metadata-failing fake cargo should be built");
-    let metadata = cargo_metadata_for(workspace, &[&workspace.join("Cargo.toml")]);
-
-    let output =
-        run_rust_audit(workspace, &fake_cargo, &metadata).expect("make rust-audit should run");
-
-    assert!(
-        !output.status.success(),
-        "rust-audit should propagate cargo metadata failure"
-    );
-    assert!(
-        !log_path.exists(),
-        "cargo audit should not run after metadata failure"
-    );
+    assert!(!output.status.success(), "{failure_message}");
+    if audit_ran {
+        let log = fs::read_to_string(&log_path).expect("fake cargo log should be readable");
+        assert_eq!(
+            log,
+            format!("{}|audit\n", workspace.display()),
+            "cargo audit should have been invoked once at the workspace root"
+        );
+    } else {
+        assert!(
+            !log_path.exists(),
+            "cargo audit should not run after metadata failure"
+        );
+    }
 }
