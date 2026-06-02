@@ -13,6 +13,7 @@
 mod classify;
 mod installation_token;
 mod pem_validation;
+mod retry_metrics;
 
 use std::future::Future;
 use std::path::PathBuf;
@@ -26,111 +27,19 @@ use jsonwebtoken::EncodingKey;
 
 use octocrab::Octocrab;
 use octocrab::models::{AppId, InstallationId};
-use octocrab::service::middleware::retry::{RateLimitMetrics, RetryConfig};
+use octocrab::service::middleware::retry::RetryConfig;
 
 use crate::error::GitHubError;
 use classify::classify_github_api_error;
 pub use installation_token::InstallationAccessToken;
 use pem_validation::parse_rsa_pem;
+use retry_metrics::PodbotOctocrabRetryMetrics;
 
 /// A boxed future for async trait methods.
 ///
 /// This type alias enables `mockall::automock` compatibility and trait object
 /// usage for async methods in [`GitHubAppClient`].
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
-struct PodbotOctocrabRetryMetrics;
-
-struct RetryEventContext<'a> {
-    req: &'a http::Request<octocrab::OctoBody>,
-    status_code: http::StatusCode,
-    retries_remaining: usize,
-}
-
-impl<'a> RetryEventContext<'a> {
-    const fn new(
-        req: &'a http::Request<octocrab::OctoBody>,
-        status_code: http::StatusCode,
-        retries_remaining: usize,
-    ) -> Self {
-        Self {
-            req,
-            status_code,
-            retries_remaining,
-        }
-    }
-
-    fn log_warn(&self, message: &'static str) {
-        tracing::warn!(
-            operation = "github_api",
-            method = %self.req.method(),
-            request_path = self.req.uri().path(),
-            status_code = self.status_code.as_u16(),
-            retries_remaining = self.retries_remaining,
-            "{message}"
-        );
-    }
-
-    fn log_warn_with_wait(&self, message: &'static str, waiting_seconds: u64) {
-        tracing::warn!(
-            operation = "github_api",
-            method = %self.req.method(),
-            request_path = self.req.uri().path(),
-            status_code = self.status_code.as_u16(),
-            retries_remaining = self.retries_remaining,
-            waiting_seconds,
-            "{message}"
-        );
-    }
-}
-
-impl RateLimitMetrics for PodbotOctocrabRetryMetrics {
-    fn retry_after_error(
-        &self,
-        req: &http::Request<octocrab::OctoBody>,
-        status_code: http::StatusCode,
-        retries_remaining: usize,
-    ) {
-        RetryEventContext::new(req, status_code, retries_remaining)
-            .log_warn("Octocrab retry policy observed a retryable GitHub API response");
-        record_octocrab_retry_event("retryable_response", status_code);
-    }
-
-    fn rate_limited(
-        &self,
-        req: &http::Request<octocrab::OctoBody>,
-        status_code: http::StatusCode,
-        retries_remaining: usize,
-        waiting_seconds: u64,
-    ) {
-        RetryEventContext::new(req, status_code, retries_remaining).log_warn_with_wait(
-            "Octocrab retry policy is waiting before retrying a GitHub API request",
-            waiting_seconds,
-        );
-        record_octocrab_retry_event("rate_limited", status_code);
-    }
-}
-
-fn record_octocrab_retry_event(event: &'static str, status_code: http::StatusCode) {
-    metrics::counter!(
-        "podbot.github.octocrab.retry.events.total",
-        "operation" => "github_api",
-        "event" => event,
-        "status_class" => github_status_class(status_code),
-    )
-    .increment(1);
-}
-
-const fn github_status_class(status_code: http::StatusCode) -> &'static str {
-    match status_code.as_u16() {
-        100..=199 => "1xx",
-        200..=299 => "2xx",
-        300..=399 => "3xx",
-        400..=499 => "4xx",
-        500..=599 => "5xx",
-        _ => "other",
-    }
-}
 
 /// Load a GitHub App RSA private key from the configured path.
 ///
@@ -478,13 +387,11 @@ pub fn test_classify_error_message(code: u16, full_error: &str) -> String {
 #[cfg(any(feature = "internal", test))]
 #[doc(hidden)]
 pub fn test_record_octocrab_retry_event(event: &'static str, status_code: http::StatusCode) {
-    record_octocrab_retry_event(event, status_code);
+    retry_metrics::record_octocrab_retry_event(event, status_code);
 }
 
 #[cfg(test)]
 mod credential_error_tests;
-#[cfg(test)]
-mod retry_metrics_tests;
 #[cfg(any(test, feature = "internal"))]
 pub mod test_support;
 #[cfg(test)]

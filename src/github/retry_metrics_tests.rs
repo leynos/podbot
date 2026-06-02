@@ -6,7 +6,7 @@ use http::{Method, Request, StatusCode};
 use octocrab::service::middleware::retry::RateLimitMetrics;
 
 use super::PodbotOctocrabRetryMetrics;
-use super::test_support::{CounterEvent, RecordingMetrics};
+use crate::github::test_support::{CounterEvent, RecordingMetrics};
 
 fn github_request() -> Request<octocrab::OctoBody> {
     match Request::builder()

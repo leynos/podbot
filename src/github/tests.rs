@@ -4,6 +4,7 @@
 //! key type rejection (ECDSA, Ed25519, public keys, certificates), encrypted
 //! key detection, and Octocrab App client building.
 
+use super::retry_metrics::github_status_class;
 use super::*;
 use cap_std::fs_utf8::Dir as Utf8Dir;
 use rstest::{fixture, rstest};
