@@ -485,5 +485,7 @@ pub fn test_record_octocrab_retry_event(event: &'static str, status_code: http::
 mod credential_error_tests;
 #[cfg(test)]
 mod retry_metrics_tests;
+#[cfg(any(test, feature = "internal"))]
+pub mod test_support;
 #[cfg(test)]
 mod tests;
