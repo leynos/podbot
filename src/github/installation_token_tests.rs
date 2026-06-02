@@ -6,6 +6,7 @@ use rstest::{fixture, rstest};
 use snafu::GenerateImplicitData;
 
 use super::*;
+use crate::github::test_support::{CounterEvent, RecordingMetrics};
 use crate::github::{MockGitHubInstallationTokenClient, acquire_installation_token_with_client};
 
 const FIXTURE_TOKEN: &str = "ghs_secret_fixture_token";
@@ -197,4 +198,121 @@ fn token_error_timeout_detection_checks_service_io_errors(
     };
 
     assert_eq!(is_timeout_error(&error), expected_timeout);
+}
+
+#[rstest]
+#[case::success("success")]
+#[case::failure("failure")]
+fn record_token_acquisition_metrics_emits_counter_and_histogram(#[case] status: &'static str) {
+    let recorder = RecordingMetrics::default();
+    metrics::with_local_recorder(&recorder, || {
+        record_token_acquisition_metrics(status, Duration::from_millis(42));
+    });
+
+    assert_eq!(
+        recorder.events(),
+        vec![CounterEvent {
+            name: "podbot.github.installation_token.acquisitions.total".to_owned(),
+            labels: vec![
+                ("operation".to_owned(), "installation_token".to_owned()),
+                ("status".to_owned(), status.to_owned()),
+            ],
+            value: 1,
+        }],
+        "acquisitions counter should be incremented once for status={status}"
+    );
+
+    let histogram_events = recorder.histogram_events();
+    assert_eq!(
+        histogram_events.len(),
+        1,
+        "exactly one latency histogram observation expected for status={status}"
+    );
+    let hist = histogram_events
+        .first()
+        .expect("histogram event count checked above");
+    assert_eq!(
+        hist.name,
+        "podbot.github.installation_token.latency_seconds"
+    );
+    assert!(
+        hist.labels
+            .contains(&("operation".to_owned(), "installation_token".to_owned())),
+        "latency histogram should have operation label: {hist:?}"
+    );
+    assert!(
+        hist.labels
+            .contains(&("status".to_owned(), status.to_owned())),
+        "latency histogram should have status={status} label: {hist:?}"
+    );
+    assert!(
+        hist.value >= 0.0,
+        "latency histogram value should be non-negative: {}",
+        hist.value
+    );
+}
+
+#[test]
+fn warn_token_acquisition_failure_increments_timeout_counter_for_timed_out_errors() {
+    let recorder = RecordingMetrics::default();
+    let io_error = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
+    let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_error);
+    let error = octocrab::Error::Service {
+        source: boxed,
+        backtrace: snafu::Backtrace::generate(),
+    };
+
+    metrics::with_local_recorder(&recorder, || {
+        warn_token_acquisition_failure(
+            INSTALLATION_ID,
+            Duration::from_secs(300),
+            Duration::from_millis(5_000),
+            &error,
+        );
+    });
+
+    let events = recorder.events();
+    let timeout_counter = events
+        .iter()
+        .find(|e| e.name == "podbot.github.installation_token.timeout_failures.total");
+    assert!(
+        timeout_counter.is_some(),
+        "expected timeout counter for TimedOut error: {events:?}"
+    );
+    assert_eq!(
+        timeout_counter
+            .expect("timeout counter checked above")
+            .value,
+        1,
+        "timeout counter should be incremented once"
+    );
+}
+
+#[test]
+fn warn_token_acquisition_failure_does_not_increment_timeout_counter_for_connection_refused() {
+    let recorder = RecordingMetrics::default();
+    let io_error = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
+    let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_error);
+    let error = octocrab::Error::Service {
+        source: boxed,
+        backtrace: snafu::Backtrace::generate(),
+    };
+
+    metrics::with_local_recorder(&recorder, || {
+        warn_token_acquisition_failure(
+            INSTALLATION_ID,
+            Duration::from_secs(300),
+            Duration::from_millis(100),
+            &error,
+        );
+    });
+
+    let events = recorder.events();
+    let timeout_counter = events
+        .iter()
+        .find(|e| e.name == "podbot.github.installation_token.timeout_failures.total");
+    assert!(
+        timeout_counter.is_none(),
+        "timeout counter must not be emitted for non-timeout errors: {events:?}"
+    );
 }

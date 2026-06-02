@@ -1,15 +1,17 @@
-//! Shared test-support types for GitHub retry metrics.
+//! Shared test-support types for GitHub metrics.
 //!
-//! Provides `CounterEvent`, `RecordingMetrics`, and `RecordedCounter` so
-//! unit tests and integration tests can use the same metrics recorder
-//! implementation without duplicating the types.
+//! Provides `CounterEvent`, `HistogramEvent`, `RecordingMetrics`,
+//! `RecordedCounter`, and `RecordedHistogram` so unit tests and integration
+//! tests can use the same metrics recorder implementation without
+//! duplicating the types.
 
 #![cfg(any(test, feature = "internal"))]
 
 use std::sync::{Arc, Mutex};
 
 use metrics::{
-    Counter, CounterFn, Gauge, Histogram, Key, KeyName, Metadata, Recorder, SharedString, Unit,
+    Counter, CounterFn, Gauge, Histogram, HistogramFn, Key, KeyName, Metadata, Recorder,
+    SharedString, Unit,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -19,9 +21,17 @@ pub struct CounterEvent {
     pub value: u64,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct HistogramEvent {
+    pub name: String,
+    pub labels: Vec<(String, String)>,
+    pub value: f64,
+}
+
 #[derive(Clone, Default)]
 pub struct RecordingMetrics {
     events: Arc<Mutex<Vec<CounterEvent>>>,
+    histogram_events: Arc<Mutex<Vec<HistogramEvent>>>,
 }
 
 impl RecordingMetrics {
@@ -30,6 +40,14 @@ impl RecordingMetrics {
         match self.events.lock() {
             Ok(events) => events.clone(),
             Err(error) => panic!("metrics events lock should not be poisoned: {error}"),
+        }
+    }
+
+    #[must_use]
+    pub fn histogram_events(&self) -> Vec<HistogramEvent> {
+        match self.histogram_events.lock() {
+            Ok(events) => events.clone(),
+            Err(error) => panic!("histogram events lock should not be poisoned: {error}"),
         }
     }
 }
@@ -59,8 +77,18 @@ impl Recorder for RecordingMetrics {
         Gauge::noop()
     }
 
-    fn register_histogram(&self, _key: &Key, _metadata: &Metadata<'_>) -> Histogram {
-        Histogram::noop()
+    fn register_histogram(&self, key: &Key, _metadata: &Metadata<'_>) -> Histogram {
+        Histogram::from_arc(Arc::new(RecordedHistogram {
+            event: HistogramEvent {
+                name: key.name().to_owned(),
+                labels: key
+                    .labels()
+                    .map(|label| (label.key().to_owned(), label.value().to_owned()))
+                    .collect(),
+                value: 0.0,
+            },
+            events: Arc::clone(&self.histogram_events),
+        }))
     }
 }
 
@@ -81,5 +109,21 @@ impl CounterFn for RecordedCounter {
 
     fn absolute(&self, value: u64) {
         self.increment(value);
+    }
+}
+
+pub struct RecordedHistogram {
+    event: HistogramEvent,
+    events: Arc<Mutex<Vec<HistogramEvent>>>,
+}
+
+impl HistogramFn for RecordedHistogram {
+    fn record(&self, value: f64) {
+        let mut event = self.event.clone();
+        event.value = value;
+        match self.events.lock() {
+            Ok(mut events) => events.push(event),
+            Err(error) => panic!("histogram events lock should not be poisoned: {error}"),
+        }
     }
 }
