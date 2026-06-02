@@ -141,7 +141,7 @@ fn rust_audit_propagates_failure(
     #[case] audit_exit_status: i32,
     #[case] metadata_exit_status: i32,
     #[case] failure_message: &str,
-    #[case] audit_ran: bool,
+    #[case] should_audit_run: bool,
 ) {
     let temp = TempDir::new().expect("temporary workspace should be created");
     let workspace = temp.path();
@@ -160,8 +160,13 @@ fn rust_audit_propagates_failure(
     let output =
         run_rust_audit(workspace, &fake_cargo, &metadata).expect("make rust-audit should run");
 
-    assert!(!output.status.success(), "{failure_message}");
-    if audit_ran {
+    assert!(
+        !output.status.success(),
+        "{failure_message}: stdout={}, stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    if should_audit_run {
         let log = fs::read_to_string(&log_path).expect("fake cargo log should be readable");
         assert_eq!(
             log,
