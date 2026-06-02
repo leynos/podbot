@@ -474,7 +474,16 @@ pub fn test_classify_error_message(code: u16, full_error: &str) -> String {
     classify::classify_by_status(code, full_error)
 }
 
+/// Test helper: record a retry event through the production metrics path.
+#[cfg(any(feature = "internal", test))]
+#[doc(hidden)]
+pub fn test_record_octocrab_retry_event(event: &'static str, status_code: http::StatusCode) {
+    record_octocrab_retry_event(event, status_code);
+}
+
 #[cfg(test)]
 mod credential_error_tests;
+#[cfg(test)]
+mod retry_metrics_tests;
 #[cfg(test)]
 mod tests;

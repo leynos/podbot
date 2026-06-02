@@ -1,5 +1,6 @@
 .PHONY: help all clean test build release lint typecheck fmt check-fmt markdownlint nixie audit rust-audit
 
+SHELL := bash
 
 TARGET ?= podbot
 
@@ -49,7 +50,7 @@ nixie: ## Validate Mermaid diagrams
 audit: rust-audit ## Audit dependencies for known vulnerabilities
 
 rust-audit: ## Audit the Rust workspace for known vulnerabilities
-	set -e; \
+	set -eo pipefail; \
 	manifest_list=$$(mktemp); \
 	trap 'rm -f "$$manifest_list"' EXIT; \
 	$(CARGO) metadata --no-deps --format-version 1 | python3 -c 'import json, sys; metadata = json.load(sys.stdin); members = set(metadata["workspace_members"]); print(metadata["workspace_root"]); [print(package["manifest_path"]) for package in metadata["packages"] if package["id"] in members]' > "$$manifest_list"; \

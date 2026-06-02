@@ -22,12 +22,13 @@ fn write_fake_cargo(
     bin_dir: &Path,
     log_path: &Path,
     exit_status: i32,
+    metadata_status: i32,
 ) -> TestResult<std::path::PathBuf> {
     let cargo_path = bin_dir.join("cargo");
     write_file(
         &cargo_path,
         &format!(
-            "#!/usr/bin/env sh\nif [ \"$1\" = metadata ]; then\nprintf '%s\\n' \"$PODBOT_FAKE_CARGO_METADATA\"\nexit 0\nfi\nprintf '%s|%s\\n' \"$PWD\" \"$*\" >> '{}'\nexit {exit_status}\n",
+            "#!/usr/bin/env sh\nif [ \"$1\" = metadata ]; then\nprintf '%s\\n' \"$PODBOT_FAKE_CARGO_METADATA\"\nexit {metadata_status}\nfi\nprintf '%s|%s\\n' \"$PWD\" \"$*\" >> '{}'\nexit {exit_status}\n",
             log_path.display()
         ),
     )?;
@@ -99,8 +100,8 @@ fn rust_audit_invokes_cargo_audit_once_at_workspace_root() {
         .expect("virtualenv manifest fixture should be created");
 
     let log_path = workspace.join("cargo-audit.log");
-    let fake_cargo =
-        write_fake_cargo(&workspace.join("bin"), &log_path, 0).expect("fake cargo should be built");
+    let fake_cargo = write_fake_cargo(&workspace.join("bin"), &log_path, 0, 0)
+        .expect("fake cargo should be built");
     let metadata = cargo_metadata_for(workspace, &[&root_manifest, &member_manifest]);
 
     let output =
@@ -139,7 +140,7 @@ fn rust_audit_fails_when_cargo_audit_fails() {
     create_manifest(&workspace.join("Cargo.toml")).expect("root manifest should be created");
 
     let log_path = workspace.join("cargo-audit.log");
-    let fake_cargo = write_fake_cargo(&workspace.join("bin"), &log_path, 42)
+    let fake_cargo = write_fake_cargo(&workspace.join("bin"), &log_path, 42, 0)
         .expect("failing fake cargo should be built");
     let metadata = cargo_metadata_for(workspace, &[&workspace.join("Cargo.toml")]);
 
@@ -152,4 +153,28 @@ fn rust_audit_fails_when_cargo_audit_fails() {
     );
     let log = fs::read_to_string(log_path).expect("fake cargo log should be readable");
     assert_eq!(log, format!("{}|audit\n", workspace.display()));
+}
+
+#[test]
+fn rust_audit_fails_when_cargo_metadata_fails() {
+    let temp = TempDir::new().expect("temporary workspace should be created");
+    let workspace = temp.path();
+    create_manifest(&workspace.join("Cargo.toml")).expect("root manifest should be created");
+
+    let log_path = workspace.join("cargo-audit.log");
+    let fake_cargo = write_fake_cargo(&workspace.join("bin"), &log_path, 0, 23)
+        .expect("metadata-failing fake cargo should be built");
+    let metadata = cargo_metadata_for(workspace, &[&workspace.join("Cargo.toml")]);
+
+    let output =
+        run_rust_audit(workspace, &fake_cargo, &metadata).expect("make rust-audit should run");
+
+    assert!(
+        !output.status.success(),
+        "rust-audit should propagate cargo metadata failure"
+    );
+    assert!(
+        !log_path.exists(),
+        "cargo audit should not run after metadata failure"
+    );
 }
