@@ -27,7 +27,7 @@ All quality gates must pass before committing. The canonical targets are:
 | `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings`                                           | Lint with all warnings denied                                                                      |
 | `make test`         | `cargo test --workspace`                                                                                         | Run full test suite                                                                                |
 | `make typecheck`    | `cargo check --workspace --all-targets --all-features`                                                           | Type-check the workspace                                                                           |
-| `make audit`        | `find . \( -path '*/target/*' -o -path '*/node_modules/*' -o -path '*/.venv/*' \) -prune -o -name Cargo.toml`    | Canonical `make audit` target: prune generated directories and run `cargo audit` for each manifest |
+| `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`                                                  | Derive workspace root with `python3`; run `cargo audit` once there                                 |
 | `make markdownlint` | markdownlint-cli                                                                                                 | Validate Markdown files                                                                            |
 | `make nixie`        | Mermaid diagram validator                                                                                        | Validate diagrams in Markdown                                                                      |
 

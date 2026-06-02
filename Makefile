@@ -48,15 +48,18 @@ nixie: ## Validate Mermaid diagrams
 
 audit: rust-audit ## Audit dependencies for known vulnerabilities
 
-rust-audit: ## Audit every Rust manifest for known vulnerabilities
+rust-audit: ## Audit the Rust workspace for known vulnerabilities
+	set -e; \
 	manifest_list=$$(mktemp); \
 	trap 'rm -f "$$manifest_list"' EXIT; \
-	$(CARGO) metadata --no-deps --format-version 1 | python3 -c 'import json, sys; metadata = json.load(sys.stdin); members = set(metadata["workspace_members"]); [print(package["manifest_path"]) for package in metadata["packages"] if package["id"] in members]' > "$$manifest_list"; \
-	while IFS= read -r manifest; do \
+	$(CARGO) metadata --no-deps --format-version 1 | python3 -c 'import json, sys; metadata = json.load(sys.stdin); members = set(metadata["workspace_members"]); print(metadata["workspace_root"]); [print(package["manifest_path"]) for package in metadata["packages"] if package["id"] in members]' > "$$manifest_list"; \
+	workspace_root=$$(sed -n '1p' "$$manifest_list"); \
+	printf "Auditing Rust workspace %s\n" "$$workspace_root"; \
+	sed -n '2,$$p' "$$manifest_list" | while IFS= read -r manifest; do \
 		manifest_dir=$$(dirname "$$manifest"); \
-		printf "Auditing Rust manifest %s\n" "$$manifest"; \
-		(cd "$$manifest_dir" && $(CARGO) audit); \
-	done < "$$manifest_list"
+		printf "Workspace Rust manifest %s\n" "$$manifest_dir/Cargo.toml"; \
+	done; \
+	(cd "$$workspace_root" && $(CARGO) audit)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

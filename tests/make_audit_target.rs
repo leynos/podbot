@@ -59,7 +59,7 @@ fn create_manifest(path: &Path) -> TestResult {
     write_file(path, "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\n")
 }
 
-fn cargo_metadata_for(manifests: &[&Path]) -> String {
+fn cargo_metadata_for(workspace: &Path, manifests: &[&Path]) -> String {
     let packages = manifests
         .iter()
         .enumerate()
@@ -77,11 +77,14 @@ fn cargo_metadata_for(manifests: &[&Path]) -> String {
         .map(|(index, _manifest)| format!(r#""fixture {index}""#))
         .collect::<Vec<_>>()
         .join(",");
-    format!(r#"{{"packages":[{packages}],"workspace_members":[{members}]}}"#)
+    format!(
+        r#"{{"workspace_root":"{}","packages":[{packages}],"workspace_members":[{members}]}}"#,
+        workspace.display()
+    )
 }
 
 #[test]
-fn rust_audit_invokes_cargo_audit_for_each_workspace_manifest() {
+fn rust_audit_invokes_cargo_audit_once_at_workspace_root() {
     let temp = TempDir::new().expect("temporary workspace should be created");
     let workspace = temp.path();
     let root_manifest = workspace.join("Cargo.toml");
@@ -98,7 +101,7 @@ fn rust_audit_invokes_cargo_audit_for_each_workspace_manifest() {
     let log_path = workspace.join("cargo-audit.log");
     let fake_cargo =
         write_fake_cargo(&workspace.join("bin"), &log_path, 0).expect("fake cargo should be built");
-    let metadata = cargo_metadata_for(&[&root_manifest, &member_manifest]);
+    let metadata = cargo_metadata_for(workspace, &[&root_manifest, &member_manifest]);
 
     let output =
         run_rust_audit(workspace, &fake_cargo, &metadata).expect("make rust-audit should run");
@@ -110,16 +113,10 @@ fn rust_audit_invokes_cargo_audit_for_each_workspace_manifest() {
         String::from_utf8_lossy(&output.stderr)
     );
     let log = fs::read_to_string(log_path).expect("fake cargo log should be readable");
-    assert!(
-        log.contains(&format!("{}|audit", workspace.display())),
-        "root manifest should be audited: {log}"
-    );
-    assert!(
-        log.contains(&format!(
-            "{}|audit",
-            workspace.join("crates/agent").display()
-        )),
-        "nested manifest should be audited: {log}"
+    assert_eq!(
+        log,
+        format!("{}|audit\n", workspace.display()),
+        "workspace root should be audited once"
     );
     assert!(
         !log.contains("target/ignored"),
@@ -144,7 +141,7 @@ fn rust_audit_fails_when_cargo_audit_fails() {
     let log_path = workspace.join("cargo-audit.log");
     let fake_cargo = write_fake_cargo(&workspace.join("bin"), &log_path, 42)
         .expect("failing fake cargo should be built");
-    let metadata = cargo_metadata_for(&[&workspace.join("Cargo.toml")]);
+    let metadata = cargo_metadata_for(workspace, &[&workspace.join("Cargo.toml")]);
 
     let output =
         run_rust_audit(workspace, &fake_cargo, &metadata).expect("make rust-audit should run");
