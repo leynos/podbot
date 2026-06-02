@@ -10,7 +10,7 @@
 //!
 //! A fake `cargo` executable is generated at test time and records its
 //! invocations to a log file so tests can assert on invocation count and
-//! working directory without network access or a real RustSec database.
+//! working directory without network access or a real `RustSec` database.
 //!
 //! See also: `Makefile` (`rust-audit` target), `docs/developers-guide.md`
 //! (§ 2 Quality gates, § 2.1 Security audit ignores).
