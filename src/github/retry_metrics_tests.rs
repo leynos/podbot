@@ -1,4 +1,24 @@
-//! Unit tests for Octocrab retry metrics and warning emission.
+//! Unit tests for Octocrab retry policy metrics and warning emission.
+//!
+//! Exercises [`super::PodbotOctocrabRetryMetrics`], the
+//! [`octocrab::service::middleware::retry::RateLimitMetrics`] implementation
+//! that bridges Octocrab retry hooks into Podbot's `tracing` warnings and
+//! `metrics` counters.
+//!
+//! Tests verify:
+//! - `retry_after_error` emits a `WARN` log with the correct structured
+//!   fields and records a `retryable_response` counter event.
+//! - `rate_limited` emits a `WARN` log that includes `waiting_seconds` and
+//!   records a `rate_limited` counter event.
+//! - Neither method emits structured fields that belong to the other branch.
+//!
+//! [`crate::github::test_support::RecordingMetrics`] is used for counter
+//! assertions; a `SharedLogBuffer` captures `tracing` output without
+//! installing a global subscriber.
+//!
+//! See also: `src/github/retry_metrics.rs`,
+//! `tests/github_retry_metrics.rs` (integration-level coverage of the same
+//! contract via the `internal` feature).
 
 use std::sync::{Arc, Mutex};
 

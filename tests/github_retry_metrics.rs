@@ -1,4 +1,20 @@
 //! Integration tests for GitHub retry metric recording.
+//!
+//! Verifies that [`podbot::github::test_record_octocrab_retry_event`] emits
+//! `podbot.github.octocrab.retry.events.total` counter events with the
+//! correct `operation`, `event`, and `status_class` labels when called
+//! through the public test seam exposed under `--features internal`.
+//!
+//! These tests complement the unit tests in
+//! `src/github/retry_metrics_tests.rs` by exercising the crate's public
+//! module boundary and asserting that [`podbot::github::test_support`]
+//! types are accessible and behave as documented.
+//!
+//! Requires `--features internal` to compile; guarded by
+//! `#![cfg(feature = "internal")]`.
+//!
+//! See also: `src/github/retry_metrics.rs`,
+//! `src/github/retry_metrics_tests.rs`.
 
 #![cfg(feature = "internal")]
 

@@ -1,4 +1,19 @@
-//! Integration tests for the Makefile Rust audit target.
+//! Integration tests for the Makefile `rust-audit` target.
+//!
+//! Validates that `make rust-audit`:
+//! - invokes `cargo audit` exactly once at the workspace root derived from
+//!   `cargo metadata`,
+//! - propagates non-zero exit codes from both `cargo audit` and
+//!   `cargo metadata` as a `make` failure,
+//! - does not audit manifests found under `target/`, `node_modules/`, or
+//!   `.venv/` unless they appear in workspace metadata.
+//!
+//! A fake `cargo` executable is generated at test time and records its
+//! invocations to a log file so tests can assert on invocation count and
+//! working directory without network access or a real RustSec database.
+//!
+//! See also: `Makefile` (`rust-audit` target), `docs/developers-guide.md`
+//! (§ 2 Quality gates, § 2.1 Security audit ignores).
 
 use std::fs;
 #[cfg(unix)]
