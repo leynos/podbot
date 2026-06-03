@@ -252,10 +252,16 @@ fn record_token_acquisition_metrics_emits_counter_and_histogram(#[case] status: 
     );
 }
 
-#[test]
-fn warn_token_acquisition_failure_increments_timeout_counter_for_timed_out_errors() {
+#[rstest]
+#[case::timed_out(std::io::ErrorKind::TimedOut, 5_000, true)]
+#[case::connection_refused(std::io::ErrorKind::ConnectionRefused, 100, false)]
+fn warn_token_acquisition_failure_timeout_counter_matches_error_kind(
+    #[case] error_kind: std::io::ErrorKind,
+    #[case] elapsed_millis: u64,
+    #[case] expect_timeout_counter: bool,
+) {
     let recorder = RecordingMetrics::default();
-    let io_error = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
+    let io_error = std::io::Error::new(error_kind, "transport failure");
     let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_error);
     let error = octocrab::Error::Service {
         source: boxed,
@@ -266,7 +272,7 @@ fn warn_token_acquisition_failure_increments_timeout_counter_for_timed_out_error
         warn_token_acquisition_failure(
             INSTALLATION_ID,
             Duration::from_secs(300),
-            Duration::from_millis(5_000),
+            Duration::from_millis(elapsed_millis),
             &error,
         );
     });
@@ -275,44 +281,23 @@ fn warn_token_acquisition_failure_increments_timeout_counter_for_timed_out_error
     let timeout_counter = events
         .iter()
         .find(|e| e.name == "podbot.github.installation_token.timeout_failures.total");
-    assert!(
-        timeout_counter.is_some(),
-        "expected timeout counter for TimedOut error: {events:?}"
-    );
-    assert_eq!(
-        timeout_counter
-            .expect("timeout counter checked above")
-            .value,
-        1,
-        "timeout counter should be incremented once"
-    );
-}
 
-#[test]
-fn warn_token_acquisition_failure_does_not_increment_timeout_counter_for_connection_refused() {
-    let recorder = RecordingMetrics::default();
-    let io_error = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
-    let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_error);
-    let error = octocrab::Error::Service {
-        source: boxed,
-        backtrace: snafu::Backtrace::generate(),
-    };
-
-    metrics::with_local_recorder(&recorder, || {
-        warn_token_acquisition_failure(
-            INSTALLATION_ID,
-            Duration::from_secs(300),
-            Duration::from_millis(100),
-            &error,
+    if expect_timeout_counter {
+        assert!(
+            timeout_counter.is_some(),
+            "expected timeout counter for {error_kind:?}: {events:?}"
         );
-    });
-
-    let events = recorder.events();
-    let timeout_counter = events
-        .iter()
-        .find(|e| e.name == "podbot.github.installation_token.timeout_failures.total");
-    assert!(
-        timeout_counter.is_none(),
-        "timeout counter must not be emitted for non-timeout errors: {events:?}"
-    );
+        assert_eq!(
+            timeout_counter
+                .expect("timeout counter checked above")
+                .value,
+            1,
+            "timeout counter should be incremented once"
+        );
+    } else {
+        assert!(
+            timeout_counter.is_none(),
+            "timeout counter must not be emitted for {error_kind:?}: {events:?}"
+        );
+    }
 }
