@@ -26,6 +26,14 @@ jobs:
             **/*.md
             !**/target/**
             !**/dist/**
+      - name: Install cargo-audit
+        run: cargo binstall --no-confirm cargo-audit
+      - name: Setup Python for audit manifest extraction
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.x'
+      - name: Audit dependencies
+        run: make audit
       - name: Lint
         run: make lint
       - name: No-CLI compile check

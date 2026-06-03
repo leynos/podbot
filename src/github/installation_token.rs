@@ -7,11 +7,11 @@
 //! refresh scheduling.
 
 use std::fmt;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use octocrab::Octocrab;
 use secrecy::ExposeSecret;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::GitHubError;
 use crate::github::classify::classify_github_api_error;
@@ -157,14 +157,74 @@ pub(super) async fn acquire_with_octocrab_installation(
         }
     })?;
 
-    let secret = installation
+    let started_at = Instant::now();
+    let secret_result = installation
         .installation_token_with_buffer(chrono_buffer)
-        .await
-        .map_err(classify_token_error)?;
+        .await;
+    let elapsed = started_at.elapsed();
+    let secret = match secret_result {
+        Ok(secret) => {
+            record_token_acquisition_metrics("success", elapsed);
+            secret
+        }
+        Err(error) => {
+            record_token_acquisition_metrics("failure", elapsed);
+            warn_token_acquisition_failure(installation_id, expiry_buffer, elapsed, &error);
+            return Err(classify_token_error(error));
+        }
+    };
     let token = secret.expose_secret().to_owned();
     let access_token = InstallationAccessToken::new(token, acquired_at, expiry_buffer)?;
     access_token.log_timing(installation_id, expiry_buffer);
     Ok(access_token)
+}
+
+fn record_token_acquisition_metrics(status: &'static str, elapsed: Duration) {
+    metrics::counter!(
+        "podbot.github.installation_token.acquisitions.total",
+        "operation" => "installation_token",
+        "status" => status,
+    )
+    .increment(1);
+    metrics::histogram!(
+        "podbot.github.installation_token.latency_seconds",
+        "operation" => "installation_token",
+        "status" => status,
+    )
+    .record(elapsed.as_secs_f64());
+}
+
+fn warn_token_acquisition_failure(
+    installation_id: u64,
+    expiry_buffer: Duration,
+    elapsed: Duration,
+    error: &octocrab::Error,
+) {
+    let is_timeout = is_timeout_error(error);
+    if is_timeout {
+        metrics::counter!(
+            "podbot.github.installation_token.timeout_failures.total",
+            "operation" => "installation_token",
+        )
+        .increment(1);
+    }
+    warn!(
+        installation_id,
+        expiry_buffer_seconds = expiry_buffer.as_secs(),
+        elapsed_seconds = elapsed.as_secs_f64(),
+        is_timeout,
+        error = %error,
+        "failed to acquire GitHub App installation token"
+    );
+}
+
+fn is_timeout_error(error: &octocrab::Error) -> bool {
+    match error {
+        octocrab::Error::Service { source, .. } => source
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io_error| io_error.kind() == std::io::ErrorKind::TimedOut),
+        _ => false,
+    }
 }
 
 fn classify_token_error(error: octocrab::Error) -> GitHubError {

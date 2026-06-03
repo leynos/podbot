@@ -1,5 +1,6 @@
-.PHONY: help all clean test build release lint typecheck fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release lint typecheck fmt check-fmt markdownlint nixie audit rust-audit
 
+SHELL := bash
 
 TARGET ?= podbot
 
@@ -45,6 +46,21 @@ markdownlint: ## Lint Markdown files
 
 nixie: ## Validate Mermaid diagrams
 	$(NIXIE) --no-sandbox
+
+audit: rust-audit ## Audit dependencies for known vulnerabilities
+
+rust-audit: ## Audit the Rust workspace for known vulnerabilities
+	set -eo pipefail; \
+	manifest_list=$$(mktemp); \
+	trap 'rm -f "$$manifest_list"' EXIT; \
+	$(CARGO) metadata --no-deps --format-version 1 | python3 -c 'import json, sys; metadata = json.load(sys.stdin); members = set(metadata["workspace_members"]); print(metadata["workspace_root"]); [print(package["manifest_path"]) for package in metadata["packages"] if package["id"] in members]' > "$$manifest_list"; \
+	workspace_root=$$(sed -n '1p' "$$manifest_list"); \
+	printf "Auditing Rust workspace %s\n" "$$workspace_root"; \
+	sed -n '2,$$p' "$$manifest_list" | while IFS= read -r manifest; do \
+		manifest_dir=$$(dirname "$$manifest"); \
+		printf "Workspace Rust manifest %s\n" "$$manifest_dir/Cargo.toml"; \
+	done; \
+	(cd "$$workspace_root" && $(CARGO) audit)
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

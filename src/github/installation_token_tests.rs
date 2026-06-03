@@ -6,6 +6,7 @@ use rstest::{fixture, rstest};
 use snafu::GenerateImplicitData;
 
 use super::*;
+use crate::github::test_support::{CounterEvent, RecordingMetrics};
 use crate::github::{MockGitHubInstallationTokenClient, acquire_installation_token_with_client};
 
 const FIXTURE_TOKEN: &str = "ghs_secret_fixture_token";
@@ -179,5 +180,124 @@ fn token_error_mapping_preserves_transport_failure_context() {
             );
         }
         other => panic!("expected token acquisition failure, got: {other:?}"),
+    }
+}
+
+#[rstest]
+#[case::timed_out(std::io::ErrorKind::TimedOut, true)]
+#[case::connection_refused(std::io::ErrorKind::ConnectionRefused, false)]
+fn token_error_timeout_detection_checks_service_io_errors(
+    #[case] error_kind: std::io::ErrorKind,
+    #[case] expected_timeout: bool,
+) {
+    let io_error = std::io::Error::new(error_kind, "transport failure");
+    let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_error);
+    let error = octocrab::Error::Service {
+        source: boxed,
+        backtrace: snafu::Backtrace::generate(),
+    };
+
+    assert_eq!(is_timeout_error(&error), expected_timeout);
+}
+
+#[rstest]
+#[case::success("success")]
+#[case::failure("failure")]
+fn record_token_acquisition_metrics_emits_counter_and_histogram(#[case] status: &'static str) {
+    let recorder = RecordingMetrics::default();
+    metrics::with_local_recorder(&recorder, || {
+        record_token_acquisition_metrics(status, Duration::from_millis(42));
+    });
+
+    assert_eq!(
+        recorder.events(),
+        vec![CounterEvent {
+            name: "podbot.github.installation_token.acquisitions.total".to_owned(),
+            labels: vec![
+                ("operation".to_owned(), "installation_token".to_owned()),
+                ("status".to_owned(), status.to_owned()),
+            ],
+            value: 1,
+        }],
+        "acquisitions counter should be incremented once for status={status}"
+    );
+
+    let histogram_events = recorder.histogram_events();
+    assert_eq!(
+        histogram_events.len(),
+        1,
+        "exactly one latency histogram observation expected for status={status}"
+    );
+    let hist = histogram_events
+        .first()
+        .expect("histogram event count checked above");
+    assert_eq!(
+        hist.name,
+        "podbot.github.installation_token.latency_seconds"
+    );
+    assert!(
+        hist.labels
+            .contains(&("operation".to_owned(), "installation_token".to_owned())),
+        "latency histogram should have operation label: {hist:?}"
+    );
+    assert!(
+        hist.labels
+            .contains(&("status".to_owned(), status.to_owned())),
+        "latency histogram should have status={status} label: {hist:?}"
+    );
+    assert!(
+        hist.value >= 0.0,
+        "latency histogram value should be non-negative: {}",
+        hist.value
+    );
+}
+
+#[rstest]
+#[case::timed_out(std::io::ErrorKind::TimedOut, 5_000, true)]
+#[case::connection_refused(std::io::ErrorKind::ConnectionRefused, 100, false)]
+fn warn_token_acquisition_failure_timeout_counter_matches_error_kind(
+    #[case] error_kind: std::io::ErrorKind,
+    #[case] elapsed_millis: u64,
+    #[case] expect_timeout_counter: bool,
+) {
+    let recorder = RecordingMetrics::default();
+    let io_error = std::io::Error::new(error_kind, "transport failure");
+    let boxed: Box<dyn std::error::Error + Send + Sync> = Box::new(io_error);
+    let error = octocrab::Error::Service {
+        source: boxed,
+        backtrace: snafu::Backtrace::generate(),
+    };
+
+    metrics::with_local_recorder(&recorder, || {
+        warn_token_acquisition_failure(
+            INSTALLATION_ID,
+            Duration::from_secs(300),
+            Duration::from_millis(elapsed_millis),
+            &error,
+        );
+    });
+
+    let events = recorder.events();
+    let timeout_counter = events
+        .iter()
+        .find(|e| e.name == "podbot.github.installation_token.timeout_failures.total");
+
+    if expect_timeout_counter {
+        assert!(
+            timeout_counter.is_some(),
+            "expected timeout counter for {error_kind:?}: {events:?}"
+        );
+        assert_eq!(
+            timeout_counter
+                .expect("timeout counter checked above")
+                .value,
+            1,
+            "timeout counter should be incremented once"
+        );
+    } else {
+        assert!(
+            timeout_counter.is_none(),
+            "timeout counter must not be emitted for {error_kind:?}: {events:?}"
+        );
     }
 }

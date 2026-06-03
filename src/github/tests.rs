@@ -4,6 +4,7 @@
 //! key type rejection (ECDSA, Ed25519, public keys, certificates), encrypted
 //! key detection, and Octocrab App client building.
 
+use super::retry_metrics::github_status_class;
 use super::*;
 use cap_std::fs_utf8::Dir as Utf8Dir;
 use rstest::{fixture, rstest};
@@ -294,6 +295,17 @@ fn build_app_client_without_runtime_returns_error(
 }
 
 #[rstest]
+#[case::client_error(http::StatusCode::TOO_MANY_REQUESTS, "4xx")]
+#[case::server_error(http::StatusCode::INTERNAL_SERVER_ERROR, "5xx")]
+#[case::redirect(http::StatusCode::TEMPORARY_REDIRECT, "3xx")]
+fn github_status_class_groups_status_codes(
+    #[case] status_code: http::StatusCode,
+    #[case] expected_class: &str,
+) {
+    assert_eq!(github_status_class(status_code), expected_class);
+}
+
+#[rstest]
 #[case::builder_context(
     "failed to build GitHub App client: test error",
     "failed to build GitHub App client"
@@ -395,4 +407,34 @@ async fn validate_with_client_propagates_mock_error() {
         message.contains("mock authentication failure"),
         "error should propagate mock message: {message}"
     );
+}
+
+mod property_tests {
+    use proptest::prelude::*;
+
+    use super::super::retry_metrics::github_status_class;
+
+    proptest! {
+        #[test]
+        fn github_status_class_range_invariant(raw_code in 100_u16..=999_u16) {
+            let status = http::StatusCode::from_u16(raw_code)
+                .expect("codes 100–999 are valid HTTP status codes");
+            let class = github_status_class(status);
+            let expected = match raw_code {
+                100..=199 => "1xx",
+                200..=299 => "2xx",
+                300..=399 => "3xx",
+                400..=499 => "4xx",
+                500..=599 => "5xx",
+                _ => "other",
+            };
+            prop_assert_eq!(
+                class,
+                expected,
+                "github_status_class({}) should map to {}",
+                raw_code,
+                expected,
+            );
+        }
+    }
 }

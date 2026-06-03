@@ -13,10 +13,12 @@
 mod classify;
 mod installation_token;
 mod pem_validation;
+mod retry_metrics;
 
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use camino::Utf8Path;
 use cap_std::ambient_authority;
@@ -25,11 +27,13 @@ use jsonwebtoken::EncodingKey;
 
 use octocrab::Octocrab;
 use octocrab::models::{AppId, InstallationId};
+use octocrab::service::middleware::retry::RetryConfig;
 
 use crate::error::GitHubError;
 use classify::classify_github_api_error;
 pub use installation_token::InstallationAccessToken;
 use pem_validation::parse_rsa_pem;
+use retry_metrics::PodbotOctocrabRetryMetrics;
 
 /// A boxed future for async trait methods.
 ///
@@ -103,6 +107,11 @@ pub fn build_app_client(app_id: u64, private_key: EncodingKey) -> Result<Octocra
 
     Octocrab::builder()
         .app(AppId(app_id), private_key)
+        .add_retry_config(RetryConfig::HandleRateLimits {
+            metrics: Arc::new(PodbotOctocrabRetryMetrics),
+            max_retries: 3,
+            min_wait_seconds: 1,
+        })
         .build()
         .map_err(|error| GitHubError::AuthenticationFailed {
             message: format!("failed to build GitHub App client: {error}"),
@@ -374,7 +383,16 @@ pub fn test_classify_error_message(code: u16, full_error: &str) -> String {
     classify::classify_by_status(code, full_error)
 }
 
+/// Test helper: record a retry event through the production metrics path.
+#[cfg(any(feature = "internal", test))]
+#[doc(hidden)]
+pub fn test_record_octocrab_retry_event(event: &'static str, status_code: http::StatusCode) {
+    retry_metrics::record_octocrab_retry_event(event, status_code);
+}
+
 #[cfg(test)]
 mod credential_error_tests;
+#[cfg(any(test, feature = "internal"))]
+pub mod test_support;
 #[cfg(test)]
 mod tests;

@@ -402,7 +402,7 @@ The token-acquisition adapter returns a Podbot-owned `InstallationAccessToken`
 value rather than exposing Octocrab or secrecy types across the boundary. The
 value contains the token string for later Git credential delivery plus
 non-secret timing metadata: `acquired_at`, `expires_at`, and `refresh_after`.
-Octocrab v0.49.5's `installation_token_with_buffer` helper returns only a
+Octocrab v0.51.0's `installation_token_with_buffer` helper returns only a
 `SecretString`, not the raw REST response's `expires_at`, so Podbot derives
 conservative metadata from GitHub's documented one-hour token lifetime. The
 adapter samples the host clock when acquiring the token, computes
@@ -444,13 +444,15 @@ the parent directory using `cap_std::fs_utf8::Dir` with ambient authority,
 reads the file, validates the PEM format, and returns a
 `jsonwebtoken::EncodingKey` suitable for `OctocrabBuilder::app()`.
 
-Only RSA keys are accepted. Octocrab v0.49.5 hardcodes `Algorithm::RS256` in its
-`create_jwt` function, and the GitHub API only supports RS256 for App
-authentication. Ed25519 and ECDSA keys are rejected at load time with clear
-error messages rather than deferring failure to JWT signing. Supported PEM
-formats are PKCS#1 (`RSA PRIVATE KEY`) and PKCS#8 (`PRIVATE KEY`); the latter
-is ambiguous across key types so validation is deferred to
-`EncodingKey::from_rsa_pem`.
+Only RSA keys are accepted. Octocrab v0.51.0 signs GitHub App JWTs with RS256,
+and the GitHub API only supports RS256 for App authentication. Podbot enables
+Octocrab's `jwt-aws-lc-rs` feature and uses `jsonwebtoken` with the `aws_lc_rs`
+backend so JWT signing avoids the deprecated RustCrypto RSA path flagged by
+RustSec while keeping PEM parsing support through `use_pem`. Ed25519 and ECDSA
+keys are rejected at load time with clear error messages rather than deferring
+failure to JWT signing. Supported PEM formats are PKCS#1 (`RSA PRIVATE KEY`)
+and PKCS#8 (`PRIVATE KEY`); the latter is ambiguous across key types, so
+validation is deferred to `EncodingKey::from_rsa_pem`.
 
 Errors are reported via `GitHubError::PrivateKeyLoadFailed { path, message }`
 with diagnostic messages covering: missing parent directory, unreadable file,
@@ -492,8 +494,18 @@ client type, installation ID wrapper, and `secrecy::SecretString` stay inside
 the GitHub adapter.
 
 The adapter logs token timing through `InstallationAccessToken::log_timing`,
-which emits only non-secret timing fields. `InstallationAccessToken` implements
-`Debug` manually so fixture or production token values are redacted.
+which emits only non-secret timing fields. Token acquisition also records
+success/failure counters, a latency histogram, and timeout-specific failure
+logs and counters. `InstallationAccessToken` implements `Debug` manually, so
+fixture or production token values are redacted.
+
+Podbot enables Octocrab's `tracing` feature so Octocrab's HTTP client spans are
+emitted through the application's subscriber. Because Octocrab's retry feature
+exposes a `RateLimitMetrics` hook, Podbot installs a zero-state adapter at
+client construction time. The adapter logs each rate-limit or retryable
+server-response decision and increments a low-cardinality retry-event counter
+labelled by operation, event type, and HTTP status class. It does not store
+global state or include token values in logs or labels.
 
 ### Credential validation contract
 
@@ -564,8 +576,8 @@ _Table 2: Supported connection protocols and their Bollard dispatch._
 Bollard does not natively accept `tcp://` schemes. The `EngineConnector`
 rewrites `tcp://` to `http://` before calling `connect_with_http`. This matches
 the behaviour of the Docker command-line interface (CLI), which treats `tcp://`
-as an alias for `http://`. The rewriting is a simple string replacement (
-`tcp://` to `http://`) applied once during connection establishment.
+as an alias for `http://`. The rewriting is a simple string replacement
+(`tcp://` to `http://`) applied once during connection establishment.
 
 ### Lazy versus eager connection
 
