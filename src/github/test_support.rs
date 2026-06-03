@@ -52,6 +52,12 @@ impl RecordingMetrics {
     }
 }
 
+fn extract_key_labels(key: &Key) -> Vec<(String, String)> {
+    key.labels()
+        .map(|label| (label.key().to_owned(), label.value().to_owned()))
+        .collect()
+}
+
 impl Recorder for RecordingMetrics {
     fn describe_counter(&self, _key: KeyName, _unit: Option<Unit>, _description: SharedString) {}
 
@@ -63,10 +69,7 @@ impl Recorder for RecordingMetrics {
         Counter::from_arc(Arc::new(RecordedCounter {
             event: CounterEvent {
                 name: key.name().to_owned(),
-                labels: key
-                    .labels()
-                    .map(|label| (label.key().to_owned(), label.value().to_owned()))
-                    .collect(),
+                labels: extract_key_labels(key),
                 value: 0,
             },
             events: Arc::clone(&self.events),
@@ -81,10 +84,7 @@ impl Recorder for RecordingMetrics {
         Histogram::from_arc(Arc::new(RecordedHistogram {
             event: HistogramEvent {
                 name: key.name().to_owned(),
-                labels: key
-                    .labels()
-                    .map(|label| (label.key().to_owned(), label.value().to_owned()))
-                    .collect(),
+                labels: extract_key_labels(key),
                 value: 0.0,
             },
             events: Arc::clone(&self.histogram_events),
