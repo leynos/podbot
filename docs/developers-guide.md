@@ -868,6 +868,8 @@ unit and integration tests share without duplicating implementations:
 | `RecordedCounter` | Backing `CounterFn` used by `RecordingMetrics` |
 | `RecordedHistogram` | Backing `HistogramFn` used by `RecordingMetrics` |
 
+_Table 4: Shared test-support types and their purposes._
+
 Use `metrics::with_local_recorder(&recorder, || { ... })` to scope metric
 assertions to a single test without installing a global recorder:
 
