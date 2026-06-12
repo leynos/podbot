@@ -40,6 +40,21 @@ If the CodeRabbit rate limit is exceeded, sleep before retrying:
 vsleep "$(shuf -i 15-30 -n 1)m"
 ```
 
+The audit findings map to implementation milestones as follows:
+
+| Finding | Milestone | Outcome |
+| --- | --- | --- |
+| Placeholder APIs report success | Milestone 1 | Typed unsupported error |
+| Config file errors are misclassified | Milestone 1 | Targeted config errors |
+| Engine imports API/config types | Milestone 2 | Engine-native requests |
+| Credential errors use string matching | Milestone 3 | Structured source data |
+| `ExecRequest` TTY builder docs are unclear | Milestone 4 | Rustdoc example |
+| Config discovery docs are stale | Milestone 4 | Both candidates documented |
+| Async tests can hang | Milestone 5 | Timeout-guarded tests |
+| BDD helpers default missing state | Milestone 5 | Precondition errors |
+| Repeated test helper stacks | Milestone 5 | Owned shared helpers |
+| Oversized protocol module | Milestone 6 | Responsibility split |
+
 ## Constraints
 
 The branch is `code-base-audit-2026-06-05`, tracking
@@ -78,11 +93,17 @@ repository for an existing equivalent. Document the new abstraction's intended
 scope and reuse policy in `docs/developers-guide.md` if it is not already clear
 there.
 
+Unsupported public placeholder commands must return an additive top-level
+`PodbotError::Unsupported { operation: &'static str }` variant. The variant must
+be available when the `experimental` feature is enabled; keeping it always
+compiled is acceptable because it is an additive public error case.
+
 ## Tolerances
 
 Stop and ask for direction if any single implementation milestone requires
-touching more than twelve production files or if the full branch grows beyond
-roughly 1,500 changed lines excluding generated snapshots and this plan.
+touching more than twelve production files or if the remediation delta from
+plan commit `c95dab9` grows beyond roughly 1,500 changed lines, excluding
+generated snapshots and this plan.
 
 Stop and ask for direction before changing a stable public type in a way that
 would break existing callers outside the audited placeholder APIs. Additive
@@ -99,9 +120,11 @@ appear unrelated to this branch and cannot be reproduced in a focused command.
 ## Risks
 
 Changing placeholder API results can break tests or callers that treated
-successful no-op behaviour as the current contract. Mitigate this by using a
-typed `Unsupported` or `NotImplemented` error with clear documentation and
-updating user-facing or developer-facing docs.
+successful no-op behaviour as the current contract. The affected functions are
+behind the `experimental` feature, so the compatibility risk is limited to
+experimental embedders and command-line tests that enable that feature. Mitigate
+this by using the additive top-level `PodbotError::Unsupported` variant with
+clear documentation and updating user-facing or developer-facing docs.
 
 Moving config-to-engine construction out of engine modules can create churn in
 internal tests. Mitigate this by adding small composition helpers at the API or
@@ -125,15 +148,22 @@ formatting and validation. Push the renamed branch and open a draft pull
 request for plan review.
 
 Milestone 1 changes false-success public command APIs and configuration error
-ergonomics. Add a typed `Unsupported` or `NotImplemented` error variant to the
-domain error surface, update `run_agent`, `list_containers`, `stop_container`,
-and `run_token_daemon` so unimplemented work returns the new error, and update
-CLI-facing tests that currently expect success. Update `src/config/loader.rs`
-so malformed config paths and missing files produce targeted configuration
-errors. Add `rstest` unit coverage for supported and unsupported command paths
-and for config file read, parse, missing-file, and malformed-path cases. Add or
-update BDD coverage only where the behaviour is observable through existing
-CLI/config scenarios.
+ergonomics. Add `PodbotError::Unsupported { operation: &'static str }` to the
+top-level domain error surface, update `run_agent`, `list_containers`,
+`stop_container`, and `run_token_daemon` so unimplemented work returns the new
+error, and update CLI-facing tests that currently expect success. `run_agent`
+must continue to return specific request, `ConfigError`, and `GitHubError`
+validation failures before returning `Unsupported` for the still-unimplemented
+agent lifecycle. Reword its Rustdoc so validation failures remain documented as
+real behaviour while the post-validation lifecycle is explicitly unsupported.
+Remove the three `#[expect(clippy::missing_const_for_fn)]` attributes from the
+pure stubs when their bodies start constructing errors, because the lint will no
+longer fire and unfulfilled expectations fail `make lint`. Update
+`src/config/loader.rs` so malformed config paths and missing files produce
+targeted configuration errors. Add `rstest` unit coverage for supported and
+unsupported command paths and for config file read, parse, missing-file, and
+malformed-path cases. Add or update BDD coverage only where the behaviour is
+observable through existing CLI/config scenarios.
 
 Milestone 2 removes upward dependencies from engine modules. Move
 `CreateContainerRequest::from_app_config` out of
@@ -141,9 +171,15 @@ Milestone 2 removes upward dependencies from engine modules. Move
 composition layer. Replace repository-clone engine request fields that depend on
 `crate::api` value objects with engine-native primitives, such as a
 prevalidated remote URL, branch string, workspace path string, and askpass path
-string. Keep API value object parsing at the API boundary. Add tests that prove
-API/domain values compose into the engine request while engine code no longer
-imports `crate::api` or `AppConfig`.
+string. Move `CredentialUploadRequest::from_app_config` out of
+`src/engine/connection/upload_credentials/mod.rs` as part of the same boundary
+cleanup, because that engine module also imports `AppConfig`. Keep API value
+object parsing and config-to-engine composition at the API or orchestration
+boundary. When touching `upload_credentials`, preserve an engine-native request
+shape that Milestone 3 can extend with explicit credential source identifiers
+without reintroducing `AppConfig`. Add tests that prove API/domain values
+compose into engine requests while engine code no longer imports `crate::api` or
+`AppConfig`.
 
 Milestone 3 makes credential upload failure classification structured. Replace
 string matching in `src/engine/connection/upload_credentials/error_mapping.rs`
@@ -239,11 +275,28 @@ sections.
 - [x] 2026-06-05: Attempted a final `coderabbit review --agent` twice after
   fixing the wrapping concern. Both attempts stalled after sandbox
   preparation; the stuck processes from this session were terminated.
-- [ ] Push branch `code-base-audit-2026-06-05` and set upstream to
+- [x] Push branch `code-base-audit-2026-06-05` and set upstream to
   `origin/code-base-audit-2026-06-05`.
 - [x] Run plan-milestone documentation gates.
 - [x] Request CodeRabbit review for the plan milestone.
-- [ ] Open a draft pull request for ExecPlan review.
+- [x] Open a draft pull request for ExecPlan review.
+- [x] 2026-06-12: Addressed plan-review feedback by extending Milestone 2 to
+  cover `CredentialUploadRequest::from_app_config`, specifying the
+  `PodbotError::Unsupported` target, calling out Clippy expectation removal,
+  clarifying experimental compatibility risk, defining the changed-line
+  baseline, and adding finding-to-milestone traceability.
+- [x] 2026-06-12: Ran `make check-fmt`; it passed.
+- [x] 2026-06-12: Ran `make lint`; it passed.
+- [x] 2026-06-12: Ran `make test`; the first run failed because the user
+  Podman socket was in `trigger-limit-hit`. After resetting and starting the
+  socket, the focused e2e test and exact `make test` target passed.
+- [x] 2026-06-12: Ran `make markdownlint`; it passed after fixing the
+  traceability table separator style.
+- [x] 2026-06-12: Ran `make nixie`; it passed.
+- [x] 2026-06-12: Ran `coderabbit review --agent` for the updated plan; it
+  stalled after sandbox preparation without producing findings, matching the
+  earlier service stall. The podbot review process from this session was
+  terminated without touching other agents' CodeRabbit processes.
 - [ ] Obtain explicit approval to implement the plan.
 - [ ] Milestone 1: public unsupported APIs and config error ergonomics.
 - [ ] Milestone 2: engine boundary direction cleanup.
@@ -277,12 +330,35 @@ Two final CodeRabbit reruns after the wrapping fix stalled after sandbox
 preparation and did not produce review findings. The deterministic gates were
 clean after the fix, and the earlier CodeRabbit findings were resolved.
 
+Plan review on 2026-06-12 found that Milestone 2 did not cover
+`CredentialUploadRequest::from_app_config`, even though it imports `AppConfig`
+from an engine module. The same review identified that changing the three pure
+placeholder stubs will make their `clippy::missing_const_for_fn` expectations
+unfulfilled unless those attributes are removed.
+
+The first 2026-06-12 `make test` run failed in
+`tests/bdd_repository_cloning_e2e.rs` because testcontainers could not connect
+to the container engine. `systemctl --user status podman.socket` showed
+`trigger-limit-hit`. After `systemctl --user reset-failed podman.socket` and
+`systemctl --user start podman.socket`, `curl --unix-socket
+/run/user/1000/podman/podman.sock http://localhost/_ping` returned `OK`, the
+focused e2e target passed, and the exact `make test` target passed.
+
 ## Decision log
 
 2026-06-05: Use a typed unsupported/not-implemented error rather than removing
-public placeholder functions. Removing functions would be a breaking API
-change; returning an inspectable domain error fixes false-success semantics
-while preserving symbols for callers.
+public placeholder functions. The functions are experimental, so the
+compatibility risk is limited, but returning an inspectable domain error fixes
+false-success semantics while preserving symbols for experimental callers.
+
+2026-06-12: Add `PodbotError::Unsupported { operation: &'static str }` rather
+than placing the unsupported case under `ContainerError`. `run_agent` is an
+agent-lifecycle command, not only a container operation, and embedders already
+match the top-level `PodbotError` returned by public API functions.
+
+2026-06-12: Include `CredentialUploadRequest::from_app_config` in Milestone 2.
+The milestone's success criterion is that engine code no longer imports
+`crate::api` or `AppConfig`, so all current engine importers must be covered.
 
 2026-06-05: Defer the `protocol.rs` split until after behaviour-changing fixes.
 The file is oversized, but a mechanical split is safest once tests already pin
@@ -307,3 +383,17 @@ Plan-milestone validation on 2026-06-05:
 - `make nixie`: passed.
 - `coderabbit review --agent`: sentence-case and wrapping findings fixed; final
   reruns stalled after setup without producing findings.
+
+Plan-review-update validation on 2026-06-12:
+
+- `make check-fmt`: passed.
+- `make lint`: passed.
+- `cargo test --all-features --test bdd_repository_cloning_e2e` with
+  `DOCKER_HOST=unix:///run/user/1000/podman/podman.sock`: passed after resetting
+  the failed user Podman socket.
+- `make test`: passed after resetting the failed user Podman socket.
+- `make markdownlint`: passed after fixing the traceability table separator
+  style.
+- `make nixie`: passed.
+- `coderabbit review --agent`: stalled after sandbox preparation without
+  producing findings.
