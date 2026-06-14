@@ -16,10 +16,12 @@ credential upload failures must be classified using structured data rather than
 display strings, configuration loading must produce inspectable errors, and
 test helpers must fail clearly when scenarios are under-specified.
 
-Success is observable in three ways. First, embedders receive typed errors for
-unsupported commands instead of false `CommandOutcome::Success` results.
-Second, tests cover both happy and unhappy paths for the changed public and
-internal contracts. Third, the canonical gates pass after each major milestone:
+Success is observable in three ways. First, embedders receive errors for
+unsupported commands instead of false `CommandOutcome::Success` results,
+without adding a new variant to the currently exhaustive public `PodbotError`
+enum. Second, tests cover both happy and unhappy paths for the changed public
+and internal contracts. Third, the canonical gates pass after each major
+milestone:
 
 ```sh
 set -o pipefail
@@ -44,7 +46,7 @@ The audit findings map to implementation milestones as follows:
 
 | Finding | Milestone | Outcome |
 | --- | --- | --- |
-| Placeholder APIs report success | Milestone 1 | Typed unsupported error |
+| Placeholder APIs report success | Milestone 1 | Compatible error result |
 | Config file errors are misclassified | Milestone 1 | Targeted config errors |
 | Engine imports API/config types | Milestone 2 | Engine-native requests |
 | Credential errors use string matching | Milestone 3 | Structured source data |
@@ -93,10 +95,15 @@ repository for an existing equivalent. Document the new abstraction's intended
 scope and reuse policy in `docs/developers-guide.md` if it is not already clear
 there.
 
-Unsupported public placeholder commands must return an additive top-level
-`PodbotError::Unsupported { operation: &'static str }` variant. The variant must
-be available when the `experimental` feature is enabled; keeping it always
-compiled is acceptable because it is an additive public error case.
+Unsupported public placeholder commands must not add a new top-level
+`PodbotError` variant in this branch. `podbot::error` is documented as
+semver-stable and `PodbotError` is currently exhaustive, so adding a variant
+would break embedders with exhaustive matches. Route the unsupported diagnostic
+through an existing compatible error bucket, such as
+`ContainerError::ExecFailed` with an operation identifier and clear
+unsupported-work message. A new
+top-level unsupported error requires a separate versioned migration that first
+makes the public enum non-exhaustive or otherwise documents the breaking change.
 
 ## Tolerances
 
@@ -106,9 +113,9 @@ plan commit `c95dab9` grows beyond roughly 1,500 changed lines, excluding
 generated snapshots and this plan.
 
 Stop and ask for direction before changing a stable public type in a way that
-would break existing callers outside the audited placeholder APIs. Additive
-variants in an existing error enum are allowed when tests and documentation
-make the new behaviour clear.
+would break existing callers. Do not add variants to currently exhaustive public
+error enums, including `PodbotError`, unless the milestone explicitly includes a
+versioned or non-exhaustive migration.
 
 Stop and ask for direction if CodeRabbit reports a security, soundness, or
 public API compatibility concern that cannot be resolved with a local patch in
@@ -123,8 +130,8 @@ Changing placeholder API results can break tests or callers that treated
 successful no-op behaviour as the current contract. The affected functions are
 behind the `experimental` feature, so the compatibility risk is limited to
 experimental embedders and command-line tests that enable that feature. Mitigate
-this by using the additive top-level `PodbotError::Unsupported` variant with
-clear documentation and updating user-facing or developer-facing docs.
+this by returning an existing compatible `PodbotError` bucket with a clear
+unsupported diagnostic, rather than adding a new top-level variant.
 
 Moving config-to-engine construction out of engine modules can create churn in
 internal tests. Mitigate this by adding small composition helpers at the API or
@@ -148,22 +155,25 @@ formatting and validation. Push the renamed branch and open a draft pull
 request for plan review.
 
 Milestone 1 changes false-success public command APIs and configuration error
-ergonomics. Add `PodbotError::Unsupported { operation: &'static str }` to the
-top-level domain error surface, update `run_agent`, `list_containers`,
-`stop_container`, and `run_token_daemon` so unimplemented work returns the new
-error, and update CLI-facing tests that currently expect success. `run_agent`
-must continue to return specific request, `ConfigError`, and `GitHubError`
-validation failures before returning `Unsupported` for the still-unimplemented
-agent lifecycle. Reword its Rustdoc so validation failures remain documented as
-real behaviour while the post-validation lifecycle is explicitly unsupported.
-Remove the three `#[expect(clippy::missing_const_for_fn)]` attributes from the
-pure stubs when their bodies start constructing errors, because the lint will no
-longer fire and unfulfilled expectations fail `make lint`. Update
-`src/config/loader.rs` so malformed config paths and missing files produce
-targeted configuration errors. Add `rstest` unit coverage for supported and
-unsupported command paths and for config file read, parse, missing-file, and
-malformed-path cases. Add or update BDD coverage only where the behaviour is
-observable through existing CLI/config scenarios.
+ergonomics. Do not add a `PodbotError::Unsupported` variant. Instead, update
+`run_agent`, `list_containers`, `stop_container`, and `run_token_daemon` so
+unimplemented work returns an existing compatible error bucket, preferably
+`PodbotError::Container(ContainerError::ExecFailed { .. })`, with the operation
+name in `container_id` and a message that states the operation is unsupported
+until implemented. Update CLI-facing tests that currently expect success.
+`run_agent` must continue to return specific request, `ConfigError`, and
+`GitHubError` validation failures before returning the unsupported diagnostic
+for the still-unimplemented agent lifecycle. Reword its Rustdoc so validation
+failures remain documented as real behaviour while the post-validation
+lifecycle is explicitly unsupported. Remove the three
+`#[expect(clippy::missing_const_for_fn)]` attributes from the pure stubs when
+their bodies start constructing errors, because the lint will no longer fire and
+unfulfilled expectations fail `make lint`. Update `src/config/loader.rs` so
+malformed config paths and missing files produce targeted configuration errors.
+Add `rstest` unit coverage for supported and unsupported command paths and for
+config file read, parse, missing-file, and malformed-path cases. Add or update
+BDD coverage only where the behaviour is observable through existing CLI/config
+scenarios.
 
 Milestone 2 removes upward dependencies from engine modules. Move
 `CreateContainerRequest::from_app_config` out of
@@ -281,10 +291,10 @@ sections.
 - [x] Request CodeRabbit review for the plan milestone.
 - [x] Open a draft pull request for ExecPlan review.
 - [x] 2026-06-12: Addressed plan-review feedback by extending Milestone 2 to
-  cover `CredentialUploadRequest::from_app_config`, specifying the
-  `PodbotError::Unsupported` target, calling out Clippy expectation removal,
-  clarifying experimental compatibility risk, defining the changed-line
-  baseline, and adding finding-to-milestone traceability.
+  cover `CredentialUploadRequest::from_app_config`, initially specifying an
+  unsupported-error target, calling out Clippy expectation removal, clarifying
+  experimental compatibility risk, defining the changed-line baseline, and
+  adding finding-to-milestone traceability.
 - [x] 2026-06-12: Ran `make check-fmt`; it passed.
 - [x] 2026-06-12: Ran `make lint`; it passed.
 - [x] 2026-06-12: Ran `make test`; the first run failed because the user
@@ -297,6 +307,17 @@ sections.
   stalled after sandbox preparation without producing findings, matching the
   earlier service stall. The podbot review process from this session was
   terminated without touching other agents' CodeRabbit processes.
+- [x] 2026-06-14: Revised the plan to avoid adding a new exhaustive
+  `PodbotError` variant. Milestone 1 now routes unsupported placeholder
+  diagnostics through an existing compatible error bucket and defers any new
+  top-level unsupported variant to a separate versioned or non-exhaustive
+  migration.
+- [x] 2026-06-14: Ran `make check-fmt`, `make lint`, `make test`,
+  `make markdownlint`, and `make nixie`; all passed.
+- [x] 2026-06-14: Ran `coderabbit review --agent`; it stalled after sandbox
+  preparation without producing findings. The timeout-wrapped podbot review
+  process from this session was terminated without touching other agents'
+  CodeRabbit processes.
 - [ ] Obtain explicit approval to implement the plan.
 - [ ] Milestone 1: public unsupported APIs and config error ergonomics.
 - [ ] Milestone 2: engine boundary direction cleanup.
@@ -344,6 +365,12 @@ to the container engine. `systemctl --user status podman.socket` showed
 /run/user/1000/podman/podman.sock http://localhost/_ping` returned `OK`, the
 focused e2e target passed, and the exact `make test` target passed.
 
+Plan review on 2026-06-14 found that adding
+`PodbotError::Unsupported { .. }` would break embedders that exhaustively match
+the currently public `PodbotError` enum. The plan now keeps Milestone 1
+compatible by using an existing error bucket for unsupported placeholder
+diagnostics.
+
 ## Decision log
 
 2026-06-05: Use a typed unsupported/not-implemented error rather than removing
@@ -351,10 +378,12 @@ public placeholder functions. The functions are experimental, so the
 compatibility risk is limited, but returning an inspectable domain error fixes
 false-success semantics while preserving symbols for experimental callers.
 
-2026-06-12: Add `PodbotError::Unsupported { operation: &'static str }` rather
-than placing the unsupported case under `ContainerError`. `run_agent` is an
-agent-lifecycle command, not only a container operation, and embedders already
-match the top-level `PodbotError` returned by public API functions.
+2026-06-14: Do not add `PodbotError::Unsupported` in this remediation branch.
+Although an explicit unsupported variant would be the clearest long-term shape,
+`PodbotError` is currently public and exhaustive. Adding a variant would be a
+breaking change for embedders with exhaustive matches. Use an existing
+compatible bucket for this branch, and handle any new top-level unsupported
+variant through a separate versioned or non-exhaustive migration.
 
 2026-06-12: Include `CredentialUploadRequest::from_app_config` in Milestone 2.
 The milestone's success criterion is that engine code no longer imports
@@ -381,6 +410,8 @@ Plan-milestone validation on 2026-06-05:
 - `make test`: passed.
 - `make markdownlint`: passed.
 - `make nixie`: passed.
+- `coderabbit review --agent`: stalled after sandbox preparation without
+  producing findings.
 - `coderabbit review --agent`: sentence-case and wrapping findings fixed; final
   reruns stalled after setup without producing findings.
 
@@ -397,3 +428,11 @@ Plan-review-update validation on 2026-06-12:
 - `make nixie`: passed.
 - `coderabbit review --agent`: stalled after sandbox preparation without
   producing findings.
+
+Plan-review-update validation on 2026-06-14:
+
+- `make check-fmt`: passed.
+- `make lint`: passed.
+- `make test`: passed.
+- `make markdownlint`: passed.
+- `make nixie`: passed.
