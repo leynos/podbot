@@ -57,7 +57,7 @@
 - **Style:** All documentation must adhere to the
   [documentation style guide](docs/documentation-style-guide.md).
 
-## Change quality & committing
+## Change quality and committing
 
 - **Atomicity:** Aim for small, focused, atomic changes. Each change (and
   subsequent commit) should represent a single logical unit of work.
@@ -87,7 +87,7 @@
       code snippets) within the commit message body.
   - Do not commit changes that fail any of the quality gates.
 
-## Refactoring heuristics & workflow
+## Refactoring heuristics and workflow
 
 - **Recognizing Refactoring Needs:** Regularly assess the codebase for potential
   refactoring opportunities. Perform refactoring when observing:
@@ -230,7 +230,7 @@ project:
   `newt-hype` for the common case, tuple structs for outliers, and
   `the-newtype` to unify behaviour when owning the trait definitions.
 - Use `cap_std` and `cap_std::fs_utf8` / `camino` in place of `std::fs` and
-  `std::path` for enhanced cross-platform support and capabilities oriented
+  `std::path` for enhanced cross platform support and capabilities oriented
   filesystem access.
 
 ### Testing
@@ -248,13 +248,12 @@ project:
 
 - **Mandate caret requirements for all dependencies.** All crate versions
   specified in `Cargo.toml` must use SemVer-compatible caret requirements (e.g.,
-   `some-crate = "1.2.3"` (equivalent to `^1.2.3`). This is Cargo's default and
-   allows for safe,
+   `some-crate = "1.2.3"`). This is Cargo's default and allows for safe,
   non-breaking updates to minor and patch versions while preventing breaking
   changes from new major versions. This approach is critical for ensuring build
   stability and reproducibility.
 - **Prohibit unstable version specifiers.** The use of wildcard (`*`) or
-  open-ended inequality (`>=`) version requirements is strictly forbidden, as
+  open-ended inequality (`>=`) version requirements is strictly forbidden as
   they introduce unacceptable risk and unpredictability. Tilde requirements (
   `~`) should only be used where a dependency must be locked to patch-level
   updates for a specific, documented reason.
@@ -274,7 +273,7 @@ project:
 - In production code and shared fixtures, avoid `.expect()` entirely: return
   `Result` and use `?` to propagate errors instead of panicking.
 - Keep `expect_used` **strict**; do not suppress the lint.
-- Recognize that `allow-expect-in-tests = true` **doesn’t cover** helpers
+- Recognise that `allow-expect-in-tests = true` **doesn’t cover** helpers
   outside `#[cfg(test)]` or `#[test]`; avoid `expect` in such fixtures.
 - Use `anyhow`/`eyre` with `.context(...)` to **preserve backtraces** and
   provide clear, typed failure paths.
@@ -303,7 +302,7 @@ project:
   user input, request IDs, paths with unbounded parameters, or raw error
   strings into labels.
 - Libraries may emit `metrics` and `tracing` instrumentation, but must not
-  install global recorders or subscribers. Applications should initialize
+  install global recorders or subscribers. Applications should initialise
   exporters/subscribers once, as early as practical in startup.
 
 ## Markdown guidance
@@ -318,17 +317,6 @@ project:
 - Use dashes (`-`) for list bullets.
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
-
-## Project documentation
-
-Record design decisions in the design document. Where a decision is
-substantive, record it in an ADR document following the documentation style
-guide, then reference that ADR from the design document.
-
-Update `docs/users-guide.md` for any change to application behaviour or user
-interface that a user should know about. Document internally facing interfaces
-or practices in the relevant component architecture document. Document
-internally facing conventions or practices in `docs/developers-guide.md`.
 
 ## Additional tooling
 
