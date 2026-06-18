@@ -12,6 +12,42 @@ under `src/`, no documentation under `docs/`, and no test files should be
 edited as part of implementing this plan until that approval is recorded in
 the `Decision log`.
 
+## Supersession note (2026-06-18)
+
+This revision supersedes the initial 2026-05-29 draft of this ExecPlan. The
+two versions agree on the overall shape — a dedicated `[mounts]` configuration
+section, a hexagonal split with a `HostPathProbe` driven port, a typed
+`bollard::models::Mount` with hardened bind options, an explicit allowlist that
+defaults to "deny", and a `testcontainers`-backed end-to-end write proof. This
+revision sharpens the security-critical details after a fresh round of external
+research (rootless Podman user-namespace write semantics, `cap-std`/`openat2`
+path resolution, the runc CVE-2025-31133 mount-time symlink-swap class, and
+SELinux relabel policy) and a community-of-experts design review. The
+substantive changes from the prior draft are:
+
+1. The writability probe is performed **through a held `cap-std` directory
+   capability** opened from the canonical path, rather than re-opening the
+   resolved path by string. This closes the in-process resolve-then-probe
+   time-of-check-to-time-of-use (TOCTOU) window the prior draft left open.
+2. A `CanonicalHostPath` newtype joins `AllowlistedRoot` so the containment
+   check is, by construction, only ever applied to canonicalised paths.
+3. The residual **mount-time** TOCTOU boundary is stated precisely: Podbot
+   guarantees containment at resolution time; the operator must guarantee that
+   the mount root and its entire parent chain are writable only by trusted
+   users, because the engine re-resolves the path string in a separate process
+   at `podman run` time.
+4. The negative-coverage matrix is expanded with the sibling-prefix trap
+   (`/allowed-evil` against root `/allowed`), the exact-root-match case
+   (`candidate == root` is permitted), an allowlist root that is itself a
+   symlink, and an assertion that a failed probe leaves no scratch file behind.
+5. The test assertions adopt `googletest` matchers and `pretty_assertions`
+   (added as dev-dependencies per the task brief), an `insta` snapshot of the
+   denial-message catalogue, and a `trybuild` signature-stability fixture for
+   the new public surface, mirroring `stable_repository_clone_signatures.rs`.
+6. The choice of `proptest` (rather than `kani` or `verus`) for the containment
+   invariant is justified and recorded, satisfying the project's
+   verification-rigour guidance.
+
 ## Purpose and big picture
 
 Complete roadmap task 4.2.2 from `docs/podbot-roadmap.md`: "Implement safe
@@ -109,6 +145,35 @@ escalation, not workarounds.
 - Use `camino::Utf8PathBuf` for all configuration path-bearing fields, and
   `cap_std::fs_utf8` for capability-oriented filesystem access where the
   operation must remain confined to a dirfd.
+- The containment check (`canonical.starts_with(root)`) must operate on the
+  `CanonicalHostPath` and `AllowlistedRoot` newtypes only. There must be no
+  code path that compares a raw, un-canonicalised `Utf8Path` against an
+  allowlist root, because a lexical path containing `..` could pass a
+  component-wise prefix check while resolving outside the root. The newtypes
+  are constructible only by the probe port, making non-canonical comparison
+  unrepresentable.
+- The writability probe must be performed through a `cap-std`
+  `Dir` capability opened once from the canonical host path, not by
+  re-opening the resolved path by string. The probe must create its scratch
+  file with `O_CREAT | O_EXCL`, remove it through the same capability, and
+  remove it even on a partial failure or panic (resource-acquisition-is-
+  initialisation cleanup). Distinct probe errnos (`EROFS`, `EACCES`/`EPERM`,
+  `ENOSPC`/`EDQUOT`, `ELOOP`) must map to distinct, actionable diagnostics.
+- Containment comparison must be component-wise (`Utf8Path::starts_with`),
+  never a string/byte prefix, so that `/srv/work-evil` is not accepted under
+  root `/srv/work`. A regression test must pin this.
+- Test assertions use `googletest` matchers (for structured error assertions)
+  and `pretty_assertions` for value equality, both added as dev-dependencies
+  per the task brief. Multivariant operator-facing output (the denial-message
+  catalogue and the rendered mount plan) is pinned with `insta` snapshots.
+  The new public surface is pinned with a `trybuild` signature-stability
+  fixture mirroring `tests/ui/stable_repository_clone_signatures.rs`.
+- Every new public item carries a runnable doc example. Pure items
+  (`HostMountRequest`, the planner over fabricated facts, the value types,
+  the new error variants) use runnable examples; filesystem-touching entry
+  points (`plan_host_mount_workspace`, the default adapter) use `no_run` so
+  they still type-check. Do not use bare `ignore`, and do not use `unwrap` in
+  examples; follow `docs/rust-doctest-dry-guide.md`.
 - Run all required gates before committing each milestone: `make check-fmt`,
   `make lint`, and `make test`. Documentation changes additionally require
   `make fmt`, `make markdownlint`, and `make nixie`.
@@ -132,7 +197,9 @@ asking for direction.
 - Dependencies: stop and escalate before adding any non-test dependency.
   `nix` for `geteuid`/`getegid`/`statvfs` is a likely candidate; do not add it
   without explicit approval, and prefer reusing the existing `cap_std`
-  surface for read-only probes.
+  surface for read-only probes. The dev-dependencies `googletest` and
+  `pretty_assertions` are pre-approved by the task brief and are not tolerance
+  events; adding any other new dependency (test or otherwise) is.
 - Iterations: if the same lint or test still fails after three focused fix
   attempts on a single milestone, stop and document the blocker.
 - Time: if any milestone exceeds eight working hours of focused effort
@@ -147,14 +214,25 @@ asking for direction.
 
 ## Risks
 
-- Risk: TOCTOU between `std::fs::canonicalize` and the eventual `bollard`
-  `create_container` syscall. Severity: medium. Likelihood: medium.
-  Mitigation: pin allowlisted roots at config load time, document the
-  remaining race openly in the threat-model section of `docs/podbot-design.md`,
-  require allowlisted roots to be operator-owned directories not writable by
-  unprivileged third parties, and reject any canonical workspace path whose
-  parent is itself a symlink. Do not claim to close the race with userland
-  Rust alone.
+- Risk: TOCTOU between Podbot's path resolution and the eventual `bollard`
+  `create_container` mount. Severity: medium. Likelihood: medium. There are
+  two distinct windows. The **in-process** window — between canonicalising the
+  host path and probing its writability — is closed by this plan: the probe
+  runs through a single `cap-std` `Dir` capability held open from the canonical
+  path, so the probe operates on the same kernel object that was resolved,
+  never a re-resolved string. The **cross-process** window cannot be closed in
+  userland Rust: Podbot resolves the path, then hands the engine a path
+  *string*, and the engine re-resolves it at `podman run` time in a separate
+  process (this is the runc CVE-2025-31133 mount-time symlink-swap class).
+  Mitigation: canonicalise allowlisted roots once at config-load time; mount
+  the canonical resolved path, never the operator's raw string; reject any
+  canonical workspace path whose parent chain contains a symlink that escapes
+  the root; document the residual cross-process race openly in the
+  threat-model section of `docs/podbot-design.md`; and state the operator
+  precondition plainly — the mount root and its entire parent chain must be
+  writable only by trusted users, so no third party can stage a swap between
+  Podbot's check and the engine's mount. Do not claim to close the
+  cross-process race with userland Rust alone.
 - Risk: rootless Podman with `--userns=auto`/`nomap` silently maps the host
   user to `nobody`, producing in-container EACCES that operators read as a
   Podbot bug. Severity: medium. Likelihood: high. Mitigation: run a probe
@@ -204,12 +282,17 @@ asking for direction.
 - [ ] User approved the plan and the status was moved to IN PROGRESS.
 - [ ] Added `MountsConfig` with `allowed_roots` and `default_read_only`,
   wired into `AppConfig`, `env_vars.rs`, and the loader.
-- [ ] Added domain types (`AllowlistedRoot`, `HostMountPlan`,
-  `HostMountRequest`, `HostMountWriteProbe`) in `src/api/host_mount.rs` with
-  a `HostPathProbe` trait used as the driven port.
+- [ ] Added the `googletest` and `pretty_assertions` dev-dependencies to
+  `Cargo.toml`.
+- [ ] Added domain types (`AllowlistedRoot`, `CanonicalHostPath`,
+  `HostMountPlan`, `HostMountRequest`, `ResolvedHostDir`, `Writability`) in
+  `src/api/host_mount.rs` with a single-pass `HostPathProbe` trait used as the
+  driven port.
 - [ ] Added the default `HostPathProbe` adapter in
-  `src/engine/connection/host_mount/probe.rs` (or equivalent path), with
-  `mockall`-generated mock under `cfg(test)`.
+  `src/engine/connection/host_mount/mod.rs` (or equivalent path), probing
+  writability through a held `cap-std` capability with errno-mapped
+  diagnostics and resource-acquisition-is-initialisation scratch cleanup, with
+  a `mockall`-generated mock under `cfg(test)`.
 - [ ] Added the engine integration in
   `src/engine/connection/create_container/mod.rs` so `build_create_body`
   attaches the typed `Mount` when the workspace plan calls for it.
@@ -219,8 +302,12 @@ asking for direction.
 - [ ] Added `rstest` unit coverage for the domain types (allowlist
   invariants, canonicalisation, denied prefixes, denied target paths) using
   the mocked probe.
-- [ ] Added `proptest` coverage for the prefix invariant against
-  `tempfile`-generated real directory trees.
+- [ ] Added `proptest` coverage for the containment invariant over
+  canonical-shaped inputs (soundness, completeness of denial, default-deny,
+  writability gate, determinism).
+- [ ] Added an `insta` snapshot of the denial-message catalogue and the
+  rendered mount plan, and a `trybuild` signature-stability fixture
+  (`tests/ui/stable_host_mount_signatures.rs`) for the new public surface.
 - [ ] Added a new `rstest-bdd` feature
   `tests/features/host_mounted_workspaces.feature` plus helpers, exercising
   the public `plan_host_mount_workspace` entry point against the in-process
@@ -287,7 +374,20 @@ This section will be populated as work progresses. Anticipated entries:
   workspace. Rationale: `cap_std::fs::Dir::canonicalize` deliberately
   returns a relative path and would require post-processing before passing
   it to `bollard`, while we still want `cap_std` for any confined read or
-  probe-file lifecycle. Date/Author: 2026-05-29 / Codex.
+  probe-file lifecycle. `std::fs::canonicalize` fully resolves symlinks, so a
+  benign symlink *inside* the workspace tree resolves to a path that still
+  starts with the allowlist root (permitted), while a symlink that escapes the
+  root resolves outside it (rejected) — exactly the desired "allow in-tree
+  links, reject escapes" semantics, equivalent to `openat2`'s
+  `RESOLVE_BENEATH` rather than the stricter `RESOLVE_NO_SYMLINKS`.
+  Date/Author: 2026-05-29 / Codex.
+  - Addendum (2026-06-18): `std::fs::canonicalize` remains the source of the
+    absolute path string for `bollard` and the allowlist containment check.
+    However, the **writability probe** is performed through a `cap-std` `Dir`
+    opened *once* from the canonical path and used for the create/remove
+    cycle, rather than via a second `std::fs` operation on the resolved path
+    string. This closes the in-process resolve-then-probe TOCTOU window. See
+    the 2026-06-18 single-pass-probe decision below.
 - Decision (2026-05-29): keep CLI changes minimal. Adding an
   `--allow-host-mount-root` global flag is out of scope; operators express
   allowlists via the configuration file or `PODBOT_MOUNTS_ALLOWED_ROOTS`
@@ -299,6 +399,74 @@ This section will be populated as work progresses. Anticipated entries:
   their own ADR and risk silently destroying operator data when set wrong.
   Document in `Future work` and revisit if Step 4.4 or Step 4.6.3 requires
   them. Date/Author: 2026-05-29 / Codex.
+- Decision (2026-06-18): this revision **supersedes** the 2026-05-29 draft on
+  the same branch and the same draft pull request (#110), rather than opening
+  a new branch. Rationale: the user directed superseding on the existing
+  branch; the prior draft is strongly aligned, so the highest-quality outcome
+  is to preserve its accurate structure and inject the security upgrades from
+  fresh research and a community-of-experts review, recorded as
+  `2026-06-18` decisions here. Date/Author: 2026-06-18 / Claude Opus 4.8.
+- Decision (2026-06-18): keep the allowlist in a dedicated `[mounts]` section
+  (`mounts.allowed_roots`) rather than under `[sandbox]`. The planning
+  question initially offered `[sandbox]` versus `[workspace]`, and `[sandbox]`
+  was chosen; on reflection a dedicated `[mounts]` section is more appropriate
+  and the user explicitly invited reconsidering it. Rationale: `[mounts]`
+  satisfies every property that motivated rejecting `[workspace]` (it is
+  operator-owned policy, not a per-run request, and a single host policy
+  governs the agent container and any future helper containers), while keeping
+  mount policy (allowlist, read-only default, propagation, future relabel and
+  user-namespace knobs) cohesive instead of overloading the container-security
+  profile in `[sandbox]`. The prior author reached `[mounts]` independently,
+  which corroborates the choice. If the reviewer prefers `[sandbox]`, this is
+  a localised change (section name plus the `PODBOT_MOUNTS_*` env-var prefix).
+  Date/Author: 2026-06-18 / Claude Opus 4.8.
+- Decision (2026-06-18): perform the writability probe in a **single pass**
+  through a held `cap-std` `Dir` capability opened from the canonical path,
+  with create/remove via `O_CREAT | O_EXCL` and resource-acquisition-is-
+  initialisation cleanup that removes the scratch file even on panic or early
+  return. Rationale: a two-step "canonicalise, then probe the path string"
+  port re-opens the path between resolution and probing, reintroducing the
+  symlink-swap race that this task exists to close. Holding the capability
+  makes the probe operate on the resolved inode. Date/Author: 2026-06-18 /
+  Claude Opus 4.8.
+- Decision (2026-06-18): introduce a `CanonicalHostPath` newtype alongside
+  `AllowlistedRoot`, both constructible only by the probe port. The pure
+  planner accepts these newtypes, so the containment check can never run on a
+  raw, un-canonicalised path. Rationale: makes the one catastrophic mistake —
+  comparing a lexical `..`-bearing path against an allowlist root — a
+  compile-time impossibility rather than a review-time hazard. Date/Author:
+  2026-06-18 / Claude Opus 4.8.
+- Decision (2026-06-18): model the new denials as **additive
+  `FilesystemError` variants** (`PathOutsideAllowlist`, `SymlinkEscapeDetected`,
+  `RootlessWriteProbeFailed`) plus a `ConfigError` for the empty-allowlist
+  config-time case, rather than introducing a new top-level `MountError`
+  family. The community review proposed a dedicated `MountError`; this plan
+  keeps the existing domain-grouped error convention
+  (`Config`/`Container`/`GitHub`/`Filesystem`) because well-named additive
+  variants are equally greppable and auditable, are additive under ADR 001's
+  stable-boundary rules, and avoid widening the `PodbotError` aggregate with a
+  parallel family. The denials remain distinct and self-describing, satisfying
+  the "negative coverage" success criterion. Date/Author: 2026-06-18 / Claude
+  Opus 4.8.
+- Decision (2026-06-18): verify the containment invariant with `proptest`, not
+  `kani` or `verus`. Rationale: the predicate is `camino::Utf8Path::starts_with`
+  over an unbounded-length path. `kani` is bounded model checking and would
+  only prove containment up to a chosen path length — a weaker guarantee than
+  `proptest` already gives with shrinking across realistic lengths. `verus`
+  would mean re-proving `camino`'s component semantics, which is not this
+  crate's code. The genuine risks — a non-canonical path reaching the check,
+  and incorrect resolution semantics — are eliminated by the
+  `CanonicalHostPath` newtype (a type guarantee, stronger than any test) and by
+  the real-filesystem adapter tests respectively, neither of which a bounded
+  prover would reach. This decision is governed by the `rust-verification`
+  skill and recorded here in lieu of a standalone ADR; promote it to an ADR if
+  the reviewer wants the rationale to outlive this plan. Date/Author:
+  2026-06-18 / Claude Opus 4.8.
+- Decision (2026-06-18): adopt the threat-model boundary statement quoted in
+  Milestone G verbatim into `docs/podbot-design.md`. Rationale: it states
+  precisely what Podbot guarantees, what the operator must guarantee, and the
+  residual cross-process mount-time race, which the design document's existing
+  one-line summary does not. Date/Author: 2026-06-18 / Claude Opus 4.8.
 
 ## Outcomes and retrospective
 
@@ -422,18 +590,26 @@ milestone and commits at each green gate.
 
    - `AllowlistedRoot` — a validated, canonicalised `Utf8PathBuf` that
      points to a directory the operator has authorised as a mount root.
+     Constructible only by the probe port.
+   - `CanonicalHostPath` — a canonicalised, symlink-resolved absolute host
+     path. Constructible only by the probe port, so the containment check can
+     never run on a raw path.
    - `HostMountRequest` — borrowed view of the `AppConfig` slice the planner
      needs: workspace source, host path, container path, default-read-only
      toggle, and the allowlist slice.
    - `HostMountPlan` — the validated, materialised plan: canonical host
      source, absolute container target, read-only flag, propagation mode,
      non-recursive flag, and the matched allowlist root.
-   - `HostPathProbe` — a driven port with the methods the domain needs:
-     `canonicalize`, `is_directory`, `is_symlink`, `parent_is_symlink`, and
-     `probe_writable_temporary`. Implementations must be `Sync + Send`.
+   - `HostPathProbe` — a driven port whose single resolving method returns the
+     canonical path together with its probed facts (directory or not, parent
+     chain symlink-clean or not, and — for read-write plans — writability
+     established through a held capability), so the planner never triggers a
+     second filesystem pass over a re-derived path string. Implementations
+     must be `Sync + Send`. The pure planner consumes the returned facts, not
+     the filesystem.
    - `plan_host_mount_workspace(config: &AppConfig, probe: &dyn
-     HostPathProbe) -> Result<HostMountPlan>` — the only public entry
-     point.
+     HostPathProbe) -> Result<Option<HostMountPlan>>` — the only public entry
+     point (`None` for the `github_clone` source).
 
 Acceptance: this section of the plan is updated with any deviations, and
 no source files have been modified.
@@ -504,19 +680,45 @@ fail before the implementation and pass after.
    Confirm `#[error]` strings match the existing voice and include
    actionable hints where appropriate (`AGENTS.md` directs error messages
    to remain operator-friendly).
-5. Add `rstest` unit coverage in `src/api/host_mount.rs` exercising:
+5. Add `rstest` unit coverage in `src/api/host_mount.rs` exercising the pure
+   planner over fabricated `CanonicalHostPath`/writability facts (a mocked
+   `HostPathProbe`), using `googletest` matchers for the structured error
+   assertions and `pretty_assertions` for plan equality:
    - happy host-mount path resolved against a single allowlist root;
-   - happy path against a multi-root allowlist (first match wins);
-   - symlink escape rejected;
-   - path outside allowlist rejected;
+   - happy path against a multi-root allowlist (first match wins, recorded
+     deterministically);
+   - `candidate == root` exactly is **permitted** (mounting the root itself);
+   - sibling-prefix trap: canonical `/srv/work-evil` against root `/srv/work`
+     is **rejected** (`PathOutsideAllowlist`), pinning component-wise
+     containment against a future regression to a string prefix;
+   - symlink escape rejected (`SymlinkEscapeDetected`);
+   - path outside every allowlist root rejected (`PathOutsideAllowlist`,
+     naming all configured roots);
    - non-directory rejected;
+   - empty allowlist rejected at the config gate (`ConfigError`);
    - write-probe failure propagated as `RootlessWriteProbeFailed`;
    - read-only plan does not probe writability.
-6. Add `proptest` coverage proving that for any pair of canonicalised
-   absolute paths `(root, child)` materialised under `tempfile`,
-   `plan_host_mount_workspace` accepts the pair if and only if
-   `child.starts_with(root)` and the canonical form lies inside the
-   tempdir.
+6. Add `proptest` coverage proving, for canonical-shaped path inputs:
+   - soundness: an `Ok(plan)` implies `plan.source.starts_with(some root)`;
+   - completeness of denial: a candidate not component-wise under any root is
+     denied with `PathOutsideAllowlist`;
+   - default-deny: an empty allowlist denies every candidate;
+   - the writability gate: a non-writable fact denies regardless of
+     containment;
+   - determinism: the planner is a pure function (equal inputs, equal output).
+   Generate components from an alphabet that excludes `..` and empty segments,
+   because the planner's precondition (enforced by `CanonicalHostPath`) is that
+   inputs are already canonical; adversarial `..`/symlink inputs are exercised
+   at the adapter layer in Milestone D, not here.
+7. Add an `insta` snapshot test rendering the `Display` of one instance of
+   every new error variant (the denial-message catalogue) plus the rendered
+   mount plan for the read-write and read-only cases, so operator-facing
+   wording and the option rendering are pinned in one legible place.
+8. Add `tests/ui/stable_host_mount_signatures.rs`, a `trybuild` fixture that
+   names the public `HostMountRequest`, `HostMountPlan`, `AllowlistedRoot`,
+   `CanonicalHostPath`, and `plan_host_mount_workspace` signatures, mirroring
+   `tests/ui/stable_repository_clone_signatures.rs`, so the new public surface
+   cannot drift silently.
 
 Acceptance: `make check-fmt`, `make lint`, `make test` pass; domain code
 has no `bollard` or `cap_std::fs::Dir` imports.
@@ -526,23 +728,46 @@ has no `bollard` or `cap_std::fs::Dir` imports.
 1. Add `src/engine/connection/host_mount/mod.rs` with a
    `DefaultHostPathProbe` implementing `HostPathProbe` using:
    - `std::fs::canonicalize` for canonicalisation, then
-     `Utf8PathBuf::from_path_buf` to recover the `camino` view;
-   - `std::fs::symlink_metadata` for symlink detection (do not follow);
-   - `cap_std::fs_utf8::Dir::open_ambient_dir(parent, ambient_authority())`
-     plus `Dir::open_with` to perform the writability probe by creating
-     and immediately removing a uniquely named scratch file
-     (`.podbot-write-probe-<pid>-<nanos>`). The probe must always remove
-     its scratch file, even on partial failure.
+     `Utf8PathBuf::from_path_buf` to recover the `camino` view, returning a
+     `CanonicalHostPath`;
+   - `std::fs::symlink_metadata` for symlink and parent-chain detection
+     (do not follow);
+   - a writability probe performed through a single held capability:
+     `cap_std::fs_utf8::Dir::open_ambient_dir(<canonical path>,
+     ambient_authority())`, then `Dir::open_with` to create a uniquely named
+     scratch file (`.podbot-write-probe-<pid>-<nanos>`) with
+     `O_CREAT | O_EXCL`, and `Dir::remove_file` to remove it through the same
+     `Dir`. Wrap the scratch file in a guard whose `Drop` removes it, so a
+     panic or early return cannot leave litter. Map probe errnos to distinct
+     diagnostics: `EROFS` → read-only filesystem; `EACCES`/`EPERM` →
+     permission denied (mention POSIX ACLs and the immutable flag);
+     `ENOSPC`/`EDQUOT` → no space/quota; `ELOOP` → symlink loop. The probe
+     runs only when the resolved plan is read-write.
+   - The probe's effective-UID writability result is a **host-side proxy** for
+     in-container writability that is exact only under the default rootless
+     mapping (container root maps to the invoking user) or `--userns=keep-id`.
+     The error message and the design/users-guide docs must say so, and must
+     recommend `--userns=keep-id` for the common rootless EACCES papercut.
 2. Add a `mockall`-generated mock for `HostPathProbe` under `cfg(test)`
    exposed to integration tests via a `#[doc(hidden)] pub` helper, in line
    with the existing `MockExecClient` pattern.
-3. Add tests in `src/engine/connection/host_mount/tests.rs`:
-   - canonicalises real symlinked directories produced by `tempfile`;
-   - returns `SymlinkEscapeDetected` when the resolved path leaves the
-     allowlist;
-   - returns `RootlessWriteProbeFailed` when the probe directory is
-     read-only (`tempdir` with read-only permissions);
-   - leaves no probe file behind after success or failure (asserted via a
+3. Add tests in `src/engine/connection/host_mount/tests.rs` (real filesystem
+   via `tempfile`; use `serial_test` where umask/permission probing could
+   interfere):
+   - canonicalises real symlinked directories produced by `tempfile`, and a
+     benign symlink *inside* the root resolves to a path still under the root
+     (permitted);
+   - returns `SymlinkEscapeDetected` when a symlink inside the root resolves
+     outside it;
+   - returns an escape/`SymlinkEscapeDetected`/out-of-root error for a
+     `..`-traversal request that climbs above the root;
+   - an allowlist root that is itself a symlink is canonicalised before
+     comparison, so a path under the real target is accepted and one outside
+     it is rejected;
+   - rejects a path that is a regular file, not a directory;
+   - returns `RootlessWriteProbeFailed` when the probe directory is read-only
+     (`tempdir` with `chmod 0500`), asserting the mapped errno diagnostic;
+   - leaves no probe file behind after success **or** failure (asserted via a
      direct directory listing).
 
 Acceptance: `make check-fmt`, `make lint`, `make test` pass; no test
@@ -609,10 +834,40 @@ behavioural and e2e scenarios fail before this milestone and pass after.
 
 1. Update `docs/podbot-design.md`:
    - Expand the existing "Host-mount path safety policy" subsection with
-     the new domain/probe split, the propagation defaults, and the
-     write-probe protocol.
-   - Update the "Threat model summary" to acknowledge the residual TOCTOU
-     race and the operator responsibility for allowlist hygiene.
+     the new domain/probe split, the propagation defaults, the single-pass
+     write-probe protocol, the empty-allowlist default, root canonicalisation,
+     and the component-wise containment rule.
+   - Update the "Threat model summary" to embed the boundary statement below
+     verbatim (en-GB-oxendict, wrapped to the document's column width):
+
+     > **Host-mount boundary.** When `workspace.source = "host_mount"`, the
+     > agent is, by operator choice, granted full read/write access to the
+     > mounted subtree; containment shifts from "cannot touch host files" to
+     > "cannot touch anything outside the resolved, allowlisted workspace, and
+     > cannot reach the host engine socket." **Podbot guarantees** that
+     > `workspace.host_path` is resolved against an operator-configured
+     > allowlisted root (default empty, so host mounts are denied until
+     > explicitly opted into), that the resolved source lies beneath that root
+     > by component-wise containment with no symlink or `..` escape, that the
+     > invoking process's effective UID can write the resolved directory at
+     > validation time (a proxy valid only under the default rootless mapping
+     > or `--userns=keep-id`, not under a non-root `--user`/subuid mapping or
+     > a `:U` chown), and that the raw request, the resolved source and target,
+     > the matched root (or none), and a distinct denial reason are recorded in
+     > diagnostics. **Podbot does not guarantee** that the container engine
+     > resolves the same inode at `podman run` time: because the validated path
+     > is re-resolved by the engine in a separate process, an actor able to
+     > write any component of the mount root or its parent chain between
+     > Podbot's check and the engine's mount can redirect the source via a
+     > symlink swap (runc CVE-2025-31133 class). **The operator therefore must
+     > ensure** that the mount root and its entire parent chain are writable
+     > only by trusted users, that the narrowest necessary subtree is mounted,
+     > and that the configured user-namespace and SELinux modes match these
+     > assumptions. Residual risks below this boundary — kernel-level container
+     > escape and engine mount-time re-resolution — are out of scope and
+     > warrant virtual-machine isolation where stronger guarantees are
+     > required.
+
    - Add the new `[mounts]` section to the example configuration TOML.
 2. Update `docs/users-guide.md`:
    - Document `mounts.allowed_roots`, `mounts.default_read_only`, and the
@@ -623,6 +878,12 @@ behavioural and e2e scenarios fail before this milestone and pass after.
    - Record the hexagonal split for host mounts (domain in
      `src/api/host_mount.rs`, port `HostPathProbe`, default adapter in
      `src/engine/connection/host_mount/`).
+   - Record the single-pass-probe contract (resolve and probe through one held
+     capability) and the `CanonicalHostPath`/`AllowlistedRoot` newtype
+     discipline as a reusable host-trust-boundary pattern.
+   - Record the verification-rigour decision (`proptest` for the containment
+     invariant; why not `kani`/`verus`) so future contributors do not
+     re-litigate it.
    - Note the testcontainers helper relocation, if any.
 4. Update `docs/podbot-roadmap.md` to mark step 4.2.2 as done only after
    every gate above has passed.
@@ -821,6 +1082,7 @@ freestanding ADR unless the design boundary itself shifts.
 
 The expected primary edit set is:
 
+- `Cargo.toml` — add the `googletest` and `pretty_assertions` dev-dependencies.
 - `src/config/mod.rs` — re-export `MountsConfig`.
 - `src/config/mounts.rs` (new) — `MountsConfig` and defaults.
 - `src/config/types.rs` — embed `mounts: MountsConfig`.
@@ -848,6 +1110,8 @@ The expected primary edit set is:
   `tests/bdd_host_mounted_workspaces_helpers/` (new) — BDD scaffold.
 - `tests/bdd_host_mounted_workspaces_e2e.rs` (new) — testcontainers
   scenario.
+- `tests/ui/stable_host_mount_signatures.rs` (new) — `trybuild`
+  signature-stability fixture for the new public surface.
 - `tests/testcontainers_support.rs` (new, optional) — shared
   socket-detection helper.
 - `docs/podbot-design.md`, `docs/users-guide.md`,
@@ -856,6 +1120,12 @@ The expected primary edit set is:
 Concretely, in `src/api/host_mount.rs`, define:
 
 ```rust
+/// A canonicalised, symlink-resolved absolute host path. Constructible only by
+/// the probe port, so the containment check can never run on a raw path.
+pub struct CanonicalHostPath(Utf8PathBuf);
+
+/// An operator-authorised, canonicalised mount root. Constructible only by the
+/// probe port.
 pub struct AllowlistedRoot(Utf8PathBuf);
 
 pub struct HostMountRequest<'a> {
@@ -864,17 +1134,37 @@ pub struct HostMountRequest<'a> {
 }
 
 pub struct HostMountPlan {
-    canonical_host_path: Utf8PathBuf,
+    canonical_host_path: CanonicalHostPath,
     container_path: Utf8PathBuf,
     matched_root: AllowlistedRoot,
     read_only: bool,
 }
 
+/// Facts the pure planner consumes. The probe resolves and probes in a single
+/// pass through one held capability, so the planner never re-touches the
+/// filesystem.
+pub struct ResolvedHostDir {
+    pub canonical: CanonicalHostPath,
+    pub is_directory: bool,
+    pub parent_chain_symlink_clean: bool,
+    pub writability: Writability,
+}
+
+pub enum Writability {
+    /// Probe skipped because the resolved plan is read-only.
+    NotProbed,
+    Writable,
+    NotWritable { probed_uid: u32, reason: NotWritableReason },
+}
+
 pub trait HostPathProbe: Sync + Send {
-    fn canonicalize(&self, path: &Utf8Path) -> PodbotResult<Utf8PathBuf>;
-    fn is_directory(&self, path: &Utf8Path) -> PodbotResult<bool>;
-    fn parent_is_symlink(&self, path: &Utf8Path) -> PodbotResult<bool>;
-    fn probe_writable(&self, path: &Utf8Path) -> PodbotResult<()>;
+    /// Resolve `path` (canonicalise, classify, and — when `probe_write` is set
+    /// — probe writability through a held capability) in a single pass.
+    fn resolve(
+        &self,
+        path: &Utf8Path,
+        probe_write: bool,
+    ) -> PodbotResult<ResolvedHostDir>;
 }
 
 pub fn plan_host_mount_workspace(
@@ -900,20 +1190,53 @@ needs `nix` for `geteuid`/`statvfs`, treat that as a tolerance event and
 escalate before adding the dependency. The default adapter should attempt
 to satisfy the probe using `cap_std::fs_utf8` and `std::fs` first.
 
-References used while planning this step:
+References used while planning this step (the 2026-06-18 revision verified
+these against current sources):
 
-- `https://docs.rs/bollard/latest/bollard/models/struct.HostConfig.html`
-- `https://docs.rs/cap-std/latest/cap_std/fs/struct.Dir.html`
-- `https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html`
+- `https://doc.rust-lang.org/std/fs/fn.canonicalize.html` — symlink-resolving
+  canonicalisation semantics (requires the path to exist).
+- `https://doc.rust-lang.org/std/path/struct.Path.html` — `starts_with` is
+  component-wise, not byte-wise (the `/allowed-evil` guard); `components` does
+  not resolve `..` or symlinks.
+- `https://docs.rs/bollard/latest/bollard/models/struct.HostConfig.html` and
+  `.../struct.Mount.html` — typed `Mount`, `MountTypeEnum::BIND`, and
+  `MountBindOptionsPropagationEnum`.
+- `https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html` — the held
+  directory capability used for the single-pass write probe.
+- `https://www.redhat.com/en/blog/debug-rootless-podman-mounted-volumes` —
+  rootless UID mapping, why bind mounts appear `nobody`-owned, and `:U`.
+- `https://docs.podman.io/en/latest/markdown/podman-run.1.html` —
+  `--userns=keep-id`, `:z`/`:Z`, `:U`; idmapped mounts are rootful-only.
+- `https://developers.redhat.com/articles/2025/04/11/my-advice-selinux-container-labeling`
+  — `:z` shared versus `:Z` private relabel, and never relabelling system dirs.
+- `https://advisories.gitlab.com/golang/github.com/opencontainers/runc/CVE-2025-31133/`
+  — the mount-time symlink-swap (TOCTOU) class that bounds the threat model.
 - `https://github.com/opencontainers/runtime-spec/blob/main/config.md#mounts`
-- `https://kubernetes.io/docs/concepts/security/pod-security-policy/#volumes-and-file-systems`
-- `https://www.redhat.com/en/blog/rootless-podman-user-namespace-modes`
-- `https://devcontainers.github.io/implementors/json_reference/`
+  — OCI mount semantics.
 
 ## Revision note
 
 Initial draft created 2026-05-29 from the roadmap, design documents, code
 inspection, and parallel research into bollard bind-mount shapes,
 cap-std versus std canonicalisation, rootless Podman userns behaviour, and
-prior art in OCI / Kubernetes / devcontainers. This draft awaits user
-approval before implementation begins.
+prior art in OCI / Kubernetes / devcontainers.
+
+Revised 2026-06-18 (Claude Opus 4.8). What changed: the writability probe now
+runs in a single pass through a held `cap-std` capability (closing the
+in-process resolve-then-probe TOCTOU window); a `CanonicalHostPath` newtype
+makes non-canonical containment checks unrepresentable; the residual
+cross-process mount-time race and the operator's trusted-parent-chain
+precondition are stated precisely and embedded as a verbatim threat-model
+boundary; the negative-coverage matrix gains the sibling-prefix trap, the
+exact-root-match case, a symlinked allowlist root, and a no-litter assertion;
+`googletest`, `pretty_assertions`, an `insta` denial-message snapshot, and a
+`trybuild` signature-stability fixture are added; and the choice of `proptest`
+over `kani`/`verus` is justified and recorded. Why: a fresh round of external
+research (rootless Podman write semantics, `cap-std`/`openat2` resolution, runc
+CVE-2025-31133, SELinux relabel policy) and a community-of-experts review
+identified these as the load-bearing security details. How it affects the
+remaining work: the milestone order is unchanged, but Milestones C and D now
+carry the single-pass probe contract, the newtype discipline, and the expanded
+test matrix; the configuration section remains `[mounts]` (reaffirmed against a
+`[sandbox]` alternative). This revision supersedes the prior draft on the same
+branch and pull request and awaits user approval before implementation begins.
