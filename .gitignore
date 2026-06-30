@@ -2,5 +2,6 @@ target/
 *:Zone.Identifier
 **/*.rs.bk
 .grepai/
+.memdb/
 *~
 .agents/mcp/context_pack/packs/
