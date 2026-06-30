@@ -18,7 +18,7 @@ long-lived guide.
 
 ## User and contributor guides
 
-- [Ortho configuration users' guide](ortho-config-users-guide.md) explains
+- [OrthoConfig user's guide](ortho-config-users-guide.md) explains
   layered configuration through OrthoConfig.
 - [rstest-bdd users' guide](rstest-bdd-users-guide.md) explains behaviour
   testing with rstest-bdd.
