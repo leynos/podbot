@@ -264,7 +264,7 @@ Wire up the new scenarios in `bdd_container_creation.rs`.
 ### Stage D: Quality gates and roadmap
 
 1. Run `make check-fmt`, `make lint`, `make test`.
-2. Mark the `2.2.3` entry in `docs/podbot-roadmap.md` as done (change `[ ]`
+2. Mark the `2.2.3` entry in `docs/roadmap.md` as done (change `[ ]`
    to `[x]`).
 3. Commit the changes.
 
@@ -300,7 +300,7 @@ All commands should be run from the repository root.
 
    Expected: all three pass with zero warnings.
 
-10. Update `docs/podbot-roadmap.md` to mark task 2.2.3 as done.
+10. Update `docs/roadmap.md` to mark task 2.2.3 as done.
 
 11. Commit the changes with a descriptive message.
 
@@ -317,7 +317,7 @@ Quality criteria (what "done" means):
   pass. New BDD scenarios pass.
 - Lint/typecheck: `make check-fmt` and `make lint` pass with zero warnings.
 - Documentation: design doc and user's guide accurately describe minimal mode.
-- Roadmap: task 2.2.3 is marked `[x]` in `docs/podbot-roadmap.md`.
+- Roadmap: task 2.2.3 is marked `[x]` in `docs/roadmap.md`.
 
 Quality method (how we check):
 
@@ -339,7 +339,7 @@ Key files that will be created or modified:
 - `tests/bdd_container_creation.rs` (wire new scenarios)
 - `tests/bdd_container_creation_helpers/steps.rs` (add step definitions)
 - `tests/bdd_container_creation_helpers/assertions.rs` (add assertions)
-- `docs/podbot-roadmap.md` (mark 2.2.3 as done)
+- `docs/roadmap.md` (mark 2.2.3 as done)
 - `docs/execplans/2-2-3-minimal-mode.md` (this file)
 
 ## Interfaces and dependencies

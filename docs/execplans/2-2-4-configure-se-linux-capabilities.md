@@ -179,7 +179,7 @@ Key files:
   including `ContainerSecurityOptions` and `from_sandbox_config`.
 - `docs/users-guide.md`: End-user documentation.
 - `docs/podbot-design.md`: Architecture documentation.
-- `docs/podbot-roadmap.md`: Task tracking.
+- `docs/roadmap.md`: Task tracking.
 
 ## Plan of work
 
@@ -241,7 +241,7 @@ Documentation files modified (3 total):
 
     docs/users-guide.md
     docs/podbot-design.md
-    docs/podbot-roadmap.md
+    docs/roadmap.md
 
 ## Interfaces and dependencies
 

@@ -3,7 +3,7 @@
 **Task:** Add a health check that verifies the container engine responds after
 connection.
 
-**Phase:** 2.1 (Engine Connection) from `docs/podbot-roadmap.md`
+**Phase:** 2.1 (Engine Connection) from `docs/roadmap.md`
 
 **Status:** Complete
 
@@ -161,7 +161,7 @@ ______________________________________________________________________
 
 ### Task 8: Update roadmap ✓
 
-**File:** `docs/podbot-roadmap.md`
+**File:** `docs/roadmap.md`
 
 Mark task as done:
 
@@ -232,7 +232,7 @@ Table: Files modified in this implementation
 | `tests/bdd_engine_connection.rs`           | Added scenario bindings                                     |
 | `tests/bdd_engine_connection_helpers.rs`   | Added step definitions                                      |
 | `docs/users-guide.md`                      | Documented health check behaviour                           |
-| `docs/podbot-roadmap.md`                   | Marked task as done                                         |
+| `docs/roadmap.md`                          | Marked task as done                                         |
 
 ______________________________________________________________________
 

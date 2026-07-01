@@ -28,7 +28,7 @@ continue milestone by milestone within the tolerances below.
 
 ## Constraints
 
-- Follow roadmap item 3.2.1 in `docs/podbot-roadmap.md`: use
+- Follow roadmap item 3.2.1 in `docs/roadmap.md`: use
   `installation_token_with_buffer`, return the token string for Git operations,
   handle acquisition failures semantically, and log expiry timing without
   logging token values.
@@ -175,7 +175,7 @@ continue milestone by milestone within the tolerances below.
   documentation. `docs/podbot-design.md` records the token-acquisition contract
   and conservative expiry metadata; `docs/users-guide.md` records user-facing
   token behaviour and failure messages; `docs/developers-guide.md` records
-  adapter and BDD conventions; `docs/podbot-roadmap.md` marks 3.2.1 done.
+  adapter and BDD conventions; `docs/roadmap.md` marks 3.2.1 done.
 - [x] (2026-05-26T00:00:00Z) Run documentation gates. `make markdownlint` and
   `make nixie` passed. `make fmt` still reports pre-existing line-length issues
   across unrelated documentation after running the repository-wide Markdown
@@ -523,7 +523,7 @@ Acceptance is behavioural, not merely structural:
   operations.
 - A BDD scenario proves an unhappy path: rejected installation token
   acquisition returns a clear semantic failure.
-- `docs/podbot-roadmap.md` marks 3.2.1 complete only after all code,
+- `docs/roadmap.md` marks 3.2.1 complete only after all code,
   behavioural tests, documentation updates, and gates are complete.
 - `make check-fmt`, `make lint`, and `make test` pass.
 - Documentation gates pass after doc changes: `make markdownlint`, `make fmt`,

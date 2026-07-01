@@ -12,7 +12,7 @@ is the governing implementation document for Step 2.4 interactive execution.
 
 ## Purpose and big picture
 
-Complete roadmap Step 2.4 in `docs/podbot-roadmap.md` by implementing
+Complete roadmap Step 2.4 in `docs/roadmap.md` by implementing
 interactive command execution in running containers with proper terminal
 attachment semantics.
 
@@ -83,7 +83,7 @@ pass.
 Current implementation and docs anchors:
 
 - Roadmap Step 2.4 tasks and completion criteria:
-  `docs/podbot-roadmap.md`.
+  `docs/roadmap.md`.
 - Design flow already calls for starting agent attached to terminal and cites
   Bollard exec-with-TTY support: `docs/podbot-design.md`.
 - CLI `exec` surface exists but is stubbed:
@@ -123,7 +123,7 @@ Lane D (docs and roadmap owner):
 
 - Own `docs/podbot-design.md` design-decision updates.
 - Own `docs/users-guide.md` user-visible behaviour updates.
-- Mark `docs/podbot-roadmap.md` Step 2.4 items done only after all gates pass.
+- Mark `docs/roadmap.md` Step 2.4 items done only after all gates pass.
 
 Coordination rule:
 
@@ -255,7 +255,7 @@ Update `docs/users-guide.md` for user-visible changes in `podbot exec`:
 - exit-code behaviour and troubleshooting.
 
 After code/tests/docs pass all gates, mark Step 2.4 tasks done in
-`docs/podbot-roadmap.md`.
+`docs/roadmap.md`.
 
 ### Stage H: Verification gates and evidence
 
@@ -275,7 +275,7 @@ logs for auditability.
 
 Acceptance is met only when all are true:
 
-- Roadmap Step 2.4 checkboxes in `docs/podbot-roadmap.md` are all done.
+- Roadmap Step 2.4 checkboxes in `docs/roadmap.md` are all done.
 - `podbot exec` supports both attached and detached modes.
 - Attached interactive sessions propagate `SIGWINCH` resize updates.
 - Executed command exit codes are captured and returned accurately.
@@ -315,7 +315,7 @@ Acceptance is met only when all are true:
       in `tests/features/interactive_exec.feature` and helper modules.
 - [x] (2026-02-22 UTC) Implemented Stage G documentation updates in
       `docs/podbot-design.md`, `docs/users-guide.md`, and roadmap completion in
-      `docs/podbot-roadmap.md`.
+      `docs/roadmap.md`.
 - [x] (2026-02-22 UTC) Completed Stage H gate stack with passing runs logged at
       `/tmp/check-fmt-podbot-2-4-1-interactive-execution.out`,
       `/tmp/lint-podbot-2-4-1-interactive-execution.out`, and

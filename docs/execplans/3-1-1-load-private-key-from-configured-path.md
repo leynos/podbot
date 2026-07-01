@@ -104,7 +104,7 @@ Step 3.1, tasks 2-4).
 - [x] (2026-02-25 UTC) Update `docs/users-guide.md` with key file
   requirements.
 - [x] (2026-02-25 UTC) Mark roadmap task as done in
-  `docs/podbot-roadmap.md`.
+  `docs/roadmap.md`.
 - [x] (2026-02-25 UTC) Run documentation gates: `make markdownlint`,
   `make fmt`, `make nixie`.
 - [x] (2026-02-25 UTC) Commit documentation updates.
@@ -231,7 +231,7 @@ Implementation uses a single integrator agent that:
 - updates `src/lib.rs` and `Cargo.toml` for module registration and
   dependency additions;
 - updates documentation files (`podbot-design.md`, `users-guide.md`,
-  `podbot-roadmap.md`);
+  `roadmap.md`);
 - runs quality gates and commits each logical slice.
 
 ## Plan of work
@@ -350,7 +350,7 @@ Validation: `make test` passes with BDD scenarios green.
 
 1. `docs/podbot-design.md`: add private key loading contract.
 2. `docs/users-guide.md`: add private key file requirements section.
-3. `docs/podbot-roadmap.md`: mark first task of Step 3.1 as done.
+3. `docs/roadmap.md`: mark first task of Step 3.1 as done.
 
 Validation: `make markdownlint`, `make fmt`, `make nixie` all pass.
 

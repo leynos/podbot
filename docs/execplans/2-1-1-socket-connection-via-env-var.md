@@ -3,7 +3,7 @@
 **Task:** Implement socket connection via `DOCKER_HOST`, `CONTAINER_HOST`, or
 `PODMAN_HOST` environment variables or direct path specification.
 
-**Phase:** 2.1 (Engine Connection) from `docs/podbot-roadmap.md`
+**Phase:** 2.1 (Engine Connection) from `docs/roadmap.md`
 
 **Status:** Complete
 
@@ -256,7 +256,7 @@ ______________________________________________________________________
 
 ### Task 10: Update roadmap ✓
 
-**File:** `docs/podbot-roadmap.md`
+**File:** `docs/roadmap.md`
 
 Mark the first task in Step 2.1 as done.
 
@@ -323,7 +323,7 @@ Table: Files modified in this implementation
 | `tests/bdd_engine_connection.rs`           | Created BDD test file                              |
 | `tests/bdd_engine_connection_helpers.rs`   | Created BDD step definitions                       |
 | `docs/users-guide.md`                      | Documented environment variable fallback           |
-| `docs/podbot-roadmap.md`                   | Marked task as done                                |
+| `docs/roadmap.md`                          | Marked task as done                                |
 
 ______________________________________________________________________
 

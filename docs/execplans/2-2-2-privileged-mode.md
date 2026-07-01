@@ -249,7 +249,7 @@ Review and update documentation as needed:
   explains the privileged-mode trade-off and documents that `mount_dev_fuse`
   has no effect in privileged mode.
 
-- `docs/podbot-roadmap.md`: mark task 2.2.2 as done by changing
+- `docs/roadmap.md`: mark task 2.2.2 as done by changing
   `[ ] Support privileged mode for maximum compatibility.` to
   `[x] Support privileged mode for maximum compatibility.`
 
@@ -282,7 +282,7 @@ All commands run from repository root: `/data/leynos/Projects/podbot`.
 4. Add scenario bindings in `tests/bdd_container_creation.rs`.
 
 5. Review and update `docs/podbot-design.md`, `docs/users-guide.md`, and
-   `docs/podbot-roadmap.md`.
+   `docs/roadmap.md`.
 
 6. Run verification with log capture:
 
@@ -313,7 +313,7 @@ Implementation is complete when all conditions below are true:
 - `docs/podbot-design.md` explicitly documents that `mount_dev_fuse` and
   SELinux settings are ignored in privileged mode.
 - `docs/users-guide.md` documents privileged-mode behaviour clearly.
-- `docs/podbot-roadmap.md` marks task 2.2.2 as done.
+- `docs/roadmap.md` marks task 2.2.2 as done.
 - `make check-fmt`, `make lint`, and `make test` all pass.
 
 Quality criteria (what "done" means):

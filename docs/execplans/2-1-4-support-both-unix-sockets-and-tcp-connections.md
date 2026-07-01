@@ -271,7 +271,7 @@ Add "Engine connection protocol support" section documenting:
 
 ### Task 9: Mark roadmap entry
 
-**File:** `docs/podbot-roadmap.md`
+**File:** `docs/roadmap.md`
 
 Mark "Support both Unix sockets and TCP connections" as `[x]`. Add completion
 marker to Step 2.1 heading.
@@ -296,7 +296,7 @@ All commands run from `/home/user/project`.
 9. Add bindings to `tests/bdd_engine_connection.rs`.
 10. Update `docs/users-guide.md` with TCP section.
 11. Update `docs/podbot-design.md` with protocol support section.
-12. Update `docs/podbot-roadmap.md` to mark complete.
+12. Update `docs/roadmap.md` to mark complete.
 13. Run quality gates:
 
 ```bash
@@ -381,7 +381,7 @@ _Table 1: Files created by this task._
 | `tests/bdd_engine_connection.rs`                | Add 4 scenario bindings                                     |
 | `docs/users-guide.md`                           | Add TCP endpoint support section                            |
 | `docs/podbot-design.md`                         | Add engine connection protocol support section              |
-| `docs/podbot-roadmap.md`                        | Mark task and step complete                                 |
+| `docs/roadmap.md`                               | Mark task and step complete                                 |
 
 _Table 2: Files modified by this task._
 

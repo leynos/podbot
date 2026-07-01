@@ -3,7 +3,7 @@
 ## Overview
 
 Implement actionable error handling for container engine socket permission
-errors, as specified in `docs/podbot-roadmap.md` Phase 2.1.
+errors, as specified in `docs/roadmap.md` Phase 2.1.
 
 **Roadmap task:** Handle socket permission errors with actionable error
 messages.
@@ -538,7 +538,7 @@ ______________________________________________________________________
 
 ### Task 11: Update roadmap
 
-**File:** `docs/podbot-roadmap.md` (line 79)
+**File:** `docs/roadmap.md` (line 79)
 
 Change:
 
@@ -567,7 +567,7 @@ ______________________________________________________________________
 | `tests/bdd_engine_connection_helpers/permission_error_steps.rs` | **New file** |
 | `tests/bdd_engine_connection.rs` | Add scenario bindings |
 | `docs/users-guide.md` | Add troubleshooting docs |
-| `docs/podbot-roadmap.md` | Mark task complete |
+| `docs/roadmap.md` | Mark task complete |
 | `docs/execplans/2-1-3-handle-socket-permission-errors.md` | **New file** |
 
 ## Verification

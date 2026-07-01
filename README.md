@@ -11,7 +11,7 @@ actual machine.
 > **⚠️ Work in Progress**
 > Podbot is in early development. Core foundation is complete, but container
 > orchestration and GitHub integration are still being built. See the
-> [roadmap](docs/podbot-roadmap.md) for current status.
+> [roadmap](docs/roadmap.md) for current status.
 
 ## Why podbot?
 
@@ -46,7 +46,7 @@ Podbot will ultimately serve as the agent encapsulation adapter for
 - Repository cloning and agent startup
 - Container image with bundled agents
 
-See [docs/podbot-roadmap.md](docs/podbot-roadmap.md) for the complete
+See [docs/roadmap.md](docs/roadmap.md) for the complete
 implementation plan.
 
 ## Quick start
@@ -87,7 +87,7 @@ elevated privileges.
 
 - **[User's Guide](docs/users-guide.md)** — Installation, CLI reference,
   configuration, security model
-- **[Roadmap](docs/podbot-roadmap.md)** — Detailed implementation status and
+- **[Roadmap](docs/roadmap.md)** — Detailed implementation status and
   upcoming features
 - **[Design Document](docs/podbot-design.md)** — Architecture, security model,
   token management
@@ -109,7 +109,7 @@ Podbot is actively developed and currently completing Phase 1 (Foundation). The
 error handling, configuration system, and CLI structure are in place. Container
 orchestration and GitHub integration are next up.
 
-Watch this space, check the [roadmap](docs/podbot-roadmap.md), or star the repo
+Watch this space, check the [roadmap](docs/roadmap.md), or star the repo
 to follow along!
 
 ## Credits

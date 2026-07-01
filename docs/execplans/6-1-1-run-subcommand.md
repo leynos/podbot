@@ -37,7 +37,7 @@ Observable success for the eventual implementation:
    without importing `podbot::cli`.
 5. `docs/podbot-design.md` records the run-request boundary decision,
    `docs/users-guide.md` documents the user-visible behaviour, and
-   `docs/podbot-roadmap.md` marks only the specific
+   `docs/roadmap.md` marks only the specific
    `Define the run subcommand for launching agent sessions` task as done when
    implementation is complete.
 6. `make check-fmt`, `make lint`, and `make test` all pass after the code
@@ -70,7 +70,7 @@ the public API boundary, and the library-boundary test suite.
 
 The implementer should keep these documents open while working:
 
-- `docs/podbot-roadmap.md`: the authoritative scope for Phase 6, Step 6.1 and
+- `docs/roadmap.md`: the authoritative scope for Phase 6, Step 6.1 and
   the exact roadmap checkbox that must be updated on completion.
 - `docs/podbot-design.md`: the CLI surface, dual-delivery model, and the rule
   that library APIs must not depend on CLI-only types.
@@ -119,7 +119,7 @@ right companions for the work:
   `docs/podbot-design.md` and `docs/users-guide.md` when behaviour or design
   decisions change.
 - When the feature is complete, update only the relevant roadmap checkbox in
-  `docs/podbot-roadmap.md`; do not mark the entire Step 6.1 section complete
+  `docs/roadmap.md`; do not mark the entire Step 6.1 section complete
   unless all Step 6.1 tasks are finished.
 - Quality gates must run sequentially through `tee` logs because concurrent
   Cargo invocations in this repo can block on build locks.
@@ -240,7 +240,7 @@ right companions for the work:
    `docs/users-guide.md` so the user-facing contract matches the implemented
    argument and validation behaviour. When the implementation is complete,
    change only the `Define the run subcommand for launching agent sessions`
-   checkbox in `docs/podbot-roadmap.md` as done.
+   checkbox in `docs/roadmap.md` as done.
 
 6. Run the full validation sequence and capture evidence.
 
@@ -266,7 +266,7 @@ right companions for the work:
 
 ## Progress
 
-- [x] 2026-04-21: Reviewed `docs/podbot-roadmap.md`,
+- [x] 2026-04-21: Reviewed `docs/roadmap.md`,
   `docs/podbot-design.md`, `docs/users-guide.md`, the existing CLI adapter, the
   public API boundary, and the current unit and BDD harnesses.
 - [x] 2026-04-21: Drafted this ExecPlan for approval.

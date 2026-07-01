@@ -114,7 +114,7 @@ wrapper, while `main` returns `eyre::Result<()>`. The roadmap still lists Step
 aligning it with the intended pattern, and adding behavioural tests and
 documentation updates required by the roadmap. Relevant references:
 
-- `docs/podbot-roadmap.md` Step 1.2
+- `docs/roadmap.md` Step 1.2
 - `docs/podbot-design.md` (design decisions)
 - `docs/rust-testing-with-rstest-fixtures.md` (unit test patterns)
 - `docs/rstest-bdd-users-guide.md` (behavioural tests)
@@ -150,7 +150,7 @@ configuration message).
 Stage D: documentation and roadmap. Record any design decisions in
 `docs/podbot-design.md` (for example, the canonical error hierarchy and how it
 maps to `eyre`). Update `docs/users-guide.md` only if the user-visible error
-behaviour or messaging changes. Mark Step 1.2 in `docs/podbot-roadmap.md` as
+behaviour or messaging changes. Mark Step 1.2 in `docs/roadmap.md` as
 "done" once all validations pass.
 
 ## Concrete Steps
@@ -174,7 +174,7 @@ behaviour or messaging changes. Mark Step 1.2 in `docs/podbot-roadmap.md` as
 
 6. Update `docs/users-guide.md` only if user-facing error behaviour changes.
 
-7. Mark Step 1.2 as done in `docs/podbot-roadmap.md`.
+7. Mark Step 1.2 as done in `docs/roadmap.md`.
 
 8. Run formatting and validation commands with logs (use tee + pipefail):
 
@@ -204,7 +204,7 @@ Quality criteria:
 - Lint/typecheck: `make lint` passes with no Clippy warnings.
 - Formatting: `make check-fmt` passes; if docs changed, `make fmt` and
   `make markdownlint`/`make nixie` pass.
-- Roadmap: Step 1.2 is marked done in `docs/podbot-roadmap.md`.
+- Roadmap: Step 1.2 is marked done in `docs/roadmap.md`.
 
 Quality method (how we check):
 

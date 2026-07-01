@@ -27,13 +27,13 @@ Observable success: `make check-fmt && make lint && make test` all pass. Git
 identity configuration is testable in isolation with mock host command runners
 and mock container exec clients. Missing identity on the host produces a
 warning-level result rather than a hard error. This is Step 4.1 of Phase 4 in
-the roadmap (`docs/podbot-roadmap.md`).
+the roadmap (`docs/roadmap.md`).
 
 Required documentation outcomes:
 
 - record design decisions in `docs/podbot-design.md`;
 - update user-visible behaviour in `docs/users-guide.md`;
-- mark Step 4.1 roadmap tasks as done in `docs/podbot-roadmap.md`.
+- mark Step 4.1 roadmap tasks as done in `docs/roadmap.md`.
 
 ## Constraints
 
@@ -833,7 +833,7 @@ operator's identity without requiring manual configuration inside the
 sandbox.
 ```
 
-#### D.3: Update `docs/podbot-roadmap.md`
+#### D.3: Update `docs/roadmap.md`
 
 Mark Step 4.1 tasks as done:
 
@@ -943,7 +943,7 @@ No new external crate dependencies are required.
 | `src/api/mod.rs`               | Add `mod configure_git_identity;` and re-export |
 | `docs/podbot-design.md`        | Add `git_identity/` module entry if needed      |
 | `docs/users-guide.md`          | Add Git identity configuration section          |
-| `docs/podbot-roadmap.md`       | Mark Step 4.1 tasks as done                     |
+| `docs/roadmap.md`              | Mark Step 4.1 tasks as done                     |
 
 ## Validation and acceptance
 
@@ -1002,6 +1002,6 @@ per run.
 17. Gate check (Stage C)
 18. `docs/podbot-design.md` -- update if needed
 19. `docs/users-guide.md` -- add Git identity section
-20. `docs/podbot-roadmap.md` -- mark tasks done
+20. `docs/roadmap.md` -- mark tasks done
 21. Gate check (Stage D)
 22. Final gate check (Stage E)

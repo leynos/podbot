@@ -12,7 +12,7 @@ is the governing implementation document for this task.
 
 ## Purpose and big picture
 
-Implement the Step 2.2 container-creation slice from `docs/podbot-roadmap.md`
+Implement the Step 2.2 container-creation slice from `docs/roadmap.md`
 by adding a Bollard-backed `create_container` capability that applies sandbox
 security settings deterministically.
 
@@ -141,7 +141,7 @@ Implemented Step 2.2.1 container creation with configurable security options.
 - Added semantic missing-image validation via `ConfigError::MissingRequired`.
 - Added unit and behavioural coverage for happy, unhappy, and edge paths.
 - Updated `docs/podbot-design.md`, `docs/users-guide.md`, and
-  `docs/podbot-roadmap.md`.
+  `docs/roadmap.md`.
 
 This milestone stops at container creation; start/execution lifecycle work
 remains in subsequent roadmap steps.
@@ -166,7 +166,7 @@ Relevant files for this work:
 - `tests/bdd_engine_connection_helpers/`
 - `docs/podbot-design.md`
 - `docs/users-guide.md`
-- `docs/podbot-roadmap.md`
+- `docs/roadmap.md`
 
 Key requirement translation for Step 2.2.1:
 
@@ -265,7 +265,7 @@ Update `docs/users-guide.md` with user-visible behaviour for container
 creation, including how sandbox settings influence runtime security and
 compatibility.
 
-Update `docs/podbot-roadmap.md` by marking the relevant Step 2.2 entry done
+Update `docs/roadmap.md` by marking the relevant Step 2.2 entry done
 once tests and quality gates pass.
 
 Validation gate:
@@ -320,7 +320,7 @@ Implementation is complete when all conditions below are true:
 - `docs/podbot-design.md` records design decisions for container security
   mapping.
 - `docs/users-guide.md` describes user-visible behaviour changes.
-- `docs/podbot-roadmap.md` marks the relevant Step 2.2 entry done.
+- `docs/roadmap.md` marks the relevant Step 2.2 entry done.
 - `make check-fmt`, `make lint`, and `make test` all pass.
 
 ## Idempotence and recovery

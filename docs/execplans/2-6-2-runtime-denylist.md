@@ -56,7 +56,7 @@ Observable success for this task:
 
 ## Constraints
 
-- Scope is limited to Step 2.6.2 in `docs/podbot-roadmap.md`. The operator
+- Scope is limited to Step 2.6.2 in `docs/roadmap.md`. The operator
   override (Step 2.6.4), the consolidated override and handshake test battery
   (Step 2.6.5), and any user-facing configuration surface for enabling
   delegation are out of scope. Synthesizing a protocol error and emitting a
@@ -207,7 +207,7 @@ Stop and escalate (do not improvise) when any of the following occurs.
 
 Read the following first; the plan assumes nothing else.
 
-- `docs/podbot-roadmap.md` lines 186 to 220 define Step 2.6 and the
+- `docs/roadmap.md` lines 186 to 220 define Step 2.6 and the
   remaining checkboxes. The completion criteria for Step 2.6 are at lines 201
   to 207 (sandbox-preserving default, opt-in override, denials recorded on
   stderr).
@@ -592,7 +592,7 @@ Validation: `make fmt 2>&1 | tee ...`, `make markdownlint 2>&1 | tee ...`, and
 
 ### Stage I: Roadmap and final gates
 
-Update `docs/podbot-roadmap.md` to mark only the second Step 2.6 checkbox done.
+Update `docs/roadmap.md` to mark only the second Step 2.6 checkbox done.
 Leave the next three checkboxes open.
 
 Run the full gate stack sequentially with `tee` for each command (do not

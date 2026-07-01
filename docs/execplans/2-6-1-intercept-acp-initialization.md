@@ -13,7 +13,7 @@ is the governing implementation document for this task.
 ## Purpose and big picture
 
 Complete the first implementation task under Step 2.6 from
-`docs/podbot-roadmap.md`: intercept ACP initialization and mask `terminal/*` and
+`docs/roadmap.md`: intercept ACP initialization and mask `terminal/*` and
 `fs/*` capabilities before forwarding capability metadata into the container.
 
 Podbot already had a protocol-safe exec path in
@@ -102,7 +102,7 @@ Observable success for this task:
 
 Relevant design and implementation anchors:
 
-- `docs/podbot-roadmap.md` Step 2.6 defines ACP capability masking as the next
+- `docs/roadmap.md` Step 2.6 defines ACP capability masking as the next
   container-engine integration task.
 - `docs/podbot-design.md` already commits Podbot to masking ACP
   `terminal/*` and `fs/*` capabilities by default.
@@ -235,7 +235,7 @@ Update:
 - `docs/podbot-design.md` to record the first-frame rewrite decision and the
   unchanged pass-through rule for malformed or non-ACP frames;
 - `docs/users-guide.md` to explain ACP masking within protocol mode;
-- `docs/podbot-roadmap.md` to mark only the first Step 2.6 checkbox done.
+- `docs/roadmap.md` to mark only the first Step 2.6 checkbox done.
 
 ### Stage F: Validate the complete change
 
@@ -293,7 +293,7 @@ The task is complete only when all of the following are true:
   `tests/features/acp_capability_masking.feature` with bindings in
   `src/engine/connection/exec/protocol_acp_bdd_tests.rs`.
 - [x] (2026-04-21) Updated `docs/podbot-design.md`, `docs/users-guide.md`, and
-  `docs/podbot-roadmap.md`.
+  `docs/roadmap.md`.
 - [x] (2026-04-21) Ran `make fmt`, `make markdownlint`, `make nixie`,
   `make check-fmt`, `make lint`, and `make test` successfully.
 

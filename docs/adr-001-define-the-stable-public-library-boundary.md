@@ -188,7 +188,7 @@ ______________________________________________________________________
     "Dual delivery model" section.
 
 [^2]: Podbot development roadmap. See
-    [`docs/podbot-roadmap.md`](podbot-roadmap.md), Step 5.3: "Stabilize public
+    [`docs/roadmap.md`](roadmap.md), Step 5.3: "Stabilize public
     library boundaries."
 
 [^3]: Current module structure: `api`, `config`, `engine`, `error`, `github`.
