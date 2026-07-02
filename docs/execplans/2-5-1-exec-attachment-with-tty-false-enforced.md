@@ -317,7 +317,7 @@ arms for `ExecMode::Protocol`.
 Update `docs/podbot-design.md` (Interactive exec semantics section) to describe
 Protocol mode. Update `docs/users-guide.md` (exec section) with a note about
 `ExecMode::Protocol`. Check the first task under Step 2.5 in
-`docs/podbot-roadmap.md`.
+`docs/roadmap.md`.
 
 ### Stage G: Verification gates
 

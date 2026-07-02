@@ -38,7 +38,7 @@ Observable success when this plan is implemented:
   success, malformed repository input, and clone failure paths;
 - `make check-fmt`, `make lint`, and `make test` all pass;
 - `docs/podbot-design.md`, `docs/users-guide.md`, and
-  `docs/podbot-roadmap.md` are updated to reflect the implemented behaviour.
+  `docs/roadmap.md` are updated to reflect the implemented behaviour.
 
 This step deliberately stops at repository preparation. It does not claim that
 full interactive agent startup is complete; that remains the responsibility of
@@ -134,7 +134,7 @@ escalation, not workarounds.
   coverage for clone success, malformed input, clone failure, and branch
   verification failure.
 - [x] 2026-05-01: Updated `docs/podbot-design.md`, `docs/users-guide.md`, and
-  `docs/podbot-roadmap.md`.
+  `docs/roadmap.md`.
 - [x] 2026-05-01: Ran `make check-fmt`, `make markdownlint`, `make nixie`,
   `make lint`, and `make test` successfully.
 - [x] 2026-05-01: Fixed post-turn hook path failures by making Makefile
@@ -348,14 +348,14 @@ The design document sections that matter most are:
   clone destination and authentication approach.
 - `docs/podbot-design.md`, token refresh section, for the mounted token file
   and helper-script contract consumed by `GIT_ASKPASS`.
-- `docs/podbot-roadmap.md`, Step 4.2 for the task list and completion
+- `docs/roadmap.md`, Step 4.2 for the task list and completion
   criteria.
 
 ## Relevant documentation and skills
 
 Implementation of this plan should keep the following documents open:
 
-- `docs/podbot-roadmap.md`
+- `docs/roadmap.md`
 - `docs/podbot-design.md`
 - `docs/users-guide.md`
 - `docs/rust-testing-with-rstest-fixtures.md`
@@ -526,7 +526,7 @@ change:
   - Document that `podbot run --repo` expects `owner/name`.
   - Clarify that `--branch` is required and has no default.
   - Clarify the clone destination semantics for `workspace.base_dir`.
-- `docs/podbot-roadmap.md`
+- `docs/roadmap.md`
   - Mark the Step 4.2 tasks and completion criteria as done once the feature is
     actually complete.
 

@@ -108,7 +108,7 @@ orchestration flow (that is Steps 3.1.3 and 3.1.4).
 - [x] (2026-02-27) Commit BDD tests.
 - [x] (2026-02-27) Update `docs/podbot-design.md` with App client construction
   contract.
-- [x] (2026-02-27) Update `docs/podbot-roadmap.md` to mark task complete.
+- [x] (2026-02-27) Update `docs/roadmap.md` to mark task complete.
 - [x] (2026-02-27) Run documentation gates (`markdownlint`, `fmt`, `nixie`).
 - [x] (2026-02-27) Commit documentation updates.
 - [x] (2026-02-27) Finalize outcomes and retrospective.
@@ -256,7 +256,7 @@ Implementation uses a single integrator agent that:
 - owns all new files (BDD harness, helpers, feature file);
 - modifies `src/github/mod.rs` and `src/github/tests.rs` for the core
   function and unit tests;
-- updates documentation files (`podbot-design.md`, `podbot-roadmap.md`);
+- updates documentation files (`podbot-design.md`, `roadmap.md`);
 - runs quality gates and commits each logical slice.
 
 ## Plan of work
@@ -419,7 +419,7 @@ paragraph after the existing "Private key loading contract" section (after line
 - That credential validation occurs at token acquisition time.
 - That builder failures are mapped to `GitHubError::AuthenticationFailed`.
 
-Update `docs/podbot-roadmap.md` at line 150 to mark the task as done: change
+Update `docs/roadmap.md` at line 150 to mark the task as done: change
 `- [ ] Configure OctocrabBuilder with app_id and private_key.` to
 `- [x] Configure OctocrabBuilder with app_id and private_key.`.
 

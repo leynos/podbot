@@ -21,7 +21,7 @@ Rustdoc examples must compile from the perspective of an external crate.
 `make check-fmt`, `make lint`, and `make test` must all pass, and the design
 document, user's guide, and roadmap must agree on the supported boundary.
 
-This is the Step 5.3 plan from `docs/podbot-roadmap.md`. The user approved
+This is the Step 5.3 plan from `docs/roadmap.md`. The user approved
 implementation on 2026-03-30, and this document now records the implemented
 boundary and its evidence.
 
@@ -239,7 +239,7 @@ Implemented outcome:
 
 The implementer should begin by reading the following files in this order:
 
-1. `docs/podbot-roadmap.md`, especially Step 5.3 and the preceding Steps 4.8,
+1. `docs/roadmap.md`, especially Step 5.3 and the preceding Steps 4.8,
    4.9, and 4.10.
 2. `docs/podbot-design.md`, especially the dual-delivery model and error
    handling boundary.
@@ -403,7 +403,7 @@ embedding guidance. Replace the current library example so it uses only stable
 types. If the CLI feature changes installation or build commands, document the
 new operator path clearly.
 
-Finally, mark Step 5.3 as done in `docs/podbot-roadmap.md` only after the
+Finally, mark Step 5.3 as done in `docs/roadmap.md` only after the
 tests, docs, and boundary changes are all complete.
 
 ## Validation and evidence

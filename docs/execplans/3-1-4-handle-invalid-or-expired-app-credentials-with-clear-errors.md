@@ -139,7 +139,7 @@ Retry after the service recovers.
 - [x] Update `docs/users-guide.md` with credential validation error table.
 - [x] Update `docs/podbot-design.md` with error classification contract.
 - [x] Run quality gates (`check-fmt`, `lint`, `test`).
-- [x] Update `docs/podbot-roadmap.md` to mark task complete.
+- [x] Update `docs/roadmap.md` to mark task complete.
 - [x] Run documentation gates (`markdownlint`, `fmt`, `nixie`).
 - [x] Finalize outcomes and retrospective.
 
@@ -520,7 +520,7 @@ document the error classification strategy. Add a paragraph explaining that
 HTTP errors from `GET /app` are classified by status code with actionable
 remediation hints, and that the raw error message is preserved for debugging.
 
-#### `docs/podbot-roadmap.md`
+#### `docs/roadmap.md`
 
 At line 213, change:
 
@@ -670,7 +670,7 @@ All acceptance criteria met:
   282
 - ✓ `docs/podbot-design.md` documents error classification contract at line
   402
-- ✓ `docs/podbot-roadmap.md` marks task complete
+- ✓ `docs/roadmap.md` marks task complete
 
 User-visible improvement: GitHub App credential validation failures now produce
 specific, actionable error messages with remediation hints instead of generic
@@ -715,7 +715,7 @@ specific, actionable error messages with remediation hints instead of generic
 
 - Lines added: approximately 200 (classifier + tests + BDD + documentation)
 - Files modified: 6 (mod.rs, users-guide.md, podbot-design.md,
-  podbot-roadmap.md, execplan)
+  roadmap.md, execplan)
 - Files created: 5 (credential_error_tests.rs, feature file, 3 BDD helper
   files, harness)
 - No new crate dependencies introduced (only dev-dependencies already in

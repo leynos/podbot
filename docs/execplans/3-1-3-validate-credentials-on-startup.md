@@ -109,7 +109,7 @@ The output includes suggestions for resolution.
 - [x] Create BDD feature file and helpers.
 - [x] Run quality gates (`check-fmt`, `lint`, `test`).
 - [x] Update `docs/podbot-design.md` with validation contract.
-- [x] Update `docs/podbot-roadmap.md` to mark task complete.
+- [x] Update `docs/roadmap.md` to mark task complete.
 - [x] Update `docs/users-guide.md` if applicable (no changes needed).
 - [x] Run documentation gates (`markdownlint`, `fmt`, `nixie`).
 - [x] Finalize outcomes and retrospective.
@@ -439,7 +439,7 @@ The paragraph describes:
 - That validation happens once at startup for commands requiring GitHub access.
 - Error handling and message formatting.
 
-Update `docs/podbot-roadmap.md` at the relevant line to mark the task as done:
+Update `docs/roadmap.md` at the relevant line to mark the task as done:
 change `- [ ] Validate credentials produce a valid App token on startup.` to
 `- [x] Validate credentials produce a valid App token on startup.`.
 
@@ -581,7 +581,7 @@ Implementation completed successfully. All quality gates pass.
   struct, and `validate_app_credentials` function (~80 lines)
 - `src/github/tests.rs` — added 2 unit tests (~25 lines)
 - `docs/podbot-design.md` — added credential validation contract section
-- `docs/podbot-roadmap.md` — marked task complete
+- `docs/roadmap.md` — marked task complete
 
 **Files created:**
 

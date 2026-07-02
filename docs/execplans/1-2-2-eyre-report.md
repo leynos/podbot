@@ -92,7 +92,7 @@ warnings.
 
 - Outcome: The CLI boundary now converts domain errors to `eyre::Report`, with
   unit and behavioural tests covering success, failure and edge paths.
-- Outcome: `docs/podbot-design.md` and `docs/podbot-roadmap.md` reflect the
+- Outcome: `docs/podbot-design.md` and `docs/roadmap.md` reflect the
   error-handling boundary and Step 1.2 completion.
 - Lesson: Keep an eye on `cargo doc` lint rename warnings to avoid noise in
   future linting runs.
@@ -104,7 +104,7 @@ Relevant code lives in `src/main.rs` (CLI entry point) and `src/error.rs`
 already exist under `tests/bdd_error_handling.rs` and
 `tests/features/error_handling.feature`. Reference documents:
 
-- `docs/podbot-roadmap.md` (Step 1.2 tasks and completion criteria)
+- `docs/roadmap.md` (Step 1.2 tasks and completion criteria)
 - `docs/podbot-design.md` (design decisions for error boundaries)
 - `docs/rust-testing-with-rstest-fixtures.md` (unit test patterns)
 - `docs/rstest-bdd-users-guide.md` (behavioural tests)
@@ -142,7 +142,7 @@ field).
 Stage D: documentation and roadmap. Record any design decisions about the error
 boundary in `docs/podbot-design.md`. Update `docs/users-guide.md` only if
 user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
-`docs/podbot-roadmap.md` once all validations pass.
+`docs/roadmap.md` once all validations pass.
 
 ## Concrete Steps
 
@@ -176,7 +176,7 @@ user-visible error output or CLI behaviour changes. Mark Step 1.2 as done in
     - `docs/podbot-design.md` for any new decisions about the error boundary.
     - `docs/users-guide.md` if user-facing error output changes.
 
-7. Mark Step 1.2 as done in `docs/podbot-roadmap.md`.
+7. Mark Step 1.2 as done in `docs/roadmap.md`.
 
 8. Run validation commands with logs (use tee + pipefail):
 

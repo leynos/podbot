@@ -66,7 +66,7 @@ user's guide is updated, and the roadmap task is marked complete.
 - [x] (2026-01-16 UTC) Update `docs/users-guide.md` with sandbox configuration
       details.
 - [x] (2026-01-16 UTC) Mark the SandboxConfig task as done in
-      `docs/podbot-roadmap.md`.
+      `docs/roadmap.md`.
 - [x] (2026-01-16 UTC) Run `make check-fmt`, `make lint`, `make test`, and
       capture logs.
 
@@ -111,7 +111,7 @@ interface (CLI) arguments and configuration structs including `SandboxConfig`.
 Behavioural coverage resides in `tests/bdd_config.rs` with feature definitions
 in `tests/features/configuration.feature`.
 
-The roadmap entry for this task is in `docs/podbot-roadmap.md` under Step 1.3:
+The roadmap entry for this task is in `docs/roadmap.md` under Step 1.3:
 "Establish SandboxConfig for privileged mode and /dev/fuse mount options."
 
 ### Existing Implementation
@@ -161,7 +161,7 @@ sandbox configuration edge cases. Add corresponding step definitions.
 
 Stage C updates documentation. Update `docs/users-guide.md` with details about
 the security trade-offs between privileged and minimal modes. Mark the task
-complete in `docs/podbot-roadmap.md`.
+complete in `docs/roadmap.md`.
 
 Stage D runs validation gates with captured logs.
 
@@ -192,7 +192,7 @@ Stage D runs validation gates with captured logs.
     - Document the security trade-offs between privileged and minimal modes
     - Document that `mount_dev_fuse = true` is the default for fuse-overlayfs
 
-5) Update `docs/podbot-roadmap.md`:
+5) Update `docs/roadmap.md`:
 
     - Mark the checkbox: `[x] Establish SandboxConfig for privileged mode and
       /dev/fuse mount options.`
@@ -222,7 +222,7 @@ Success looks like:
 - Behavioural tests in `tests/bdd_config.rs` pass with new scenarios covering
   sandbox configuration.
 - `docs/users-guide.md` includes documentation about sandbox settings.
-- The SandboxConfig task in `docs/podbot-roadmap.md` is marked as done.
+- The SandboxConfig task in `docs/roadmap.md` is marked as done.
 
 ## Idempotence and Recovery
 
@@ -272,4 +272,4 @@ No validation method is required because all boolean combinations are valid.
 - `tests/bdd_config.rs` - Add step definitions and scenario bindings
 - `tests/features/configuration.feature` - Add new BDD scenarios
 - `docs/users-guide.md` - Add sandbox configuration documentation
-- `docs/podbot-roadmap.md` - Mark task complete
+- `docs/roadmap.md` - Mark task complete

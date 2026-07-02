@@ -12,7 +12,7 @@ is the governing implementation document for this task.
 
 ## Purpose and big picture
 
-Complete roadmap task 2.5.2 from `docs/podbot-roadmap.md`: "Implement
+Complete roadmap task 2.5.2 from `docs/roadmap.md`: "Implement
 byte-stream proxy loops: stdin -> container stdin, container stdout -> host
 stdout, and container stderr -> host stderr."
 
@@ -39,7 +39,7 @@ Observable success for this task:
 - `docs/podbot-design.md` records the proxy-loop design decisions;
 - `docs/users-guide.md` documents any observable behaviour change relevant to
   users or embedders;
-- the Step 2.5.2 checkbox in `docs/podbot-roadmap.md` is marked done after all
+- the Step 2.5.2 checkbox in `docs/roadmap.md` is marked done after all
   required gates pass.
 
 This task does not complete all of Step 2.5. Bounded buffering policy,
@@ -121,7 +121,7 @@ for them.
 
 Current relevant implementation and design anchors:
 
-- `docs/podbot-roadmap.md` Step 2.5 tracks protocol-safe execution and shows
+- `docs/roadmap.md` Step 2.5 tracks protocol-safe execution and shows
   2.5.1 complete while 2.5.2 and later purity tasks remain open.
 - `docs/podbot-design.md` already commits Podbot hosting mode to strict stdout
   purity, `tty = false`, stderr-only diagnostics, and bounded buffering.
@@ -336,7 +336,7 @@ especially:
 - any error or shutdown behaviour users should expect when hosting protocols.
 
 After all validation passes, mark only the Step 2.5.2 checkbox done in
-`docs/podbot-roadmap.md`. Leave the remaining Step 2.5 items open.
+`docs/roadmap.md`. Leave the remaining Step 2.5 items open.
 
 ## Validation and acceptance
 
@@ -453,7 +453,7 @@ pass.
   `rstest-bdd` coverage for forwarding, stream routing, failure mapping, and
   EOF shutdown behaviour.
 - Documentation: updated `docs/podbot-design.md`,
-  `docs/users-guide.md`, and `docs/podbot-roadmap.md` to describe the final
+  `docs/users-guide.md`, and `docs/roadmap.md` to describe the final
   protocol proxy behaviour and mark Step 2.5.2 complete.
 - Gates passed: `make fmt`, `make markdownlint`, `make nixie`,
   `make check-fmt`, `make lint`, and `make test`.

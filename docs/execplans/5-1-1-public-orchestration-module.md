@@ -20,7 +20,7 @@ existing `podbot exec` behaviour is identical before and after (interactive
 sessions, resize events, exit codes). A library consumer can write
 `podbot::api::exec(...)` and receive a typed `CommandOutcome` without depending
 on clap types or triggering stdout output. This is Step 5.1 of Phase 5 in the
-roadmap (`docs/podbot-roadmap.md`).
+roadmap (`docs/roadmap.md`).
 
 ## Constraints
 
@@ -209,7 +209,7 @@ Key files:
 - `tests/bdd_interactive_exec.rs` — existing BDD test for exec behaviour
 - `tests/bdd_interactive_exec_helpers/` — state, steps, assertions for exec BDD
 - `docs/podbot-design.md` — architecture and dual-delivery model
-- `docs/podbot-roadmap.md` — roadmap; Step 5.1 is the target
+- `docs/roadmap.md` — roadmap; Step 5.1 is the target
 
 Existing patterns to follow:
 
@@ -674,7 +674,7 @@ In the "Library API boundary requirements" section, add a bullet:
 Add a "Library API" section documenting the available orchestration functions
 for library embedders. No user-facing CLI behaviour changes.
 
-#### C.3: Update `docs/podbot-roadmap.md`
+#### C.3: Update `docs/roadmap.md`
 
 Mark Step 5.1 first task as done:
 
@@ -781,7 +781,7 @@ No new external crate dependencies are required.
 | `src/main.rs`            | Remove `CommandOutcome`, replace handlers with thin calls to `podbot::api::*` |
 | `docs/podbot-design.md`  | Add `api/` module detail                                                      |
 | `docs/users-guide.md`    | Add Library API section                                                       |
-| `docs/podbot-roadmap.md` | Mark Step 5.1 first task done                                                 |
+| `docs/roadmap.md`        | Mark Step 5.1 first task done                                                 |
 
 ## Validation and acceptance
 
@@ -835,6 +835,6 @@ per run.
 13. Gate check (Stage B)
 14. `docs/podbot-design.md` update
 15. `docs/users-guide.md` update
-16. `docs/podbot-roadmap.md` update
+16. `docs/roadmap.md` update
 17. `docs/execplans/5-1-1-public-orchestration-module.md`
 18. Final gate check (Stage D)

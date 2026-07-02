@@ -280,7 +280,7 @@ managing agent-specific filesystem conventions.
 
 ______________________________________________________________________
 
-[^1]: Podbot development roadmap. See `docs/podbot-roadmap.md`, Step 4.5:
+[^1]: Podbot development roadmap. See `docs/roadmap.md`, Step 4.5:
     "Normalized launch contract."
 
 [^2]: MCP server hosting design. See `docs/mcp-server-hosting-design.md`.

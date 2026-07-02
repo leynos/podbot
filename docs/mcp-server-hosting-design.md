@@ -9,7 +9,7 @@
 - Primary audience: Podbot and Corbusier maintainers working on hosting mode.
 - Precedence:
   [podbot-design.md](podbot-design.md) remains the primary design document for
-  Podbot itself, and [podbot-roadmap.md](podbot-roadmap.md) remains the source
+  Podbot itself, and [roadmap.md](roadmap.md) remains the source
   of truth for delivery sequencing. This document refines the MCP-specific
   hosting shape that those documents imply.
 
@@ -453,7 +453,7 @@ exist.
 The authoritative companion references for these settings should live in the
 main Podbot design and roadmap documents, especially
 [podbot-design.md](podbot-design.md) and
-[podbot-roadmap.md](podbot-roadmap.md), so operators have one place to confirm
+[roadmap.md](roadmap.md), so operators have one place to confirm
 runtime assumptions before changing hosting defaults.
 
 ### 8.5 Runtime and agent container image versioning and upgrades

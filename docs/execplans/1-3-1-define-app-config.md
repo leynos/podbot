@@ -73,7 +73,7 @@ from a sample config file while preserving defaults for missing fields.
 - [x] (2026-01-14 13:20Z) Update `docs/podbot-design.md` with any design
   decisions and `docs/users-guide.md` with user-facing behaviour.
 - [x] (2026-01-14 13:20Z) Mark Step 1.3 task as done in
-  `docs/podbot-roadmap.md`.
+  `docs/roadmap.md`.
 - [x] (2026-01-14 13:20Z) Run formatting, linting, tests, and full validation
   (`make all`) with logs captured.
 
@@ -107,7 +107,7 @@ and configuration structs. Behavioural coverage resides in
 `tests/features/configuration.feature`. Design intent is captured in
 `docs/podbot-design.md`, while user-facing configuration guidance sits in
 `docs/users-guide.md`. The roadmap entry for this task is in
-`docs/podbot-roadmap.md` under Step 1.3.
+`docs/roadmap.md` under Step 1.3.
 
 `AppConfig` should be the root configuration container for the application. It
 must aggregate nested configuration structs (GitHub, sandbox, agent, workspace,
@@ -145,7 +145,7 @@ use dependency injection per
 Stage D updates documentation and the roadmap. Record any design decisions in
 `docs/podbot-design.md`, update `docs/users-guide.md` for user-visible changes,
 then mark the Step 1.3 "Define AppConfig" task as done in
-`docs/podbot-roadmap.md`.
+`docs/roadmap.md`.
 
 Stage E runs formatting, linting, and test gates. Use Makefile targets and the
 `tee` + `set -o pipefail` pattern to capture logs for review.
@@ -192,7 +192,7 @@ Stage E runs formatting, linting, and test gates. Use Makefile targets and the
 6) Mark the roadmap entry as done.
 
     - Update the checkbox for "Define AppConfig as the root configuration
-      structure" in `docs/podbot-roadmap.md`.
+      structure" in `docs/roadmap.md`.
 
 7) Run validation with captured logs.
 
@@ -241,7 +241,7 @@ Success looks like:
   unhappy or edge scenario.
 - `docs/podbot-design.md` reflects any decisions taken, and
   `docs/users-guide.md` reflects user-facing behaviour.
-- The Step 1.3 task in `docs/podbot-roadmap.md` is marked as done.
+- The Step 1.3 task in `docs/roadmap.md` is marked as done.
 
 ## Idempotence and Recovery
 

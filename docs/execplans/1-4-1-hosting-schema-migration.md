@@ -27,7 +27,7 @@ invalid combinations of subcommand, `agent.kind`, `agent.mode`, and
 wrong and what to do next.
 
 This plan now records the implemented Step 1.4 delivery. The roadmap entry in
-`docs/podbot-roadmap.md` was updated after the implementation, tests,
+`docs/roadmap.md` was updated after the implementation, tests,
 documentation, and quality gates passed.
 
 ## Constraints
@@ -110,7 +110,7 @@ documentation, and quality gates passed.
 - [x] (2026-03-29 03:00Z) Add rstest unit coverage and rstest-bdd behavioural
   coverage for the compatibility matrix.
 - [x] (2026-03-29 03:00Z) Update design and user documentation.
-- [x] (2026-03-29 03:00Z) Mark Step 1.4 complete in `docs/podbot-roadmap.md`
+- [x] (2026-03-29 03:00Z) Mark Step 1.4 complete in `docs/roadmap.md`
   after all validations pass.
 - [x] (2026-03-29 03:00Z) Run and capture validation commands.
 
@@ -146,7 +146,7 @@ documentation, and quality gates passed.
 ## Decision Log
 
 - Decision: plan Step 1.4 around the full roadmap scope, not only the subset in
-  the user prompt. Rationale: `docs/podbot-roadmap.md` is the source of truth
+  the user prompt. Rationale: `docs/roadmap.md` is the source of truth
   for the step, and the omitted schema fields are required to make the hosting
   migration coherent. Date/Author: 2026-03-29 / Codex.
 - Decision: keep the plan in DRAFT state and do not mark the roadmap entry
@@ -215,7 +215,7 @@ The relevant existing tests are:
 
 The design sources to keep open during implementation are:
 
-- `docs/podbot-roadmap.md`
+- `docs/roadmap.md`
 - `docs/podbot-design.md`
 - `docs/mcp-server-hosting-design.md`
 - `docs/users-guide.md`
@@ -229,7 +229,7 @@ The design sources to keep open during implementation are:
 ## Plan of Work
 
 Stage A is to freeze the semantic target. Re-read the Step 1.4 section in
-`docs/podbot-roadmap.md` together with the hosting examples and migration notes
+`docs/roadmap.md` together with the hosting examples and migration notes
 in `docs/podbot-design.md`. Extract the exact target schema and validation
 matrix before touching code. This stage ends when the implementation has a
 written checklist of new fields, new enum values, defaults, and illegal
@@ -287,7 +287,7 @@ to document new configuration keys, environment variables, and the user-visible
 difference between `run` and `host` modes once the validation behaviour is in
 place. If the MCP hosting defaults become concrete enough to matter to
 operators, update `docs/mcp-server-hosting-design.md` as well. Only after the
-feature is implemented and validated should `docs/podbot-roadmap.md` mark Step
+feature is implemented and validated should `docs/roadmap.md` mark Step
 1.4 as done.
 
 Stage G is validation and evidence capture. Run the required Rust quality gates
@@ -302,7 +302,7 @@ tests and the new compatibility scenarios.
    Confirm the design examples and migration bullets in:
 
    ```markdown
-   docs/podbot-roadmap.md
+   docs/roadmap.md
    docs/podbot-design.md
    docs/mcp-server-hosting-design.md
    ```
@@ -412,7 +412,7 @@ tests and the new compatibility scenarios.
 
     Deferred until implementation passes:
 
-    - `docs/podbot-roadmap.md`
+    - `docs/roadmap.md`
 
 11. Run validation with logs.
 
@@ -522,7 +522,7 @@ Expected primary edit set:
 - `tests/features/config_loader.feature`
 - `docs/podbot-design.md`
 - `docs/users-guide.md`
-- `docs/podbot-roadmap.md` after completion
+- `docs/roadmap.md` after completion
 
 No new dependencies are expected. The implementation should rely on the existing
 `ortho_config`, `mockable`, `rstest`, and `rstest-bdd` stack.

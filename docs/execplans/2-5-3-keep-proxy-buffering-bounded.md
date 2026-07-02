@@ -12,7 +12,7 @@ implementation document for this task.
 
 ## Purpose and big picture
 
-Complete the remaining roadmap tasks for Step 2.5 from `docs/podbot-roadmap.md`:
+Complete the remaining roadmap tasks for Step 2.5 from `docs/roadmap.md`:
 
 1. Keep proxy buffering bounded, so hosted protocols can apply backpressure.
 2. Ensure `podbot host` emits no non-protocol bytes to stdout while proxying.
@@ -373,7 +373,7 @@ Update `docs/users-guide.md` to document:
   protocol-mode execution behaviour section).
 
 After all gates pass, mark the four remaining Step 2.5 roadmap checkboxes done
-in `docs/podbot-roadmap.md`.
+in `docs/roadmap.md`.
 
 ## Validation and acceptance
 

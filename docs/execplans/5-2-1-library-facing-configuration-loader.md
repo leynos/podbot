@@ -36,7 +36,7 @@ Observable success:
    - Design decisions recorded in `docs/podbot-design.md`.
    - User-visible CLI/config behaviour updated in `docs/users-guide.md` (only
      if behaviour changes).
-   - Roadmap entry Step 5.2 marked as done in `docs/podbot-roadmap.md`.
+   - Roadmap entry Step 5.2 marked as done in `docs/roadmap.md`.
 
 ## Agent team (planning + implementation)
 
@@ -192,7 +192,7 @@ Key current state (as of 2026-03-03):
    `ConfigLoadOptions` via `Cli::config_load_options()`, and calls
    `podbot::config::load_config(&options)`.
 
-The roadmap target is Phase 5, Step 5.2 in `docs/podbot-roadmap.md`: "Decouple
+The roadmap target is Phase 5, Step 5.2 in `docs/roadmap.md`: "Decouple
 configuration APIs from Clap".
 
 ## Plan of work
@@ -306,7 +306,7 @@ Validation at end of Stage D:
    - Where Clap parsing lives (binary adapter layer).
 2. Update `docs/users-guide.md` if user-visible behaviour changed (for example
    erroring on a missing `--config` path instead of silently ignoring it).
-3. Mark Step 5.2 as done in `docs/podbot-roadmap.md`.
+3. Mark Step 5.2 as done in `docs/roadmap.md`.
 
 Validation at end of Stage E:
 
@@ -354,7 +354,7 @@ Done means:
 4. Documentation is updated:
    - `docs/podbot-design.md`
    - `docs/users-guide.md` (if behaviour changes)
-   - `docs/podbot-roadmap.md` Step 5.2 marked done
+   - `docs/roadmap.md` Step 5.2 marked done
 5. Gates pass: `make check-fmt`, `make lint`, `make test`.
 
 ## Idempotence and recovery
@@ -375,7 +375,7 @@ Done means:
   - `tests/load_config_integration.rs`, `tests/load_config_image_resolution.rs`
   - `tests/features/config_loader.feature`, `tests/bdd_config_loader.rs`,
     `tests/bdd_config_loader_helpers.rs`, `tests/bdd_cli.rs`
-  - `docs/podbot-design.md`, `docs/podbot-roadmap.md`
+  - `docs/podbot-design.md`, `docs/roadmap.md`
 
 ## Interfaces and dependencies
 

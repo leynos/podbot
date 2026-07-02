@@ -211,7 +211,7 @@ Success is observable when:
    (Progress checklist item removed). Should document environment variable
    names and config file discovery paths for users.
 
-3. **Roadmap tasks**: `docs/podbot-roadmap.md` was not updated as planned.
+3. **Roadmap tasks**: `docs/roadmap.md` was not updated as planned.
    Should mark relevant configuration tasks as complete.
 
 ### Lessons learnt
@@ -386,7 +386,7 @@ Update `docs/users-guide.md`:
 
 ### Stage G: Completion
 
-Mark tasks complete in `docs/podbot-roadmap.md`:
+Mark tasks complete in `docs/roadmap.md`:
 
 - `[x] Implement OrthoConfig derive for layered precedence.`
 - `[x] Support configuration file at ~/.config/podbot/config.toml.`
@@ -414,7 +414,7 @@ Mark tasks complete in `docs/podbot-roadmap.md`:
 
 10) Update `docs/users-guide.md`
 
-11) Mark tasks complete in `docs/podbot-roadmap.md`
+11) Mark tasks complete in `docs/roadmap.md`
 
 12) Run validation:
 
@@ -472,7 +472,7 @@ Table: Files to modify for the ortho-config-derive exec plan.
 | `tests/bdd_config_helpers.rs`                 | Modify | +40 lines       |
 | `tests/features/configuration.feature`        | Modify | +30 lines       |
 | `docs/users-guide.md`                         | Modify | +20 lines       |
-| `docs/podbot-roadmap.md`                      | Modify | +3 lines        |
+| `docs/roadmap.md`                             | Modify | +3 lines        |
 
 ## Interfaces and dependencies
 

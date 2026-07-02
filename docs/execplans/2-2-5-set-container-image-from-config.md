@@ -12,7 +12,7 @@ is the governing implementation document for this task.
 
 ## Purpose and big picture
 
-Complete roadmap task 2.2.5 from `docs/podbot-roadmap.md`: "Set the container
+Complete roadmap task 2.2.5 from `docs/roadmap.md`: "Set the container
 image from configuration."
 
 The core outcome is that container creation must consume the resolved
@@ -32,7 +32,7 @@ After implementation:
   cover happy, unhappy, and edge paths;
 - `docs/podbot-design.md` records the image-selection decision;
 - `docs/users-guide.md` documents any observable behaviour change;
-- `docs/podbot-roadmap.md` task 2.2.5 is marked done after all gates pass.
+- `docs/roadmap.md` task 2.2.5 is marked done after all gates pass.
 
 ## Constraints
 
@@ -202,7 +202,7 @@ Keep wording aligned with existing guidance and avoid duplicate statements.
 ### Stage E: Roadmap and final validation
 
 After all code and docs changes are complete and verified, mark task 2.2.5 done
-in `docs/podbot-roadmap.md`.
+in `docs/roadmap.md`.
 
 Run required gates with log capture via `tee`:
 
@@ -226,7 +226,7 @@ Acceptance is met only when all points below are true:
 - `make lint` passes.
 - `make test` passes.
 - `docs/podbot-design.md` and `docs/users-guide.md` reflect final behaviour.
-- `docs/podbot-roadmap.md` marks 2.2.5 as done.
+- `docs/roadmap.md` marks 2.2.5 as done.
 
 ## Idempotence and recovery
 
@@ -323,6 +323,6 @@ integration.
   forwarding from resolved configuration and no-engine-call validation failures.
 - Updated documentation in `docs/podbot-design.md` and `docs/users-guide.md` to
   clarify configuration-layer image resolution and pre-engine-call validation.
-- Marked roadmap task 2.2.5 complete in `docs/podbot-roadmap.md`.
+- Marked roadmap task 2.2.5 complete in `docs/roadmap.md`.
 - Verification completed with passing gates: `make check-fmt`, `make lint`,
   and `make test`.

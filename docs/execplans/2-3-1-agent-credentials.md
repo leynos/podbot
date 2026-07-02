@@ -34,7 +34,7 @@ Required documentation outcomes for this task:
 
 - record design decisions in `docs/podbot-design.md`;
 - update user-visible behaviour in `docs/users-guide.md`;
-- mark Step 2.3 roadmap tasks as done in `docs/podbot-roadmap.md` after tests
+- mark Step 2.3 roadmap tasks as done in `docs/roadmap.md` after tests
   and gates pass.
 
 ## Constraints
@@ -104,7 +104,7 @@ Required documentation outcomes for this task:
       `docs/users-guide.md` with the final credential injection contract and
       user-visible behaviour.
 - [x] (2026-02-21 UTC) Marked Step 2.3 roadmap tasks as done in
-      `docs/podbot-roadmap.md`.
+      `docs/roadmap.md`.
 - [x] (2026-02-21 UTC) Ran docs gates and captured logs:
       `/tmp/markdownlint-podbot-2-3-1-agent-credentials.out`,
       `/tmp/fmt-podbot-2-3-1-agent-credentials.out`,
@@ -190,7 +190,7 @@ Current relevant files:
 - `tests/bdd_container_creation*` and
   `tests/bdd_container_creation_helpers/*` show the current behavioural test
   seam pattern with `rstest-bdd`.
-- `docs/podbot-roadmap.md` defines Step 2.3 tasks and completion criteria.
+- `docs/roadmap.md` defines Step 2.3 tasks and completion criteria.
 - `docs/podbot-design.md` already specifies that credentials must be copied via
   Bollard `upload_to_container` tar uploads.
 - `docs/users-guide.md` already documents credential toggles but does not yet
@@ -207,7 +207,7 @@ Implementation will use a three-agent team plus an integrator:
   handling, and unhappy paths around missing dirs and upload failures.
 - Agent C (behaviour + docs): owns `rstest-bdd` scenarios and step helpers plus
   docs updates (`docs/podbot-design.md`, `docs/users-guide.md`,
-  `docs/podbot-roadmap.md`).
+  `docs/roadmap.md`).
 - Integrator (lead agent): resolves conflicts, runs gates, keeps this ExecPlan
   updated, and performs final commits.
 
@@ -317,7 +317,7 @@ Update docs after behaviour is implemented:
   permission-preservation design decision.
 - `docs/users-guide.md`: document credential copy behaviour, toggle effects,
   and expected in-container location semantics.
-- `docs/podbot-roadmap.md`: mark Step 2.3 task checklist as done only after all
+- `docs/roadmap.md`: mark Step 2.3 task checklist as done only after all
   tests and required gates pass.
 
 Validation gate:
@@ -374,7 +374,7 @@ All commands run from `/data/leynos/Projects/podbot` on branch
 
 Implementation is complete only when all are true:
 
-- Roadmap Step 2.3 tasks are all checked in `docs/podbot-roadmap.md`.
+- Roadmap Step 2.3 tasks are all checked in `docs/roadmap.md`.
 - A production upload path uses Bollard `upload_to_container` with tar payloads.
 - `~/.claude` and `~/.codex` upload behaviour follows `CredsConfig` toggles.
 - Tar uploads preserve file permissions needed for agent credential reads.

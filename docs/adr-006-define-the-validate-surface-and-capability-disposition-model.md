@@ -304,7 +304,7 @@ When validating a prompt against an ACP-mode agent:
 
 ______________________________________________________________________
 
-[^1]: Podbot development roadmap. See `docs/podbot-roadmap.md`.
+[^1]: Podbot development roadmap. See `docs/roadmap.md`.
 
 [^2]: Podbot design document. See `docs/podbot-design.md`, "Execution flow"
     section.

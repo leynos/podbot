@@ -70,7 +70,7 @@ the roadmap task is marked complete.
 - [x] (2026-01-15 UTC) Update `docs/users-guide.md` with validation behaviour
   note.
 - [x] (2026-01-15 UTC) Mark the GitHubConfig task as done in
-  `docs/podbot-roadmap.md`.
+  `docs/roadmap.md`.
 - [x] (2026-01-15 UTC) Run `make check-fmt`, `make lint`, `make test` and
   capture logs.
 
@@ -120,7 +120,7 @@ resides in `tests/bdd_config.rs` with feature definitions in
 already defines `ConfigError::MissingRequired` which will be used for
 validation errors.
 
-The roadmap entry for this task is in `docs/podbot-roadmap.md` under Step 1.3:
+The roadmap entry for this task is in `docs/roadmap.md` under Step 1.3:
 "Create GitHubConfig for App ID, installation ID, and private key path."
 
 ## Plan of Work
@@ -141,7 +141,7 @@ corresponding step definitions to `tests/bdd_config.rs`. Cover happy path
 
 Stage D updates documentation. Add a note to `docs/users-guide.md` explaining
 that GitHub configuration is validated only when GitHub operations are invoked.
-Mark the task complete in `docs/podbot-roadmap.md`.
+Mark the task complete in `docs/roadmap.md`.
 
 Stage E runs validation gates with captured logs.
 
@@ -185,7 +185,7 @@ Stage E runs validation gates with captured logs.
     - Add a note under the Configuration section explaining that GitHub
       credentials are validated only when GitHub operations are performed.
 
-6) Update `docs/podbot-roadmap.md`.
+6) Update `docs/roadmap.md`.
 
     - Mark the checkbox: `[x] Create GitHubConfig for App ID, installation ID,
       and private key path.`
@@ -213,7 +213,7 @@ Success looks like:
 - Behavioural tests in `tests/bdd_config.rs` pass with at least four new
   scenarios covering GitHub validation.
 - `docs/users-guide.md` includes a note about validation behaviour.
-- The GitHubConfig task in `docs/podbot-roadmap.md` is marked as done.
+- The GitHubConfig task in `docs/roadmap.md` is marked as done.
 
 ## Idempotence and Recovery
 

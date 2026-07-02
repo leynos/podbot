@@ -119,7 +119,7 @@ uses `tests/bdd_config.rs` with scenarios in
 `tests/features/configuration.feature`. The design intent for configuration is
 in `docs/podbot-design.md`, while user-facing behaviour is documented in
 `docs/users-guide.md`. The roadmap entry for this task is task 1.3.4 in
-`docs/podbot-roadmap.md`.
+`docs/roadmap.md`.
 
 `agent.kind` currently supports `claude` and `codex` via `AgentKind`. The
 configuration example in the design document already includes
@@ -159,7 +159,7 @@ Update `tests/bdd_config.rs` with step definitions and scenario bindings.
 Stage E: Documentation and roadmap. Record the `agent.mode` decision and
 behaviour in `docs/podbot-design.md`, update `docs/users-guide.md` to include
 `agent.mode` in the configuration example and environment variable table, and
-mark task 1.3.4 as done in `docs/podbot-roadmap.md`.
+mark task 1.3.4 as done in `docs/roadmap.md`.
 
 Stage F: Validation. Run the required Makefile targets with captured logs,
 including documentation tooling if any Markdown files were modified.
@@ -220,7 +220,7 @@ including documentation tooling if any Markdown files were modified.
 
 7) Mark the roadmap entry as done.
 
-    - Update `docs/podbot-roadmap.md` checkboxes for:
+    - Update `docs/roadmap.md` checkboxes for:
       - "Specify AgentConfig for agent kind and execution mode."
       - "Add WorkspaceConfig for base directory."
 
@@ -273,7 +273,7 @@ Success looks like:
   `docs/users-guide.md` documents the new configuration key and environment
   variable.
 - Task 1.3.4 for AgentConfig and WorkspaceConfig is marked as done in
-  `docs/podbot-roadmap.md`.
+  `docs/roadmap.md`.
 
 ## Idempotence and Recovery
 

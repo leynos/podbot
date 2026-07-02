@@ -29,7 +29,7 @@ long-lived guide.
 
 - [Podbot design](podbot-design.md) describes the architecture, boundaries,
   crate choices, and design rationale for Podbot.
-- [Podbot roadmap](podbot-roadmap.md) tracks planned delivery work and the
+- [Podbot roadmap](roadmap.md) tracks planned delivery work and the
   staged implementation sequence.
 - [MCP server hosting design](mcp-server-hosting-design.md) describes the
   hosted Model Context Protocol (MCP) server direction.
