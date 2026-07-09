@@ -70,22 +70,44 @@ async fn drain_channel(mut rx: mpsc::Receiver<WriteCmd>) -> Vec<WriteCmd> {
     received
 }
 
+/// The frame variants exercised by the single-frame routing test.
+#[derive(Debug, Clone, Copy)]
+enum SingleFrame {
+    Permitted,
+    BlockedNotification,
+}
+
+#[rstest]
+#[case::permitted_reaches_host_stdout(SingleFrame::Permitted)]
+#[case::blocked_notification_drops_silently(SingleFrame::BlockedNotification)]
 #[tokio::test]
-async fn permitted_frame_writes_to_host_stdout_only() {
+async fn single_frame_routing_matches_policy(#[case] kind: SingleFrame) {
     let (mut adapter, rx) = build_adapter();
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = permitted_frame().expect("frame should serialize");
+    let frame = match kind {
+        SingleFrame::Permitted => permitted_frame(),
+        SingleFrame::BlockedNotification => blocked_notification_frame(),
+    }
+    .expect("frame should serialize");
 
     adapter
         .handle_chunk(&frame, &mut writer)
         .await
-        .expect("permitted frame writes succeed");
+        .expect("frame handles cleanly");
     adapter.finish();
     drop(adapter);
 
-    assert_eq!(recorder.snapshot(), frame);
+    let expected_stdout: &[u8] = match kind {
+        SingleFrame::Permitted => &frame,
+        SingleFrame::BlockedNotification => b"",
+    };
+    assert_eq!(
+        recorder.snapshot(),
+        expected_stdout,
+        "{kind:?} should route to host stdout accordingly",
+    );
     let received = drain_channel(rx).await;
     assert!(received.is_empty(), "no commands should reach the sink");
 }
@@ -124,28 +146,6 @@ async fn blocked_request_skips_host_stdout_and_queues_synthesized_response() {
             .and_then(|err| err.get("data"))
             .and_then(|data| data.get("method")),
         Some(&serde_json::json!("terminal/create")),
-    );
-}
-
-#[tokio::test]
-async fn blocked_notification_drops_silently_without_sink_command() {
-    let (mut adapter, rx) = build_adapter();
-    let host_stdout = RecordingWriter::default();
-    let recorder = host_stdout.clone();
-    let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_notification_frame().expect("frame should serialize");
-
-    adapter
-        .handle_chunk(&frame, &mut writer)
-        .await
-        .expect("blocked notification handles cleanly");
-    drop(adapter);
-
-    assert!(recorder.snapshot().is_empty());
-    let received = drain_channel(rx).await;
-    assert!(
-        received.is_empty(),
-        "notifications must not generate a response"
     );
 }
 
