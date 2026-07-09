@@ -62,7 +62,7 @@ metrics = "0.24.6"
 
 [dev-dependencies]
 mockable = { version = "0.1.4", default-features = false, features = ["clock", "mock"] }
-mockall = "0.14.0"
+mockall = "0.15.0"
 proptest = "1.9.0"
 snafu = "0.9.1"
 rstest = "0.26.1"
