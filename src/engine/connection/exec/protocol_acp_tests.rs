@@ -1,100 +1,62 @@
 //! ACP capability masking tests for the protocol stdin proxy.
+//!
+//! This module hosts the shared test harness (recording writers, frame
+//! builders, and the synchronous forwarding runner) and delegates the
+//! individual test groups to sibling submodules.
 
 use std::io;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
 
-use rstest::rstest;
-use tokio::io::{AsyncWrite, AsyncWriteExt, DuplexStream};
+use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use super::*;
 use crate::engine::connection::exec::acp_helpers::{
     ACP_FILE_SYSTEM_CAPABILITY, ACP_TERMINAL_CAPABILITY, MAX_FIRST_FRAME_BYTES,
     forward_initial_acp_frame_async, mask_acp_initialize_frame, split_frame_line_ending,
 };
-
-struct RecordingInputWriter {
-    bytes: Arc<Mutex<Vec<u8>>>,
-    shutdown_called: Arc<Mutex<bool>>,
-}
-
-impl RecordingInputWriter {
-    fn new() -> Self {
-        Self {
-            bytes: Arc::new(Mutex::new(Vec::new())),
-            shutdown_called: Arc::new(Mutex::new(false)),
-        }
-    }
-}
-
-impl AsyncWrite for RecordingInputWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        self.bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        *self
-            .shutdown_called
-            .lock()
-            .expect("shutdown mutex should not poison") = true;
-        Poll::Ready(Ok(()))
-    }
-}
+use crate::engine::connection::exec::acp_test_support::RecordingWriter as RecordingInputWriter;
 
 fn initialize_frame_with_capabilities(
-    capabilities: serde_json::Value,
+    capabilities: &serde_json::Value,
     line_ending: &str,
-) -> Vec<u8> {
-    let mut payload = serde_json::json!({
+) -> Result<Vec<u8>, serde_json::Error> {
+    let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 0,
         "method": "initialize",
         "params": {
             "protocolVersion": 1,
-            "clientCapabilities": null,
+            "clientCapabilities": capabilities,
             "clientInfo": {
                 "name": "podbot-tests",
                 "version": "1.0.0"
             }
         }
     });
-    payload
-        .get_mut("params")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("initialize params should be present")
-        .insert("clientCapabilities".to_owned(), capabilities);
-    let mut frame = serde_json::to_vec(&payload).expect("initialize payload should serialise");
+    let mut frame = serde_json::to_vec(&payload)?;
     frame.extend_from_slice(line_ending.as_bytes());
-    frame
+    Ok(frame)
 }
 
-fn initialize_frame(line_ending: &str) -> Vec<u8> {
-    initialize_frame_with_capabilities(
-        serde_json::json!({
-            "fs": { "readTextFile": true, "writeTextFile": true },
-            "terminal": true,
-            "_meta": { "custom": true }
-        }),
-        line_ending,
-    )
+/// Builds the blocked `fs`/`terminal` capability object, optionally with an
+/// unrelated `_meta` entry that masking must preserve.
+fn blocked_capabilities(include_meta: bool) -> serde_json::Value {
+    let mut capabilities = serde_json::json!({
+        "fs": { "readTextFile": true, "writeTextFile": true },
+        "terminal": true
+    });
+    if include_meta && let Some(object) = capabilities.as_object_mut() {
+        object.insert(String::from("_meta"), serde_json::json!({ "custom": true }));
+    }
+    capabilities
+}
+
+fn initialize_frame(line_ending: &str) -> Result<Vec<u8>, serde_json::Error> {
+    initialize_frame_with_capabilities(&blocked_capabilities(true), line_ending)
 }
 
 /// Builds a serialised ACP `initialize` frame whose `clientCapabilities`
 /// contains only `_meta` (no blocked entries), terminated with `\n`.
-pub(super) fn initialize_without_blocked_capabilities() -> Vec<u8> {
+pub(super) fn initialize_without_blocked_capabilities() -> Result<Vec<u8>, serde_json::Error> {
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 0,
@@ -109,19 +71,15 @@ pub(super) fn initialize_without_blocked_capabilities() -> Vec<u8> {
         }
     });
 
-    let mut frame = serde_json::to_vec(&payload).expect("initialize payload should serialize");
+    let mut frame = serde_json::to_vec(&payload)?;
     frame.push(b'\n');
-    frame
+    Ok(frame)
 }
 
-fn initialize_with_only_blocked_capabilities(line_ending: &str) -> Vec<u8> {
-    initialize_frame_with_capabilities(
-        serde_json::json!({
-            "fs": { "readTextFile": true, "writeTextFile": true },
-            "terminal": true
-        }),
-        line_ending,
-    )
+fn initialize_with_only_blocked_capabilities(
+    line_ending: &str,
+) -> Result<Vec<u8>, serde_json::Error> {
+    initialize_frame_with_capabilities(&blocked_capabilities(false), line_ending)
 }
 
 fn session_new_bytes() -> Vec<u8> {
@@ -135,46 +93,41 @@ pub(super) fn malformed_initialize_bytes() -> Vec<u8> {
         .to_vec()
 }
 
-fn parse_frame_payload(frame: &[u8]) -> serde_json::Value {
+fn parse_frame_payload(frame: &[u8]) -> Result<serde_json::Value, serde_json::Error> {
     let (payload, _) = split_frame_line_ending(frame);
-    serde_json::from_slice(payload).expect("frame should contain JSON payload")
+    serde_json::from_slice(payload)
 }
 
-fn assert_masked_client_capabilities(message: &serde_json::Value) {
-    let client_capabilities = message
-        .get("params")
-        .and_then(serde_json::Value::as_object)
-        .and_then(|params| params.get("clientCapabilities"))
-        .and_then(serde_json::Value::as_object)
-        .expect("clientCapabilities should remain present");
-    assert!(
-        !client_capabilities.contains_key(ACP_FILE_SYSTEM_CAPABILITY),
-        "fs capability should be removed"
-    );
-    assert!(
-        !client_capabilities.contains_key(ACP_TERMINAL_CAPABILITY),
-        "terminal capability should be removed"
-    );
-    assert!(
-        client_capabilities.contains_key("_meta"),
-        "unrelated capabilities should remain"
-    );
+/// Verifies that the blocked `fs` and `terminal` capabilities have been
+/// removed while unrelated entries survive, returning a descriptive error on
+/// the first violated expectation.
+fn check_masked_client_capabilities(message: &serde_json::Value) -> Result<(), String> {
+    let caps = client_capabilities(message)
+        .ok_or_else(|| String::from("clientCapabilities should remain present"))?;
+    if caps.contains_key(ACP_FILE_SYSTEM_CAPABILITY) {
+        return Err(String::from("fs capability should be removed"));
+    }
+    if caps.contains_key(ACP_TERMINAL_CAPABILITY) {
+        return Err(String::from("terminal capability should be removed"));
+    }
+    if !caps.contains_key("_meta") {
+        return Err(String::from("unrelated capabilities should remain"));
+    }
+    Ok(())
 }
 
-fn client_capabilities(message: &serde_json::Value) -> &serde_json::Map<String, serde_json::Value> {
+fn client_capabilities(
+    message: &serde_json::Value,
+) -> Option<&serde_json::Map<String, serde_json::Value>> {
     message
         .get("params")
         .and_then(serde_json::Value::as_object)
         .and_then(|params| params.get("clientCapabilities"))
         .and_then(serde_json::Value::as_object)
-        .expect("clientCapabilities should remain")
 }
 
-fn params(message: &serde_json::Value) -> &serde_json::Map<String, serde_json::Value> {
-    message
-        .get("params")
-        .and_then(serde_json::Value::as_object)
-        .expect("params should remain")
+fn params(message: &serde_json::Value) -> Option<&serde_json::Map<String, serde_json::Value>> {
+    message.get("params").and_then(serde_json::Value::as_object)
 }
 
 async fn build_host_stdin(bytes: &[u8]) -> io::Result<DuplexStream> {
@@ -188,175 +141,34 @@ async fn build_host_stdin(bytes: &[u8]) -> io::Result<DuplexStream> {
 /// Runs ACP stdin forwarding synchronously with `rewrite_acp_initialize =
 /// true`, returning the bytes written to the container input and whether
 /// `poll_shutdown` was called.
-pub(super) fn run_forwarding(host_stdin_bytes: &[u8]) -> (Vec<u8>, bool) {
+pub(super) fn run_forwarding(host_stdin_bytes: &[u8]) -> io::Result<(Vec<u8>, bool)> {
     run_forwarding_with_rewrite(host_stdin_bytes, true)
 }
 
 fn run_forwarding_with_rewrite(
     host_stdin_bytes: &[u8],
     rewrite_acp_initialize: bool,
-) -> (Vec<u8>, bool) {
-    let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
-    let host_stdin = runtime
-        .block_on(build_host_stdin(host_stdin_bytes))
-        .expect("host stdin should build");
+) -> io::Result<(Vec<u8>, bool)> {
+    let runtime = tokio::runtime::Runtime::new()?;
+    let host_stdin = runtime.block_on(build_host_stdin(host_stdin_bytes))?;
     let container_input = RecordingInputWriter::new();
-    let forwarded_bytes = container_input.bytes.clone();
-    let shutdown_called = container_input.shutdown_called.clone();
+    let recorder = container_input.clone();
 
-    runtime
-        .block_on(forward_host_stdin_to_exec_async(
-            host_stdin,
-            Box::pin(container_input),
-            rewrite_acp_initialize,
-        ))
-        .expect("stdin forwarding should succeed");
+    runtime.block_on(forward_host_stdin_to_exec_async(
+        host_stdin,
+        Box::pin(container_input),
+        rewrite_acp_initialize,
+    ))?;
 
-    (
-        forwarded_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-        *shutdown_called
-            .lock()
-            .expect("shutdown mutex should not poison"),
-    )
-}
-
-#[rstest]
-#[case("\n")]
-#[case("\r\n")]
-fn mask_acp_initialize_frame_removes_blocked_capabilities(#[case] line_ending: &str) {
-    let frame = initialize_frame(line_ending);
-    let masked = mask_acp_initialize_frame(&frame);
-    let payload = parse_frame_payload(&masked);
-
-    assert_eq!(
-        split_frame_line_ending(&masked).1,
-        line_ending.as_bytes(),
-        "line ending should be preserved"
-    );
-    assert_masked_client_capabilities(&payload);
-}
-
-#[test]
-fn mask_acp_initialize_frame_removes_empty_client_capabilities() {
-    let frame = initialize_with_only_blocked_capabilities("\n");
-    let masked = mask_acp_initialize_frame(&frame);
-    let payload = parse_frame_payload(&masked);
-    let params = payload
-        .get("params")
-        .and_then(serde_json::Value::as_object)
-        .expect("initialize params should remain present");
-
-    assert!(
-        !params.contains_key("clientCapabilities"),
-        "clientCapabilities should be removed when all entries are masked"
-    );
-    assert_eq!(
-        params.get("protocolVersion"),
-        Some(&serde_json::json!(1)),
-        "protocolVersion should remain unchanged"
-    );
-    assert_eq!(
-        params.get("clientInfo"),
-        Some(&serde_json::json!({
-            "name": "podbot-tests",
-            "version": "1.0.0"
-        })),
-        "clientInfo should remain unchanged"
-    );
-}
-
-#[rstest]
-#[case(
-    serde_json::json!({
-        "fs": { "readTextFile": true },
-        "auth": { "token": true }
-    }),
-    &["fs"],
-    &["auth"]
-)]
-#[case(
-    serde_json::json!({
-        "terminal": true,
-        "logging": { "level": "info" }
-    }),
-    &["terminal"],
-    &["logging"]
-)]
-#[case(
-    serde_json::json!({
-        "fs": { "readTextFile": true },
-        "terminal": true,
-        "auth": { "token": true },
-        "logging": { "level": "debug" }
-    }),
-    &["fs", "terminal"],
-    &["auth", "logging"]
-)]
-fn mask_acp_initialize_frame_preserves_unrelated_capabilities(
-    #[case] capabilities: serde_json::Value,
-    #[case] removed_capabilities: &[&str],
-    #[case] preserved_capabilities: &[&str],
-) {
-    let frame = initialize_frame_with_capabilities(capabilities, "\n");
-    let masked = mask_acp_initialize_frame(&frame);
-    let result = parse_frame_payload(&masked);
-    let caps = client_capabilities(&result);
-
-    for capability in removed_capabilities {
-        assert!(
-            !caps.contains_key(*capability),
-            "{capability} should be removed"
-        );
-    }
-    for capability in preserved_capabilities {
-        assert!(
-            caps.contains_key(*capability),
-            "{capability} should be preserved"
-        );
-    }
-}
-
-#[test]
-fn mask_acp_initialize_frame_passes_through_frame_without_line_ending() {
-    let frame = initialize_with_only_blocked_capabilities("");
-    let masked = mask_acp_initialize_frame(&frame);
-
-    assert!(
-        !masked.ends_with(b"\n"),
-        "masked frame should not gain a trailing newline"
-    );
-    let result: serde_json::Value =
-        serde_json::from_slice(&masked).expect("result should be valid JSON");
-    assert!(
-        params(&result).get("clientCapabilities").is_none(),
-        "capabilities should still be masked even without a line ending"
-    );
-}
-
-#[test]
-fn mask_acp_initialize_frame_leaves_non_initialize_messages_unchanged() {
-    let mut frame = session_new_bytes();
-    frame.push(b'\n');
-
-    assert_eq!(mask_acp_initialize_frame(&frame), frame);
-}
-
-#[test]
-fn mask_acp_initialize_frame_leaves_malformed_input_unchanged() {
-    let frame = malformed_initialize_bytes();
-
-    assert_eq!(mask_acp_initialize_frame(&frame), frame);
+    Ok((recorder.snapshot(), recorder.shutdown_observed()))
 }
 
 /// Constructs a host-stdin byte sequence containing a masked `initialize`
 /// frame followed by a follow-up frame, and returns both the raw input bytes
 /// and the expected post-masking output bytes for BDD assertion.
-pub(super) fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
-    let mut host_stdin_bytes = initialize_frame("\n");
-    let follow_up = initialize_frame("\n");
+pub(super) fn masked_initialize_with_follow_up() -> Result<(Vec<u8>, Vec<u8>), serde_json::Error> {
+    let mut host_stdin_bytes = initialize_frame("\n")?;
+    let follow_up = initialize_frame("\n")?;
     host_stdin_bytes.extend_from_slice(&follow_up);
 
     let expected_initialize = serde_json::json!({
@@ -377,136 +189,18 @@ pub(super) fn masked_initialize_with_follow_up() -> (Vec<u8>, Vec<u8>) {
         }
     });
 
-    let mut expected = serde_json::to_vec(&expected_initialize)
-        .expect("expected initialize payload should serialize");
+    let mut expected = serde_json::to_vec(&expected_initialize)?;
     expected.push(b'\n');
     expected.extend_from_slice(&follow_up);
 
-    (host_stdin_bytes, expected)
+    Ok((host_stdin_bytes, expected))
 }
 
-#[cfg(test)]
-mod capability_policy_routing {
-    //! Verifies that `CapabilityPolicy` selects raw forwarding or runtime
-    //! enforcement for outbound ACP frames.
+#[path = "protocol_acp_masking_tests.rs"]
+mod masking_tests;
 
-    use bollard::container::LogOutput;
-    use futures_util::stream;
-
-    use super::*;
-    use crate::engine::connection::exec::session::CapabilityPolicy;
-    use crate::engine::connection::exec::{ExecMode, ExecRequest};
-
-    fn protocol_request() -> ExecRequest {
-        ExecRequest::new(
-            "capability-policy-routing",
-            vec![String::from("codex"), String::from("app-server")],
-            ExecMode::Protocol,
-        )
-        .expect("protocol request should build")
-    }
-
-    fn blocked_terminal_create_frame() -> Vec<u8> {
-        let mut bytes = serde_json::to_vec(&serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 7,
-            "method": "terminal/create",
-            "params": {},
-        }))
-        .expect("blocked request should serialize");
-        bytes.push(b'\n');
-        bytes
-    }
-
-    fn run_policy_output_frame(policy: CapabilityPolicy, frame: &[u8]) -> (Vec<u8>, Vec<u8>) {
-        let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
-        let host_stdin = runtime
-            .block_on(build_host_stdin(&[]))
-            .expect("host stdin should build");
-        let host_stdout = RecordingInputWriter::new();
-        let host_stdout_bytes = host_stdout.bytes.clone();
-        let host_stderr = RecordingInputWriter::new();
-        let container_input = RecordingInputWriter::new();
-        let container_stdin_bytes = container_input.bytes.clone();
-        let output = stream::iter([Ok(LogOutput::StdOut {
-            message: frame.to_vec().into(),
-        })]);
-        let stdio = ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr)
-            .with_options(ProtocolSessionOptions::new().with_capability_policy(policy));
-
-        runtime
-            .block_on(run_protocol_session_with_io_async(
-                &protocol_request(),
-                Box::pin(output),
-                Box::pin(container_input),
-                stdio,
-            ))
-            .expect("protocol session should complete");
-
-        (
-            host_stdout_bytes
-                .lock()
-                .expect("stdout mutex should not poison")
-                .clone(),
-            container_stdin_bytes
-                .lock()
-                .expect("stdin mutex should not poison")
-                .clone(),
-        )
-    }
-
-    fn synthesized_response_for_terminal_create(bytes: &[u8]) -> bool {
-        let response: serde_json::Value =
-            serde_json::from_slice(bytes.strip_suffix(b"\n").unwrap_or(bytes))
-                .expect("synthesized response should contain JSON");
-        response.get("id") == Some(&serde_json::json!(7))
-            && response
-                .get("error")
-                .and_then(|error| error.get("data"))
-                .and_then(|data| data.get("method"))
-                == Some(&serde_json::json!("terminal/create"))
-    }
-
-    #[rstest]
-    #[case::mask_and_deny_routes_through_enforcement_path(
-        CapabilityPolicy::MaskAndDeny,
-        false,
-        true
-    )]
-    #[case::disabled_policy_forwards_all_frames_raw(CapabilityPolicy::Disabled, true, false)]
-    #[case::mask_only_policy_forwards_blocked_frames_raw(CapabilityPolicy::MaskOnly, true, false)]
-    fn routes_output_frame_for_capability_policy(
-        #[case] policy: CapabilityPolicy,
-        #[case] expect_forward_raw: bool,
-        #[case] expect_synthesized_response: bool,
-    ) {
-        let frame = blocked_terminal_create_frame();
-        let (host_stdout, container_stdin) = run_policy_output_frame(policy, &frame);
-
-        if expect_forward_raw {
-            assert_eq!(
-                host_stdout, frame,
-                "{policy:?} should preserve the byte-transparent output path",
-            );
-        } else {
-            assert_ne!(
-                host_stdout, frame,
-                "{policy:?} must not forward blocked frames verbatim",
-            );
-        }
-        if expect_synthesized_response {
-            assert!(
-                synthesized_response_for_terminal_create(&container_stdin),
-                "{policy:?} should write a synthesized denial response to container stdin",
-            );
-        } else {
-            assert!(
-                container_stdin.is_empty(),
-                "{policy:?} should not write a synthesized denial response",
-            );
-        }
-    }
-}
+#[path = "protocol_acp_routing_tests.rs"]
+mod capability_policy_routing;
 
 #[path = "protocol_acp_forwarding_tests.rs"]
 mod forwarding_tests;

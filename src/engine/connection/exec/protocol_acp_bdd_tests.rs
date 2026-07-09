@@ -26,10 +26,14 @@ fn acp_masking_state() -> AcpMaskingState {
 #[given(
     "ACP stdin contains an initialize request with blocked capabilities and a follow-up request"
 )]
-fn acp_stdin_contains_blocked_initialize_and_follow_up(acp_masking_state: &AcpMaskingState) {
-    let (host_stdin_bytes, expected) = masked_initialize_with_follow_up();
+fn acp_stdin_contains_blocked_initialize_and_follow_up(
+    acp_masking_state: &AcpMaskingState,
+) -> StepResult<()> {
+    let (host_stdin_bytes, expected) = masked_initialize_with_follow_up()
+        .map_err(|err| format!("initialize frames should serialize: {err}"))?;
     acp_masking_state.host_stdin.set(host_stdin_bytes);
     acp_masking_state.expected_forwarded.set(expected);
+    Ok(())
 }
 
 #[given("ACP stdin contains malformed initialize bytes")]
@@ -40,10 +44,12 @@ fn acp_stdin_contains_malformed_initialize(acp_masking_state: &AcpMaskingState) 
 }
 
 #[given("ACP stdin contains initialize without blocked capabilities")]
-fn acp_stdin_contains_safe_initialize(acp_masking_state: &AcpMaskingState) {
-    let initialize = initialize_without_blocked_capabilities();
+fn acp_stdin_contains_safe_initialize(acp_masking_state: &AcpMaskingState) -> StepResult<()> {
+    let initialize = initialize_without_blocked_capabilities()
+        .map_err(|err| format!("initialize frame should serialize: {err}"))?;
     acp_masking_state.host_stdin.set(initialize.clone());
     acp_masking_state.expected_forwarded.set(initialize);
+    Ok(())
 }
 
 #[when("ACP stdin forwarding runs")]
@@ -52,7 +58,8 @@ fn acp_stdin_forwarding_runs(acp_masking_state: &AcpMaskingState) -> StepResult<
         .host_stdin
         .get()
         .ok_or_else(|| String::from("host stdin should be configured"))?;
-    let (forwarded, _) = run_forwarding(&host_stdin_bytes);
+    let (forwarded, _) = run_forwarding(&host_stdin_bytes)
+        .map_err(|err| format!("stdin forwarding failed: {err}"))?;
     acp_masking_state.actual_forwarded.set(forwarded);
     acp_masking_state.succeeded.set(true);
     Ok(())

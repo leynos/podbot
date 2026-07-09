@@ -112,9 +112,11 @@ fn write_config_file(
 ) -> StepResult<Utf8PathBuf> {
     let temp_dir = tempfile::TempDir::new().map_err(|e| e.to_string())?;
     let temp_dir_arc = Arc::new(temp_dir);
-    let raw_path = temp_dir_arc.path().join(file_name);
-    std::fs::write(&raw_path, content).map_err(|e| e.to_string())?;
+    let dir = cap_std::fs::Dir::open_ambient_dir(temp_dir_arc.path(), cap_std::ambient_authority())
+        .map_err(|e| e.to_string())?;
+    dir.write(file_name, content).map_err(|e| e.to_string())?;
 
+    let raw_path = temp_dir_arc.path().join(file_name);
     let path = Utf8PathBuf::try_from(raw_path).map_err(|e| e.to_string())?;
     config_loader_state.temp_dir.set(temp_dir_arc);
     Ok(path)

@@ -200,6 +200,8 @@ pub fn clean_env() -> EnvGuard<'static> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the shared integration-test utilities.
+
     use bollard::exec::{CreateExecOptions, CreateExecResults, StartExecOptions, StartExecResults};
     use bollard::models::ExecInspectResponse;
     use mockall::mock;

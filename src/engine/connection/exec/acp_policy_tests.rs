@@ -42,13 +42,13 @@ fn default_denylist_blocks_terminal_and_fs_only(#[case] method: &str, #[case] ex
 
 /// Serializes `value` to compact JSON bytes and appends a newline terminator,
 /// producing a well-formed ACP frame suitable for test input.
-fn serialize_frame(value: &serde_json::Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(value).expect("frame serializes");
+fn serialize_frame(value: &serde_json::Value) -> Result<Vec<u8>, serde_json::Error> {
+    let mut bytes = serde_json::to_vec(value)?;
     bytes.push(b'\n');
-    bytes
+    Ok(bytes)
 }
 
-fn jsonrpc_request(id: &Value, method: &str) -> Vec<u8> {
+fn jsonrpc_request(id: &Value, method: &str) -> Result<Vec<u8>, serde_json::Error> {
     serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
@@ -57,7 +57,7 @@ fn jsonrpc_request(id: &Value, method: &str) -> Vec<u8> {
     }))
 }
 
-fn jsonrpc_notification(method: &str) -> Vec<u8> {
+fn jsonrpc_notification(method: &str) -> Result<Vec<u8>, serde_json::Error> {
     serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "method": method,
@@ -70,7 +70,7 @@ fn jsonrpc_notification(method: &str) -> Vec<u8> {
 #[case::string_id(serde_json::json!("call-7"))]
 #[case::null_id(serde_json::json!(null))]
 fn evaluate_returns_block_request_with_preserved_id(#[case] id: Value) {
-    let frame = jsonrpc_request(&id, "terminal/create");
+    let frame = jsonrpc_request(&id, "terminal/create").expect("frame should serialize");
     let denylist = MethodDenylist::default_families();
 
     let decision = evaluate_agent_outbound_frame(&frame, &denylist);
@@ -89,7 +89,7 @@ fn evaluate_returns_block_request_with_preserved_id(#[case] id: Value) {
 
 #[test]
 fn evaluate_returns_block_notification_for_blocked_method_without_id() {
-    let frame = jsonrpc_notification("fs/changed");
+    let frame = jsonrpc_notification("fs/changed").expect("frame should serialize");
     let denylist = MethodDenylist::default_families();
 
     let decision = evaluate_agent_outbound_frame(&frame, &denylist);
@@ -104,7 +104,8 @@ fn evaluate_returns_block_notification_for_blocked_method_without_id() {
 
 #[test]
 fn evaluate_forwards_permitted_request() {
-    let frame = jsonrpc_request(&serde_json::json!(1), "session/new");
+    let frame =
+        jsonrpc_request(&serde_json::json!(1), "session/new").expect("frame should serialize");
     let denylist = MethodDenylist::default_families();
 
     assert_eq!(
@@ -137,7 +138,7 @@ fn evaluate_forwards_malformed_json() {
     "method": 7,
 }))]
 fn evaluate_forwards_frames_without_dispatchable_method(#[case] payload: serde_json::Value) {
-    let frame = serialize_frame(&payload);
+    let frame = serialize_frame(&payload).expect("frame should serialize");
     let denylist = MethodDenylist::default_families();
 
     assert_eq!(
@@ -162,7 +163,7 @@ fn evaluate_forwards_frames_without_dispatchable_method(#[case] payload: serde_j
     "method": "terminal/create",
 }))]
 fn evaluate_forwards_non_jsonrpc_objects_with_blocked_method(#[case] payload: serde_json::Value) {
-    let frame = serialize_frame(&payload);
+    let frame = serialize_frame(&payload).expect("frame should serialize");
     let denylist = MethodDenylist::default_families();
 
     assert_eq!(

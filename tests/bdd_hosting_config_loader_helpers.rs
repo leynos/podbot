@@ -203,8 +203,11 @@ fn write_config_file(
 ) -> StepResult<Utf8PathBuf> {
     let temp_dir = tempfile::TempDir::new().map_err(|error| error.to_string())?;
     let temp_dir_arc = Arc::new(temp_dir);
+    let dir = cap_std::fs::Dir::open_ambient_dir(temp_dir_arc.path(), cap_std::ambient_authority())
+        .map_err(|error| error.to_string())?;
+    dir.write("config.toml", content)
+        .map_err(|error| error.to_string())?;
     let raw_path = temp_dir_arc.path().join("config.toml");
-    std::fs::write(&raw_path, content).map_err(|error| error.to_string())?;
     let path = Utf8PathBuf::try_from(raw_path).map_err(|error| error.to_string())?;
     hosting_config_loader_state.temp_dir.set(temp_dir_arc);
     Ok(path)

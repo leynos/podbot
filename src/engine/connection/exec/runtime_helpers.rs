@@ -53,7 +53,12 @@ pub(super) fn exec_failed(container_id: &str, message: impl Into<String>) -> Pod
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for exec runtime helper utilities.
+
+    use std::io;
+
     use super::*;
+    use eyre::{bail, ensure};
     use rstest::{fixture, rstest};
 
     enum OutsideTokioOutcome {
@@ -62,11 +67,10 @@ mod tests {
     }
 
     #[fixture]
-    fn current_thread_runtime() -> tokio::runtime::Runtime {
+    fn current_thread_runtime() -> io::Result<tokio::runtime::Runtime> {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("runtime should be created")
     }
 
     #[test]
@@ -105,24 +109,27 @@ mod tests {
     #[case::ok(OutsideTokioOutcome::Ok)]
     #[case::err(OutsideTokioOutcome::Err)]
     fn block_on_runtime_maps_outcomes_outside_tokio(
-        current_thread_runtime: tokio::runtime::Runtime,
+        current_thread_runtime: io::Result<tokio::runtime::Runtime>,
         #[case] outcome: OutsideTokioOutcome,
-    ) {
-        let handle = current_thread_runtime.handle().clone();
+    ) -> eyre::Result<()> {
+        let rt = current_thread_runtime?;
+        let handle = rt.handle().clone();
 
         match outcome {
             OutsideTokioOutcome::Ok => {
                 let result: Result<u32, crate::error::PodbotError> =
                     block_on_runtime(&handle, async { Ok(42_u32) });
 
-                assert_eq!(result.expect("future should resolve to Ok(42)"), 42);
+                ensure!(result? == 42, "future should resolve to Ok(42)");
             }
             OutsideTokioOutcome::Err => {
                 let result: Result<(), crate::error::PodbotError> =
                     block_on_runtime(&handle, async { Err(exec_failed("c", "injected error")) });
 
-                let err = result.expect_err("future should resolve to Err");
-                assert!(
+                let Err(err) = result else {
+                    bail!("future should resolve to Err");
+                };
+                ensure!(
                     matches!(
                         err,
                         crate::error::PodbotError::Container(
@@ -133,6 +140,7 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

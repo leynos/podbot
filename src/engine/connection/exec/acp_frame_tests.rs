@@ -13,29 +13,14 @@ use super::{
     OutboundFrameAssembler,
 };
 use crate::engine::connection::exec::acp_policy::MethodDenylist;
+use crate::engine::connection::exec::acp_test_support::jsonrpc_frame;
 
-fn permitted_frame(method: &str, line_ending: &[u8]) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": {},
-    }))
-    .expect("frame serializes");
-    bytes.extend_from_slice(line_ending);
-    bytes
+fn permitted_frame(method: &str, line_ending: &[u8]) -> Result<Vec<u8>, serde_json::Error> {
+    jsonrpc_frame(Some(&serde_json::json!(1)), method, line_ending)
 }
 
-fn blocked_request_frame(id: &Value, method: &str) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "method": method,
-        "params": {},
-    }))
-    .expect("frame serializes");
-    bytes.push(b'\n');
-    bytes
+fn blocked_request_frame(id: &Value, method: &str) -> Result<Vec<u8>, serde_json::Error> {
+    jsonrpc_frame(Some(id), method, b"\n")
 }
 
 fn assembler() -> OutboundFrameAssembler {
@@ -58,7 +43,7 @@ fn collect_forward_bytes(outputs: &[FrameOutput]) -> Vec<u8> {
 #[test]
 fn single_permitted_frame_is_forwarded_verbatim() {
     let mut framer = assembler();
-    let frame = permitted_frame("session/new", b"\n");
+    let frame = permitted_frame("session/new", b"\n").expect("frame should serialize");
 
     let (outputs, fallback) = framer.ingest_chunk(&frame);
 
@@ -70,8 +55,9 @@ fn single_permitted_frame_is_forwarded_verbatim() {
 #[test]
 fn multiple_frames_in_one_chunk_split_on_each_newline() {
     let mut framer = assembler();
-    let mut chunk = permitted_frame("session/new", b"\n");
-    chunk.extend_from_slice(&permitted_frame("session/update", b"\n"));
+    let mut chunk = permitted_frame("session/new", b"\n").expect("frame should serialize");
+    let second_frame = permitted_frame("session/update", b"\n").expect("frame should serialize");
+    chunk.extend_from_slice(&second_frame);
 
     let (outputs, fallback) = framer.ingest_chunk(&chunk);
 
@@ -83,7 +69,7 @@ fn multiple_frames_in_one_chunk_split_on_each_newline() {
 #[test]
 fn frame_split_across_two_chunks_reassembles_correctly() {
     let mut framer = assembler();
-    let frame = permitted_frame("session/new", b"\n");
+    let frame = permitted_frame("session/new", b"\n").expect("frame should serialize");
     let split_at = frame.len().div_euclid(2);
     let first = frame.get(..split_at).expect("split prefix");
     let second = frame.get(split_at..).expect("split suffix");
@@ -102,7 +88,7 @@ fn frame_split_across_two_chunks_reassembles_correctly() {
 #[test]
 fn frame_split_across_three_chunks_reassembles_correctly() {
     let mut framer = assembler();
-    let frame = permitted_frame("session/update", b"\n");
+    let frame = permitted_frame("session/update", b"\n").expect("frame should serialize");
     let third = frame.len().div_euclid(3);
     let two_thirds = frame.len().saturating_mul(2).div_euclid(3);
     let parts = [
@@ -124,7 +110,8 @@ fn frame_split_across_three_chunks_reassembles_correctly() {
 #[test]
 fn blocked_request_emits_decision_with_line_ending() {
     let mut framer = assembler();
-    let frame = blocked_request_frame(&serde_json::json!(7), "terminal/create");
+    let frame = blocked_request_frame(&serde_json::json!(7), "terminal/create")
+        .expect("frame should serialize");
 
     let (outputs, fallback) = framer.ingest_chunk(&frame);
 
@@ -210,8 +197,9 @@ fn frame_with_escaped_newline_in_string_treated_as_single_frame() {
 #[test]
 fn permitted_frame_after_blocked_frame_still_forwards() {
     let mut framer = assembler();
-    let mut chunk = blocked_request_frame(&serde_json::json!(1), "terminal/create");
-    let permitted = permitted_frame("session/new", b"\n");
+    let mut chunk = blocked_request_frame(&serde_json::json!(1), "terminal/create")
+        .expect("frame should serialize");
+    let permitted = permitted_frame("session/new", b"\n").expect("frame should serialize");
     chunk.extend_from_slice(&permitted);
 
     let (outputs, _) = framer.ingest_chunk(&chunk);
@@ -276,7 +264,7 @@ fn finish_drops_residual_partial_frame_and_reports_byte_count() {
 #[test]
 fn finish_returns_none_when_buffer_empty() {
     let mut framer = assembler();
-    let frame = permitted_frame("session/new", b"\n");
+    let frame = permitted_frame("session/new", b"\n").expect("frame should serialize");
 
     let _ = framer.ingest_chunk(&frame);
     assert!(framer.finish().is_none());
@@ -299,109 +287,5 @@ fn empty_chunk_produces_no_output() {
     assert!(fallback.is_none());
 }
 
-/// Build a deterministic byte sequence containing several permitted ACP
-/// frames. The sequence is reused across the exhaustive-split parameterized
-/// tests below.
-fn permitted_stream() -> Vec<u8> {
-    let frames = [
-        permitted_frame("session/new", b"\n"),
-        permitted_frame("session/update", b"\n"),
-        permitted_frame("session/cancel", b"\n"),
-        permitted_frame("session/new", b"\r\n"),
-        permitted_frame("session/update", b"\n"),
-    ];
-    frames.into_iter().fold(Vec::new(), |mut acc, mut frame| {
-        acc.append(&mut frame);
-        acc
-    })
-}
-
-fn assemble_with_two_chunks(stream: &[u8], split_at: usize) -> Vec<u8> {
-    let mut framer = assembler();
-    let first = stream.get(..split_at).unwrap_or_default();
-    let second = stream.get(split_at..).unwrap_or_default();
-    let mut outputs = Vec::new();
-    let (chunk_one, fallback_one) = framer.ingest_chunk(first);
-    assert!(fallback_one.is_none());
-    outputs.extend(chunk_one);
-    let (chunk_two, fallback_two) = framer.ingest_chunk(second);
-    assert!(fallback_two.is_none());
-    outputs.extend(chunk_two);
-    assert!(framer.finish().is_none());
-    collect_forward_bytes(&outputs)
-}
-
-fn assemble_with_three_chunks(stream: &[u8], first_split: usize, second_split: usize) -> Vec<u8> {
-    assert!(first_split <= second_split);
-    let mut framer = assembler();
-    let first = stream.get(..first_split).unwrap_or_default();
-    let second = stream.get(first_split..second_split).unwrap_or_default();
-    let third = stream.get(second_split..).unwrap_or_default();
-    let mut outputs = Vec::new();
-    for chunk in [first, second, third] {
-        let (chunk_outputs, fallback) = framer.ingest_chunk(chunk);
-        assert!(fallback.is_none());
-        outputs.extend(chunk_outputs);
-    }
-    assert!(framer.finish().is_none());
-    collect_forward_bytes(&outputs)
-}
-
-#[test]
-fn every_two_way_split_reassembles_to_original_byte_stream() {
-    let stream = permitted_stream();
-    for split_at in 1..stream.len() {
-        let reassembled = assemble_with_two_chunks(&stream, split_at);
-        assert_eq!(
-            reassembled, stream,
-            "split at byte {split_at} should reassemble byte-identically",
-        );
-    }
-}
-
-#[rstest]
-#[case(1, 4)]
-#[case(8, 32)]
-#[case(16, 64)]
-#[case(32, 96)]
-#[case(40, 80)]
-#[case(50, 120)]
-#[case(60, 100)]
-#[case(70, 140)]
-#[case(80, 160)]
-#[case(90, 150)]
-#[case(95, 145)]
-#[case(100, 200)]
-#[case(110, 220)]
-#[case(120, 180)]
-#[case(125, 230)]
-#[case(130, 240)]
-#[case(135, 235)]
-#[case(140, 250)]
-#[case(150, 260)]
-#[case(155, 265)]
-#[case(160, 270)]
-#[case(170, 280)]
-#[case(180, 290)]
-#[case(190, 300)]
-#[case(200, 310)]
-#[case(210, 320)]
-#[case(220, 325)]
-#[case(225, 330)]
-#[case(230, 335)]
-#[case(235, 340)]
-#[case(240, 345)]
-#[case(250, 350)]
-fn three_way_splits_reassemble_to_original_byte_stream(
-    #[case] first_split: usize,
-    #[case] second_split: usize,
-) {
-    let stream = permitted_stream();
-    let first_clamped = first_split.min(stream.len());
-    let second_clamped = second_split.min(stream.len());
-    let reassembled = assemble_with_three_chunks(&stream, first_clamped, second_clamped);
-    assert_eq!(
-        reassembled, stream,
-        "three-way split at ({first_clamped}, {second_clamped}) should reassemble identically",
-    );
-}
+#[path = "acp_frame_split_tests.rs"]
+mod split_tests;

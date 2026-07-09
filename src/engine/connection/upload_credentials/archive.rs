@@ -135,33 +135,50 @@ fn append_non_directory_entry(
 ) -> io::Result<()> {
     let path = normalize_archive_path(relative_path);
     match entry.entry_kind {
-        EntryKind::File => {
-            let metadata = parent_dir.metadata(&entry.file_name)?;
-            let mut file = parent_dir.open(&entry.file_name)?;
-            let mut header = new_entry_header(
-                EntryType::Regular,
-                metadata.len(),
-                metadata_mode(&metadata, DEFAULT_FILE_MODE),
-            );
-
-            builder.append_data(&mut header, path, &mut file)
-        }
-        EntryKind::Symlink => {
-            let metadata = parent_dir.symlink_metadata(&entry.file_name)?;
-            let target = parent_dir.read_link_contents(&entry.file_name)?;
-            let mut header = new_entry_header(
-                EntryType::Symlink,
-                0,
-                metadata_mode(&metadata, DEFAULT_FILE_MODE),
-            );
-
-            let normalized_target = normalize_archive_path(target.as_path());
-            builder.append_link(&mut header, path, normalized_target)
-        }
+        EntryKind::File => append_file_entry(builder, parent_dir, entry, path),
+        EntryKind::Symlink => append_symlink_entry(builder, parent_dir, entry, path),
         EntryKind::Directory | EntryKind::Other => Err(io::Error::other(
             "non-directory entry helper received invalid entry kind",
         )),
     }
+}
+
+fn append_file_entry(
+    builder: &mut Builder<Vec<u8>>,
+    parent_dir: &Dir,
+    entry: &SortedEntry,
+    path: String,
+) -> io::Result<()> {
+    let mut file = parent_dir.open(&entry.file_name)?;
+    // Read the metadata from the open handle so the header size cannot drift
+    // from the bytes actually streamed if the file changes on disk between
+    // the two calls.
+    let metadata = file.metadata()?;
+    let mut header = new_entry_header(
+        EntryType::Regular,
+        metadata.len(),
+        metadata_mode(&metadata, DEFAULT_FILE_MODE),
+    );
+
+    builder.append_data(&mut header, path, &mut file)
+}
+
+fn append_symlink_entry(
+    builder: &mut Builder<Vec<u8>>,
+    parent_dir: &Dir,
+    entry: &SortedEntry,
+    path: String,
+) -> io::Result<()> {
+    let metadata = parent_dir.symlink_metadata(&entry.file_name)?;
+    let target = parent_dir.read_link_contents(&entry.file_name)?;
+    let mut header = new_entry_header(
+        EntryType::Symlink,
+        0,
+        metadata_mode(&metadata, DEFAULT_FILE_MODE),
+    );
+
+    let normalized_target = normalize_archive_path(target.as_path());
+    builder.append_link(&mut header, path, normalized_target)
 }
 
 fn new_entry_header(entry_type: EntryType, size: u64, mode: u32) -> Header {

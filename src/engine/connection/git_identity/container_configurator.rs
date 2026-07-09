@@ -188,6 +188,10 @@ fn set_git_config<C: ContainerExecClient + Sync>(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the container git-identity configurator.
+
+    use std::io;
+
     use super::*;
     use crate::engine::connection::git_identity::host_reader::HostGitIdentity;
     use crate::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
@@ -218,10 +222,10 @@ mod tests {
         }
     }
 
-    fn make_runtime() -> (tokio::runtime::Runtime, tokio::runtime::Handle) {
-        let rt = tokio::runtime::Runtime::new().expect("test requires a Tokio runtime");
+    fn make_runtime() -> io::Result<(tokio::runtime::Runtime, tokio::runtime::Handle)> {
+        let rt = tokio::runtime::Runtime::new()?;
         let handle = rt.handle().clone();
-        (rt, handle)
+        Ok((rt, handle))
     }
 
     fn make_exec_client(exit_code: i64) -> MockExecClient {
@@ -250,7 +254,7 @@ mod tests {
 
     #[test]
     fn returns_none_configured_when_both_fields_absent() {
-        let (_rt, handle) = make_runtime();
+        let (_rt, handle) = make_runtime().expect("test requires a Tokio runtime");
         // No exec expectations — no container commands should be issued.
         let client = MockExecClient::new();
         let identity = HostGitIdentity {
@@ -273,7 +277,7 @@ mod tests {
 
     #[test]
     fn returns_configured_when_both_fields_present() {
-        let (_rt, handle) = make_runtime();
+        let (_rt, handle) = make_runtime().expect("test requires a Tokio runtime");
         let client = make_exec_client(0);
         let identity = HostGitIdentity {
             name: Some(String::from("Alice")),
@@ -301,7 +305,7 @@ mod tests {
         #[case] email: Option<&str>,
         #[case] missing_warning: &str,
     ) {
-        let (_rt, handle) = make_runtime();
+        let (_rt, handle) = make_runtime().expect("test requires a Tokio runtime");
         let client = make_exec_client(0);
         let identity = HostGitIdentity {
             name: name.map(String::from),
@@ -332,7 +336,7 @@ mod tests {
 
     #[test]
     fn propagates_exec_failure_as_error() {
-        let (_rt, handle) = make_runtime();
+        let (_rt, handle) = make_runtime().expect("test requires a Tokio runtime");
         let client = make_exec_client(1);
         let identity = HostGitIdentity {
             name: Some(String::from("Alice")),

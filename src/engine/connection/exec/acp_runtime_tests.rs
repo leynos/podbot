@@ -3,7 +3,6 @@
 
 use std::io;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use ortho_config::serde_json::{self, Value};
@@ -16,46 +15,7 @@ use super::{
     run_container_stdin_sink,
 };
 use crate::engine::connection::exec::acp_policy::MethodDenylist;
-
-/// Recording host-stdout writer that captures every byte and tracks shutdown.
-#[derive(Clone, Default)]
-struct RecordingWriter {
-    bytes: Arc<Mutex<Vec<u8>>>,
-    shutdown_called: Arc<Mutex<bool>>,
-}
-
-impl RecordingWriter {
-    fn snapshot(&self) -> Vec<u8> {
-        self.bytes.lock().expect("writer mutex").clone()
-    }
-
-    fn shutdown_observed(&self) -> bool {
-        *self.shutdown_called.lock().expect("shutdown mutex")
-    }
-}
-
-impl AsyncWrite for RecordingWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        self.bytes
-            .lock()
-            .expect("writer mutex")
-            .extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        *self.shutdown_called.lock().expect("shutdown mutex") = true;
-        Poll::Ready(Ok(()))
-    }
-}
+use crate::engine::connection::exec::acp_test_support::{RecordingWriter, jsonrpc_frame};
 
 /// Writer that always returns `BrokenPipe` on writes, used to simulate the
 /// agent having already exited.
@@ -82,42 +42,16 @@ impl AsyncWrite for BrokenPipeWriter {
     }
 }
 
-/// Builds a newline-terminated JSON-RPC 2.0 frame.
-///
-/// Pass `id = Some(…)` for requests; `id = None` for notifications.
-fn make_jsonrpc_frame(method: &str, id: Option<&Value>) -> Vec<u8> {
-    let value = id.map_or_else(
-        || {
-            serde_json::json!({
-                "jsonrpc": "2.0",
-                "method": method,
-                "params": {},
-            })
-        },
-        |request_id| {
-            serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "method": method,
-                "params": {},
-            })
-        },
-    );
-    let mut bytes = serde_json::to_vec(&value).expect("frame serializes");
-    bytes.push(b'\n');
-    bytes
+fn permitted_frame() -> Result<Vec<u8>, serde_json::Error> {
+    jsonrpc_frame(Some(&serde_json::json!(1)), "session/new", b"\n")
 }
 
-fn permitted_frame() -> Vec<u8> {
-    make_jsonrpc_frame("session/new", Some(&serde_json::json!(1)))
+fn blocked_request_frame(id: &Value) -> Result<Vec<u8>, serde_json::Error> {
+    jsonrpc_frame(Some(id), "terminal/create", b"\n")
 }
 
-fn blocked_request_frame(id: &Value) -> Vec<u8> {
-    make_jsonrpc_frame("terminal/create", Some(id))
-}
-
-fn blocked_notification_frame() -> Vec<u8> {
-    make_jsonrpc_frame("fs/changed", None)
+fn blocked_notification_frame() -> Result<Vec<u8>, serde_json::Error> {
+    jsonrpc_frame(None, "fs/changed", b"\n")
 }
 
 fn build_adapter() -> (OutboundPolicyAdapter, mpsc::Receiver<WriteCmd>) {
@@ -136,22 +70,44 @@ async fn drain_channel(mut rx: mpsc::Receiver<WriteCmd>) -> Vec<WriteCmd> {
     received
 }
 
+/// The frame variants exercised by the single-frame routing test.
+#[derive(Debug, Clone, Copy)]
+enum SingleFrame {
+    Permitted,
+    BlockedNotification,
+}
+
+#[rstest]
+#[case::permitted_reaches_host_stdout(SingleFrame::Permitted)]
+#[case::blocked_notification_drops_silently(SingleFrame::BlockedNotification)]
 #[tokio::test]
-async fn permitted_frame_writes_to_host_stdout_only() {
+async fn single_frame_routing_matches_policy(#[case] kind: SingleFrame) {
     let (mut adapter, rx) = build_adapter();
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = permitted_frame();
+    let frame = match kind {
+        SingleFrame::Permitted => permitted_frame(),
+        SingleFrame::BlockedNotification => blocked_notification_frame(),
+    }
+    .expect("frame should serialize");
 
     adapter
         .handle_chunk(&frame, &mut writer)
         .await
-        .expect("permitted frame writes succeed");
+        .expect("frame handles cleanly");
     adapter.finish();
     drop(adapter);
 
-    assert_eq!(recorder.snapshot(), frame);
+    let expected_stdout: &[u8] = match kind {
+        SingleFrame::Permitted => &frame,
+        SingleFrame::BlockedNotification => b"",
+    };
+    assert_eq!(
+        recorder.snapshot(),
+        expected_stdout,
+        "{kind:?} should route to host stdout accordingly",
+    );
     let received = drain_channel(rx).await;
     assert!(received.is_empty(), "no commands should reach the sink");
 }
@@ -162,7 +118,7 @@ async fn blocked_request_skips_host_stdout_and_queues_synthesized_response() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(&serde_json::json!(7));
+    let frame = blocked_request_frame(&serde_json::json!(7)).expect("frame should serialize");
 
     adapter
         .handle_chunk(&frame, &mut writer)
@@ -194,35 +150,13 @@ async fn blocked_request_skips_host_stdout_and_queues_synthesized_response() {
 }
 
 #[tokio::test]
-async fn blocked_notification_drops_silently_without_sink_command() {
-    let (mut adapter, rx) = build_adapter();
-    let host_stdout = RecordingWriter::default();
-    let recorder = host_stdout.clone();
-    let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_notification_frame();
-
-    adapter
-        .handle_chunk(&frame, &mut writer)
-        .await
-        .expect("blocked notification handles cleanly");
-    drop(adapter);
-
-    assert!(recorder.snapshot().is_empty());
-    let received = drain_channel(rx).await;
-    assert!(
-        received.is_empty(),
-        "notifications must not generate a response"
-    );
-}
-
-#[tokio::test]
 async fn permitted_frame_after_blocked_frame_still_reaches_host_stdout() {
     let (mut adapter, rx) = build_adapter();
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let mut chunk = blocked_request_frame(&serde_json::json!(1));
-    let permitted = permitted_frame();
+    let mut chunk = blocked_request_frame(&serde_json::json!(1)).expect("frame should serialize");
+    let permitted = permitted_frame().expect("frame should serialize");
     chunk.extend_from_slice(&permitted);
 
     adapter
@@ -242,7 +176,7 @@ async fn frame_split_across_chunks_is_classified_after_assembly() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(&serde_json::json!(2));
+    let frame = blocked_request_frame(&serde_json::json!(2)).expect("frame should serialize");
     let split_at = frame.len().div_euclid(2);
     let first = frame.get(..split_at).expect("split prefix");
     let second = frame.get(split_at..).expect("split suffix");
@@ -355,7 +289,7 @@ async fn blocked_request_synthesized_before_channel_close_is_flushed() {
     let mut adapter = OutboundPolicyAdapter::new(assembler, tx.clone(), "container-test");
     let host_stdout = RecordingWriter::default();
     let mut host_writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(&serde_json::json!(11));
+    let frame = blocked_request_frame(&serde_json::json!(11)).expect("frame should serialize");
 
     adapter
         .handle_chunk(&frame, &mut host_writer)

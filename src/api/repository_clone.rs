@@ -188,6 +188,8 @@ impl AskpassPath {
 
 #[cfg(test)]
 mod tests {
+    //! Unit and property tests for repository-clone request value types.
+
     use super::{AskpassPath, BranchName, RepositoryRef, WorkspacePath};
     use crate::error::{ConfigError, PodbotError};
     use proptest::prelude::*;

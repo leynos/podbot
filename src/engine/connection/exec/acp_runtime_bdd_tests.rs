@@ -66,17 +66,17 @@ fn denylist_state() -> DenylistState {
     DenylistState::default()
 }
 
-/// Serialises `value` to compact JSON bytes and appends a newline terminator,
+/// Serializes `value` to compact JSON bytes and appends a newline terminator,
 /// producing a well-formed ACP frame suitable for test input.
-fn serialize_frame(value: serde_json::Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(&value).expect("frame serializes");
-    drop(value);
+fn serialize_frame(value: &serde_json::Value) -> StepResult<Vec<u8>> {
+    let mut bytes =
+        serde_json::to_vec(value).map_err(|err| format!("frame serialization failed: {err}"))?;
     bytes.push(b'\n');
-    bytes
+    Ok(bytes)
 }
 
-fn make_request_frame(method: &str, id: i64) -> Vec<u8> {
-    serialize_frame(serde_json::json!({
+fn make_request_frame(method: &str, id: i64) -> StepResult<Vec<u8>> {
+    serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
         "method": method,
@@ -84,8 +84,8 @@ fn make_request_frame(method: &str, id: i64) -> Vec<u8> {
     }))
 }
 
-fn make_notification_frame(method: &str) -> Vec<u8> {
-    serialize_frame(serde_json::json!({
+fn make_notification_frame(method: &str) -> StepResult<Vec<u8>> {
+    serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "method": method,
         "params": {},
@@ -147,16 +147,14 @@ where
             adapter
                 .handle_chunk(&chunk, &mut writer)
                 .await
-                .expect("chunk handles cleanly");
+                .map_err(|err| format!("chunk handling failed: {err}"))?;
         }
         adapter.finish();
         drop(adapter);
         let commands = drain_sink(receiver).await;
-        let bytes = host_stdout_handle
-            .snapshot()
-            .expect("host stdout snapshot should succeed");
-        (commands, bytes)
-    });
+        let bytes = host_stdout_handle.snapshot()?;
+        Ok::<_, String>((commands, bytes))
+    })?;
     state.host_stdout_bytes.set(host_bytes);
     state.sink_commands.set(commands);
     Ok(())
@@ -169,25 +167,25 @@ fn adapter_uses_default_denylist(denylist_state: &DenylistState) {
 
 #[when(r#"the agent emits a "terminal/create" request with id 7"#)]
 fn emit_blocked_terminal_create(denylist_state: &DenylistState) -> StepResult<()> {
-    let frame = make_request_frame("terminal/create", 7);
+    let frame = make_request_frame("terminal/create", 7)?;
     run_runtime(denylist_state, vec![frame], || {})
 }
 
 #[when(r#"the agent emits a "session/new" request with id 1"#)]
 fn emit_permitted_session_new(denylist_state: &DenylistState) -> StepResult<()> {
-    let frame = make_request_frame("session/new", 1);
+    let frame = make_request_frame("session/new", 1)?;
     run_runtime(denylist_state, vec![frame], || {})
 }
 
 #[when(r#"the agent emits an "fs/changed" notification"#)]
 fn emit_blocked_notification(denylist_state: &DenylistState) -> StepResult<()> {
-    let frame = make_notification_frame("fs/changed");
+    let frame = make_notification_frame("fs/changed")?;
     run_runtime(denylist_state, vec![frame], || {})
 }
 
 #[when("the agent emits a blocked frame split across two output chunks")]
 fn emit_blocked_split(denylist_state: &DenylistState) -> StepResult<()> {
-    let frame = make_request_frame("terminal/create", 2);
+    let frame = make_request_frame("terminal/create", 2)?;
     let split_at = frame.len().div_euclid(2);
     let first = frame
         .get(..split_at)
@@ -202,8 +200,8 @@ fn emit_blocked_split(denylist_state: &DenylistState) -> StepResult<()> {
 
 #[when("the agent emits a blocked request followed by a permitted request")]
 fn emit_blocked_then_permitted(denylist_state: &DenylistState) -> StepResult<()> {
-    let mut chunk = make_request_frame("terminal/create", 5);
-    let permitted = make_request_frame("session/update", 6);
+    let mut chunk = make_request_frame("terminal/create", 5)?;
+    let permitted = make_request_frame("session/update", 6)?;
     chunk.extend_from_slice(&permitted);
     run_runtime(denylist_state, vec![chunk], || {})
 }
@@ -279,14 +277,16 @@ fn expect_synthesized_id(denylist_state: &DenylistState, expected_id: &Value) ->
 
 #[then("host stdout receives the permitted frame verbatim")]
 fn assert_host_stdout_matches_permitted(denylist_state: &DenylistState) -> StepResult<()> {
-    assert_host_stdout_matches(denylist_state, &make_request_frame("session/new", 1))
+    let expected = make_request_frame("session/new", 1)?;
+    assert_host_stdout_matches(denylist_state, &expected)
 }
 
 #[then("host stdout receives only the permitted frame verbatim")]
 fn assert_host_stdout_matches_permitted_after_blocked(
     denylist_state: &DenylistState,
 ) -> StepResult<()> {
-    assert_host_stdout_matches(denylist_state, &make_request_frame("session/update", 6))
+    let expected = make_request_frame("session/update", 6)?;
+    assert_host_stdout_matches(denylist_state, &expected)
 }
 
 #[then("container stdin receives no synthesized response")]

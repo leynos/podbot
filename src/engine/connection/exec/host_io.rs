@@ -50,6 +50,8 @@ pub(super) fn default_host_stdin() -> Pin<Box<dyn AsyncRead + Send>> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for host IO stdin-forwarding overrides.
+
     use tokio::io::AsyncReadExt;
 
     use super::*;

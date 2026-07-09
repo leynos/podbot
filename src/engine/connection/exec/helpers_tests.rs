@@ -191,7 +191,7 @@ impl AsyncWrite for SharedWriter {
     ) -> std::task::Poll<io::Result<usize>> {
         self.bytes
             .lock()
-            .expect("writer buffer mutex should not be poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .extend_from_slice(buf);
         std::task::Poll::Ready(Ok(buf.len()))
     }
