@@ -105,6 +105,8 @@ pub(super) async fn wait_for_sigwinch(signal: &mut Option<tokio::signal::unix::S
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for terminal size discovery and resize handling.
+
     use super::parse_stty_size;
     use rstest::rstest;
 

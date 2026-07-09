@@ -4,6 +4,8 @@
 //! covering environment variable resolution, fallback behaviour, and
 //! connection establishment for various socket types.
 
+use std::io;
+
 use mockable::MockEnv;
 use rstest::{fixture, rstest};
 
@@ -50,8 +52,8 @@ fn all_empty_env_vars() -> MockEnv {
 
 /// Fixture providing a tokio runtime for async tests.
 #[fixture]
-fn runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Runtime::new().expect("runtime creation should succeed")
+fn runtime() -> io::Result<tokio::runtime::Runtime> {
+    tokio::runtime::Runtime::new()
 }
 
 /// Helper function to create a `MockEnv` with `DOCKER_HOST` set to the
@@ -237,10 +239,11 @@ mod tcp;
 // =============================================================================
 
 #[rstest]
-fn connect_and_verify_propagates_connection_errors(runtime: tokio::runtime::Runtime) {
+fn connect_and_verify_propagates_connection_errors(runtime: io::Result<tokio::runtime::Runtime>) {
     // Using a non-existent Unix socket to trigger a connection error.
     // The actual error occurs during the connect phase, not the health check.
-    let result = runtime.block_on(async {
+    let rt = runtime.expect("runtime creation should succeed");
+    let result = rt.block_on(async {
         EngineConnector::connect_and_verify_async("unix:///nonexistent/socket.sock").await
     });
 
@@ -258,10 +261,13 @@ fn connect_and_verify_propagates_connection_errors(runtime: tokio::runtime::Runt
 
 #[rstest]
 #[cfg(unix)]
-fn connect_and_verify_classifies_bare_path_socket_not_found(runtime: tokio::runtime::Runtime) {
+fn connect_and_verify_classifies_bare_path_socket_not_found(
+    runtime: io::Result<tokio::runtime::Runtime>,
+) {
     // Bare paths are normalized to unix:// URIs before connecting, and
     // classification should use that normalized URI to extract the path.
-    let result = runtime.block_on(async {
+    let rt = runtime.expect("runtime creation should succeed");
+    let result = rt.block_on(async {
         EngineConnector::connect_and_verify_async("/nonexistent/socket.sock").await
     });
 
@@ -279,7 +285,7 @@ fn connect_and_verify_classifies_bare_path_socket_not_found(runtime: tokio::runt
 #[rstest]
 fn connect_with_fallback_and_verify_uses_resolved_socket(
     empty_env: MockEnv,
-    runtime: tokio::runtime::Runtime,
+    runtime: io::Result<tokio::runtime::Runtime>,
 ) {
     // Verify that connect_with_fallback_and_verify resolves the socket correctly
     // before attempting connection. We use an explicit socket that will fail
@@ -287,7 +293,8 @@ fn connect_with_fallback_and_verify_uses_resolved_socket(
     // path appears in the error message.
     let resolver = SocketResolver::new(&empty_env);
 
-    let result = runtime.block_on(async {
+    let rt = runtime.expect("runtime creation should succeed");
+    let result = rt.block_on(async {
         EngineConnector::connect_with_fallback_and_verify_async(
             Some("unix:///nonexistent/test.sock"),
             &resolver,
@@ -313,12 +320,15 @@ fn connect_with_fallback_and_verify_uses_resolved_socket(
 }
 
 #[rstest]
-fn connect_with_fallback_and_verify_falls_back_to_env(runtime: tokio::runtime::Runtime) {
+fn connect_with_fallback_and_verify_falls_back_to_env(
+    runtime: io::Result<tokio::runtime::Runtime>,
+) {
     // Verify that when config is None, the resolver's environment fallback is used.
     let env = env_with_docker_host("unix:///env/docker.sock");
     let resolver = SocketResolver::new(&env);
 
-    let result = runtime.block_on(async {
+    let rt = runtime.expect("runtime creation should succeed");
+    let result = rt.block_on(async {
         EngineConnector::connect_with_fallback_and_verify_async(None::<&str>, &resolver).await
     });
 

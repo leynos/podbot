@@ -117,6 +117,8 @@ fn is_rate_limited(message: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for GitHub error classification.
+
     use super::*;
 
     #[test]

@@ -144,6 +144,10 @@ fn github_remote(request: &RepositoryCloneRequest<'_>) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for container repository-clone command construction.
+
+    use std::io;
+
     use super::*;
     use crate::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
     use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
@@ -171,18 +175,19 @@ mod tests {
         }
     }
 
-    fn runtime() -> (tokio::runtime::Runtime, tokio::runtime::Handle) {
-        let rt = tokio::runtime::Runtime::new().expect("test requires a Tokio runtime");
+    fn runtime() -> io::Result<(tokio::runtime::Runtime, tokio::runtime::Handle)> {
+        let rt = tokio::runtime::Runtime::new()?;
         let handle = rt.handle().clone();
-        (rt, handle)
+        Ok((rt, handle))
     }
 
-    fn typed_request_values(branch: &str) -> (RepositoryRef, BranchName, WorkspacePath) {
-        (
-            RepositoryRef::parse("leynos/podbot").expect("test repository should parse"),
-            BranchName::parse(branch).expect("test branch should parse"),
-            WorkspacePath::parse("/work").expect("test workspace should parse"),
-        )
+    fn typed_request_values(
+        branch: &str,
+    ) -> Result<(RepositoryRef, BranchName, WorkspacePath), PodbotError> {
+        let repository = RepositoryRef::parse("leynos/podbot")?;
+        let branch_name = BranchName::parse(branch)?;
+        let workspace = WorkspacePath::parse("/work")?;
+        Ok((repository, branch_name, workspace))
     }
 
     fn request<'a>(
@@ -200,8 +205,8 @@ mod tests {
         }
     }
 
-    fn typed_askpass() -> AskpassPath {
-        AskpassPath::parse("/usr/local/bin/git-askpass").expect("test askpass should parse")
+    fn typed_askpass() -> Result<AskpassPath, PodbotError> {
+        AskpassPath::parse("/usr/local/bin/git-askpass")
     }
 
     fn expect_exec(client: &mut MockExecClient, command: Vec<&'static str>, exit_code: i64) {
@@ -267,10 +272,11 @@ mod tests {
 
     #[test]
     fn clones_repository_and_verifies_branch() {
-        let (_rt, handle) = runtime();
+        let (_rt, handle) = runtime().expect("test requires a Tokio runtime");
         let mut client = MockExecClient::new();
-        let (repository, branch, workspace) = typed_request_values("main");
-        let askpass = typed_askpass();
+        let (repository, branch, workspace) =
+            typed_request_values("main").expect("test request values should parse");
+        let askpass = typed_askpass().expect("test askpass should parse");
         let clone_request = request(&repository, &branch, &workspace, &askpass);
         arrange_successful_clone(&mut client);
         expect_exec(
@@ -295,10 +301,11 @@ mod tests {
 
     #[test]
     fn clone_failure_returns_exec_error() {
-        let (_rt, handle) = runtime();
+        let (_rt, handle) = runtime().expect("test requires a Tokio runtime");
         let mut client = MockExecClient::new();
-        let (repository, branch, workspace) = typed_request_values("main");
-        let askpass = typed_askpass();
+        let (repository, branch, workspace) =
+            typed_request_values("main").expect("test request values should parse");
+        let askpass = typed_askpass().expect("test askpass should parse");
         let clone_request = request(&repository, &branch, &workspace, &askpass);
         expect_exec(
             &mut client,
@@ -324,10 +331,11 @@ mod tests {
 
     #[test]
     fn branch_verification_failure_returns_exec_error() {
-        let (_rt, handle) = runtime();
+        let (_rt, handle) = runtime().expect("test requires a Tokio runtime");
         let mut client = MockExecClient::new();
-        let (repository, branch, workspace) = typed_request_values("main");
-        let askpass = typed_askpass();
+        let (repository, branch, workspace) =
+            typed_request_values("main").expect("test request values should parse");
+        let askpass = typed_askpass().expect("test askpass should parse");
         let clone_request = request(&repository, &branch, &workspace, &askpass);
         arrange_successful_clone(&mut client);
         // Branch verification fails (exit code 1).

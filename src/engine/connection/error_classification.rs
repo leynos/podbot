@@ -113,6 +113,8 @@ fn io_error_kind_in_chain(error: &dyn std::error::Error) -> Option<std::io::Erro
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for container-engine error classification.
+
     use std::fmt;
 
     use rstest::rstest;

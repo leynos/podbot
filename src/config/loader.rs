@@ -216,29 +216,42 @@ fn build_overrides(overrides: &ConfigOverrides) -> Result<serde_json::Value> {
         json_overrides.insert("image".to_owned(), serde_json::Value::String(image.clone()));
     }
 
-    if overrides.agent_kind.is_some() || overrides.agent_mode.is_some() {
-        let mut agent = serde_json::Map::new();
-
-        if let Some(kind) = overrides.agent_kind {
-            agent.insert(
-                "kind".to_owned(),
-                serde_json::to_value(kind).map_err(|error| ConfigError::ParseError {
-                    message: format!("failed to serialize agent kind override: {error}"),
-                })?,
-            );
-        }
-
-        if let Some(mode) = overrides.agent_mode {
-            agent.insert(
-                "mode".to_owned(),
-                serde_json::to_value(mode).map_err(|error| ConfigError::ParseError {
-                    message: format!("failed to serialize agent mode override: {error}"),
-                })?,
-            );
-        }
-
+    if let Some(agent) = build_agent_overrides(overrides)? {
         json_overrides.insert("agent".to_owned(), serde_json::Value::Object(agent));
     }
 
     Ok(serde_json::Value::Object(json_overrides))
+}
+
+/// Build the nested agent override object, if any agent override is set.
+fn build_agent_overrides(
+    overrides: &ConfigOverrides,
+) -> Result<Option<serde_json::Map<String, serde_json::Value>>> {
+    if overrides.agent_kind.is_none() && overrides.agent_mode.is_none() {
+        return Ok(None);
+    }
+
+    let mut agent = serde_json::Map::new();
+
+    if let Some(kind) = overrides.agent_kind {
+        agent.insert("kind".to_owned(), serialize_agent_override("kind", kind)?);
+    }
+
+    if let Some(mode) = overrides.agent_mode {
+        agent.insert("mode".to_owned(), serialize_agent_override("mode", mode)?);
+    }
+
+    Ok(Some(agent))
+}
+
+/// Serialize a single agent override field, labelling failures by field name.
+fn serialize_agent_override<T: serde::Serialize>(
+    field: &str,
+    value: T,
+) -> Result<serde_json::Value> {
+    Ok(
+        serde_json::to_value(value).map_err(|error| ConfigError::ParseError {
+            message: format!("failed to serialize agent {field} override: {error}"),
+        })?,
+    )
 }

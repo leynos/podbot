@@ -1,14 +1,22 @@
 //! Unit tests for GitHub App private key loading and client construction.
 //!
 //! Covers happy paths (valid RSA key), unhappy paths (missing, empty, invalid),
-//! key type rejection (ECDSA, Ed25519, public keys, certificates), encrypted
-//! key detection, and Octocrab App client building.
+//! key type rejection (ECDSA, Ed25519, public keys, certificates), and
+//! encrypted key detection. Client construction and credential validation
+//! live in [`client_tests`]; property-based coverage lives in
+//! [`property_tests`].
 
-use super::retry_metrics::github_status_class;
+use std::io;
+
 use super::*;
 use cap_std::fs_utf8::Dir as Utf8Dir;
 use rstest::{fixture, rstest};
 use tempfile::TempDir;
+
+#[path = "client_tests.rs"]
+mod client_tests;
+#[path = "property_tests.rs"]
+mod property_tests;
 
 /// Fixture providing valid RSA PEM content (PKCS#1 format).
 #[fixture]
@@ -30,20 +38,22 @@ fn ed25519_pem() -> String {
 
 /// Fixture providing a temporary directory opened as a `Dir` capability.
 #[fixture]
-fn temp_key_dir() -> (TempDir, Utf8Dir) {
-    let temp_dir = tempfile::tempdir().expect("should create temp dir");
+fn temp_key_dir() -> io::Result<(TempDir, Utf8Dir)> {
+    let temp_dir = tempfile::tempdir()?;
     let path_str = temp_dir
         .path()
         .to_str()
-        .expect("temp dir path should be UTF-8");
-    let dir =
-        Utf8Dir::open_ambient_dir(path_str, ambient_authority()).expect("should open temp dir");
-    (temp_dir, dir)
+        .ok_or_else(|| io::Error::other("temp dir path should be UTF-8"))?;
+    let dir = Utf8Dir::open_ambient_dir(path_str, ambient_authority())?;
+    Ok((temp_dir, dir))
 }
 
 #[rstest]
-fn load_valid_rsa_key_succeeds(valid_rsa_pem: String, temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
+fn load_valid_rsa_key_succeeds(
+    valid_rsa_pem: String,
+    temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
+) {
+    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
     dir.write("key.pem", &valid_rsa_pem)
         .expect("should write key");
     let path = Utf8Path::new("/display/key.pem");
@@ -52,8 +62,8 @@ fn load_valid_rsa_key_succeeds(valid_rsa_pem: String, temp_key_dir: (TempDir, Ut
 }
 
 #[rstest]
-fn load_missing_file_returns_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
+fn load_missing_file_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
+    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
     let path = Utf8Path::new("/config/missing.pem");
     let result = load_private_key_from_dir(&dir, "missing.pem", path);
     assert!(result.is_err(), "expected Err for missing file");
@@ -66,8 +76,8 @@ fn load_missing_file_returns_error(temp_key_dir: (TempDir, Utf8Dir)) {
 }
 
 #[rstest]
-fn load_empty_file_returns_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
+fn load_empty_file_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
+    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
     dir.write("empty.pem", "").expect("should write empty file");
     let path = Utf8Path::new("/config/empty.pem");
     let result = load_private_key_from_dir(&dir, "empty.pem", path);
@@ -80,8 +90,8 @@ fn load_empty_file_returns_error(temp_key_dir: (TempDir, Utf8Dir)) {
 }
 
 #[rstest]
-fn load_invalid_pem_returns_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
+fn load_invalid_pem_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
+    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
     dir.write("garbage.pem", "this is not a PEM file at all")
         .expect("should write garbage file");
     let path = Utf8Path::new("/config/garbage.pem");
@@ -95,8 +105,8 @@ fn load_invalid_pem_returns_error(temp_key_dir: (TempDir, Utf8Dir)) {
 }
 
 #[rstest]
-fn load_ec_key_returns_clear_error(ec_pem: String, temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
+fn load_ec_key_returns_clear_error(ec_pem: String, temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
+    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
     dir.write("ec.pem", &ec_pem).expect("should write EC key");
     let path = Utf8Path::new("/config/ec.pem");
     let result = load_private_key_from_dir(&dir, "ec.pem", path);
@@ -113,8 +123,11 @@ fn load_ec_key_returns_clear_error(ec_pem: String, temp_key_dir: (TempDir, Utf8D
 }
 
 #[rstest]
-fn load_ed25519_key_returns_clear_error(ed25519_pem: String, temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
+fn load_ed25519_key_returns_clear_error(
+    ed25519_pem: String,
+    temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
+) {
+    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
     dir.write("ed25519.pem", &ed25519_pem)
         .expect("should write Ed25519 key");
     let path = Utf8Path::new("/config/ed25519.pem");
@@ -128,8 +141,8 @@ fn load_ed25519_key_returns_clear_error(ed25519_pem: String, temp_key_dir: (Temp
 }
 
 #[rstest]
-fn error_includes_file_path(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (_tmp, dir) = temp_key_dir;
+fn error_includes_file_path(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
+    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
     let display = Utf8Path::new("/home/user/.config/podbot/app.pem");
     let result = load_private_key_from_dir(&dir, "nonexistent.pem", display);
     match result {
@@ -145,8 +158,11 @@ fn error_includes_file_path(temp_key_dir: (TempDir, Utf8Dir)) {
 }
 
 #[rstest]
-fn load_private_key_resolves_full_path(valid_rsa_pem: String, temp_key_dir: (TempDir, Utf8Dir)) {
-    let (tmp, dir) = temp_key_dir;
+fn load_private_key_resolves_full_path(
+    valid_rsa_pem: String,
+    temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
+) {
+    let (tmp, dir) = temp_key_dir.expect("should create temp key dir");
     dir.write("github-app.pem", &valid_rsa_pem)
         .expect("should write key");
     let full_path = tmp.path().join("github-app.pem");
@@ -217,12 +233,12 @@ fn load_private_key_missing_parent_returns_error() {
     "encrypted"
 )]
 fn load_invalid_key_types_return_clear_error(
-    temp_key_dir: (TempDir, Utf8Dir),
+    temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
     #[case] file_name: &str,
     #[case] pem_content: &str,
     #[case] expected_keyword: &str,
 ) {
-    let (_tmp, dir) = temp_key_dir;
+    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
     dir.write(file_name, pem_content)
         .expect("should write key file");
     let display = format!("/config/{file_name}");
@@ -234,207 +250,4 @@ fn load_invalid_key_types_return_clear_error(
         message.contains(expected_keyword),
         "error for {file_name} should mention '{expected_keyword}': {message}"
     );
-}
-
-#[rstest]
-fn build_app_client_with_valid_key_succeeds(
-    valid_rsa_pem: String,
-    temp_key_dir: (TempDir, Utf8Dir),
-) {
-    let (_tmp, dir) = temp_key_dir;
-    dir.write("key.pem", &valid_rsa_pem)
-        .expect("should write key");
-    let path = Utf8Path::new("/display/key.pem");
-    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
-    // Octocrab's build() spawns a Tower buffer task requiring a Tokio runtime.
-    let rt = tokio::runtime::Runtime::new().expect("should create tokio runtime");
-    let _guard = rt.enter();
-    let result = build_app_client(12345, key);
-    assert!(result.is_ok(), "expected Ok, got: {result:?}");
-}
-
-#[rstest]
-fn build_app_client_with_zero_app_id_succeeds(
-    valid_rsa_pem: String,
-    temp_key_dir: (TempDir, Utf8Dir),
-) {
-    let (_tmp, dir) = temp_key_dir;
-    dir.write("key.pem", &valid_rsa_pem)
-        .expect("should write key");
-    let path = Utf8Path::new("/display/key.pem");
-    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
-    // Builder does not validate app_id; GitHub validates at token time.
-    // Octocrab's build() spawns a Tower buffer task requiring a Tokio runtime.
-    let rt = tokio::runtime::Runtime::new().expect("should create tokio runtime");
-    let _guard = rt.enter();
-    let result = build_app_client(0, key);
-    assert!(
-        result.is_ok(),
-        "expected Ok even with zero app_id, got: {result:?}"
-    );
-}
-
-#[rstest]
-fn build_app_client_without_runtime_returns_error(
-    valid_rsa_pem: String,
-    temp_key_dir: (TempDir, Utf8Dir),
-) {
-    let (_tmp, dir) = temp_key_dir;
-    dir.write("key.pem", &valid_rsa_pem)
-        .expect("should write key");
-    let path = Utf8Path::new("/display/key.pem");
-    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
-    // Call without entering a Tokio runtime — should return Err, not panic.
-    let result = build_app_client(42, key);
-    assert!(result.is_err(), "expected Err without runtime, got Ok");
-    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(
-        message.contains("no Tokio runtime context"),
-        "error should mention missing runtime: {message}"
-    );
-}
-
-#[rstest]
-#[case::client_error(http::StatusCode::TOO_MANY_REQUESTS, "4xx")]
-#[case::server_error(http::StatusCode::INTERNAL_SERVER_ERROR, "5xx")]
-#[case::redirect(http::StatusCode::TEMPORARY_REDIRECT, "3xx")]
-fn github_status_class_groups_status_codes(
-    #[case] status_code: http::StatusCode,
-    #[case] expected_class: &str,
-) {
-    assert_eq!(github_status_class(status_code), expected_class);
-}
-
-#[rstest]
-#[case::builder_context(
-    "failed to build GitHub App client: test error",
-    "failed to build GitHub App client"
-)]
-#[case::validation_context(
-    "failed to validate GitHub App credentials: test error",
-    "failed to validate GitHub App credentials"
-)]
-fn authentication_failed_error_includes_context(
-    #[case] message: &str,
-    #[case] expected_context: &str,
-) {
-    let error = GitHubError::AuthenticationFailed {
-        message: String::from(message),
-    };
-    let display = error.to_string();
-    assert!(
-        display.contains(expected_context),
-        "error should include context: {display}"
-    );
-    assert!(
-        display.contains("test error"),
-        "error should include cause: {display}"
-    );
-}
-
-#[rstest]
-#[tokio::test]
-async fn validate_app_credentials_with_missing_key_returns_error(temp_key_dir: (TempDir, Utf8Dir)) {
-    let (temp_dir, _dir) = temp_key_dir;
-    let key_path = Utf8Path::from_path(temp_dir.path())
-        .expect("temp dir path should be UTF-8")
-        .join("key.pem");
-    let result = validate_app_credentials(12345, &key_path).await;
-    assert!(result.is_err(), "expected Err for missing key file");
-    match result {
-        Err(GitHubError::PrivateKeyLoadFailed { ref path, .. }) => {
-            assert!(
-                path.to_string_lossy().contains("key.pem"),
-                "error path should reference the missing file"
-            );
-        }
-        other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
-    }
-}
-
-#[rstest]
-#[tokio::test]
-async fn validate_app_credentials_with_invalid_pem_returns_error(
-    ec_pem: String,
-    temp_key_dir: (TempDir, Utf8Dir),
-) {
-    let (tmp, dir) = temp_key_dir;
-    dir.write("ec.pem", &ec_pem).expect("should write EC key");
-    let full_path = tmp.path().join("ec.pem");
-    let utf8_path = Utf8Path::from_path(&full_path).expect("temp path should be UTF-8");
-
-    let result = validate_app_credentials(12345, utf8_path).await;
-    assert!(result.is_err(), "expected Err for ECDSA key");
-    match result {
-        Err(GitHubError::PrivateKeyLoadFailed { message, .. }) => {
-            assert!(
-                message.contains("ECDSA"),
-                "error should mention ECDSA: {message}"
-            );
-        }
-        other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
-    }
-}
-
-#[rstest]
-#[tokio::test]
-async fn validate_with_client_propagates_mock_success() {
-    let mut mock = MockGitHubAppClient::new();
-    mock.expect_validate_credentials()
-        .times(1)
-        .returning(|| Box::pin(async { Ok(()) }));
-
-    let result = validate_with_client(&mock).await;
-    assert!(result.is_ok(), "expected Ok from mock client");
-}
-
-#[rstest]
-#[tokio::test]
-async fn validate_with_client_propagates_mock_error() {
-    let mut mock = MockGitHubAppClient::new();
-    mock.expect_validate_credentials().times(1).returning(|| {
-        Box::pin(async {
-            Err(GitHubError::AuthenticationFailed {
-                message: String::from("mock authentication failure"),
-            })
-        })
-    });
-
-    let result = validate_with_client(&mock).await;
-    assert!(result.is_err(), "expected Err from mock client");
-    let message = result.err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(
-        message.contains("mock authentication failure"),
-        "error should propagate mock message: {message}"
-    );
-}
-
-mod property_tests {
-    use proptest::prelude::*;
-
-    use super::super::retry_metrics::github_status_class;
-
-    proptest! {
-        #[test]
-        fn github_status_class_range_invariant(raw_code in 100_u16..=999_u16) {
-            let status = http::StatusCode::from_u16(raw_code)
-                .expect("codes 100–999 are valid HTTP status codes");
-            let class = github_status_class(status);
-            let expected = match raw_code {
-                100..=199 => "1xx",
-                200..=299 => "2xx",
-                300..=399 => "3xx",
-                400..=499 => "4xx",
-                500..=599 => "5xx",
-                _ => "other",
-            };
-            prop_assert_eq!(
-                class,
-                expected,
-                "github_status_class({}) should map to {}",
-                raw_code,
-                expected,
-            );
-        }
-    }
 }

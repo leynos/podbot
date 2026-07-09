@@ -3,7 +3,7 @@
 
 use std::io;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
 use ortho_config::serde_json::{self, Value};
@@ -26,11 +26,17 @@ struct RecordingWriter {
 
 impl RecordingWriter {
     fn snapshot(&self) -> Vec<u8> {
-        self.bytes.lock().expect("writer mutex").clone()
+        self.bytes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn shutdown_observed(&self) -> bool {
-        *self.shutdown_called.lock().expect("shutdown mutex")
+        *self
+            .shutdown_called
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -42,7 +48,7 @@ impl AsyncWrite for RecordingWriter {
     ) -> Poll<io::Result<usize>> {
         self.bytes
             .lock()
-            .expect("writer mutex")
+            .unwrap_or_else(PoisonError::into_inner)
             .extend_from_slice(buf);
         Poll::Ready(Ok(buf.len()))
     }
@@ -52,7 +58,10 @@ impl AsyncWrite for RecordingWriter {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        *self.shutdown_called.lock().expect("shutdown mutex") = true;
+        *self
+            .shutdown_called
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = true;
         Poll::Ready(Ok(()))
     }
 }
@@ -85,7 +94,7 @@ impl AsyncWrite for BrokenPipeWriter {
 /// Builds a newline-terminated JSON-RPC 2.0 frame.
 ///
 /// Pass `id = Some(…)` for requests; `id = None` for notifications.
-fn make_jsonrpc_frame(method: &str, id: Option<&Value>) -> Vec<u8> {
+fn make_jsonrpc_frame(method: &str, id: Option<&Value>) -> Result<Vec<u8>, serde_json::Error> {
     let value = id.map_or_else(
         || {
             serde_json::json!({
@@ -103,20 +112,20 @@ fn make_jsonrpc_frame(method: &str, id: Option<&Value>) -> Vec<u8> {
             })
         },
     );
-    let mut bytes = serde_json::to_vec(&value).expect("frame serializes");
+    let mut bytes = serde_json::to_vec(&value)?;
     bytes.push(b'\n');
-    bytes
+    Ok(bytes)
 }
 
-fn permitted_frame() -> Vec<u8> {
+fn permitted_frame() -> Result<Vec<u8>, serde_json::Error> {
     make_jsonrpc_frame("session/new", Some(&serde_json::json!(1)))
 }
 
-fn blocked_request_frame(id: &Value) -> Vec<u8> {
+fn blocked_request_frame(id: &Value) -> Result<Vec<u8>, serde_json::Error> {
     make_jsonrpc_frame("terminal/create", Some(id))
 }
 
-fn blocked_notification_frame() -> Vec<u8> {
+fn blocked_notification_frame() -> Result<Vec<u8>, serde_json::Error> {
     make_jsonrpc_frame("fs/changed", None)
 }
 
@@ -142,7 +151,7 @@ async fn permitted_frame_writes_to_host_stdout_only() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = permitted_frame();
+    let frame = permitted_frame().expect("frame should serialize");
 
     adapter
         .handle_chunk(&frame, &mut writer)
@@ -162,7 +171,7 @@ async fn blocked_request_skips_host_stdout_and_queues_synthesized_response() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(&serde_json::json!(7));
+    let frame = blocked_request_frame(&serde_json::json!(7)).expect("frame should serialize");
 
     adapter
         .handle_chunk(&frame, &mut writer)
@@ -199,7 +208,7 @@ async fn blocked_notification_drops_silently_without_sink_command() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_notification_frame();
+    let frame = blocked_notification_frame().expect("frame should serialize");
 
     adapter
         .handle_chunk(&frame, &mut writer)
@@ -221,8 +230,8 @@ async fn permitted_frame_after_blocked_frame_still_reaches_host_stdout() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let mut chunk = blocked_request_frame(&serde_json::json!(1));
-    let permitted = permitted_frame();
+    let mut chunk = blocked_request_frame(&serde_json::json!(1)).expect("frame should serialize");
+    let permitted = permitted_frame().expect("frame should serialize");
     chunk.extend_from_slice(&permitted);
 
     adapter
@@ -242,7 +251,7 @@ async fn frame_split_across_chunks_is_classified_after_assembly() {
     let host_stdout = RecordingWriter::default();
     let recorder = host_stdout.clone();
     let mut writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(&serde_json::json!(2));
+    let frame = blocked_request_frame(&serde_json::json!(2)).expect("frame should serialize");
     let split_at = frame.len().div_euclid(2);
     let first = frame.get(..split_at).expect("split prefix");
     let second = frame.get(split_at..).expect("split suffix");
@@ -355,7 +364,7 @@ async fn blocked_request_synthesized_before_channel_close_is_flushed() {
     let mut adapter = OutboundPolicyAdapter::new(assembler, tx.clone(), "container-test");
     let host_stdout = RecordingWriter::default();
     let mut host_writer: Pin<Box<dyn AsyncWrite + Send + Unpin>> = Box::pin(host_stdout);
-    let frame = blocked_request_frame(&serde_json::json!(11));
+    let frame = blocked_request_frame(&serde_json::json!(11)).expect("frame should serialize");
 
     adapter
         .handle_chunk(&frame, &mut host_writer)

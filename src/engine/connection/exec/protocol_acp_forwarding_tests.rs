@@ -4,9 +4,10 @@ use super::*;
 
 #[test]
 fn forwarding_leaves_initialize_unchanged_when_acp_rewrite_is_disabled() {
-    let host_stdin_bytes = initialize_frame("\n");
+    let host_stdin_bytes = initialize_frame("\n").expect("initialize frame should serialize");
 
-    let (forwarded, shutdown_called) = run_forwarding_with_rewrite(&host_stdin_bytes, false);
+    let (forwarded, shutdown_called) = run_forwarding_with_rewrite(&host_stdin_bytes, false)
+        .expect("stdin forwarding should succeed");
 
     assert_eq!(
         forwarded, host_stdin_bytes,
@@ -17,11 +18,12 @@ fn forwarding_leaves_initialize_unchanged_when_acp_rewrite_is_disabled() {
 
 #[test]
 fn forwarding_masks_initialize_and_preserves_trailing_bytes() {
-    let mut host_stdin_bytes = initialize_frame("\n");
-    let trailing = initialize_frame("\n");
+    let mut host_stdin_bytes = initialize_frame("\n").expect("initialize frame should serialize");
+    let trailing = initialize_frame("\n").expect("initialize frame should serialize");
     host_stdin_bytes.extend_from_slice(&trailing);
 
-    let (forwarded, shutdown_called) = run_forwarding(&host_stdin_bytes);
+    let (forwarded, shutdown_called) =
+        run_forwarding(&host_stdin_bytes).expect("stdin forwarding should succeed");
     let newline_index = forwarded
         .iter()
         .position(|byte| *byte == b'\n')
@@ -32,9 +34,10 @@ fn forwarding_masks_initialize_and_preserves_trailing_bytes() {
     let trailing_forwarded = forwarded
         .get(newline_index + 1..)
         .expect("trailing bytes should remain addressable");
-    let payload = parse_frame_payload(initialize_frame);
+    let payload = parse_frame_payload(initialize_frame).expect("frame should contain JSON payload");
 
-    assert_masked_client_capabilities(&payload);
+    check_masked_client_capabilities(&payload)
+        .expect("blocked client capabilities should be masked");
     assert_eq!(
         trailing_forwarded,
         trailing.as_slice(),

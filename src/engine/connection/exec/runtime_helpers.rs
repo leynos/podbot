@@ -53,6 +53,10 @@ pub(super) fn exec_failed(container_id: &str, message: impl Into<String>) -> Pod
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for exec runtime helper utilities.
+
+    use std::io;
+
     use super::*;
     use rstest::{fixture, rstest};
 
@@ -62,11 +66,10 @@ mod tests {
     }
 
     #[fixture]
-    fn current_thread_runtime() -> tokio::runtime::Runtime {
+    fn current_thread_runtime() -> io::Result<tokio::runtime::Runtime> {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("runtime should be created")
     }
 
     #[test]
@@ -105,10 +108,11 @@ mod tests {
     #[case::ok(OutsideTokioOutcome::Ok)]
     #[case::err(OutsideTokioOutcome::Err)]
     fn block_on_runtime_maps_outcomes_outside_tokio(
-        current_thread_runtime: tokio::runtime::Runtime,
+        current_thread_runtime: io::Result<tokio::runtime::Runtime>,
         #[case] outcome: OutsideTokioOutcome,
     ) {
-        let handle = current_thread_runtime.handle().clone();
+        let rt = current_thread_runtime.expect("runtime should be created");
+        let handle = rt.handle().clone();
 
         match outcome {
             OutsideTokioOutcome::Ok => {

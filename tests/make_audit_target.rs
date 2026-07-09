@@ -15,34 +15,44 @@
 //! See also: `Makefile` (`rust-audit` target), `docs/developers-guide.md`
 //! (§ 2 Quality gates, § 2.1 Security audit ignores).
 
-use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
 
+use cap_std::fs::Dir;
 use rstest::rstest;
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-fn write_file(path: &Path, contents: &str) -> TestResult {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+/// Open a capability handle on the temporary workspace root.
+fn open_workspace_dir(workspace: &Path) -> TestResult<Dir> {
+    Ok(Dir::open_ambient_dir(
+        workspace,
+        cap_std::ambient_authority(),
+    )?)
+}
+
+fn write_file(workspace_dir: &Dir, relative_path: &str, contents: &str) -> TestResult {
+    if let Some(parent) = Path::new(relative_path).parent()
+        && !parent.as_os_str().is_empty()
+    {
+        workspace_dir.create_dir_all(parent)?;
     }
-    fs::write(path, contents)?;
+    workspace_dir.write(relative_path, contents)?;
     Ok(())
 }
 
+/// Writes the fake `cargo` script at `bin/cargo` inside the workspace; the
+/// caller derives its absolute path with `workspace.join("bin/cargo")`.
 fn write_fake_cargo(
-    bin_dir: &Path,
+    workspace_dir: &Dir,
     log_path: &Path,
     exit_status: i32,
     metadata_status: i32,
-) -> TestResult<std::path::PathBuf> {
-    let cargo_path = bin_dir.join("cargo");
+) -> TestResult {
     write_file(
-        &cargo_path,
+        workspace_dir,
+        "bin/cargo",
         &format!(
             "#!/usr/bin/env sh\nif [ \"$1\" = metadata ]; then\nprintf '%s\\n' \"$PODBOT_FAKE_CARGO_METADATA\"\nexit {metadata_status}\nfi\nprintf '%s|%s\\n' \"$PWD\" \"$*\" >> '{}'\nexit {exit_status}\n",
             log_path.display()
@@ -50,11 +60,12 @@ fn write_fake_cargo(
     )?;
     #[cfg(unix)]
     {
-        let mut permissions = fs::metadata(&cargo_path)?.permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&cargo_path, permissions)?;
+        use cap_std::fs::PermissionsExt;
+
+        let permissions = cap_std::fs::Permissions::from_mode(0o755);
+        workspace_dir.set_permissions("bin/cargo", permissions)?;
     }
-    Ok(cargo_path)
+    Ok(())
 }
 
 fn run_rust_audit(
@@ -72,8 +83,12 @@ fn run_rust_audit(
         .output()?)
 }
 
-fn create_manifest(path: &Path) -> TestResult {
-    write_file(path, "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\n")
+fn create_manifest(workspace_dir: &Dir, relative_path: &str) -> TestResult {
+    write_file(
+        workspace_dir,
+        relative_path,
+        "[package]\nname = \"fixture\"\nversion = \"0.0.0\"\n",
+    )
 }
 
 fn cargo_metadata_for(workspace: &Path, manifests: &[&Path]) -> String {
@@ -104,20 +119,22 @@ fn cargo_metadata_for(workspace: &Path, manifests: &[&Path]) -> String {
 fn rust_audit_invokes_cargo_audit_once_at_workspace_root() {
     let temp = TempDir::new().expect("temporary workspace should be created");
     let workspace = temp.path();
+    let workspace_dir = open_workspace_dir(workspace).expect("workspace dir should open");
     let root_manifest = workspace.join("Cargo.toml");
     let member_manifest = workspace.join("crates/agent/Cargo.toml");
-    create_manifest(&root_manifest).expect("root manifest should be created");
-    create_manifest(&member_manifest).expect("nested manifest should be created");
-    create_manifest(&workspace.join("target/ignored/Cargo.toml"))
+    create_manifest(&workspace_dir, "Cargo.toml").expect("root manifest should be created");
+    create_manifest(&workspace_dir, "crates/agent/Cargo.toml")
+        .expect("nested manifest should be created");
+    create_manifest(&workspace_dir, "target/ignored/Cargo.toml")
         .expect("target manifest fixture should be created");
-    create_manifest(&workspace.join("node_modules/ignored/Cargo.toml"))
+    create_manifest(&workspace_dir, "node_modules/ignored/Cargo.toml")
         .expect("node_modules manifest fixture should be created");
-    create_manifest(&workspace.join(".venv/ignored/Cargo.toml"))
+    create_manifest(&workspace_dir, ".venv/ignored/Cargo.toml")
         .expect("virtualenv manifest fixture should be created");
 
     let log_path = workspace.join("cargo-audit.log");
-    let fake_cargo = write_fake_cargo(&workspace.join("bin"), &log_path, 0, 0)
-        .expect("fake cargo should be built");
+    write_fake_cargo(&workspace_dir, &log_path, 0, 0).expect("fake cargo should be built");
+    let fake_cargo = workspace.join("bin/cargo");
     let metadata = cargo_metadata_for(workspace, &[&root_manifest, &member_manifest]);
 
     let output =
@@ -129,7 +146,9 @@ fn rust_audit_invokes_cargo_audit_once_at_workspace_root() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    let log = fs::read_to_string(log_path).expect("fake cargo log should be readable");
+    let log = workspace_dir
+        .read_to_string("cargo-audit.log")
+        .expect("fake cargo log should be readable");
     assert_eq!(
         log,
         format!("{}|audit\n", workspace.display()),
@@ -160,16 +179,18 @@ fn rust_audit_propagates_failure(
 ) {
     let temp = TempDir::new().expect("temporary workspace should be created");
     let workspace = temp.path();
-    create_manifest(&workspace.join("Cargo.toml")).expect("root manifest should be created");
+    let workspace_dir = open_workspace_dir(workspace).expect("workspace dir should open");
+    create_manifest(&workspace_dir, "Cargo.toml").expect("root manifest should be created");
 
     let log_path = workspace.join("cargo-audit.log");
-    let fake_cargo = write_fake_cargo(
-        &workspace.join("bin"),
+    write_fake_cargo(
+        &workspace_dir,
         &log_path,
         audit_exit_status,
         metadata_exit_status,
     )
     .expect("fake cargo should be built");
+    let fake_cargo = workspace.join("bin/cargo");
     let metadata = cargo_metadata_for(workspace, &[&workspace.join("Cargo.toml")]);
 
     let output =
@@ -182,7 +203,9 @@ fn rust_audit_propagates_failure(
         String::from_utf8_lossy(&output.stderr),
     );
     if should_audit_run {
-        let log = fs::read_to_string(&log_path).expect("fake cargo log should be readable");
+        let log = workspace_dir
+            .read_to_string("cargo-audit.log")
+            .expect("fake cargo log should be readable");
         assert_eq!(
             log,
             format!("{}|audit\n", workspace.display()),
@@ -190,7 +213,7 @@ fn rust_audit_propagates_failure(
         );
     } else {
         assert!(
-            !log_path.exists(),
+            !workspace_dir.exists("cargo-audit.log"),
             "cargo audit should not run after metadata failure"
         );
     }

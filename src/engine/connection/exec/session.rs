@@ -70,6 +70,8 @@ pub(super) const fn protocol_session_options(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for exec session capability policies.
+
     use super::*;
 
     #[test]

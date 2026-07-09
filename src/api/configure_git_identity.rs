@@ -47,6 +47,8 @@ pub fn configure_container_git_identity<C: ContainerExecClient + Sync, R: HostCo
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for container git-identity configuration.
+
     use super::*;
     use crate::engine::test_helpers::{failure_output, success_output};
     use crate::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
@@ -139,12 +141,15 @@ mod tests {
 
     /// Shared test plumbing: creates a Tokio runtime, builds
     /// `GitIdentityParams`, and calls `configure_container_git_identity`.
+    ///
+    /// Returns an [`io::Error`] when the Tokio runtime cannot be created;
+    /// fixtures propagate arrangement failures instead of panicking.
     fn invoke(
         host_runner: &MockHostRunner,
         exec_client: &MockExecClient,
         container_id: &str,
-    ) -> PodbotResult<GitIdentityResult> {
-        let runtime = tokio::runtime::Runtime::new().expect("test requires a Tokio runtime");
+    ) -> io::Result<PodbotResult<GitIdentityResult>> {
+        let runtime = tokio::runtime::Runtime::new()?;
         let handle = runtime.handle().clone();
         let params = GitIdentityParams {
             client: exec_client,
@@ -152,7 +157,7 @@ mod tests {
             container_id,
             runtime_handle: &handle,
         };
-        configure_container_git_identity(&params)
+        Ok(configure_container_git_identity(&params))
     }
 
     #[test]
@@ -163,6 +168,7 @@ mod tests {
         let exec_client = make_exec_client(0);
 
         let result = invoke(&host_runner, &exec_client, "sandbox-unit")
+            .expect("test requires a Tokio runtime")
             .expect("should succeed with Configured");
 
         assert!(
@@ -179,6 +185,7 @@ mod tests {
         let exec_client = MockExecClient::new(); // no exec calls expected
 
         let result = invoke(&host_runner, &exec_client, "sandbox-unit-2")
+            .expect("test requires a Tokio runtime")
             .expect("should succeed with NoneConfigured");
 
         assert!(
