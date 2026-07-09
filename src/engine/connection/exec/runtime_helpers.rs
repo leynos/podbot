@@ -58,6 +58,7 @@ mod tests {
     use std::io;
 
     use super::*;
+    use eyre::{bail, ensure};
     use rstest::{fixture, rstest};
 
     enum OutsideTokioOutcome {
@@ -110,7 +111,7 @@ mod tests {
     fn block_on_runtime_maps_outcomes_outside_tokio(
         current_thread_runtime: io::Result<tokio::runtime::Runtime>,
         #[case] outcome: OutsideTokioOutcome,
-    ) -> io::Result<()> {
+    ) -> eyre::Result<()> {
         let rt = current_thread_runtime?;
         let handle = rt.handle().clone();
 
@@ -119,14 +120,16 @@ mod tests {
                 let result: Result<u32, crate::error::PodbotError> =
                     block_on_runtime(&handle, async { Ok(42_u32) });
 
-                assert_eq!(result.expect("future should resolve to Ok(42)"), 42);
+                ensure!(result? == 42, "future should resolve to Ok(42)");
             }
             OutsideTokioOutcome::Err => {
                 let result: Result<(), crate::error::PodbotError> =
                     block_on_runtime(&handle, async { Err(exec_failed("c", "injected error")) });
 
-                let err = result.expect_err("future should resolve to Err");
-                assert!(
+                let Err(err) = result else {
+                    bail!("future should resolve to Err");
+                };
+                ensure!(
                     matches!(
                         err,
                         crate::error::PodbotError::Container(
