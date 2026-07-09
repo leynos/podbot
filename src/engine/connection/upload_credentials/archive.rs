@@ -149,8 +149,11 @@ fn append_file_entry(
     entry: &SortedEntry,
     path: String,
 ) -> io::Result<()> {
-    let metadata = parent_dir.metadata(&entry.file_name)?;
     let mut file = parent_dir.open(&entry.file_name)?;
+    // Read the metadata from the open handle so the header size cannot drift
+    // from the bytes actually streamed if the file changes on disk between
+    // the two calls.
+    let metadata = file.metadata()?;
     let mut header = new_entry_header(
         EntryType::Regular,
         metadata.len(),

@@ -24,6 +24,9 @@ use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+/// Workspace-relative location of the generated fake `cargo` script.
+const FAKE_CARGO_RELATIVE_PATH: &str = "bin/cargo";
+
 /// Open a capability handle on the temporary workspace root.
 fn open_workspace_dir(workspace: &Path) -> TestResult<Dir> {
     Ok(Dir::open_ambient_dir(
@@ -43,7 +46,7 @@ fn write_file(workspace_dir: &Dir, relative_path: &str, contents: &str) -> TestR
 }
 
 /// Writes the fake `cargo` script at `bin/cargo` inside the workspace; the
-/// caller derives its absolute path with `workspace.join("bin/cargo")`.
+/// caller derives its absolute path with `workspace.join(FAKE_CARGO_RELATIVE_PATH)`.
 fn write_fake_cargo(
     workspace_dir: &Dir,
     log_path: &Path,
@@ -52,7 +55,7 @@ fn write_fake_cargo(
 ) -> TestResult {
     write_file(
         workspace_dir,
-        "bin/cargo",
+        FAKE_CARGO_RELATIVE_PATH,
         &format!(
             "#!/usr/bin/env sh\nif [ \"$1\" = metadata ]; then\nprintf '%s\\n' \"$PODBOT_FAKE_CARGO_METADATA\"\nexit {metadata_status}\nfi\nprintf '%s|%s\\n' \"$PWD\" \"$*\" >> '{}'\nexit {exit_status}\n",
             log_path.display()
@@ -63,7 +66,7 @@ fn write_fake_cargo(
         use cap_std::fs::PermissionsExt;
 
         let permissions = cap_std::fs::Permissions::from_mode(0o755);
-        workspace_dir.set_permissions("bin/cargo", permissions)?;
+        workspace_dir.set_permissions(FAKE_CARGO_RELATIVE_PATH, permissions)?;
     }
     Ok(())
 }
@@ -134,7 +137,7 @@ fn rust_audit_invokes_cargo_audit_once_at_workspace_root() {
 
     let log_path = workspace.join("cargo-audit.log");
     write_fake_cargo(&workspace_dir, &log_path, 0, 0).expect("fake cargo should be built");
-    let fake_cargo = workspace.join("bin/cargo");
+    let fake_cargo = workspace.join(FAKE_CARGO_RELATIVE_PATH);
     let metadata = cargo_metadata_for(workspace, &[&root_manifest, &member_manifest]);
 
     let output =
@@ -190,7 +193,7 @@ fn rust_audit_propagates_failure(
         metadata_exit_status,
     )
     .expect("fake cargo should be built");
-    let fake_cargo = workspace.join("bin/cargo");
+    let fake_cargo = workspace.join(FAKE_CARGO_RELATIVE_PATH);
     let metadata = cargo_metadata_for(workspace, &[&workspace.join("Cargo.toml")]);
 
     let output =

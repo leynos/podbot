@@ -5,57 +5,15 @@
 //! individual test groups to sibling submodules.
 
 use std::io;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex, PoisonError};
-use std::task::{Context, Poll};
 
-use tokio::io::{AsyncWrite, AsyncWriteExt, DuplexStream};
+use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use super::*;
 use crate::engine::connection::exec::acp_helpers::{
     ACP_FILE_SYSTEM_CAPABILITY, ACP_TERMINAL_CAPABILITY, MAX_FIRST_FRAME_BYTES,
     forward_initial_acp_frame_async, mask_acp_initialize_frame, split_frame_line_ending,
 };
-
-struct RecordingInputWriter {
-    bytes: Arc<Mutex<Vec<u8>>>,
-    shutdown_called: Arc<Mutex<bool>>,
-}
-
-impl RecordingInputWriter {
-    fn new() -> Self {
-        Self {
-            bytes: Arc::new(Mutex::new(Vec::new())),
-            shutdown_called: Arc::new(Mutex::new(false)),
-        }
-    }
-}
-
-impl AsyncWrite for RecordingInputWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        self.bytes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        *self
-            .shutdown_called
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = true;
-        Poll::Ready(Ok(()))
-    }
-}
+use crate::engine::connection::exec::acp_test_support::RecordingWriter as RecordingInputWriter;
 
 fn initialize_frame_with_capabilities(
     capabilities: &serde_json::Value,
@@ -79,15 +37,21 @@ fn initialize_frame_with_capabilities(
     Ok(frame)
 }
 
+/// Builds the blocked `fs`/`terminal` capability object, optionally with an
+/// unrelated `_meta` entry that masking must preserve.
+fn blocked_capabilities(include_meta: bool) -> serde_json::Value {
+    let mut capabilities = serde_json::json!({
+        "fs": { "readTextFile": true, "writeTextFile": true },
+        "terminal": true
+    });
+    if include_meta && let Some(object) = capabilities.as_object_mut() {
+        object.insert(String::from("_meta"), serde_json::json!({ "custom": true }));
+    }
+    capabilities
+}
+
 fn initialize_frame(line_ending: &str) -> Result<Vec<u8>, serde_json::Error> {
-    initialize_frame_with_capabilities(
-        &serde_json::json!({
-            "fs": { "readTextFile": true, "writeTextFile": true },
-            "terminal": true,
-            "_meta": { "custom": true }
-        }),
-        line_ending,
-    )
+    initialize_frame_with_capabilities(&blocked_capabilities(true), line_ending)
 }
 
 /// Builds a serialised ACP `initialize` frame whose `clientCapabilities`
@@ -115,13 +79,7 @@ pub(super) fn initialize_without_blocked_capabilities() -> Result<Vec<u8>, serde
 fn initialize_with_only_blocked_capabilities(
     line_ending: &str,
 ) -> Result<Vec<u8>, serde_json::Error> {
-    initialize_frame_with_capabilities(
-        &serde_json::json!({
-            "fs": { "readTextFile": true, "writeTextFile": true },
-            "terminal": true
-        }),
-        line_ending,
-    )
+    initialize_frame_with_capabilities(&blocked_capabilities(false), line_ending)
 }
 
 fn session_new_bytes() -> Vec<u8> {
@@ -194,8 +152,7 @@ fn run_forwarding_with_rewrite(
     let runtime = tokio::runtime::Runtime::new()?;
     let host_stdin = runtime.block_on(build_host_stdin(host_stdin_bytes))?;
     let container_input = RecordingInputWriter::new();
-    let forwarded_bytes = container_input.bytes.clone();
-    let shutdown_called = container_input.shutdown_called.clone();
+    let recorder = container_input.clone();
 
     runtime.block_on(forward_host_stdin_to_exec_async(
         host_stdin,
@@ -203,14 +160,7 @@ fn run_forwarding_with_rewrite(
         rewrite_acp_initialize,
     ))?;
 
-    let forwarded = forwarded_bytes
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
-    let shutdown = *shutdown_called
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-    Ok((forwarded, shutdown))
+    Ok((recorder.snapshot(), recorder.shutdown_observed()))
 }
 
 /// Constructs a host-stdin byte sequence containing a masked `initialize`

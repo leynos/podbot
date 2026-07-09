@@ -13,27 +13,14 @@ use super::{
     OutboundFrameAssembler,
 };
 use crate::engine::connection::exec::acp_policy::MethodDenylist;
+use crate::engine::connection::exec::acp_test_support::jsonrpc_frame;
 
 fn permitted_frame(method: &str, line_ending: &[u8]) -> Result<Vec<u8>, serde_json::Error> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": method,
-        "params": {},
-    }))?;
-    bytes.extend_from_slice(line_ending);
-    Ok(bytes)
+    jsonrpc_frame(Some(&serde_json::json!(1)), method, line_ending)
 }
 
 fn blocked_request_frame(id: &Value, method: &str) -> Result<Vec<u8>, serde_json::Error> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "method": method,
-        "params": {},
-    }))?;
-    bytes.push(b'\n');
-    Ok(bytes)
+    jsonrpc_frame(Some(id), method, b"\n")
 }
 
 fn assembler() -> OutboundFrameAssembler {

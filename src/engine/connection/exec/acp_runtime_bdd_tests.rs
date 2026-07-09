@@ -68,16 +68,15 @@ fn denylist_state() -> DenylistState {
 
 /// Serializes `value` to compact JSON bytes and appends a newline terminator,
 /// producing a well-formed ACP frame suitable for test input.
-fn serialize_frame(value: serde_json::Value) -> StepResult<Vec<u8>> {
+fn serialize_frame(value: &serde_json::Value) -> StepResult<Vec<u8>> {
     let mut bytes =
-        serde_json::to_vec(&value).map_err(|err| format!("frame serialization failed: {err}"))?;
-    drop(value);
+        serde_json::to_vec(value).map_err(|err| format!("frame serialization failed: {err}"))?;
     bytes.push(b'\n');
     Ok(bytes)
 }
 
 fn make_request_frame(method: &str, id: i64) -> StepResult<Vec<u8>> {
-    serialize_frame(serde_json::json!({
+    serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "id": id,
         "method": method,
@@ -86,7 +85,7 @@ fn make_request_frame(method: &str, id: i64) -> StepResult<Vec<u8>> {
 }
 
 fn make_notification_frame(method: &str) -> StepResult<Vec<u8>> {
-    serialize_frame(serde_json::json!({
+    serialize_frame(&serde_json::json!({
         "jsonrpc": "2.0",
         "method": method,
         "params": {},

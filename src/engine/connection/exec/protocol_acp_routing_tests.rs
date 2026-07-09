@@ -2,13 +2,13 @@
 //! enforcement for outbound ACP frames.
 
 use std::io;
-use std::sync::PoisonError;
 
 use bollard::container::LogOutput;
 use futures_util::stream;
 use rstest::rstest;
 
 use super::{RecordingInputWriter, build_host_stdin};
+use crate::engine::connection::exec::acp_test_support::jsonrpc_frame;
 use crate::engine::connection::exec::protocol::{
     ProtocolProxyIo, ProtocolSessionOptions, run_protocol_session_with_io_async,
 };
@@ -25,14 +25,7 @@ fn protocol_request() -> Result<ExecRequest, PodbotError> {
 }
 
 fn blocked_terminal_create_frame() -> Result<Vec<u8>, serde_json::Error> {
-    let mut bytes = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 7,
-        "method": "terminal/create",
-        "params": {},
-    }))?;
-    bytes.push(b'\n');
-    Ok(bytes)
+    jsonrpc_frame(Some(&serde_json::json!(7)), "terminal/create", b"\n")
 }
 
 fn run_policy_output_frame(
@@ -43,10 +36,10 @@ fn run_policy_output_frame(
     let request = protocol_request().map_err(io::Error::other)?;
     let host_stdin = runtime.block_on(build_host_stdin(&[]))?;
     let host_stdout = RecordingInputWriter::new();
-    let host_stdout_bytes = host_stdout.bytes.clone();
+    let host_stdout_recorder = host_stdout.clone();
     let host_stderr = RecordingInputWriter::new();
     let container_input = RecordingInputWriter::new();
-    let container_stdin_bytes = container_input.bytes.clone();
+    let container_stdin_recorder = container_input.clone();
     let output = stream::iter([Ok(LogOutput::StdOut {
         message: frame.to_vec().into(),
     })]);
@@ -62,15 +55,10 @@ fn run_policy_output_frame(
         ))
         .map_err(io::Error::other)?;
 
-    let recorded_stdout = host_stdout_bytes
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
-    let recorded_container_stdin = container_stdin_bytes
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone();
-    Ok((recorded_stdout, recorded_container_stdin))
+    Ok((
+        host_stdout_recorder.snapshot(),
+        container_stdin_recorder.snapshot(),
+    ))
 }
 
 /// Pure query: returns `true` when `bytes` parses as the synthesized denial

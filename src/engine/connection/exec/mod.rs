@@ -7,6 +7,8 @@ mod acp_frame;
 mod acp_helpers;
 mod acp_policy;
 mod acp_runtime;
+#[cfg(test)]
+mod acp_test_support;
 mod attached;
 mod helpers;
 mod host_io;

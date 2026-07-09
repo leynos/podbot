@@ -52,18 +52,18 @@ fn temp_key_dir() -> io::Result<(TempDir, Utf8Dir)> {
 fn load_valid_rsa_key_succeeds(
     valid_rsa_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("key.pem", &valid_rsa_pem)
-        .expect("should write key");
+) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write("key.pem", &valid_rsa_pem)?;
     let path = Utf8Path::new("/display/key.pem");
     let result = load_private_key_from_dir(&dir, "key.pem", path);
     assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    Ok(())
 }
 
 #[rstest]
-fn load_missing_file_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
+fn load_missing_file_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
     let path = Utf8Path::new("/config/missing.pem");
     let result = load_private_key_from_dir(&dir, "missing.pem", path);
     assert!(result.is_err(), "expected Err for missing file");
@@ -73,12 +73,13 @@ fn load_missing_file_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>)
         message.contains("failed to read file"),
         "error should mention file read failure: {message}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn load_empty_file_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("empty.pem", "").expect("should write empty file");
+fn load_empty_file_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write("empty.pem", "")?;
     let path = Utf8Path::new("/config/empty.pem");
     let result = load_private_key_from_dir(&dir, "empty.pem", path);
     assert!(result.is_err(), "expected Err for empty file");
@@ -87,13 +88,13 @@ fn load_empty_file_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
         message.contains("empty"),
         "error should mention empty file: {message}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn load_invalid_pem_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("garbage.pem", "this is not a PEM file at all")
-        .expect("should write garbage file");
+fn load_invalid_pem_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write("garbage.pem", "this is not a PEM file at all")?;
     let path = Utf8Path::new("/config/garbage.pem");
     let result = load_private_key_from_dir(&dir, "garbage.pem", path);
     assert!(result.is_err(), "expected Err for invalid PEM");
@@ -102,12 +103,16 @@ fn load_invalid_pem_returns_error(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) 
         message.contains("invalid RSA private key"),
         "error should mention invalid RSA key: {message}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn load_ec_key_returns_clear_error(ec_pem: String, temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("ec.pem", &ec_pem).expect("should write EC key");
+fn load_ec_key_returns_clear_error(
+    ec_pem: String,
+    temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
+) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write("ec.pem", &ec_pem)?;
     let path = Utf8Path::new("/config/ec.pem");
     let result = load_private_key_from_dir(&dir, "ec.pem", path);
     assert!(result.is_err(), "expected Err for ECDSA key");
@@ -120,16 +125,16 @@ fn load_ec_key_returns_clear_error(ec_pem: String, temp_key_dir: io::Result<(Tem
         message.contains("RSA"),
         "error should mention RSA requirement: {message}"
     );
+    Ok(())
 }
 
 #[rstest]
 fn load_ed25519_key_returns_clear_error(
     ed25519_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("ed25519.pem", &ed25519_pem)
-        .expect("should write Ed25519 key");
+) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write("ed25519.pem", &ed25519_pem)?;
     let path = Utf8Path::new("/config/ed25519.pem");
     let result = load_private_key_from_dir(&dir, "ed25519.pem", path);
     assert!(result.is_err(), "expected Err for Ed25519 key");
@@ -138,11 +143,12 @@ fn load_ed25519_key_returns_clear_error(
         message.contains("invalid RSA private key"),
         "Ed25519 PKCS#8 should fail RSA parse: {message}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn error_includes_file_path(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
+fn error_includes_file_path(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
     let display = Utf8Path::new("/home/user/.config/podbot/app.pem");
     let result = load_private_key_from_dir(&dir, "nonexistent.pem", display);
     match result {
@@ -155,20 +161,21 @@ fn error_includes_file_path(temp_key_dir: io::Result<(TempDir, Utf8Dir)>) {
         }
         other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
     }
+    Ok(())
 }
 
 #[rstest]
 fn load_private_key_resolves_full_path(
     valid_rsa_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) {
-    let (tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("github-app.pem", &valid_rsa_pem)
-        .expect("should write key");
+) -> io::Result<()> {
+    let (tmp, dir) = temp_key_dir?;
+    dir.write("github-app.pem", &valid_rsa_pem)?;
     let full_path = tmp.path().join("github-app.pem");
     let utf8_path = Utf8Path::from_path(&full_path).expect("temp path should be UTF-8");
     let result = load_private_key(utf8_path);
     assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    Ok(())
 }
 
 #[rstest]
@@ -237,10 +244,9 @@ fn load_invalid_key_types_return_clear_error(
     #[case] file_name: &str,
     #[case] pem_content: &str,
     #[case] expected_keyword: &str,
-) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write(file_name, pem_content)
-        .expect("should write key file");
+) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write(file_name, pem_content)?;
     let display = format!("/config/{file_name}");
     let path = Utf8Path::new(&display);
     let result = load_private_key_from_dir(&dir, file_name, path);
@@ -250,4 +256,5 @@ fn load_invalid_key_types_return_clear_error(
         message.contains(expected_keyword),
         "error for {file_name} should mention '{expected_keyword}': {message}"
     );
+    Ok(())
 }

@@ -249,9 +249,10 @@ fn serialize_agent_override<T: serde::Serialize>(
     field: &str,
     value: T,
 ) -> Result<serde_json::Value> {
-    Ok(
-        serde_json::to_value(value).map_err(|error| ConfigError::ParseError {
+    serde_json::to_value(value).map_err(|error| {
+        ConfigError::ParseError {
             message: format!("failed to serialize agent {field} override: {error}"),
-        })?,
-    )
+        }
+        .into()
+    })
 }

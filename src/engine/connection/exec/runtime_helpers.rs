@@ -110,8 +110,8 @@ mod tests {
     fn block_on_runtime_maps_outcomes_outside_tokio(
         current_thread_runtime: io::Result<tokio::runtime::Runtime>,
         #[case] outcome: OutsideTokioOutcome,
-    ) {
-        let rt = current_thread_runtime.expect("runtime should be created");
+    ) -> io::Result<()> {
+        let rt = current_thread_runtime?;
         let handle = rt.handle().clone();
 
         match outcome {
@@ -137,6 +137,7 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

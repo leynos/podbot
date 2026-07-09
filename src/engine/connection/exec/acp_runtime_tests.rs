@@ -3,7 +3,6 @@
 
 use std::io;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
 use ortho_config::serde_json::{self, Value};
@@ -16,55 +15,7 @@ use super::{
     run_container_stdin_sink,
 };
 use crate::engine::connection::exec::acp_policy::MethodDenylist;
-
-/// Recording host-stdout writer that captures every byte and tracks shutdown.
-#[derive(Clone, Default)]
-struct RecordingWriter {
-    bytes: Arc<Mutex<Vec<u8>>>,
-    shutdown_called: Arc<Mutex<bool>>,
-}
-
-impl RecordingWriter {
-    fn snapshot(&self) -> Vec<u8> {
-        self.bytes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
-    }
-
-    fn shutdown_observed(&self) -> bool {
-        *self
-            .shutdown_called
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-    }
-}
-
-impl AsyncWrite for RecordingWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        self.bytes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        *self
-            .shutdown_called
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = true;
-        Poll::Ready(Ok(()))
-    }
-}
+use crate::engine::connection::exec::acp_test_support::{RecordingWriter, jsonrpc_frame};
 
 /// Writer that always returns `BrokenPipe` on writes, used to simulate the
 /// agent having already exited.
@@ -91,42 +42,16 @@ impl AsyncWrite for BrokenPipeWriter {
     }
 }
 
-/// Builds a newline-terminated JSON-RPC 2.0 frame.
-///
-/// Pass `id = Some(…)` for requests; `id = None` for notifications.
-fn make_jsonrpc_frame(method: &str, id: Option<&Value>) -> Result<Vec<u8>, serde_json::Error> {
-    let value = id.map_or_else(
-        || {
-            serde_json::json!({
-                "jsonrpc": "2.0",
-                "method": method,
-                "params": {},
-            })
-        },
-        |request_id| {
-            serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "method": method,
-                "params": {},
-            })
-        },
-    );
-    let mut bytes = serde_json::to_vec(&value)?;
-    bytes.push(b'\n');
-    Ok(bytes)
-}
-
 fn permitted_frame() -> Result<Vec<u8>, serde_json::Error> {
-    make_jsonrpc_frame("session/new", Some(&serde_json::json!(1)))
+    jsonrpc_frame(Some(&serde_json::json!(1)), "session/new", b"\n")
 }
 
 fn blocked_request_frame(id: &Value) -> Result<Vec<u8>, serde_json::Error> {
-    make_jsonrpc_frame("terminal/create", Some(id))
+    jsonrpc_frame(Some(id), "terminal/create", b"\n")
 }
 
 fn blocked_notification_frame() -> Result<Vec<u8>, serde_json::Error> {
-    make_jsonrpc_frame("fs/changed", None)
+    jsonrpc_frame(None, "fs/changed", b"\n")
 }
 
 fn build_adapter() -> (OutboundPolicyAdapter, mpsc::Receiver<WriteCmd>) {

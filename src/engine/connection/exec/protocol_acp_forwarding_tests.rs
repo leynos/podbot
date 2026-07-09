@@ -62,7 +62,7 @@ fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
     let mut buffered_stdin =
         tokio::io::BufReader::with_capacity(STDIN_BUFFER_CAPACITY, host_reader);
     let recording_input = RecordingInputWriter::new();
-    let forwarded_bytes = recording_input.bytes.clone();
+    let recorder = recording_input.clone();
     let mut container_input: Pin<Box<dyn AsyncWrite + Send>> = Box::pin(recording_input);
 
     runtime
@@ -77,10 +77,7 @@ fn forwarding_does_not_wait_indefinitely_for_oversized_initial_frame() {
         .expect("initial forwarding should succeed");
 
     assert_eq!(
-        forwarded_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .len(),
+        recorder.snapshot().len(),
         MAX_FIRST_FRAME_BYTES,
         "only the bounded first-frame buffer should be held before streaming resumes"
     );

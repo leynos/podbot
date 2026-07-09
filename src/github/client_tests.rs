@@ -15,48 +15,47 @@ use super::{ec_pem, temp_key_dir, valid_rsa_pem};
 fn build_app_client_with_valid_key_succeeds(
     valid_rsa_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("key.pem", &valid_rsa_pem)
-        .expect("should write key");
+) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write("key.pem", &valid_rsa_pem)?;
     let path = Utf8Path::new("/display/key.pem");
     let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
     // Octocrab's build() spawns a Tower buffer task requiring a Tokio runtime.
-    let rt = tokio::runtime::Runtime::new().expect("should create tokio runtime");
+    let rt = tokio::runtime::Runtime::new()?;
     let _guard = rt.enter();
     let result = build_app_client(12345, key);
     assert!(result.is_ok(), "expected Ok, got: {result:?}");
+    Ok(())
 }
 
 #[rstest]
 fn build_app_client_with_zero_app_id_succeeds(
     valid_rsa_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("key.pem", &valid_rsa_pem)
-        .expect("should write key");
+) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write("key.pem", &valid_rsa_pem)?;
     let path = Utf8Path::new("/display/key.pem");
     let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
     // Builder does not validate app_id; GitHub validates at token time.
     // Octocrab's build() spawns a Tower buffer task requiring a Tokio runtime.
-    let rt = tokio::runtime::Runtime::new().expect("should create tokio runtime");
+    let rt = tokio::runtime::Runtime::new()?;
     let _guard = rt.enter();
     let result = build_app_client(0, key);
     assert!(
         result.is_ok(),
         "expected Ok even with zero app_id, got: {result:?}"
     );
+    Ok(())
 }
 
 #[rstest]
 fn build_app_client_without_runtime_returns_error(
     valid_rsa_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) {
-    let (_tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("key.pem", &valid_rsa_pem)
-        .expect("should write key");
+) -> io::Result<()> {
+    let (_tmp, dir) = temp_key_dir?;
+    dir.write("key.pem", &valid_rsa_pem)?;
     let path = Utf8Path::new("/display/key.pem");
     let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
     // Call without entering a Tokio runtime — should return Err, not panic.
@@ -67,6 +66,7 @@ fn build_app_client_without_runtime_returns_error(
         message.contains("no Tokio runtime context"),
         "error should mention missing runtime: {message}"
     );
+    Ok(())
 }
 
 #[rstest]
@@ -111,8 +111,8 @@ fn authentication_failed_error_includes_context(
 #[tokio::test]
 async fn validate_app_credentials_with_missing_key_returns_error(
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) {
-    let (temp_dir, _dir) = temp_key_dir.expect("should create temp key dir");
+) -> io::Result<()> {
+    let (temp_dir, _dir) = temp_key_dir?;
     let key_path = Utf8Path::from_path(temp_dir.path())
         .expect("temp dir path should be UTF-8")
         .join("key.pem");
@@ -127,6 +127,7 @@ async fn validate_app_credentials_with_missing_key_returns_error(
         }
         other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
     }
+    Ok(())
 }
 
 #[rstest]
@@ -134,9 +135,9 @@ async fn validate_app_credentials_with_missing_key_returns_error(
 async fn validate_app_credentials_with_invalid_pem_returns_error(
     ec_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) {
-    let (tmp, dir) = temp_key_dir.expect("should create temp key dir");
-    dir.write("ec.pem", &ec_pem).expect("should write EC key");
+) -> io::Result<()> {
+    let (tmp, dir) = temp_key_dir?;
+    dir.write("ec.pem", &ec_pem)?;
     let full_path = tmp.path().join("ec.pem");
     let utf8_path = Utf8Path::from_path(&full_path).expect("temp path should be UTF-8");
 
@@ -151,6 +152,7 @@ async fn validate_app_credentials_with_invalid_pem_returns_error(
         }
         other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
     }
+    Ok(())
 }
 
 #[rstest]
