@@ -12,6 +12,7 @@ name: Coverage (main)
 'on':
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   coverage-upload:
