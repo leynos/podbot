@@ -76,6 +76,7 @@ jobs:
           features: internal
           output-path: lcov.info
           format: lcov
+          use-cargo-nextest: 'false'
           with-ratchet: 'true'
       # The `mode: check` step is deliberately not wired in yet: CodeScene
       # project 75835 has no coverage-gates configuration, so
