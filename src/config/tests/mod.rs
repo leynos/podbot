@@ -1,12 +1,12 @@
 //! Unit tests for podbot configuration types.
 //!
-//! This module contains tests organised into:
+//! This module contains tests organized into:
 //! - [`helpers`] - Shared fixtures and helper functions
-//! - [`types_tests`] - Basic type and serialisation tests
+//! - [`types_tests`] - Basic type and serialization tests
 //! - [`validation`] - `GitHubConfig` validation tests
 //! - [`layer_precedence_tests`] - `MergeComposer` layer precedence tests
 //! - [`hosting_layer_precedence_tests`] - Hosting layer precedence tests
-//! - [`hosting_types_tests`] - Hosting schema defaults and serialisation tests
+//! - [`hosting_types_tests`] - Hosting schema defaults and serialization tests
 //! - [`semantic_validation_tests`] - Hosted-era semantic validation tests
 
 mod helpers;

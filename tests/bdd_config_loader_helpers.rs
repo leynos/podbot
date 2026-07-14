@@ -45,7 +45,7 @@ fn get_env_vars(config_loader_state: &ConfigLoaderState) -> StepResult<EnvVars> 
     config_loader_state
         .env_vars
         .get()
-        .ok_or_else(|| String::from("env_vars should be initialised"))
+        .ok_or_else(|| String::from("env_vars should be initialized"))
 }
 
 fn set_env_var(config_loader_state: &ConfigLoaderState, key: &str, value: &str) -> StepResult<()> {

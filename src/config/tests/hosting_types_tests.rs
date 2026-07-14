@@ -84,31 +84,31 @@ fn app_config_mcp_env_overrides() {
 #[rstest]
 #[case(AgentKind::Custom, "custom")]
 fn agent_kind_supports_hosting_variants(#[case] kind: AgentKind, #[case] expected: &str) {
-    let serialised = serde_json::to_string(&kind).expect("serialisation should succeed");
-    assert_eq!(serialised, format!("\"{expected}\""));
+    let serialized = serde_json::to_string(&kind).expect("serialization should succeed");
+    assert_eq!(serialized, format!("\"{expected}\""));
 }
 
 #[rstest]
 #[case(AgentMode::CodexAppServer, "codex_app_server")]
 #[case(AgentMode::Acp, "acp")]
 fn agent_mode_supports_hosting_variants(#[case] mode: AgentMode, #[case] expected: &str) {
-    let serialised = serde_json::to_string(&mode).expect("serialisation should succeed");
-    assert_eq!(serialised, format!("\"{expected}\""));
+    let serialized = serde_json::to_string(&mode).expect("serialization should succeed");
+    assert_eq!(serialized, format!("\"{expected}\""));
 }
 
 #[rstest]
 #[case(WorkspaceSource::GithubClone, "github_clone")]
 #[case(WorkspaceSource::HostMount, "host_mount")]
-fn workspace_source_serialises_to_snake_case(
+fn workspace_source_serializes_to_snake_case(
     #[case] source: WorkspaceSource,
     #[case] expected: &str,
 ) {
-    let serialised = serde_json::to_string(&source).expect("serialisation should succeed");
-    assert_eq!(serialised, format!("\"{expected}\""));
+    let serialized = serde_json::to_string(&source).expect("serialization should succeed");
+    assert_eq!(serialized, format!("\"{expected}\""));
 }
 
 #[rstest]
-fn hosting_toml_deserialises() {
+fn hosting_toml_deserializes() {
     let config = toml::from_str::<AppConfig>(
         r#"
         [workspace]

@@ -213,13 +213,13 @@ fn validate_no_path_conflicts() {
     }
 }
 
-/// Returns the list of environment variable names recognised by the config
+/// Returns the list of environment variable names recognized by the config
 /// loader.
 ///
 /// This includes the variables mapped in this module plus
 /// `PODBOT_CONFIG_PATH`, which is consumed by config-path discovery.
 ///
-/// This is primarily useful for tests that need to clear all recognised
+/// This is primarily useful for tests that need to clear all recognized
 /// `PODBOT_*` environment variables to ensure isolation. Using this function
 /// instead of a hard-coded list keeps tests in sync with loader behaviour.
 #[must_use]
@@ -245,7 +245,7 @@ pub fn env_var_names() -> Vec<&'static str> {
 /// # Errors
 ///
 /// Returns `ConfigError::InvalidValue` if a typed environment variable (bool,
-/// u64) has an unparseable value. This fail-fast approach ensures
+/// u64) has an unparsable value. This fail-fast approach ensures
 /// misconfigurations are visible to users.
 ///
 /// # Panics

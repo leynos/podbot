@@ -281,7 +281,7 @@ The steps above are safe to re-run. If a command fails, fix the underlying
 issue and re-run the same command. If a failure persists after two attempts,
 stop and escalate with the log file path.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Keep the following log files for review if needed:
 

@@ -15,7 +15,7 @@
 //!    values. `OrthoConfig`'s `load()` expects to own the entire CLI parsing.
 //!
 //! 2. **Environment variable validation**: `OrthoConfig`'s environment layer uses
-//!    Figment, which silently ignores unparseable values. This loader implements
+//!    Figment, which silently ignores unparsable values. This loader implements
 //!    fail-fast validation that returns errors for invalid typed values.
 //!
 //! 3. **Custom discovery integration**: Hosts (including the `podbot` CLI) can
@@ -27,7 +27,7 @@
 //!
 //! # Environment Variable Handling
 //!
-//! Environment variables with unparseable values (e.g., `PODBOT_SANDBOX_PRIVILEGED=maybe`
+//! Environment variables with unparsable values (e.g., `PODBOT_SANDBOX_PRIVILEGED=maybe`
 //! instead of `true`/`false`) return an error immediately. This fail-fast approach
 //! ensures misconfigurations are visible to users rather than silently falling back
 //! to defaults.
@@ -125,10 +125,10 @@ pub fn load_config_with_env<E: mockable::Env>(
 ) -> Result<AppConfig> {
     let mut composer = MergeComposer::new();
 
-    // Layer 1: Defaults (serialised from AppConfig::default()).
+    // Layer 1: Defaults (serialized from AppConfig::default()).
     let defaults =
         serde_json::to_value(AppConfig::default()).map_err(|e| ConfigError::ParseError {
-            message: format!("failed to serialise defaults: {e}"),
+            message: format!("failed to serialize defaults: {e}"),
         })?;
     composer.push_defaults(defaults);
 

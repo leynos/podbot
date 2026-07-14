@@ -97,7 +97,7 @@ fn get_env_vars(state: &EngineConnectionState) -> StepResult<EnvVars> {
     state
         .env_vars
         .get()
-        .ok_or_else(|| String::from("env_vars should be initialised"))
+        .ok_or_else(|| String::from("env_vars should be initialized"))
 }
 
 /// Helper to set an environment variable.

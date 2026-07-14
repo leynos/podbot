@@ -1,4 +1,8 @@
 target/
+.typos-oxendict-base.json
+.typos-oxendict-base.toml
+.uv-cache/
+.uv-tools/
 *:Zone.Identifier
 **/*.rs.bk
 .grepai/

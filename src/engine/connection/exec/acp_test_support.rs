@@ -73,7 +73,7 @@ impl AsyncWrite for RecordingWriter {
     }
 }
 
-/// Build a serialised JSON-RPC 2.0 frame terminated by `line_ending`.
+/// Build a serialized JSON-RPC 2.0 frame terminated by `line_ending`.
 ///
 /// Pass `id = Some(…)` for requests and `id = None` for notifications.
 pub(super) fn jsonrpc_frame(

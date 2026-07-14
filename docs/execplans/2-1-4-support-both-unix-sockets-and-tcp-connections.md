@@ -357,7 +357,7 @@ make test 2>&1 | tee /tmp/test.log && echo "TEST OK"
 All steps are idempotent. Test file additions are additive. Documentation
 changes are additive. The quality gate commands can be re-run at any time.
 
-## Artifacts and notes
+## Artefacts and notes
 
 **Files created:**
 

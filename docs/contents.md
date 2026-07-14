@@ -50,7 +50,7 @@ long-lived guide.
   records prompt metadata and rendering rules.
 - [ADR 006: Define the validate surface and capability disposition model](adr-006-define-the-validate-surface-and-capability-disposition-model.md)
   records validation and capability disposition concepts.
-- [ADR 007: Define session composition and artefact materialisation](adr-007-define-session-composition-and-artefact-materialisation.md)
+- [ADR 007: Define session composition and artefact materialization](adr-007-define-session-composition-and-artefact-materialization.md)
   records session composition and generated artefacts.
 - [ADR 008: Define secrets and trust boundaries for hooks, prompts, and validation](adr-008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md)
   records secret-handling and trust-boundary rules.

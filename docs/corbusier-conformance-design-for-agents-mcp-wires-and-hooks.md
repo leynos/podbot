@@ -480,7 +480,7 @@ Corbusier must store hook execution and acknowledgement for auditability
 (consistent with its broader audit goals in tool calls and agent handoffs). A
 concrete minimal state machine for hook gating:
 
-- `Pending` (hook requested by Podbot, not yet authorised)
+- `Pending` (hook requested by Podbot, not yet authorized)
 - `Authorized` or `Denied` (after HookPolicyService decision)
 - `Acked` (ack delivered to Podbot)
 - `Completed` / `Failed` (proposed future states if Podbot later emits
@@ -841,7 +841,7 @@ registry while introducing Podbot-wired operation safely.
 
 ### Tests and QA requirements
 
-Corbusier already emphasises deterministic testing via in-memory adapters and
+Corbusier already emphasizes deterministic testing via in-memory adapters and
 structured audit trails. Extend this with:
 
 - **Unit tests**

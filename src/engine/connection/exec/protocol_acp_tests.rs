@@ -54,7 +54,7 @@ fn initialize_frame(line_ending: &str) -> Result<Vec<u8>, serde_json::Error> {
     initialize_frame_with_capabilities(&blocked_capabilities(true), line_ending)
 }
 
-/// Builds a serialised ACP `initialize` frame whose `clientCapabilities`
+/// Builds a serialized ACP `initialize` frame whose `clientCapabilities`
 /// contains only `_meta` (no blocked entries), terminated with `\n`.
 pub(super) fn initialize_without_blocked_capabilities() -> Result<Vec<u8>, serde_json::Error> {
     let payload = serde_json::json!({

@@ -9,18 +9,18 @@ use ortho_config::MergeComposer;
 use ortho_config::serde_json::json;
 use rstest::rstest;
 
-/// Test that serialised `AppConfig::default()` can round-trip through `MergeComposer`.
+/// Test that serialized `AppConfig::default()` can round-trip through `MergeComposer`.
 ///
-/// This mirrors the production `load_config` behaviour, which serialises
+/// This mirrors the production `load_config` behaviour, which serializes
 /// `AppConfig::default()` as the defaults layer.
 #[rstest]
-fn layer_precedence_serialised_defaults_round_trip() {
-    // This is exactly what load_config does: serialise defaults, push to composer.
+fn layer_precedence_serialized_defaults_round_trip() {
+    // This is exactly what load_config does: serialize defaults, push to composer.
     let composer = create_composer_with_defaults().expect("composer creation should succeed");
     let config = merge_config(composer).expect("merge should succeed");
     let expected = AppConfig::default();
 
-    // Verify key fields match to ensure the serialisation round-trip works.
+    // Verify key fields match to ensure the serialization round-trip works.
     assert_eq!(config.engine_socket, expected.engine_socket);
     assert_eq!(config.image, expected.image);
     assert_eq!(config.sandbox.privileged, expected.sandbox.privileged);
@@ -203,13 +203,13 @@ fn layer_precedence_noncanonical_defaults_fail() {
     );
 }
 
-/// Test that serialised `AppConfig::default()` works correctly as a defaults layer.
+/// Test that serialized `AppConfig::default()` works correctly as a defaults layer.
 ///
 /// This remains a valid explicit caller input, even though `merge_from_layers`
 /// now injects the same defaults layer internally.
 #[rstest]
-fn layer_precedence_serialised_defaults_works() {
-    // Production approach: serialise AppConfig::default() as the defaults layer.
+fn layer_precedence_serialized_defaults_works() {
+    // Production approach: serialize AppConfig::default() as the defaults layer.
     let composer = create_composer_with_defaults().expect("composer creation should succeed");
     let config = merge_config(composer).expect("merge should succeed");
 

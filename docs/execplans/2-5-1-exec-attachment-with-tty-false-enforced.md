@@ -376,7 +376,7 @@ stage. After modifying `.feature` files, run `cargo clean -p podbot` to ensure
 rstest-bdd picks up the changes (feature files are read at compile time and
 incremental compilation does not track them).
 
-## Artifacts and notes
+## Artefacts and notes
 
 (To be populated during implementation.)
 

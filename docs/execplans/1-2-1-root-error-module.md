@@ -217,7 +217,7 @@ All steps are additive or edits to existing files and can be re-run safely. If
 any command fails, fix the reported issue and re-run the failed command with
 the same log file name, overwriting the log to keep the latest output.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Expected successful command signals (examples):
 
