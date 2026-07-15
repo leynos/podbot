@@ -97,7 +97,7 @@ fn resolve_docker_host_endpoint() -> StepResult<String> {
 /// set `DOCKER_HOST` but a Podman or Docker socket is present, this helper
 /// mirrors the resolved endpoint into the process environment exactly once,
 /// gated through a dedicated `OnceLock<()>` so the one-shot unsafe write is
-/// serialised across concurrent test threads.
+/// serialized across concurrent test threads.
 fn ensure_docker_host() -> StepResult<DockerHostSocket> {
     static ENV_INIT: OnceLock<()> = OnceLock::new();
     let endpoint = resolve_docker_host_endpoint()?;
@@ -107,7 +107,7 @@ fn ensure_docker_host() -> StepResult<DockerHostSocket> {
             .unwrap_or(false);
         if !already_set {
             // SAFETY: The surrounding `OnceLock::get_or_init` guarantees that
-            // this branch executes exactly once per process, serialised
+            // this branch executes exactly once per process, serialized
             // against concurrent test threads. The write is required because
             // `testcontainers` reads `DOCKER_HOST` during client construction
             // and exposes no in-process alternative.

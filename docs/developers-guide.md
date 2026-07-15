@@ -902,10 +902,10 @@ The `Cargo.toml` `[dev-dependencies]` section includes:
   dev-dependency does not increase the total dependency count.
 - **proptest** — supports property-based tests for request validation and stays
   confined to the test-only dependency set.
-- **rstest** — parameterised tests and fixtures; use `#[rstest]` with
+- **rstest** — parameterized tests and fixtures; use `#[rstest]` with
   `#[case]` for table-driven tests and `#[fixture]` for shared test state.
 - **insta** — snapshot testing for structured outputs such as log lines and
-  serialised payloads; run `cargo insta review` after changing snapshot-tested
+  serialized payloads; run `cargo insta review` after changing snapshot-tested
   output.
 - **tempfile** — creates temporary directories for integration tests that
   write to the filesystem; used by key-loading and audit-target tests.
@@ -984,6 +984,23 @@ Documentation uses British English with Oxford spelling (`en-GB-oxendict`):
 - Capitalize proper nouns: Markdown, GitHub, Rust
 
 The words "outwith" and "caveat" are acceptable.
+
+Run `make spelling` to enforce this policy with the pinned Typos release. The
+tracked `typos.toml` is generated from the shared estate dictionary and the
+narrow repository policy in `typos.local.toml`; never edit the generated file
+by hand.
+
+`make spelling-config-write` invokes the exact, commit-pinned
+`typos-config-builder` CLI to refresh the untracked shared-dictionary cache
+when its authority is newer and write the deterministic configuration. Use
+`make spelling-config` to verify cache and generated-config drift. The builder
+only parses, refreshes, merges and renders spelling policy. Harvesting, Typos
+execution, phrase enforcement and Mermaid validation remain consumer-owned.
+
+The phrase checker rejects punctuation-sensitive shared corrections such as
+`hand-written` in tracked UTF-8 text. Repository exceptions belong in the
+local overlay as narrow exact or full-line patterns; do not add bare accepted
+words for machine interfaces or formal names.
 
 ## 16. Behavioural test infrastructure
 

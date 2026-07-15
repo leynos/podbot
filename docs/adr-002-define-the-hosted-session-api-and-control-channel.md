@@ -20,7 +20,7 @@ Today the Podbot library returns typed results from orchestration functions,
 but there is no long-lived session handle that separates protocol input/output
 (IO) from control events. Without such a handle, hook notifications, validation
 warnings, wire lifecycle events, and session diagnostics have nowhere to go
-except stderr text — which is unstructured, unparseable, and invisible to
+except stderr text — which is unstructured, unparsable, and invisible to
 library embedders that do not scrape process output.
 
 This ADR must choose the shape of the hosted session API before hooks land,

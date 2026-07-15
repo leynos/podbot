@@ -1,4 +1,11 @@
 target/
+.typos-oxendict-base.json
+.typos-oxendict-base.toml
+.uv-cache/
+.uv-tools/
+__pycache__/
+*.py[cod]
+*$py.class
 *:Zone.Identifier
 **/*.rs.bk
 .grepai/

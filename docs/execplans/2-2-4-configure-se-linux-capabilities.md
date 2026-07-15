@@ -217,7 +217,7 @@ All changes are additive and safe to revert. The `selinux_label_mode` field uses
 `#[serde(default)]` on `SandboxConfig`, so existing config files continue to
 work without changes.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Files modified (15 total):
 

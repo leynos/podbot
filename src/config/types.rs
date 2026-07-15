@@ -183,7 +183,7 @@ impl AppConfig {
             ortho_config::serde_json::Value::Object(ortho_config::serde_json::Map::new());
         let mut ctx = PostMergeContext::new(Self::prefix());
 
-        let defaults_layer = serialised_defaults_layer()?;
+        let defaults_layer = serialized_defaults_layer()?;
         ensure_defaults_layer_is_not_empty(&defaults_layer)?;
         let expected_defaults_value = defaults_layer.clone().into_value();
         merge_value(&mut merged, defaults_layer.into_value());
@@ -224,7 +224,7 @@ fn ensure_defaults_layer_is_not_empty(layer: &MergeLayer<'_>) -> ortho_config::O
         return Err(std::sync::Arc::new(ortho_config::OrthoError::Validation {
             key: String::from("defaults"),
             message: String::from(
-                "merge_from_layers requires a serialised AppConfig::default() layer",
+                "merge_from_layers requires a serialized AppConfig::default() layer",
             ),
         }));
     }
@@ -242,7 +242,7 @@ fn ensure_defaults_layer_matches_expected(
             key: String::from("defaults"),
             message: String::from(
                 "merge_from_layers only accepts caller-supplied defaults layers when they match \
-                 the serialised AppConfig::default() value",
+                 the serialized AppConfig::default() value",
             ),
         }));
     }
@@ -259,11 +259,11 @@ where
     AppConfig::merge_from_layers(layers)
 }
 
-fn serialised_defaults_layer() -> ortho_config::OrthoResult<MergeLayer<'static>> {
+fn serialized_defaults_layer() -> ortho_config::OrthoResult<MergeLayer<'static>> {
     let value = ortho_config::serde_json::to_value(AppConfig::default()).map_err(|error| {
         Arc::new(ortho_config::OrthoError::Validation {
             key: String::from("defaults"),
-            message: format!("failed to serialise AppConfig::default(): {error}"),
+            message: format!("failed to serialize AppConfig::default(): {error}"),
         })
     })?;
 

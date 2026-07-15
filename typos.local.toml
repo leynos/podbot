@@ -1,0 +1,30 @@
+# Repository-specific quotations and machine interfaces.
+
+schema = 1
+
+[oxford]
+stems = []
+
+[words]
+accepted = []
+
+[words.corrections]
+
+[patterns]
+ignore = [
+  # Official documentation name.
+  'Azure Architecture\s+Center\s+\|\s+Microsoft Learn',
+  # Public design identifiers are exact API names.
+  '(?m)^### HookArtifact and HookSubscription$',
+  # Tokio's type, method, and macro arguments are upstream API tokens.
+  '(?m)^use tokio::runtime::RuntimeFlavor;$',
+  '(?m)^        if current_runtime\.runtime_flavor\(\) == RuntimeFlavor::MultiThread \{$',
+  '(?m)^    #\[tokio::test\(flavor = "multi_thread", worker_threads = 2\)\]$',
+  '(?m)^    #\[tokio::test\(flavor = "current_thread"\)\]$',
+  # Cargo and GitHub workflow values are machine interfaces.
+  '(?m)^      CARGO_TERM_COLOR: always$',
+  '(?m)^    types: \[opened, reopened, synchronize, labeled, ready_for_review\]$',
+]
+
+[files]
+exclude = []

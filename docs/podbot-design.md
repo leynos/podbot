@@ -1002,7 +1002,7 @@ map to `1`, and values above `255` are clamped to `255`.
 
 ## Module structure
 
-A suggested organisation for maintainability:
+A suggested organization for maintainability:
 
 ```plaintext
 src/

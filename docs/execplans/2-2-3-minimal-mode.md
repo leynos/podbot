@@ -329,7 +329,7 @@ All steps are additive (new files, new test scenarios, documentation edits).
 Re-running any step is safe and produces the same outcome. No destructive
 operations are involved.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Key files that will be created or modified:
 

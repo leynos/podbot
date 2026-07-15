@@ -104,7 +104,7 @@ Success is observable when:
      values. `OrthoConfig`'s `load()` method expects to own the entire CLI
      parsing, which conflicts with existing subcommand routing.
   2. **Fail-fast env var validation**: `OrthoConfig`'s environment layer uses
-     Figment, which silently ignores unparseable values. The manual
+     Figment, which silently ignores unparsable values. The manual
      implementation returns clear errors for invalid typed values (e.g.,
      `PODBOT_SANDBOX_PRIVILEGED=maybe` fails immediately instead of falling
      back to defaults).

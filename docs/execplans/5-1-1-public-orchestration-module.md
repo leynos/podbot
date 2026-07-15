@@ -616,7 +616,7 @@ Feature: Command orchestration
 
 State struct with `Slot<T>` fields for mode, tty, command, exit code, engine
 availability, and result. Fixture function `orchestration_state()` returns a
-default-initialised state.
+default-initialized state.
 
 Use `OrchestrationResult` enum with success and error variants
 (`Ok(CommandOutcome)` and `Err(String)`) for capturing outcomes.

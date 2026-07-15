@@ -230,7 +230,7 @@ pub(super) fn mask_acp_initialize_frame(frame: &[u8]) -> Vec<u8> {
 
 /// Splits a newline-delimited frame into its JSON payload and trailing line
 /// ending bytes (`\n` or `\r\n`). Returns the original slice as the payload
-/// with an empty line-ending slice when no recognised line ending is present.
+/// with an empty line-ending slice when no recognized line ending is present.
 pub(super) fn split_frame_line_ending(frame: &[u8]) -> (&[u8], &[u8]) {
     if let Some(stripped) = frame.strip_suffix(b"\r\n") {
         return (stripped, b"\r\n");

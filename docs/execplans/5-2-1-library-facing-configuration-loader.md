@@ -366,7 +366,7 @@ Done means:
   reads feature files at compile time; if changes appear to be ignored, run a
   targeted `cargo clean -p podbot` before re-running the affected test.
 
-## Artifacts and notes
+## Artefacts and notes
 
 - Files changed:
   - `src/config/load_options.rs`, `src/config/loader.rs`, `src/config/mod.rs`,

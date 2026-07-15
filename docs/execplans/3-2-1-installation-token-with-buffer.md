@@ -550,7 +550,7 @@ around Octocrab by calling undocumented internals. Stop, record the finding in
 `Decision Log`, and ask whether to switch to an explicit REST adapter for
 `POST /app/installations/{installation_id}/access_tokens`.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Firecrawl research used these sources:
 

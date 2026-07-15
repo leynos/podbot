@@ -1,7 +1,7 @@
 //! Sandboxed execution environment for AI coding agents.
 //!
 //! `podbot` provides a secure container-based sandbox for running AI coding agents
-//! such as Claude Code and Codex. The design prioritises security by treating the
+//! such as Claude Code and Codex. The design prioritizes security by treating the
 //! host container engine as high-trust infrastructure, while the agent container
 //! operates in a low-trust playpen with no access to the host socket.
 //!

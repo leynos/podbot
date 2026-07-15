@@ -20,8 +20,12 @@ jobs:
           fetch-depth: 0
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+      - name: Setup uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
       - name: Format
         run: make check-fmt
+      - name: Enforce en-GB-oxendict spelling
+        run: make spelling
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@8de2aa07cae85fd17c0b35642db70cf5495f1d25
         with:
@@ -29,6 +33,8 @@ jobs:
             **/*.md
             !**/target/**
             !**/dist/**
+            !**/.uv-cache/**
+            !**/.uv-tools/**
       # Dependency audits report advisories against the whole lockfile, so a
       # newly published advisory would fail every Dependabot PR regardless of
       # content and deadlock auto-merge. The scheduled audit workflow covers
@@ -78,16 +84,27 @@ jobs:
           format: lcov
           use-cargo-nextest: 'false'
           with-ratchet: 'true'
-      # The `mode: check` step is deliberately not wired in yet: CodeScene
-      # project 75835 has no coverage-gates configuration, so
-      # `cs-coverage check` is expected to fail every run with "HTTP call
-      # succeeded, but the received project-config isn't valid. Lacks the
-      # gates configuration." — a CodeScene-side per-project setting, not a
-      # CI defect (ddlint and chutoro hit the byte-identical error). Add the
-      # check step in a fast-follow PR once coverage-main.yml has uploaded
-      # to main at least once and the gate is confirmed to resolve, or once
-      # CodeScene confirms the project's coverage gate is enabled.
-      #
+      - name: Check coverage against CodeScene gates
+        env:
+          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        if: github.event_name == 'pull_request' && env.CS_ACCESS_TOKEN != ''
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        with:
+          format: lcov
+          mode: check
+          project-url: https://api.codescene.io/v2/projects/75835
+          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+      - name: Set up Rust for Merman
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master
+        with:
+          toolchain: '1.95.0'
+      - name: Install Mermaid validation tools
+        run: |
+          uv tool install nixie-cli==1.1.0
+          cargo +1.95.0 install merman-cli --version '=0.7.0' --locked
+      - name: Validate Mermaid diagrams
+        run: make nixie
       # Coverage is uploaded to CodeScene from coverage-main.yml on push to
       # main instead of here: CodeScene's `cs-coverage upload` only accepts
       # analysed branches, and this job runs on pull_request only.

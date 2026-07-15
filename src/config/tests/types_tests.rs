@@ -1,4 +1,4 @@
-//! Basic type and serialisation tests for podbot configuration types.
+//! Basic type and serialization tests for podbot configuration types.
 
 use crate::config::tests::helpers::{app_config_from_full_toml, app_config_from_partial_toml};
 use crate::config::{AgentConfig, AgentKind, AgentMode, AppConfig, SelinuxLabelMode};
@@ -17,30 +17,30 @@ fn agent_mode_default_is_podbot() {
 #[rstest]
 #[case(AgentKind::Claude, "claude")]
 #[case(AgentKind::Codex, "codex")]
-fn agent_kind_serialises_to_lowercase(#[case] kind: AgentKind, #[case] expected: &str) {
-    let serialised = serde_json::to_string(&kind).expect("serialisation should succeed");
-    assert_eq!(serialised, format!("\"{expected}\""));
+fn agent_kind_serializes_to_lowercase(#[case] kind: AgentKind, #[case] expected: &str) {
+    let serialized = serde_json::to_string(&kind).expect("serialization should succeed");
+    assert_eq!(serialized, format!("\"{expected}\""));
 }
 
 #[rstest]
 #[case(AgentMode::Podbot, "podbot")]
-fn agent_mode_serialises_to_lowercase(#[case] mode: AgentMode, #[case] expected: &str) {
-    let serialised = serde_json::to_string(&mode).expect("serialisation should succeed");
-    assert_eq!(serialised, format!("\"{expected}\""));
+fn agent_mode_serializes_to_lowercase(#[case] mode: AgentMode, #[case] expected: &str) {
+    let serialized = serde_json::to_string(&mode).expect("serialization should succeed");
+    assert_eq!(serialized, format!("\"{expected}\""));
 }
 
 #[rstest]
 #[case("\"claude\"", AgentKind::Claude)]
 #[case("\"codex\"", AgentKind::Codex)]
-fn agent_kind_deserialises_from_lowercase(#[case] input: &str, #[case] expected: AgentKind) {
-    let kind: AgentKind = serde_json::from_str(input).expect("deserialisation should succeed");
+fn agent_kind_deserializes_from_lowercase(#[case] input: &str, #[case] expected: AgentKind) {
+    let kind: AgentKind = serde_json::from_str(input).expect("deserialization should succeed");
     assert_eq!(kind, expected);
 }
 
 #[rstest]
 #[case("\"podbot\"", AgentMode::Podbot)]
-fn agent_mode_deserialises_from_lowercase(#[case] input: &str, #[case] expected: AgentMode) {
-    let mode: AgentMode = serde_json::from_str(input).expect("deserialisation should succeed");
+fn agent_mode_deserializes_from_lowercase(#[case] input: &str, #[case] expected: AgentMode) {
+    let mode: AgentMode = serde_json::from_str(input).expect("deserialization should succeed");
     assert_eq!(mode, expected);
 }
 
@@ -181,23 +181,23 @@ fn selinux_label_mode_default_is_disable_for_container() {
 #[rstest]
 #[case(SelinuxLabelMode::KeepDefault, "keep_default")]
 #[case(SelinuxLabelMode::DisableForContainer, "disable_for_container")]
-fn selinux_label_mode_serialises_to_snake_case(
+fn selinux_label_mode_serializes_to_snake_case(
     #[case] mode: SelinuxLabelMode,
     #[case] expected: &str,
 ) {
-    let serialised = serde_json::to_string(&mode).expect("serialisation should succeed");
-    assert_eq!(serialised, format!("\"{expected}\""));
+    let serialized = serde_json::to_string(&mode).expect("serialization should succeed");
+    assert_eq!(serialized, format!("\"{expected}\""));
 }
 
 #[rstest]
 #[case("\"keep_default\"", SelinuxLabelMode::KeepDefault)]
 #[case("\"disable_for_container\"", SelinuxLabelMode::DisableForContainer)]
-fn selinux_label_mode_deserialises_from_snake_case(
+fn selinux_label_mode_deserializes_from_snake_case(
     #[case] input: &str,
     #[case] expected: SelinuxLabelMode,
 ) {
     let mode: SelinuxLabelMode =
-        serde_json::from_str(input).expect("deserialisation should succeed");
+        serde_json::from_str(input).expect("deserialization should succeed");
     assert_eq!(mode, expected);
 }
 

@@ -234,7 +234,7 @@ pub enum PodbotError {
     Filesystem(#[from] FilesystemError),
 }
 
-/// A specialised `Result` type for podbot operations.
+/// A specialized `Result` type for podbot operations.
 pub type Result<T> = std::result::Result<T, PodbotError>;
 
 #[cfg(test)]

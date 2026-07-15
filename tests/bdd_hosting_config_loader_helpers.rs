@@ -159,7 +159,7 @@ fn get_env_vars(hosting_config_loader_state: &HostingConfigLoaderState) -> StepR
     hosting_config_loader_state
         .env_vars
         .get()
-        .ok_or_else(|| String::from("env vars should be initialised"))
+        .ok_or_else(|| String::from("env vars should be initialized"))
 }
 
 fn set_env_var(
