@@ -1,5 +1,8 @@
 # podbot
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](
+https://deepwiki.com/leynos/podbot)
+
 > A sandboxed execution environment for AI coding agents
 
 Podbot creates secure, isolated containers where AI coding assistants (like
