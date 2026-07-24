@@ -50,7 +50,11 @@ target/%/$(TARGET): ## Build binary in debug or release mode
 lint: ## Run Clippy and the Whitaker Dylint suite with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --no-deps
 	$(CARGO) clippy $(CLIPPY_FLAGS)
-	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --all -- $(CARGO_FLAGS)
+# TODO: drop -A no_expect_outside_tests once leynos/whitaker#311 is fixed:
+# rolling suite build 4e8a8ab regressed the #[cfg(test)] companion-module
+# exemption and flags expect() calls in test-only helper functions under
+# src/**/tests/.
+	RUSTFLAGS="$(RUST_FLAGS) -A no_expect_outside_tests" $(WHITAKER) --all -- $(CARGO_FLAGS)
 
 typecheck: ## Type-check the workspace
 	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) check $(CARGO_FLAGS) $(BUILD_JOBS)
