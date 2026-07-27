@@ -119,8 +119,8 @@ right companions for the work:
   `docs/podbot-design.md` and `docs/users-guide.md` when behaviour or design
   decisions change.
 - When the feature is complete, update only the relevant roadmap checkbox in
-  `docs/roadmap.md`; do not mark the entire Step 6.1 section complete
-  unless all Step 6.1 tasks are finished.
+  `docs/roadmap.md`; do not mark the entire Step 6.1 section complete unless
+  all Step 6.1 tasks are finished.
 - Quality gates must run sequentially through `tee` logs because concurrent
   Cargo invocations in this repo can block on build locks.
 

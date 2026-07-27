@@ -12,9 +12,9 @@ is the governing implementation document for Step 2.4 interactive execution.
 
 ## Purpose and big picture
 
-Complete roadmap Step 2.4 in `docs/roadmap.md` by implementing
-interactive command execution in running containers with proper terminal
-attachment semantics.
+Complete roadmap Step 2.4 in `docs/roadmap.md` by implementing interactive
+command execution in running containers with proper terminal attachment
+semantics.
 
 After this change, `podbot exec` will support:
 

@@ -556,19 +556,19 @@ ______________________________________________________________________
 
 ## Files modified
 
-| File | Action |
-| ---- | ------ |
-| `Cargo.toml` | Upgrade rstest-bdd to 0.4.0 |
-| `src/engine/connection/mod.rs` | Add error classification |
-| `src/error.rs` | Enhance error messages |
-| `src/engine/connection/tests.rs` | Add unit tests |
-| `tests/features/engine_connection.feature` | Add scenarios |
-| `tests/bdd_engine_connection_helpers/mod.rs` | Add state fields |
-| `tests/bdd_engine_connection_helpers/permission_error_steps.rs` | **New file** |
-| `tests/bdd_engine_connection.rs` | Add scenario bindings |
-| `docs/users-guide.md` | Add troubleshooting docs |
-| `docs/roadmap.md` | Mark task complete |
-| `docs/execplans/2-1-3-handle-socket-permission-errors.md` | **New file** |
+| File                                                            | Action                      |
+| --------------------------------------------------------------- | --------------------------- |
+| `Cargo.toml`                                                    | Upgrade rstest-bdd to 0.4.0 |
+| `src/engine/connection/mod.rs`                                  | Add error classification    |
+| `src/error.rs`                                                  | Enhance error messages      |
+| `src/engine/connection/tests.rs`                                | Add unit tests              |
+| `tests/features/engine_connection.feature`                      | Add scenarios               |
+| `tests/bdd_engine_connection_helpers/mod.rs`                    | Add state fields            |
+| `tests/bdd_engine_connection_helpers/permission_error_steps.rs` | **New file**                |
+| `tests/bdd_engine_connection.rs`                                | Add scenario bindings       |
+| `docs/users-guide.md`                                           | Add troubleshooting docs    |
+| `docs/roadmap.md`                                               | Mark task complete          |
+| `docs/execplans/2-1-3-handle-socket-permission-errors.md`       | **New file**                |
 
 ## Verification
 
@@ -618,17 +618,20 @@ All tasks completed successfully:
 
 ## Lessons learned
 
-1. **Bollard IOError struct syntax**: Bollard v0.20.0 uses `IOError { err }` struct
-   syntax rather than tuple `IOError(io_err)`. Must match directly on this variant
-   rather than relying on error source chain inspection.
+1. **Bollard IOError struct syntax**: Bollard v0.20.0 uses `IOError { err }`
+   struct
+   syntax rather than tuple `IOError(io_err)`. Must match directly on this
+   variant rather than relying on error source chain inspection.
 
-2. **thiserror concat!() limitation**: The `#[error(...)]` attribute doesn't support
-   `concat!()` macro. Use multi-line string literals with `\n\` continuation instead.
+2. **thiserror concat!() limitation**: The `#[error(...)]` attribute doesn't
+   support
+   `concat!()` macro. Use multi-line string literals with `\n\` continuation
+   instead.
 
 3. **rstest-bdd Slot requires Clone**: Can't store `Result<Docker, PodbotError>`
    in `Slot` because it doesn't implement `Clone`. Created `ConnectionOutcome`
    enum that captures just the error classification result.
 
 4. **Health check skip logic**: After adding new error message formats, existing
-   `is_daemon_unavailable()` needed updating to recognize "socket not found" pattern
-   in addition to legacy patterns like "No such file".
+   `is_daemon_unavailable()` needed updating to recognize "socket not found"
+   pattern in addition to legacy patterns like "No such file".

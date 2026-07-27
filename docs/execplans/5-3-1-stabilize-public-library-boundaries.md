@@ -403,8 +403,8 @@ embedding guidance. Replace the current library example so it uses only stable
 types. If the CLI feature changes installation or build commands, document the
 new operator path clearly.
 
-Finally, mark Step 5.3 as done in `docs/roadmap.md` only after the
-tests, docs, and boundary changes are all complete.
+Finally, mark Step 5.3 as done in `docs/roadmap.md` only after the tests, docs,
+and boundary changes are all complete.
 
 ## Validation and evidence
 

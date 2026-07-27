@@ -280,9 +280,8 @@ Internal structure uses four private helpers:
    splits the path into parent directory and filename, opens the parent as a
    `cap_std::fs_utf8::Dir` via `ambient_authority()`.
 
-2. `read_key_file(dir, file_name, display_path) -> Result<String,
-   GitHubError>
-   `: reads the file to a string, returns an error if the file is empty.
+2. `read_key_file(dir, file_name, display_path) -> Result<String, GitHubError>`:
+   reads the file to a string, returns an error if the file is empty.
 
 3. `validate_rsa_pem(pem_contents, display_path)`:
    inspects the PEM header to detect non-RSA key types. Checks for known
@@ -310,8 +309,7 @@ This allows unit tests to inject a `Dir` backed by a `tempfile::TempDir`.
 
 All errors use `GitHubError::PrivateKeyLoadFailed { path, message }`:
 
-- Parent directory open failure: `"failed to open parent directory:
-  {io_error}"`
+- Parent directory open failure: `"failed to open parent directory: {io_error}"`
 - File read failure: `"failed to read file: {io_error}"`
 - Empty file: `"file is empty"`
 - EC key detected: `"GitHub App authentication requires an RSA private

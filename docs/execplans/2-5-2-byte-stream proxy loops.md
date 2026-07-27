@@ -12,9 +12,9 @@ is the governing implementation document for this task.
 
 ## Purpose and big picture
 
-Complete roadmap task 2.5.2 from `docs/roadmap.md`: "Implement
-byte-stream proxy loops: stdin -> container stdin, container stdout -> host
-stdout, and container stderr -> host stderr."
+Complete roadmap task 2.5.2 from `docs/roadmap.md`: "Implement byte-stream
+proxy loops: stdin -> container stdin, container stdout -> host stdout, and
+container stderr -> host stderr."
 
 The current `ExecMode::Protocol` work only guarantees `tty = false`. It still
 reuses the interactive attached-session helper, which was written for terminal
@@ -453,8 +453,8 @@ pass.
   `rstest-bdd` coverage for forwarding, stream routing, failure mapping, and
   EOF shutdown behaviour.
 - Documentation: updated `docs/podbot-design.md`,
-  `docs/users-guide.md`, and `docs/roadmap.md` to describe the final
-  protocol proxy behaviour and mark Step 2.5.2 complete.
+  `docs/users-guide.md`, and `docs/roadmap.md` to describe the final protocol
+  proxy behaviour and mark Step 2.5.2 complete.
 - Gates passed: `make fmt`, `make markdownlint`, `make nixie`,
   `make check-fmt`, `make lint`, and `make test`.
 - Deviation: behavioural coverage landed as an internal `rstest-bdd` module

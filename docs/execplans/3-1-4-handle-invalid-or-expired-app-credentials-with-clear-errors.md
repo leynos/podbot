@@ -187,8 +187,9 @@ infrastructure:
   loading, client construction, and API validation via `GET /app`.
 - `GitHubAppClient` trait with `OctocrabAppClient` production implementation
   and `MockGitHubAppClient` for testing.
-- `validate_with_client(client)` and `validate_with_factory(app_id, path,
-  factory)` for dependency-injected testing.
+- `validate_with_client(client)` and
+  `validate_with_factory(app_id, path, factory)` for dependency-injected
+  testing.
 
 ### Key files for this task
 
@@ -481,9 +482,9 @@ Important BDD patterns enforced (from project conventions):
 - Feature file text uses unquoted values for `{param}` captures.
 - Feature files are read at compile time; `cargo clean -p podbot` is needed
   after modifying them.
-- Local `mockall::mock!` for `GitHubAppClient` since `#[cfg_attr(test,
-  mockall::automock)]
-  ` is only available within the main crate's test configuration.
+- Local `mockall::mock!` for `GitHubAppClient` since
+  `#[cfg_attr(test, mockall::automock)]` is only available within the main
+  crate's test configuration.
 
 Estimated additions: approximately 200 lines across all BDD files.
 

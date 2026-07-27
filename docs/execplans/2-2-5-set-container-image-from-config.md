@@ -12,8 +12,8 @@ is the governing implementation document for this task.
 
 ## Purpose and big picture
 
-Complete roadmap task 2.2.5 from `docs/roadmap.md`: "Set the container
-image from configuration."
+Complete roadmap task 2.2.5 from `docs/roadmap.md`: "Set the container image
+from configuration."
 
 The core outcome is that container creation must consume the resolved
 configuration image (`AppConfig.image`) rather than relying on ad-hoc test or

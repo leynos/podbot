@@ -44,18 +44,18 @@ vsleep "$(shuf -i 15-30 -n 1)m"
 
 The audit findings map to implementation milestones as follows:
 
-| Finding | Milestone | Outcome |
-| --- | --- | --- |
-| Placeholder APIs report success | Milestone 1 | Compatible error result |
-| Config file errors are misclassified | Milestone 1 | Targeted config errors |
-| Engine imports API/config types | Milestone 2 | Engine-native requests |
-| Credential errors use string matching | Milestone 3 | Structured source data |
-| `ExecRequest` TTY builder docs are unclear | Milestone 4 | Rustdoc example |
-| Config discovery docs are stale | Milestone 4 | Both candidates documented |
-| Async tests can hang | Milestone 5 | Timeout-guarded tests |
-| BDD helpers default missing state | Milestone 5 | Precondition errors |
-| Repeated test helper stacks | Milestone 5 | Owned shared helpers |
-| Oversized protocol module | Milestone 6 | Responsibility split |
+| Finding                                    | Milestone   | Outcome                    |
+| ------------------------------------------ | ----------- | -------------------------- |
+| Placeholder APIs report success            | Milestone 1 | Compatible error result    |
+| Config file errors are misclassified       | Milestone 1 | Targeted config errors     |
+| Engine imports API/config types            | Milestone 2 | Engine-native requests     |
+| Credential errors use string matching      | Milestone 3 | Structured source data     |
+| `ExecRequest` TTY builder docs are unclear | Milestone 4 | Rustdoc example            |
+| Config discovery docs are stale            | Milestone 4 | Both candidates documented |
+| Async tests can hang                       | Milestone 5 | Timeout-guarded tests      |
+| BDD helpers default missing state          | Milestone 5 | Precondition errors        |
+| Repeated test helper stacks                | Milestone 5 | Owned shared helpers       |
+| Oversized protocol module                  | Milestone 6 | Responsibility split       |
 
 ## Constraints
 
@@ -101,9 +101,9 @@ semver-stable and `PodbotError` is currently exhaustive, so adding a variant
 would break embedders with exhaustive matches. Route the unsupported diagnostic
 through an existing compatible error bucket, such as
 `ContainerError::ExecFailed` with an operation identifier and clear
-unsupported-work message. A new
-top-level unsupported error requires a separate versioned migration that first
-makes the public enum non-exhaustive or otherwise documents the breaking change.
+unsupported-work message. A new top-level unsupported error requires a separate
+versioned migration that first makes the public enum non-exhaustive or
+otherwise documents the breaking change.
 
 ## Tolerances
 
@@ -113,9 +113,9 @@ plan commit `c95dab9` grows beyond roughly 1,500 changed lines, excluding
 generated snapshots and this plan.
 
 Stop and ask for direction before changing a stable public type in a way that
-would break existing callers. Do not add variants to currently exhaustive public
-error enums, including `PodbotError`, unless the milestone explicitly includes a
-versioned or non-exhaustive migration.
+would break existing callers. Do not add variants to currently exhaustive
+public error enums, including `PodbotError`, unless the milestone explicitly
+includes a versioned or non-exhaustive migration.
 
 Stop and ask for direction if CodeRabbit reports a security, soundness, or
 public API compatibility concern that cannot be resolved with a local patch in
@@ -129,9 +129,9 @@ appear unrelated to this branch and cannot be reproduced in a focused command.
 Changing placeholder API results can break tests or callers that treated
 successful no-op behaviour as the current contract. The affected functions are
 behind the `experimental` feature, so the compatibility risk is limited to
-experimental embedders and command-line tests that enable that feature. Mitigate
-this by returning an existing compatible `PodbotError` bucket with a clear
-unsupported diagnostic, rather than adding a new top-level variant.
+experimental embedders and command-line tests that enable that feature.
+Mitigate this by returning an existing compatible `PodbotError` bucket with a
+clear unsupported diagnostic, rather than adding a new top-level variant.
 
 Moving config-to-engine construction out of engine modules can create churn in
 internal tests. Mitigate this by adding small composition helpers at the API or
@@ -167,8 +167,8 @@ for the still-unimplemented agent lifecycle. Reword its Rustdoc so validation
 failures remain documented as real behaviour while the post-validation
 lifecycle is explicitly unsupported. Remove the three
 `#[expect(clippy::missing_const_for_fn)]` attributes from the pure stubs when
-their bodies start constructing errors, because the lint will no longer fire and
-unfulfilled expectations fail `make lint`. Update `src/config/loader.rs` so
+their bodies start constructing errors, because the lint will no longer fire
+and unfulfilled expectations fail `make lint`. Update `src/config/loader.rs` so
 malformed config paths and missing files produce targeted configuration errors.
 Add `rstest` unit coverage for supported and unsupported command paths and for
 config file read, parse, missing-file, and malformed-path cases. Add or update
@@ -253,8 +253,7 @@ coderabbit review --agent
 ```
 
 Record the exact commands, pass/fail status, and any CodeRabbit follow-up in the
-`Progress`, `Surprises & discoveries`, and `Outcomes & retrospective`
-sections.
+`Progress`, `Surprises & discoveries`, and `Outcomes & retrospective` sections.
 
 ## Progress
 
@@ -283,8 +282,8 @@ sections.
   CodeRabbit wrapping fix; `make check-fmt`, `make markdownlint`, and
   `make nixie` passed.
 - [x] 2026-06-05: Attempted a final `coderabbit review --agent` twice after
-  fixing the wrapping concern. Both attempts stalled after sandbox
-  preparation; the stuck processes from this session were terminated.
+  fixing the wrapping concern. Both attempts stalled after sandbox preparation;
+  the stuck processes from this session were terminated.
 - [x] Push branch `code-base-audit-2026-06-05` and set upstream to
   `origin/code-base-audit-2026-06-05`.
 - [x] Run plan-milestone documentation gates.
@@ -361,15 +360,15 @@ The first 2026-06-12 `make test` run failed in
 `tests/bdd_repository_cloning_e2e.rs` because testcontainers could not connect
 to the container engine. `systemctl --user status podman.socket` showed
 `trigger-limit-hit`. After `systemctl --user reset-failed podman.socket` and
-`systemctl --user start podman.socket`, `curl --unix-socket
-/run/user/1000/podman/podman.sock http://localhost/_ping` returned `OK`, the
-focused e2e target passed, and the exact `make test` target passed.
+`systemctl --user start podman.socket`,
+`curl --unix-socket /run/user/1000/podman/podman.sock http://localhost/_ping`
+returned `OK`, the focused e2e target passed, and the exact `make test` target
+passed.
 
-Plan review on 2026-06-14 found that adding
-`PodbotError::Unsupported { .. }` would break embedders that exhaustively match
-the currently public `PodbotError` enum. The plan now keeps Milestone 1
-compatible by using an existing error bucket for unsupported placeholder
-diagnostics.
+Plan review on 2026-06-14 found that adding `PodbotError::Unsupported { .. }`
+would break embedders that exhaustively match the currently public
+`PodbotError` enum. The plan now keeps Milestone 1 compatible by using an
+existing error bucket for unsupported placeholder diagnostics.
 
 ## Decision log
 
@@ -420,8 +419,8 @@ Plan-review-update validation on 2026-06-12:
 - `make check-fmt`: passed.
 - `make lint`: passed.
 - `cargo test --all-features --test bdd_repository_cloning_e2e` with
-  `DOCKER_HOST=unix:///run/user/1000/podman/podman.sock`: passed after resetting
-  the failed user Podman socket.
+  `DOCKER_HOST=unix:///run/user/1000/podman/podman.sock`: passed after
+  resetting the failed user Podman socket.
 - `make test`: passed after resetting the failed user Podman socket.
 - `make markdownlint`: passed after fixing the traceability table separator
   style.

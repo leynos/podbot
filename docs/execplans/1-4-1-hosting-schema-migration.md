@@ -27,8 +27,8 @@ invalid combinations of subcommand, `agent.kind`, `agent.mode`, and
 wrong and what to do next.
 
 This plan now records the implemented Step 1.4 delivery. The roadmap entry in
-`docs/roadmap.md` was updated after the implementation, tests,
-documentation, and quality gates passed.
+`docs/roadmap.md` was updated after the implementation, tests, documentation,
+and quality gates passed.
 
 ## Constraints
 
@@ -146,8 +146,8 @@ documentation, and quality gates passed.
 ## Decision Log
 
 - Decision: plan Step 1.4 around the full roadmap scope, not only the subset in
-  the user prompt. Rationale: `docs/roadmap.md` is the source of truth
-  for the step, and the omitted schema fields are required to make the hosting
+  the user prompt. Rationale: `docs/roadmap.md` is the source of truth for the
+  step, and the omitted schema fields are required to make the hosting
   migration coherent. Date/Author: 2026-03-29 / Codex.
 - Decision: keep the plan in DRAFT state and do not mark the roadmap entry
   complete yet. Rationale: the execplans skill requires an approval gate before
@@ -229,11 +229,10 @@ The design sources to keep open during implementation are:
 ## Plan of Work
 
 Stage A is to freeze the semantic target. Re-read the Step 1.4 section in
-`docs/roadmap.md` together with the hosting examples and migration notes
-in `docs/podbot-design.md`. Extract the exact target schema and validation
-matrix before touching code. This stage ends when the implementation has a
-written checklist of new fields, new enum values, defaults, and illegal
-combinations.
+`docs/roadmap.md` together with the hosting examples and migration notes in
+`docs/podbot-design.md`. Extract the exact target schema and validation matrix
+before touching code. This stage ends when the implementation has a written
+checklist of new fields, new enum values, defaults, and illegal combinations.
 
 Stage B is to extend the configuration schema and loader inputs. Add the
 hosting-era fields that the roadmap requires: `workspace.source`,
@@ -287,8 +286,8 @@ to document new configuration keys, environment variables, and the user-visible
 difference between `run` and `host` modes once the validation behaviour is in
 place. If the MCP hosting defaults become concrete enough to matter to
 operators, update `docs/mcp-server-hosting-design.md` as well. Only after the
-feature is implemented and validated should `docs/roadmap.md` mark Step
-1.4 as done.
+feature is implemented and validated should `docs/roadmap.md` mark Step 1.4 as
+done.
 
 Stage G is validation and evidence capture. Run the required Rust quality gates
 with `tee` and `set -o pipefail`, then run the documentation gates because this

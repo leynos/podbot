@@ -20,16 +20,16 @@ For user-facing behaviour and configuration reference, see
 
 All quality gates must pass before committing. The canonical targets are:
 
-| Target              | Command                                                                                                          | Purpose                                                                                            |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `make check-fmt`    | `cargo fmt --workspace -- --check`                                                                               | Verify formatting                                                                                  |
-| `make fmt`          | `cargo fmt --workspace`                                                                                          | Apply formatting fixes                                                                             |
-| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings`                                           | Lint with all warnings denied                                                                      |
-| `make test`         | `cargo test --workspace`                                                                                         | Run full test suite                                                                                |
-| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                                                           | Type-check the workspace                                                                           |
-| `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`                                                  | Derive workspace root with `python3`; run `cargo audit` once there                                 |
-| `make markdownlint` | markdownlint-cli                                                                                                 | Validate Markdown files                                                                            |
-| `make nixie`        | Mermaid diagram validator                                                                                        | Validate diagrams in Markdown                                                                      |
+| Target              | Command                                                                | Purpose                                                            |
+| ------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `make check-fmt`    | `cargo fmt --workspace -- --check`                                     | Verify formatting                                                  |
+| `make fmt`          | `cargo fmt --workspace`                                                | Apply formatting fixes                                             |
+| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Lint with all warnings denied                                      |
+| `make test`         | `cargo test --workspace`                                               | Run full test suite                                                |
+| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                 | Type-check the workspace                                           |
+| `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`        | Derive workspace root with `python3`; run `cargo audit` once there |
+| `make markdownlint` | markdownlint-cli                                                       | Validate Markdown files                                            |
+| `make nixie`        | Mermaid diagram validator                                              | Validate diagrams in Markdown                                      |
 
 _Table 1: Quality gates and corresponding commands._
 
@@ -39,11 +39,11 @@ be reviewed from the log file.
 ### 2.1. Security audit ignores
 
 Security audit jobs may set `CARGO_AUDIT_IGNORES=RUSTSEC-2023-0071`. This
-ignore rule covers SQLx's transitive MySQL RSA password-authentication advisory.
-Podbot does not use SQLx or MySQL at runtime; the advisory enters the graph
-through tooling dependencies rather than an application database path. Keep the
-ignore scoped to `RUSTSEC-2023-0071`, and remove it if SQLx leaves the tool
-dependency graph or if Podbot adds a MySQL runtime integration.
+ignore rule covers SQLx's transitive MySQL RSA password-authentication
+advisory. Podbot does not use SQLx or MySQL at runtime; the advisory enters the
+graph through tooling dependencies rather than an application database path.
+Keep the ignore scoped to `RUSTSEC-2023-0071`, and remove it if SQLx leaves the
+tool dependency graph or if Podbot adds a MySQL runtime integration.
 
 ## 3. Repository layout (exec subsystem)
 
@@ -857,16 +857,16 @@ Podbot-owned types such as `InstallationAccessToken` and
 ### 13.4. Shared test-support types (`src/github/test_support.rs`)
 
 `src/github/test_support.rs` is gated by
-`#[cfg(any(test, feature = "internal"))]` and provides recorder types that
-unit and integration tests share without duplicating implementations:
+`#[cfg(any(test, feature = "internal"))]` and provides recorder types that unit
+and integration tests share without duplicating implementations:
 
-| Type | Purpose |
-| :-- | :-- |
-| `CounterEvent` | Captures one `counter!` increment: metric name, labels, and value |
-| `HistogramEvent` | Captures one `histogram!` observation: metric name, labels, and value |
-| `RecordingMetrics` | Implements `metrics::Recorder`; collects counter and histogram events |
-| `RecordedCounter` | Backing `CounterFn` used by `RecordingMetrics` |
-| `RecordedHistogram` | Backing `HistogramFn` used by `RecordingMetrics` |
+| Type                | Purpose                                                               |
+| :------------------ | :-------------------------------------------------------------------- |
+| `CounterEvent`      | Captures one `counter!` increment: metric name, labels, and value     |
+| `HistogramEvent`    | Captures one `histogram!` observation: metric name, labels, and value |
+| `RecordingMetrics`  | Implements `metrics::Recorder`; collects counter and histogram events |
+| `RecordedCounter`   | Backing `CounterFn` used by `RecordingMetrics`                        |
+| `RecordedHistogram` | Backing `HistogramFn` used by `RecordingMetrics`                      |
 
 _Table 4: Shared test-support types and their purposes._
 
@@ -888,9 +888,8 @@ Integration tests that require the `internal` feature import these types as
 Unit tests within `src/github/` import them as
 `crate::github::test_support::{CounterEvent, RecordingMetrics}`.
 
-Gauge registrations are intentionally no-ops; extend `RecordingMetrics` only
-if a production code path under test emits gauge values that require
-assertion.
+Gauge registrations are intentionally no-ops; extend `RecordingMetrics` only if
+a production code path under test emits gauge values that require assertion.
 
 ## 14. Dev-dependencies for test construction
 
@@ -998,9 +997,9 @@ only parses, refreshes, merges and renders spelling policy. Harvesting, Typos
 execution, phrase enforcement and Mermaid validation remain consumer-owned.
 
 The phrase checker rejects punctuation-sensitive shared corrections such as
-`hand-written` in tracked UTF-8 text. Repository exceptions belong in the
-local overlay as narrow exact or full-line patterns; do not add bare accepted
-words for machine interfaces or formal names.
+`hand-written` in tracked UTF-8 text. Repository exceptions belong in the local
+overlay as narrow exact or full-line patterns; do not add bare accepted words
+for machine interfaces or formal names.
 
 ## 16. Behavioural test infrastructure
 
@@ -1043,18 +1042,17 @@ container engine through
 [`testcontainers`](https://crates.io/crates/testcontainers). A mocked
 `ContainerExecClient` (`mockall::mock!`) is supplementary contract-level
 coverage only; it must not stand in for behavioural coverage of any code that
-talks to the engine. This applies to every behavioural slice whose
-production path reaches the container, including (non-exhaustively) workspace
-preparation, repository cloning, credential injection, git identity
-configuration, container creation, interactive exec, protocol exec, and
-hosted-session lifecycle.
+talks to the engine. This applies to every behavioural slice whose production
+path reaches the container, including (non-exhaustively) workspace preparation,
+repository cloning, credential injection, git identity configuration, container
+creation, interactive exec, protocol exec, and hosted-session lifecycle.
 
 "Container functionality" means any code path whose public contract observably
 depends on running, exec'ing into, or inspecting a container — that is, any
-code that ultimately calls a method on `ContainerExecClient`, mutates
-container state, or asserts a property that only a real container can
-exhibit. Assertions that cannot be demonstrated against a real container are
-not behavioural tests and must be labelled as contract-level (see §16.2).
+code that ultimately calls a method on `ContainerExecClient`, mutates container
+state, or asserts a property that only a real container can exhibit. Assertions
+that cannot be demonstrated against a real container are not behavioural tests
+and must be labelled as contract-level (see §16.2).
 
 Required structure for testcontainers-backed BDD suites:
 
@@ -1063,63 +1061,60 @@ Required structure for testcontainers-backed BDD suites:
   companion.
 - Split helpers across `mod.rs`, `state.rs`, `container.rs`, `steps.rs`, and
   `assertions.rs`. `container.rs` owns the testcontainers wiring: image
-  selection, setup script, socket resolution, and the Bollard client. The
-  other files stay focused on scenario state and step definitions, in line
-  with the layout in §16.
+  selection, setup script, socket resolution, and the Bollard client. The other
+  files stay focused on scenario state and step definitions, in line with the
+  layout in §16.
 - Bundle the runtime, container, Bollard client, and container ID in a
   single fixture type (the canonical example is `SandboxBundle` in
   `tests/bdd_repository_cloning_e2e_helpers/state.rs`). The bundle's `Drop`
   must call `runtime.block_on(container.rm())` so the `testcontainers`
   async-drop helper has a live reactor.
 - Resolve the container socket through `DOCKER_HOST`, then
-  `/var/run/docker.sock`, then `$XDG_RUNTIME_DIR/podman/podman.sock`. Wrap
-  any `DOCKER_HOST` mutation in a `OnceLock` (or equivalent) so concurrent
-  test threads cannot race on the unsafe env write. Continuous integration
-  runners with Docker pre-installed and developers with rootless Podman both
-  pick the right socket without manual configuration.
+  `/var/run/docker.sock`, then `$XDG_RUNTIME_DIR/podman/podman.sock`. Wrap any
+  `DOCKER_HOST` mutation in a `OnceLock` (or equivalent) so concurrent test
+  threads cannot race on the unsafe env write. Continuous integration runners
+  with Docker pre-installed and developers with rootless Podman both pick the
+  right socket without manual configuration.
 - Construct the Bollard `Docker` client against the same socket the fixture
   resolved, so production exec calls route through the live container.
 - Pin the image tag (do **not** rely on `latest`) and prefer a small image
   with the required tools pre-installed; bake any setup the production path
-  expects (helpers, configuration files, prepared remotes) into the
-  container during start, not into the production code under test.
+  expects (helpers, configuration files, prepared remotes) into the container
+  during start, not into the production code under test.
 
 Reach for testcontainers even when the live container makes the test slower.
 Behavioural coverage is the place to spend that cost.
 
-For the canonical implementation, see
-`tests/bdd_repository_cloning_e2e.rs`, the helper module under
-`tests/bdd_repository_cloning_e2e_helpers/`, and the feature file at
-`tests/features/repository_cloning_e2e.feature`.
+For the canonical implementation, see `tests/bdd_repository_cloning_e2e.rs`,
+the helper module under `tests/bdd_repository_cloning_e2e_helpers/`, and the
+feature file at `tests/features/repository_cloning_e2e.feature`.
 
 ### 16.2. Contract-level BDD as supplementary coverage
 
-A mocked `ContainerExecClient` suite is permitted **only** as a supplement to
-a testcontainers-backed suite, and only for assertions that cannot be
-reproduced through a live container — for example, exec exit codes that real
-Git will not produce, error-mapping paths gated on specific daemon
-responses, or validation paths that fail before any exec runs and therefore
-do not need an engine at all.
+A mocked `ContainerExecClient` suite is permitted **only** as a supplement to a
+testcontainers-backed suite, and only for assertions that cannot be reproduced
+through a live container — for example, exec exit codes that real Git will not
+produce, error-mapping paths gated on specific daemon responses, or validation
+paths that fail before any exec runs and therefore do not need an engine at all.
 
 When adding contract-level coverage:
 
 - The corresponding behavioural slice must already have (or gain in the same
   change) a testcontainers-backed suite covering its observable workflows.
 - The contract-level suite must not duplicate any scenario the testcontainers
-  suite already covers; it should focus exclusively on paths the live
-  container cannot reach.
+  suite already covers; it should focus exclusively on paths the live container
+  cannot reach.
 - The scope and rationale for keeping a scenario in the contract-level suite
   must be recorded in the relevant ExecPlan, naming each scenario and why a
-  real container cannot exercise it. "Slower to run" is not a sufficient
-  reason.
+  real container cannot exercise it. "Slower to run" is not a sufficient reason.
 
 The repository-cloning slice illustrates the split: the contract-level
 scenarios in `tests/bdd_repository_cloning.rs` cover input validation that
 short-circuits before exec and the "branch verification failure" path, which
 depends on an exec exit code that `git clone --branch X --single-branch` will
 not produce against a real filesystem remote. The behavioural workflows —
-successful clone and clone-time exec failure — live in the testcontainers
-suite described in §16.1.
+successful clone and clone-time exec failure — live in the testcontainers suite
+described in §16.1.
 
 ## 17. Git identity subsystem
 
@@ -1163,7 +1158,8 @@ tests/
 The subsystem has one Application Programming Interface (API)-level entry point
 and several engine-level collaborators:
 
-- **API entry point**: `configure_container_git_identity`. Its full signature is:
+- **API entry point**: `configure_container_git_identity`. Its full signature
+  is:
 
   ```rust
   configure_container_git_identity(
@@ -1267,8 +1263,8 @@ This yields three testing seams:
 - orchestration is exercised through the BDD harness.
 
 The existing git-identity BDD suite drives orchestration through a mocked
-`ContainerExecClient`. Treat that suite as contract-level coverage per
-§16.2: behavioural coverage of the git-identity subsystem must move to a
+`ContainerExecClient`. Treat that suite as contract-level coverage per §16.2:
+behavioural coverage of the git-identity subsystem must move to a
 testcontainers-backed suite, per the standard set out in §16.1, the next time
 the subsystem is touched.
 
@@ -1396,8 +1392,8 @@ _Figure 4: Repository cloning validation and execution flow._
 - **Behavioural tests**: repository cloning BDD coverage follows the
   testcontainers-backed standard set out in §16.1. The end-to-end suite in
   `tests/bdd_repository_cloning_e2e.rs` exercises successful clone and clone-
-  time exec failure against a real container; the contract-level companion
-  in `tests/bdd_repository_cloning.rs` covers input validation that short-
+  time exec failure against a real container; the contract-level companion in
+  `tests/bdd_repository_cloning.rs` covers input validation that short-
   circuits before exec and the branch-verification-failure path that a real
   remote cannot reproduce (see §16.2).
 

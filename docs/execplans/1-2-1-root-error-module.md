@@ -150,8 +150,8 @@ configuration message).
 Stage D: documentation and roadmap. Record any design decisions in
 `docs/podbot-design.md` (for example, the canonical error hierarchy and how it
 maps to `eyre`). Update `docs/users-guide.md` only if the user-visible error
-behaviour or messaging changes. Mark Step 1.2 in `docs/roadmap.md` as
-"done" once all validations pass.
+behaviour or messaging changes. Mark Step 1.2 in `docs/roadmap.md` as "done"
+once all validations pass.
 
 ## Concrete Steps
 

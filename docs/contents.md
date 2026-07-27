@@ -1,8 +1,8 @@
 # Documentation contents
 
-This index points to the project documents most useful for users,
-contributors, and maintainers. Use it to confirm the canonical names for each
-long-lived guide.
+This index points to the project documents most useful for users, contributors,
+and maintainers. Use it to confirm the canonical names for each long-lived
+guide.
 
 ## Start here
 

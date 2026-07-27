@@ -439,8 +439,8 @@ The paragraph describes:
 - That validation happens once at startup for commands requiring GitHub access.
 - Error handling and message formatting.
 
-Update `docs/roadmap.md` at the relevant line to mark the task as done:
-change `- [ ] Validate credentials produce a valid App token on startup.` to
+Update `docs/roadmap.md` at the relevant line to mark the task as done: change
+`- [ ] Validate credentials produce a valid App token on startup.` to
 `- [x] Validate credentials produce a valid App token on startup.`.
 
 Check `docs/users-guide.md` for any user-facing documentation updates. If

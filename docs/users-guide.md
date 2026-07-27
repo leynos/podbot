@@ -669,14 +669,14 @@ supported semver contract for embedders.
 
 ### Available API items
 
-| Item                                           | Description                         |
-| ---------------------------------------------- | ----------------------------------- |
-| `podbot::api::exec(config, request)`           | Execute in a container              |
-| `podbot::api::ExecContext::connect(…)`         | Reuse runtime and engine state      |
-| `podbot::api::RunRequest::new(repo, branch)`   | Build the library-owned run request |
-| `podbot::api::RepositoryRef`                   | Validate repository `owner/name`    |
-| `podbot::api::BranchName`                      | Validate a branch value             |
-| `podbot::api::WorkspacePath`                   | Validate a workspace path           |
+| Item                                         | Description                         |
+| -------------------------------------------- | ----------------------------------- |
+| `podbot::api::exec(config, request)`         | Execute in a container              |
+| `podbot::api::ExecContext::connect(…)`       | Reuse runtime and engine state      |
+| `podbot::api::RunRequest::new(repo, branch)` | Build the library-owned run request |
+| `podbot::api::RepositoryRef`                 | Validate repository `owner/name`    |
+| `podbot::api::BranchName`                    | Validate a branch value             |
+| `podbot::api::WorkspacePath`                 | Validate a workspace path           |
 
 Table: Podbot API functions for executing and connecting to containers.
 
@@ -745,10 +745,10 @@ stable API.
 
 ### Repository cloning
 
-`clone_repository_into_workspace` is available via the `internal` Cargo
-feature and is not part of the stable embedding contract. Stable embedders
-interact with repository cloning exclusively through the validated value
-types: `RepositoryRef::parse`, `BranchName::parse`, and `WorkspacePath::parse`.
+`clone_repository_into_workspace` is available via the `internal` Cargo feature
+and is not part of the stable embedding contract. Stable embedders interact
+with repository cloning exclusively through the validated value types:
+`RepositoryRef::parse`, `BranchName::parse`, and `WorkspacePath::parse`.
 Validation failures surface as `ConfigError`; clone or branch verification
 failures surface as `ContainerError::ExecFailed`.
 

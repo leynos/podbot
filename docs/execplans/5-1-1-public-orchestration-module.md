@@ -775,13 +775,13 @@ No new external crate dependencies are required.
 
 ## Files to modify
 
-| File                     | Change                                                                        |
-| ------------------------ | ----------------------------------------------------------------------------- |
-| `src/lib.rs`             | Add `pub mod api;` and update module doc                                      |
-| `src/main.rs`            | Remove `CommandOutcome`, replace handlers with thin calls to `podbot::api::*` |
-| `docs/podbot-design.md`  | Add `api/` module detail                                                      |
-| `docs/users-guide.md`    | Add Library API section                                                       |
-| `docs/roadmap.md`        | Mark Step 5.1 first task done                                                 |
+| File                    | Change                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `src/lib.rs`            | Add `pub mod api;` and update module doc                                      |
+| `src/main.rs`           | Remove `CommandOutcome`, replace handlers with thin calls to `podbot::api::*` |
+| `docs/podbot-design.md` | Add `api/` module detail                                                      |
+| `docs/users-guide.md`   | Add Library API section                                                       |
+| `docs/roadmap.md`       | Mark Step 5.1 first task done                                                 |
 
 ## Validation and acceptance
 

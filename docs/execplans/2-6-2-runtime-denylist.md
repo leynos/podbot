@@ -592,8 +592,8 @@ Validation: `make fmt 2>&1 | tee ...`, `make markdownlint 2>&1 | tee ...`, and
 
 ### Stage I: Roadmap and final gates
 
-Update `docs/roadmap.md` to mark only the second Step 2.6 checkbox done.
-Leave the next three checkboxes open.
+Update `docs/roadmap.md` to mark only the second Step 2.6 checkbox done. Leave
+the next three checkboxes open.
 
 Run the full gate stack sequentially with `tee` for each command (do not
 parallelize):

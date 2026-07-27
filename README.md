@@ -49,8 +49,7 @@ Podbot will ultimately serve as the agent encapsulation adapter for
 - Repository cloning and agent startup
 - Container image with bundled agents
 
-See [docs/roadmap.md](docs/roadmap.md) for the complete
-implementation plan.
+See [docs/roadmap.md](docs/roadmap.md) for the complete implementation plan.
 
 ## Quick start
 
@@ -112,8 +111,8 @@ Podbot is actively developed and currently completing Phase 1 (Foundation). The
 error handling, configuration system, and CLI structure are in place. Container
 orchestration and GitHub integration are next up.
 
-Watch this space, check the [roadmap](docs/roadmap.md), or star the repo
-to follow along!
+Watch this space, check the [roadmap](docs/roadmap.md), or star the repo to
+follow along!
 
 ## Credits
 

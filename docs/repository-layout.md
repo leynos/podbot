@@ -45,25 +45,25 @@ _Figure 1: Compact repository layout for contributor orientation._
 
 ## Path responsibilities
 
-| Path | Responsibility |
-| ---- | -------------- |
-| `AGENTS.md` | Normative agent and contributor instructions for code style, documentation upkeep, Rust conventions, and quality gates. |
-| `Cargo.toml` and `Cargo.lock` | Workspace package metadata, dependency declarations, feature configuration, and the locked dependency graph. |
-| `Makefile` | Canonical build, lint, test, formatting, Markdown, and diagram validation entrypoints. |
-| `README.md` | Public project overview and first contact for readers outside the maintainer workflow. |
-| `rust-toolchain.toml` | Rust toolchain pin used by local builds and continuous integration (CI). |
-| `.github/` | GitHub automation such as dependency updates and CI workflows. |
-| `docs/` | Long-lived project knowledge base, including guides, design documents, Architecture Decision Records (ADRs), roadmaps, and plans. |
-| `src/api/` | Stable and experimental library-facing API surfaces for embedders and integration callers. |
-| `src/bin_tests/` | Support code used by binary-facing tests. |
-| `src/cli/` | Command-line interface parsing, command wiring, and operator-facing behaviour. |
-| `src/config/` | Configuration models, layered loading, environment overrides, validation, and related testable helpers. |
-| `src/engine/` | Container-engine integration, execution modes, protocol proxying, repository cloning, credential upload, and git-identity configuration. |
-| `src/github/` | GitHub App authentication, credential validation, installation-token acquisition, and GitHub error classification. |
-| `src/error.rs` | Project error boundary and domain error types. |
-| `src/lib.rs` | Public library root and exported module boundary. |
-| `src/main.rs` | Binary entrypoint that wires the command-line application to the library. |
-| `tests/` | Integration, behaviour, feature, fixture, and helper code used to validate externally observable workflows. |
+| Path                          | Responsibility                                                                                                                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENTS.md`                   | Normative agent and contributor instructions for code style, documentation upkeep, Rust conventions, and quality gates.                  |
+| `Cargo.toml` and `Cargo.lock` | Workspace package metadata, dependency declarations, feature configuration, and the locked dependency graph.                             |
+| `Makefile`                    | Canonical build, lint, test, formatting, Markdown, and diagram validation entrypoints.                                                   |
+| `README.md`                   | Public project overview and first contact for readers outside the maintainer workflow.                                                   |
+| `rust-toolchain.toml`         | Rust toolchain pin used by local builds and continuous integration (CI).                                                                 |
+| `.github/`                    | GitHub automation such as dependency updates and CI workflows.                                                                           |
+| `docs/`                       | Long-lived project knowledge base, including guides, design documents, Architecture Decision Records (ADRs), roadmaps, and plans.        |
+| `src/api/`                    | Stable and experimental library-facing API surfaces for embedders and integration callers.                                               |
+| `src/bin_tests/`              | Support code used by binary-facing tests.                                                                                                |
+| `src/cli/`                    | Command-line interface parsing, command wiring, and operator-facing behaviour.                                                           |
+| `src/config/`                 | Configuration models, layered loading, environment overrides, validation, and related testable helpers.                                  |
+| `src/engine/`                 | Container-engine integration, execution modes, protocol proxying, repository cloning, credential upload, and git-identity configuration. |
+| `src/github/`                 | GitHub App authentication, credential validation, installation-token acquisition, and GitHub error classification.                       |
+| `src/error.rs`                | Project error boundary and domain error types.                                                                                           |
+| `src/lib.rs`                  | Public library root and exported module boundary.                                                                                        |
+| `src/main.rs`                 | Binary entrypoint that wires the command-line application to the library.                                                                |
+| `tests/`                      | Integration, behaviour, feature, fixture, and helper code used to validate externally observable workflows.                              |
 
 _Table 1: Top-level path responsibilities._
 

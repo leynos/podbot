@@ -120,8 +120,8 @@ resides in `tests/bdd_config.rs` with feature definitions in
 already defines `ConfigError::MissingRequired` which will be used for
 validation errors.
 
-The roadmap entry for this task is in `docs/roadmap.md` under Step 1.3:
-"Create GitHubConfig for App ID, installation ID, and private key path."
+The roadmap entry for this task is in `docs/roadmap.md` under Step 1.3: "Create
+GitHubConfig for App ID, installation ID, and private key path."
 
 ## Plan of Work
 

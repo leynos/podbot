@@ -12,8 +12,8 @@ is the governing implementation document for this task.
 
 ## Purpose and big picture
 
-Implement the Step 2.2 container-creation slice from `docs/roadmap.md`
-by adding a Bollard-backed `create_container` capability that applies sandbox
+Implement the Step 2.2 container-creation slice from `docs/roadmap.md` by
+adding a Bollard-backed `create_container` capability that applies sandbox
 security settings deterministically.
 
 After this change, callers can request container creation with explicit
@@ -265,8 +265,8 @@ Update `docs/users-guide.md` with user-visible behaviour for container
 creation, including how sandbox settings influence runtime security and
 compatibility.
 
-Update `docs/roadmap.md` by marking the relevant Step 2.2 entry done
-once tests and quality gates pass.
+Update `docs/roadmap.md` by marking the relevant Step 2.2 entry done once tests
+and quality gates pass.
 
 Validation gate:
 

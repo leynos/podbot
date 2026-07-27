@@ -106,8 +106,8 @@ and configuration structs. Behavioural coverage resides in
 `tests/bdd_config.rs` with feature definitions in
 `tests/features/configuration.feature`. Design intent is captured in
 `docs/podbot-design.md`, while user-facing configuration guidance sits in
-`docs/users-guide.md`. The roadmap entry for this task is in
-`docs/roadmap.md` under Step 1.3.
+`docs/users-guide.md`. The roadmap entry for this task is in `docs/roadmap.md`
+under Step 1.3.
 
 `AppConfig` should be the root configuration container for the application. It
 must aggregate nested configuration structs (GitHub, sandbox, agent, workspace,
@@ -144,8 +144,7 @@ use dependency injection per
 
 Stage D updates documentation and the roadmap. Record any design decisions in
 `docs/podbot-design.md`, update `docs/users-guide.md` for user-visible changes,
-then mark the Step 1.3 "Define AppConfig" task as done in
-`docs/roadmap.md`.
+then mark the Step 1.3 "Define AppConfig" task as done in `docs/roadmap.md`.
 
 Stage E runs formatting, linting, and test gates. Use Makefile targets and the
 `tee` + `set -o pipefail` pattern to capture logs for review.

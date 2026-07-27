@@ -27,8 +27,9 @@ orchestration flow (that is Steps 3.1.3 and 3.1.4).
 
 ## Constraints
 
-- Do not modify `src/error.rs`. The `GitHubError::AuthenticationFailed {
-  message: String }` variant already exists at lines 149-155 and is sufficient.
+- Do not modify `src/error.rs`. The
+  `GitHubError::AuthenticationFailed { message: String }` variant already
+  exists at lines 149-155 and is sufficient.
 - Do not modify `src/config/types.rs`. The `GitHubConfig` struct and its
   validation methods are not consumed by this function — it takes primitives.
 - Do not modify `Cargo.toml` dependencies. Both `octocrab = "0.49.5"` and

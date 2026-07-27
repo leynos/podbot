@@ -157,9 +157,8 @@ escalation, not workarounds.
   ) -> Result<AppConfig>
   ```
 
-  Rationale: Avoids mutating the process environment in tests and
-  aligns with the repository dependency-injection guidance. Date/Author:
-  2026-03-03 (agent)
+  Rationale: Avoids mutating the process environment in tests and aligns with
+  the repository dependency-injection guidance. Date/Author: 2026-03-03 (agent)
 
 - Decision: Keep Clap-dependent parse structures in `podbot::cli` and remove
   Clap derives from `podbot::config` model enums. Rationale: Separates CLI
