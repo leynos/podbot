@@ -17,7 +17,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
       - name: Install cargo-audit
