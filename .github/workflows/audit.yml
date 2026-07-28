@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
+        uses: leynos/shared-actions/.github/actions/setup-rust@6b9dc1be1b8bfb585ddd0083d50b9d6597cd902e
       - name: Install cargo-audit
         run: cargo binstall --no-confirm cargo-audit
       - name: Setup Python for audit manifest extraction
