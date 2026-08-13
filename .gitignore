@@ -12,3 +12,7 @@ __pycache__/
 .memdb/
 *~
 .agents/mcp/context_pack/packs/
+.vtcode/
+.claude/
+*.swp
+*.swo
