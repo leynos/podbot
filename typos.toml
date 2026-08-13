@@ -30,6 +30,11 @@ extend-exclude = [
 [default]
 locale = "en-gb"
 extend-ignore-re = [
+    "-fuse-ld=mold",
+    "mold linker",
+    "Cranelift \\+ mold",
+    "Cranelift and mold",
+    "`mold`",
     "(?m)^        if current_runtime\\.runtime_flavor\\(\\) == RuntimeFlavor::MultiThread \\{$",
     "(?m)^      CARGO_TERM_COLOR: always$",
     "(?m)^    #\\[tokio::test\\(flavor = \"current_thread\"\\)\\]$",
@@ -1488,7 +1493,6 @@ extend-ignore-re = [
 "modularizers" = "modularizers"
 "modularizes" = "modularizes"
 "modularizing" = "modularizing"
-"mold" = "mold"
 "monetisable" = "monetizable"
 "monetisably" = "monetizably"
 "monetisation" = "monetization"
