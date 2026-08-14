@@ -30,11 +30,6 @@ extend-exclude = [
 [default]
 locale = "en-gb"
 extend-ignore-re = [
-    "-fuse-ld=mold",
-    "mold linker",
-    "Cranelift \\+ mold",
-    "Cranelift and mold",
-    "`mold`",
     "(?m)^        if current_runtime\\.runtime_flavor\\(\\) == RuntimeFlavor::MultiThread \\{$",
     "(?m)^      CARGO_TERM_COLOR: always$",
     "(?m)^    #\\[tokio::test\\(flavor = \"current_thread\"\\)\\]$",
@@ -43,9 +38,14 @@ extend-ignore-re = [
     "(?m)^### HookArtifact and HookSubscription$",
     "(?m)^use tokio::runtime::RuntimeFlavor;$",
     "(?s)```.*?```",
+    "-fuse-ld=mold",
     "Azure Architecture\\s+Center\\s+\\|\\s+Microsoft Learn",
+    "Cranelift \\+ mold",
+    "Cranelift and mold",
     "\\brust-analyzer\\b",
     "`[^`\\n]+`",
+    "`mold`",
+    "mold linker",
 ]
 
 [default.extend-words]
