@@ -7,9 +7,7 @@
 
 mod test_support;
 
-use std::io::Write;
-
-use crate::test_support::env_with;
+use crate::test_support::{env_with, temp_config_file};
 use camino::Utf8PathBuf;
 use mockable::MockEnv;
 use podbot::config::{
@@ -19,12 +17,6 @@ use podbot::engine::CreateContainerRequest;
 use podbot::error::{ConfigError, PodbotError};
 use rstest::rstest;
 use tempfile::NamedTempFile;
-
-fn temp_config_file(content: &str) -> std::io::Result<NamedTempFile> {
-    let mut file = NamedTempFile::new()?;
-    file.write_all(content.as_bytes())?;
-    Ok(file)
-}
 
 #[expect(clippy::expect_used, reason = "test helper - panics are acceptable")]
 fn config_file_with_image(image: Option<&str>) -> (Option<NamedTempFile>, Option<Utf8PathBuf>) {
