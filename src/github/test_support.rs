@@ -37,18 +37,22 @@ pub struct RecordingMetrics {
 impl RecordingMetrics {
     #[must_use]
     pub fn events(&self) -> Vec<CounterEvent> {
-        match self.events.lock() {
-            Ok(events) => events.clone(),
-            Err(error) => panic!("metrics events lock should not be poisoned: {error}"),
-        }
+        // A panic while holding the lock cannot leave recorded events in an
+        // inconsistent state (pushes are the only mutation), so recovering
+        // the poisoned guard is safe here.
+        self.events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     #[must_use]
     pub fn histogram_events(&self) -> Vec<HistogramEvent> {
-        match self.histogram_events.lock() {
-            Ok(events) => events.clone(),
-            Err(error) => panic!("histogram events lock should not be poisoned: {error}"),
-        }
+        // See `events` above: poisoning cannot corrupt the recorded data.
+        self.histogram_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -101,10 +105,12 @@ impl CounterFn for RecordedCounter {
     fn increment(&self, value: u64) {
         let mut event = self.event.clone();
         event.value = value;
-        match self.events.lock() {
-            Ok(mut events) => events.push(event),
-            Err(error) => panic!("metrics events lock should not be poisoned: {error}"),
-        }
+        // See `RecordingMetrics::events`: poisoning cannot corrupt the
+        // recorded data, so recovering the guard is safe.
+        self.events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(event);
     }
 
     fn absolute(&self, value: u64) {
@@ -121,9 +127,11 @@ impl HistogramFn for RecordedHistogram {
     fn record(&self, value: f64) {
         let mut event = self.event.clone();
         event.value = value;
-        match self.events.lock() {
-            Ok(mut events) => events.push(event),
-            Err(error) => panic!("histogram events lock should not be poisoned: {error}"),
-        }
+        // See `RecordingMetrics::events`: poisoning cannot corrupt the
+        // recorded data, so recovering the guard is safe.
+        self.events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(event);
     }
 }
