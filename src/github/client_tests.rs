@@ -3,72 +3,64 @@
 
 use std::io;
 
-use eyre::{bail, ensure};
-
 use cap_std::fs_utf8::Dir as Utf8Dir;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
 use super::super::retry_metrics::github_status_class;
 use super::super::*;
 use super::{ec_pem, temp_key_dir, valid_rsa_pem};
 
-#[rstest]
-fn build_app_client_with_valid_key_succeeds(
-    valid_rsa_pem: String,
-    temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) -> eyre::Result<()> {
-    let (_tmp, dir) = temp_key_dir?;
-    dir.write("key.pem", &valid_rsa_pem)?;
-    let path = Utf8Path::new("/display/key.pem");
-    let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
-    // Octocrab's build() spawns a Tower buffer task requiring a Tokio runtime.
-    let rt = tokio::runtime::Runtime::new()?;
-    let _guard = rt.enter();
-    let result = build_app_client(12345, key);
-    ensure!(result.is_ok(), "expected Ok, got: {result:?}");
-    Ok(())
+/// Fixture providing a fresh Tokio runtime.
+///
+/// Octocrab's `build()` spawns a Tower buffer task requiring a Tokio
+/// runtime, so tests that build a client must enter one first.
+#[fixture]
+fn tokio_runtime() -> io::Result<tokio::runtime::Runtime> {
+    tokio::runtime::Runtime::new()
 }
 
 #[rstest]
-fn build_app_client_with_zero_app_id_succeeds(
+#[case::nonzero_app_id(12345)]
+// Builder does not validate app_id; GitHub validates at token time.
+#[case::zero_app_id(0)]
+fn build_app_client_succeeds(
+    #[case] app_id: u64,
     valid_rsa_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) -> eyre::Result<()> {
-    let (_tmp, dir) = temp_key_dir?;
-    dir.write("key.pem", &valid_rsa_pem)?;
+    tokio_runtime: io::Result<tokio::runtime::Runtime>,
+) {
+    let (_tmp, dir) = temp_key_dir.expect("temp key dir should be created");
+    dir.write("key.pem", &valid_rsa_pem)
+        .expect("key file should write");
     let path = Utf8Path::new("/display/key.pem");
     let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
-    // Builder does not validate app_id; GitHub validates at token time.
-    // Octocrab's build() spawns a Tower buffer task requiring a Tokio runtime.
-    let rt = tokio::runtime::Runtime::new()?;
+    let rt = tokio_runtime.expect("tokio runtime should build");
     let _guard = rt.enter();
-    let result = build_app_client(0, key);
-    ensure!(
-        result.is_ok(),
-        "expected Ok even with zero app_id, got: {result:?}"
-    );
-    Ok(())
+
+    let result = build_app_client(app_id, key);
+
+    assert!(result.is_ok(), "expected Ok, got: {result:?}");
 }
 
 #[rstest]
 fn build_app_client_without_runtime_returns_error(
     valid_rsa_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) -> eyre::Result<()> {
-    let (_tmp, dir) = temp_key_dir?;
-    dir.write("key.pem", &valid_rsa_pem)?;
+) {
+    let (_tmp, dir) = temp_key_dir.expect("temp key dir should be created");
+    dir.write("key.pem", &valid_rsa_pem)
+        .expect("key file should write");
     let path = Utf8Path::new("/display/key.pem");
     let key = load_private_key_from_dir(&dir, "key.pem", path).expect("should load valid key");
     // Call without entering a Tokio runtime — should return Err, not panic.
     let result = build_app_client(42, key);
-    ensure!(result.is_err(), "expected Err without runtime, got Ok");
+    assert!(result.is_err(), "expected Err without runtime, got Ok");
     let message = result.err().map(|e| e.to_string()).unwrap_or_default();
-    ensure!(
+    assert!(
         message.contains("no Tokio runtime context"),
         "error should mention missing runtime: {message}"
     );
-    Ok(())
 }
 
 #[rstest]
@@ -113,22 +105,21 @@ fn authentication_failed_error_includes_context(
 #[tokio::test]
 async fn validate_app_credentials_with_missing_key_returns_error(
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) -> eyre::Result<()> {
-    let (temp_dir, _dir) = temp_key_dir?;
+) {
+    let (temp_dir, _dir) = temp_key_dir.expect("temp key dir should be created");
     let key_path = Utf8Path::from_path(temp_dir.path())
         .expect("temp dir path should be UTF-8")
         .join("key.pem");
     let result = validate_app_credentials(12345, &key_path).await;
     match result {
         Err(GitHubError::PrivateKeyLoadFailed { ref path, .. }) => {
-            ensure!(
+            assert!(
                 path.to_string_lossy().contains("key.pem"),
                 "error path should reference the missing file"
             );
         }
-        other => bail!("expected PrivateKeyLoadFailed, got: {other:?}"),
+        other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
     }
-    Ok(())
 }
 
 #[rstest]
@@ -136,23 +127,22 @@ async fn validate_app_credentials_with_missing_key_returns_error(
 async fn validate_app_credentials_with_invalid_pem_returns_error(
     ec_pem: String,
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
-) -> eyre::Result<()> {
-    let (tmp, dir) = temp_key_dir?;
-    dir.write("ec.pem", &ec_pem)?;
+) {
+    let (tmp, dir) = temp_key_dir.expect("temp key dir should be created");
+    dir.write("ec.pem", &ec_pem).expect("key file should write");
     let full_path = tmp.path().join("ec.pem");
     let utf8_path = Utf8Path::from_path(&full_path).expect("temp path should be UTF-8");
 
     let result = validate_app_credentials(12345, utf8_path).await;
     match result {
         Err(GitHubError::PrivateKeyLoadFailed { message, .. }) => {
-            ensure!(
+            assert!(
                 message.contains("ECDSA"),
                 "error should mention ECDSA: {message}"
             );
         }
-        other => bail!("expected PrivateKeyLoadFailed, got: {other:?}"),
+        other => panic!("expected PrivateKeyLoadFailed, got: {other:?}"),
     }
-    Ok(())
 }
 
 #[rstest]

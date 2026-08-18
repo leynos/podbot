@@ -14,9 +14,11 @@ use rstest::rstest;
 /// This mirrors the production `load_config` behaviour, which serializes
 /// `AppConfig::default()` as the defaults layer.
 #[rstest]
-fn layer_precedence_serialized_defaults_round_trip() {
+fn layer_precedence_serialized_defaults_round_trip(
+    create_composer_with_defaults: Result<MergeComposer, serde_json::Error>,
+) {
     // This is exactly what load_config does: serialize defaults, push to composer.
-    let composer = create_composer_with_defaults().expect("composer creation should succeed");
+    let composer = create_composer_with_defaults.expect("composer creation should succeed");
     let config = merge_config(composer).expect("merge should succeed");
     let expected = AppConfig::default();
 
@@ -37,8 +39,10 @@ fn layer_precedence_serialized_defaults_round_trip() {
 
 /// Test that defaults layer provides baseline configuration values.
 #[rstest]
-fn layer_precedence_defaults_provide_baseline() {
-    let composer = create_composer_with_defaults().expect("composer creation should succeed");
+fn layer_precedence_defaults_provide_baseline(
+    create_composer_with_defaults: Result<MergeComposer, serde_json::Error>,
+) {
+    let composer = create_composer_with_defaults.expect("composer creation should succeed");
     let config = merge_config(composer).expect("merge should succeed");
 
     assert_config_has_defaults(&config);
@@ -46,8 +50,10 @@ fn layer_precedence_defaults_provide_baseline() {
 
 /// Test that file layer overrides defaults.
 #[rstest]
-fn layer_precedence_file_overrides_defaults() {
-    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
+fn layer_precedence_file_overrides_defaults(
+    create_composer_with_defaults: Result<MergeComposer, serde_json::Error>,
+) {
+    let mut composer = create_composer_with_defaults.expect("composer creation should succeed");
     composer.push_file(
         json!({
             "engine_socket": "unix:///from/file.sock",
@@ -74,11 +80,11 @@ fn layer_precedence_file_overrides_defaults() {
 #[case::env_overrides_file(None, "unix:///from/env.sock")]
 #[case::cli_overrides_all(Some("unix:///from/cli.sock"), "unix:///from/cli.sock")]
 fn layer_precedence_override_for_engine_socket(
+    create_composer_with_file_and_env: Result<MergeComposer, serde_json::Error>,
     #[case] cli_override: Option<&str>,
     #[case] expected_socket: &str,
 ) {
-    let mut composer =
-        create_composer_with_file_and_env().expect("composer creation should succeed");
+    let mut composer = create_composer_with_file_and_env.expect("composer creation should succeed");
 
     if let Some(socket) = cli_override {
         composer.push_cli(json!({ "engine_socket": socket }));
@@ -94,8 +100,10 @@ fn layer_precedence_override_for_engine_socket(
 
 /// Test full precedence chain: defaults < file < env < CLI.
 #[rstest]
-fn layer_precedence_full_chain() {
-    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
+fn layer_precedence_full_chain(
+    create_composer_with_defaults: Result<MergeComposer, serde_json::Error>,
+) {
+    let mut composer = create_composer_with_defaults.expect("composer creation should succeed");
 
     // Layer 2: File provides base configuration
     composer.push_file(
@@ -135,8 +143,10 @@ fn layer_precedence_full_chain() {
 
 /// Test that nested config merges correctly across layers.
 #[rstest]
-fn layer_precedence_nested_config_merges() {
-    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
+fn layer_precedence_nested_config_merges(
+    create_composer_with_defaults: Result<MergeComposer, serde_json::Error>,
+) {
+    let mut composer = create_composer_with_defaults.expect("composer creation should succeed");
     composer.push_file(
         json!({
             "sandbox": {
@@ -208,9 +218,11 @@ fn layer_precedence_noncanonical_defaults_fail() {
 /// This remains a valid explicit caller input, even though `merge_from_layers`
 /// now injects the same defaults layer internally.
 #[rstest]
-fn layer_precedence_serialized_defaults_works() {
+fn layer_precedence_serialized_defaults_works(
+    create_composer_with_defaults: Result<MergeComposer, serde_json::Error>,
+) {
     // Production approach: serialize AppConfig::default() as the defaults layer.
-    let composer = create_composer_with_defaults().expect("composer creation should succeed");
+    let composer = create_composer_with_defaults.expect("composer creation should succeed");
     let config = merge_config(composer).expect("merge should succeed");
 
     // Verify the config matches the expected defaults.
