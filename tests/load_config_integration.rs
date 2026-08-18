@@ -7,22 +7,12 @@
 
 mod test_support;
 
-use std::io::Write;
-
-use crate::test_support::env_with;
+use crate::test_support::{env_with, temp_config_file};
 use camino::Utf8PathBuf;
 use podbot::config::{
     CommandIntent, ConfigLoadOptions, ConfigOverrides, SelinuxLabelMode, load_config_with_env,
 };
 use rstest::rstest;
-use tempfile::NamedTempFile;
-
-/// Helper: Creates a temporary config file with the given TOML content.
-fn temp_config_file(content: &str) -> std::io::Result<NamedTempFile> {
-    let mut file = NamedTempFile::new()?;
-    file.write_all(content.as_bytes())?;
-    Ok(file)
-}
 
 #[rstest]
 fn load_config_returns_defaults_when_no_sources_provided() {

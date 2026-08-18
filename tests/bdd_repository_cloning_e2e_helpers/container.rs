@@ -28,35 +28,11 @@ const READY_MARKER: &str = "PODBOT_E2E_READY";
 
 const CONNECTION_TIMEOUT_SECS: u64 = 30;
 
-const SETUP_SCRIPT: &str = concat!(
-    "set -eu\n",
-    "mkdir -p /root /srv/test-repos/leynos/podbot.git\n",
-    "cat > /root/.gitconfig <<'GITCFG'\n",
-    "[user]\n",
-    "    name = Test\n",
-    "    email = test@example.com\n",
-    "[init]\n",
-    "    defaultBranch = main\n",
-    "[url \"file:///srv/test-repos/\"]\n",
-    "    insteadOf = https://github.com/\n",
-    "GITCFG\n",
-    "git init --bare -b main /srv/test-repos/leynos/podbot.git >/dev/null 2>&1\n",
-    "work=$(mktemp -d)\n",
-    "git -C \"$work\" init -b main >/dev/null 2>&1\n",
-    "echo hello > \"$work\"/README.md\n",
-    "git -C \"$work\" add README.md >/dev/null 2>&1\n",
-    "git -C \"$work\" commit -m init >/dev/null 2>&1\n",
-    "git -C \"$work\" push /srv/test-repos/leynos/podbot.git main:main >/dev/null 2>&1\n",
-    "cat > /usr/local/bin/git-askpass <<'ASKPASS'\n",
-    "#!/bin/sh\n",
-    "echo \"\"\n",
-    "ASKPASS\n",
-    "chmod +x /usr/local/bin/git-askpass\n",
-    "echo ",
-    "PODBOT_E2E_READY",
-    "\n",
-    "exec sleep infinity\n",
-);
+/// Shell script that provisions the in-container git server and the
+/// `git-askpass` helper before signalling readiness. Kept in an external
+/// fixture (rather than inline `concat!`) so it can be linted with
+/// `shellcheck` and edited as ordinary shell.
+const SETUP_SCRIPT: &str = include_str!("../fixtures/e2e_sandbox_setup.sh");
 
 /// Selected container socket used by both testcontainers and the Bollard
 /// client created for the scenario.
