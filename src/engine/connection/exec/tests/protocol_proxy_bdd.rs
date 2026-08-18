@@ -1,7 +1,6 @@
 //! Behavioural tests for protocol exec byte proxying.
 
 use std::io;
-use std::sync::PoisonError;
 
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
@@ -12,7 +11,9 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_io_async};
-use super::proxy_helpers::{RecordingInputWriter, RecordingWriter, WriterFailureMode};
+use super::proxy_helpers::{
+    RecordingInputWriter, RecordingWriter, WriterFailureMode, captured_bytes,
+};
 use super::*;
 
 type StepResult<T> = Result<T, String>;
@@ -142,27 +143,9 @@ fn store_proxy_results(
     captured: &CapturedIo,
     result: Result<(), PodbotError>,
 ) {
-    state.host_stdout.set(
-        captured
-            .stdout
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone(),
-    );
-    state.host_stderr.set(
-        captured
-            .stderr
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone(),
-    );
-    state.container_stdin.set(
-        captured
-            .stdin
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone(),
-    );
+    state.host_stdout.set(captured_bytes(&captured.stdout));
+    state.host_stderr.set(captured_bytes(&captured.stderr));
+    state.container_stdin.set(captured_bytes(&captured.stdin));
 
     match result {
         Ok(()) => state.outcome.set(ProtocolProxyOutcome::Success),
