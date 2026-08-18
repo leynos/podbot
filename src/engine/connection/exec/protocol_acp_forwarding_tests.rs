@@ -1,5 +1,7 @@
 //! ACP stdin forwarding tests for the protocol proxy.
 
+use tokio::io::AsyncWriteExt;
+
 use super::*;
 
 #[test]

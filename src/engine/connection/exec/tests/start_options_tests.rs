@@ -67,10 +67,10 @@ fn assert_start_options(options: &StartExecOptions, case: &StartOptionsCase) {
     expected_tty: false,
     expected_output_capacity: None,
 })]
-fn build_start_exec_options_per_mode(#[case] case: StartOptionsCase) -> TestResult {
-    let request =
-        ExecRequest::new("c", vec![String::from("cmd")], case.mode)?.with_tty(case.requested_tty);
+fn build_start_exec_options_per_mode(#[case] case: StartOptionsCase) {
+    let request = ExecRequest::new("c", vec![String::from("cmd")], case.mode)
+        .expect("exec request should build")
+        .with_tty(case.requested_tty);
     let options = build_start_exec_options(&request);
     assert_start_options(&options, &case);
-    Ok(())
 }

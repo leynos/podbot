@@ -76,41 +76,83 @@ pub(super) fn assert_detached_exec_expectation(
     assert_eq!(result.exit_code(), expected.exit_code);
 }
 
-/// Assert that execution failed with an `ExecFailed` message containing a
-/// required fragment.
-///
-/// Panics with `assertion_context` when the result is not the expected error
-/// shape or when the message does not contain `expected_message_fragment`.
-pub(super) fn assert_exec_failed_with_message(
-    result: Result<ExecResult, PodbotError>,
-    expected_message_fragment: &str,
-    assertion_context: &str,
-) {
-    match result {
-        Err(PodbotError::Container(ContainerError::ExecFailed { message, .. }))
-            if message.contains(expected_message_fragment) => {}
-        other => panic!("{assertion_context}, got {other:?}"),
-    }
+/// The payload of a `ContainerError::ExecFailed` error, extracted for
+/// assertion.
+#[derive(Debug)]
+pub(super) struct ExecFailure {
+    pub(super) container_id: String,
+    pub(super) message: String,
 }
 
-/// Assert that execution failed for a specific container and message
-/// fragment.
+/// Extracts the `ExecFailed` payload from an execution result.
 ///
-/// Panics with `assertion_context` when the result does not match
-/// `ContainerError::ExecFailed` for `expected_container_id`, or when the
-/// message does not contain `expected_message_fragment`.
-pub(super) fn assert_exec_failed_for_container_with_message(
-    result: Result<ExecResult, PodbotError>,
-    expected_container_id: &str,
-    expected_message_fragment: &str,
-    assertion_context: &str,
-) {
+/// Returns the debug rendering of the actual result in the error case so the
+/// caller can report the mismatch; this helper never panics.
+///
+/// # Examples
+///
+/// ```ignore
+/// let failure = exec_failure(result).expect("expected an ExecFailed error");
+/// assert!(failure.message.contains("resize exec failed"));
+/// ```
+pub(super) fn exec_failure(result: Result<ExecResult, PodbotError>) -> Result<ExecFailure, String> {
     match result {
         Err(PodbotError::Container(ContainerError::ExecFailed {
             container_id,
             message,
-        })) if container_id == expected_container_id
-            && message.contains(expected_message_fragment) => {}
-        other => panic!("{assertion_context}, got {other:?}"),
+        })) => Ok(ExecFailure {
+            container_id,
+            message,
+        }),
+        other => Err(format!("{other:?}")),
     }
 }
+
+/// Asserts that an exec result failed with an `ExecFailed` error whose message
+/// contains `$fragment`, optionally for a specific container.
+///
+/// A macro rather than a function so failures report the calling test's line
+/// number. `exec_failure` must be in scope at the call site, which the
+/// `tests::helpers` re-export provides.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_exec_failed!(result, "resize exec failed", "expected resize mapping");
+/// assert_exec_failed!(result, container: "sandbox-123", "detached start result", context);
+/// ```
+macro_rules! assert_exec_failed {
+    ($result:expr, $fragment:expr, $context:expr $(,)?) => {
+        match exec_failure($result) {
+            Ok(failure) => assert!(
+                failure.message.contains($fragment),
+                "{}: expected message containing '{}', got '{}'",
+                $context,
+                $fragment,
+                failure.message
+            ),
+            Err(actual) => panic!("{}, got {}", $context, actual),
+        }
+    };
+    ($result:expr, container: $container_id:expr, $fragment:expr, $context:expr $(,)?) => {
+        match exec_failure($result) {
+            Ok(failure) => {
+                assert_eq!(
+                    failure.container_id, $container_id,
+                    "{}: unexpected container id",
+                    $context
+                );
+                assert!(
+                    failure.message.contains($fragment),
+                    "{}: expected message containing '{}', got '{}'",
+                    $context,
+                    $fragment,
+                    failure.message
+                );
+            }
+            Err(actual) => panic!("{}, got {}", $context, actual),
+        }
+    };
+}
+
+pub(super) use assert_exec_failed;

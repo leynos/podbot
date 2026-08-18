@@ -2,6 +2,7 @@
 
 mod minimal_mode;
 mod privileged_mode;
+mod request_construction;
 
 use std::sync::{Arc, Mutex};
 
@@ -33,6 +34,13 @@ struct CapturedCreateCall {
     body: Option<ContainerCreateBody>,
 }
 
+/// Error returned when a mock is invoked more often than it was primed for.
+fn mock_not_configured_error() -> bollard::errors::Error {
+    bollard::errors::Error::IOError {
+        err: std::io::Error::other("mock response not configured for this call"),
+    }
+}
+
 fn creator_with_result(
     result: Result<ContainerCreateResponse, bollard::errors::Error>,
 ) -> (MockCreator, Arc<Mutex<CapturedCreateCall>>) {
@@ -46,19 +54,23 @@ fn creator_with_result(
         .expect_create_container()
         .returning(move |options, config| {
             {
+                // Recovering the guard keeps the captured call readable after a
+                // panicking test; the data remains structurally valid.
                 let mut captured_locked = captured_for_closure
                     .lock()
-                    .expect("mock capture lock should succeed");
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 captured_locked.call_count += 1;
                 captured_locked.options = options;
                 captured_locked.body = Some(config);
             }
 
+            // Surface an unexpected second call through the mock's own error
+            // channel so the test fails on its assertions, not inside the mock.
             let response = response_state_for_closure
                 .lock()
-                .expect("mock response lock should succeed")
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .take()
-                .expect("mock response should be configured for the test");
+                .unwrap_or_else(|| Err(mock_not_configured_error()));
 
             Box::pin(async move { response })
         });
@@ -77,27 +89,26 @@ fn failing_creator(error: bollard::errors::Error) -> (MockCreator, Arc<Mutex<Cap
     creator_with_result(Err(error))
 }
 
-fn take_options(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<CreateContainerOptions> {
+/// Reads the captured call, recovering from a poisoned mutex because the
+/// captured data stays valid even when a test panics while holding the lock.
+fn captured_call(
+    captured: &Arc<Mutex<CapturedCreateCall>>,
+) -> std::sync::MutexGuard<'_, CapturedCreateCall> {
     captured
         .lock()
-        .expect("mock capture lock should succeed")
-        .options
-        .clone()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn take_options(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<CreateContainerOptions> {
+    captured_call(captured).options.clone()
 }
 
 fn take_body(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<ContainerCreateBody> {
-    captured
-        .lock()
-        .expect("mock capture lock should succeed")
-        .body
-        .clone()
+    captured_call(captured).body.clone()
 }
 
 fn call_count(captured: &Arc<Mutex<CapturedCreateCall>>) -> usize {
-    captured
-        .lock()
-        .expect("mock capture lock should succeed")
-        .call_count
+    captured_call(captured).call_count
 }
 
 fn io_error(message: impl Into<String>) -> std::io::Error {
@@ -115,75 +126,6 @@ fn ensure(condition: bool, message: impl Into<String>) -> std::io::Result<()> {
 #[fixture]
 fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
     tokio::runtime::Runtime::new()
-}
-
-#[rstest]
-#[case::keep_default(SelinuxLabelMode::KeepDefault)]
-#[case::disable_for_container(SelinuxLabelMode::DisableForContainer)]
-fn from_sandbox_config_passes_through_all_fields(#[case] selinux: SelinuxLabelMode) {
-    let sandbox = SandboxConfig {
-        privileged: true,
-        mount_dev_fuse: false,
-        selinux_label_mode: selinux,
-    };
-
-    let security = ContainerSecurityOptions::from_sandbox_config(&sandbox);
-
-    assert!(security.privileged);
-    assert!(!security.mount_dev_fuse);
-    assert_eq!(security.selinux_label_mode, selinux);
-}
-
-#[rstest]
-fn create_container_request_from_app_config_uses_image_and_security() {
-    let config = AppConfig {
-        image: Some(String::from("ghcr.io/example/sandbox:latest")),
-        sandbox: SandboxConfig {
-            privileged: true,
-            mount_dev_fuse: false,
-            selinux_label_mode: SelinuxLabelMode::KeepDefault,
-        },
-        ..AppConfig::default()
-    };
-    let request = CreateContainerRequest::from_app_config(&config)
-        .expect("request construction from config should succeed");
-    assert_eq!(request.image(), "ghcr.io/example/sandbox:latest");
-    assert!(request.security().privileged);
-    assert!(!request.security().mount_dev_fuse);
-    assert_eq!(
-        request.security().selinux_label_mode,
-        SelinuxLabelMode::KeepDefault
-    );
-}
-
-#[rstest]
-#[case::missing_image(None)]
-#[case::whitespace_only_image(Some("   "))]
-fn create_container_request_from_app_config_requires_image(#[case] image: Option<&str>) {
-    let config = AppConfig {
-        image: image.map(String::from),
-        ..AppConfig::default()
-    };
-    let request = CreateContainerRequest::from_app_config(&config);
-    assert!(
-        matches!(
-            request,
-            Err(PodbotError::Config(ConfigError::MissingRequired { ref field }))
-                if field == "image"
-        ),
-        "expected missing image validation error, got: {request:?}"
-    );
-}
-
-#[rstest]
-fn create_container_request_from_app_config_trims_surrounding_whitespace() {
-    let config = AppConfig {
-        image: Some(String::from("  ghcr.io/example/sandbox:latest  ")),
-        ..AppConfig::default()
-    };
-    let request = CreateContainerRequest::from_app_config(&config)
-        .expect("request construction from config should succeed");
-    assert_eq!(request.image(), "ghcr.io/example/sandbox:latest");
 }
 
 #[rstest]

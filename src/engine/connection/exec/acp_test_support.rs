@@ -9,8 +9,16 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
+use bollard::container::LogOutput;
+use futures_util::stream;
 use serde_json::Value;
-use tokio::io::AsyncWrite;
+use tokio::io::{AsyncWrite, AsyncWriteExt, DuplexStream};
+
+use super::protocol::{
+    ProtocolProxyIo, ProtocolSessionOptions, run_protocol_session_with_io_async,
+};
+use super::session::CapabilityPolicy;
+use super::{ExecMode, ExecRequest};
 
 /// Recording writer that captures every byte written to it and tracks
 /// whether `poll_shutdown` was observed.
@@ -101,4 +109,67 @@ pub(super) fn jsonrpc_frame(
     let mut bytes = serde_json::to_vec(&payload)?;
     bytes.extend_from_slice(line_ending);
     Ok(bytes)
+}
+
+/// Build a host-stdin duplex stream pre-loaded with `bytes` and closed at EOF.
+pub(super) async fn build_host_stdin(bytes: &[u8]) -> io::Result<DuplexStream> {
+    let capacity = bytes.len().max(1);
+    let (mut writer, reader) = tokio::io::duplex(capacity);
+    writer.write_all(bytes).await?;
+    drop(writer);
+    Ok(reader)
+}
+
+/// Byte streams captured while driving a protocol session under a policy.
+pub(super) struct CapturedSessionIo {
+    pub(super) host_stdout: Vec<u8>,
+    pub(super) container_stdin: Vec<u8>,
+}
+
+/// Drives one protocol session under `policy`, feeding `host_stdin_bytes` from
+/// the host and a single `output_frame` chunk from the daemon.
+///
+/// Host stdout and container stdin are captured for assertions; host stderr is
+/// wired to a discarding recorder because no scenario inspects it. Set-up and
+/// session failures surface as `io::Error`; the helper never panics.
+pub(super) fn run_policy_session(
+    container_id: &str,
+    policy: CapabilityPolicy,
+    host_stdin_bytes: &[u8],
+    output_frame: &[u8],
+) -> io::Result<CapturedSessionIo> {
+    let runtime = tokio::runtime::Runtime::new()?;
+    let request = ExecRequest::new(
+        container_id,
+        vec![String::from("codex"), String::from("app-server")],
+        ExecMode::Protocol,
+    )
+    .map_err(io::Error::other)?;
+    let host_stdin = runtime.block_on(build_host_stdin(host_stdin_bytes))?;
+
+    let host_stdout = RecordingWriter::new();
+    let host_stdout_recorder = host_stdout.clone();
+    let host_stderr = RecordingWriter::new();
+    let container_input = RecordingWriter::new();
+    let container_stdin_recorder = container_input.clone();
+
+    let output = stream::iter([Ok(LogOutput::StdOut {
+        message: output_frame.to_vec().into(),
+    })]);
+    let stdio = ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr)
+        .with_options(ProtocolSessionOptions::new().with_capability_policy(policy));
+
+    runtime
+        .block_on(run_protocol_session_with_io_async(
+            &request,
+            Box::pin(output),
+            Box::pin(container_input),
+            stdio,
+        ))
+        .map_err(io::Error::other)?;
+
+    Ok(CapturedSessionIo {
+        host_stdout: host_stdout_recorder.snapshot(),
+        container_stdin: container_stdin_recorder.snapshot(),
+    })
 }

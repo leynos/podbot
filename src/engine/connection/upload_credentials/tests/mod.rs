@@ -39,6 +39,13 @@ struct CapturedUploadCall {
     archive_bytes: Vec<u8>,
 }
 
+/// Error returned when a mock is invoked more often than it was primed for.
+fn mock_not_configured_error() -> bollard::errors::Error {
+    bollard::errors::Error::IOError {
+        err: io::Error::other("mock response not configured for this call"),
+    }
+}
+
 fn uploader_with_result(
     result: Result<(), bollard::errors::Error>,
 ) -> (MockUploader, Arc<Mutex<CapturedUploadCall>>) {
@@ -53,20 +60,24 @@ fn uploader_with_result(
         .expect_upload_to_container()
         .returning(move |container_id, options, archive_bytes| {
             {
+                // Recovering the guard keeps the captured call readable after a
+                // panicking test; the data remains structurally valid.
                 let mut captured_lock = captured_for_closure
                     .lock()
-                    .expect("capture lock should succeed");
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 captured_lock.call_count += 1;
                 captured_lock.container_id = Some(String::from(container_id));
                 captured_lock.options = options;
                 captured_lock.archive_bytes = archive_bytes;
             }
 
+            // Surface an unexpected second call through the mock's own error
+            // channel so the test fails on its assertions, not inside the mock.
             let response = response_state_for_closure
                 .lock()
-                .expect("response lock should succeed")
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .take()
-                .expect("mock response should be configured");
+                .unwrap_or_else(|| Err(mock_not_configured_error()));
 
             Box::pin(async move { response })
         });

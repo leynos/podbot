@@ -36,11 +36,8 @@ struct AttachedResizeCase {
     output_messages: vec![],
     should_resize: false,
 })]
-fn exec_async_attached_resize_behaviour(
-    runtime: RuntimeFixture,
-    #[case] case: AttachedResizeCase,
-) -> TestResult {
-    let runtime_handle = runtime?;
+fn exec_async_attached_resize_behaviour(runtime: RuntimeFixture, #[case] case: AttachedResizeCase) {
+    let runtime_handle = runtime.expect("runtime fixture should initialize");
     let mut client = MockExecClient::new();
     setup_create_exec_expectation(&mut client, case.exec_id, case.tty);
     setup_start_exec_attached(&mut client, case.tty, case.output_messages);
@@ -52,27 +49,29 @@ fn exec_async_attached_resize_behaviour(
     );
     setup_inspect_exec_once(&mut client, Some(0));
 
-    let request = make_attached_exec_request("sandbox-123", case.tty)?;
+    let request = make_attached_exec_request("sandbox-123", case.tty)
+        .expect("attached exec request should build");
     let terminal_size_provider = StubTerminalSizeProvider {
         terminal_size: Some(case.terminal_size),
     };
     let result =
-        execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider)?;
+        execute_and_assert_success(&runtime_handle, &client, &request, &terminal_size_provider)
+            .expect("attached exec should succeed");
     assert_attached_success_exit_code(&result);
-    Ok(())
 }
 
 #[rstest]
 #[serial]
-fn exec_async_attached_propagates_resize_failures(runtime: RuntimeFixture) -> TestResult {
-    let runtime_handle = runtime?;
+fn exec_async_attached_propagates_resize_failures(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("runtime fixture should initialize");
     let mut client = MockExecClient::new();
     setup_create_exec_expectation(&mut client, "exec-6", true);
     setup_start_exec_attached(&mut client, true, vec![]);
     setup_resize_exec_failure(&mut client, bollard::errors::Error::RequestTimeoutError);
     client.expect_inspect_exec().never();
 
-    let request = make_attached_exec_request("sandbox-123", true)?;
+    let request = make_attached_exec_request("sandbox-123", true)
+        .expect("attached exec request should build");
     let terminal_size_provider = make_terminal_size_provider(120, 42);
 
     let result = runtime_handle.block_on(EngineConnector::exec_async_with_terminal_size_provider(
@@ -80,10 +79,9 @@ fn exec_async_attached_propagates_resize_failures(runtime: RuntimeFixture) -> Te
         &request,
         &terminal_size_provider,
     ));
-    assert_exec_failed_with_message(
+    assert_exec_failed!(
         result,
         "resize exec failed",
-        "expected resize failure mapping",
+        "expected resize failure mapping"
     );
-    Ok(())
 }

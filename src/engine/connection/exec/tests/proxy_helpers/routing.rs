@@ -16,21 +16,13 @@ fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixtu
         }),
     ]);
 
-    let (result, stdout_bytes, stderr_bytes) = run_routing_session(runtime, output);
+    let (result, stdout_bytes, stderr_bytes) =
+        run_routing_session(runtime, output).expect("session harness should build");
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
-    assert_eq!(
-        stdout_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-        b"alphabeta"
-    );
+    assert_eq!(captured_bytes(&stdout_bytes), b"alphabeta");
     assert!(
-        stderr_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .is_empty(),
+        captured_bytes(&stderr_bytes).is_empty(),
         "stderr should remain untouched"
     );
 }
@@ -46,23 +38,12 @@ fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
         }),
     ]);
 
-    let (result, stdout_bytes, stderr_bytes) = run_routing_session(runtime, output);
+    let (result, stdout_bytes, stderr_bytes) =
+        run_routing_session(runtime, output).expect("session harness should build");
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
-    assert_eq!(
-        stderr_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-        b"warn"
-    );
-    assert_eq!(
-        stdout_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-        b"ok"
-    );
+    assert_eq!(captured_bytes(&stderr_bytes), b"warn");
+    assert_eq!(captured_bytes(&stdout_bytes), b"ok");
 }
 
 #[rstest]
@@ -76,14 +57,9 @@ fn protocol_proxy_ignores_stdin_echo_chunks(runtime: RuntimeFixture) {
         }),
     ]);
 
-    let (result, stdout_bytes, _) = run_routing_session(runtime, output);
+    let (result, stdout_bytes, _) =
+        run_routing_session(runtime, output).expect("session harness should build");
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
-    assert_eq!(
-        stdout_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-        b"server"
-    );
+    assert_eq!(captured_bytes(&stdout_bytes), b"server");
 }
