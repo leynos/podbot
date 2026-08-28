@@ -59,17 +59,21 @@ fn create_container_privileged_mode_ignores_irrelevant_settings(
     runtime: std::io::Result<tokio::runtime::Runtime>,
     #[case] fuse: bool,
     #[case] selinux: SelinuxLabelMode,
-) -> std::io::Result<()> {
-    privileged_create(&runtime?, fuse, selinux).map(|_| ())
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    privileged_create(&runtime_handle, fuse, selinux)
+        .expect("privileged-mode creation should succeed");
 }
 
 #[rstest]
 fn create_container_privileged_mode_without_optional_fields(
     runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let (opts, body) = privileged_create(&runtime?, true, SelinuxLabelMode::KeepDefault)?;
-    ensure(opts.is_none(), "expected no create options")?;
-    ensure(body.image.is_some(), "expected image to be set")?;
-    ensure(body.cmd.is_none(), "did not expect cmd")?;
-    ensure(body.env.is_none(), "did not expect env")
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    let (opts, body) = privileged_create(&runtime_handle, true, SelinuxLabelMode::KeepDefault)
+        .expect("privileged-mode creation should succeed");
+    assert!(opts.is_none(), "expected no create options");
+    assert!(body.image.is_some(), "expected image to be set");
+    assert!(body.cmd.is_none(), "did not expect cmd");
+    assert!(body.env.is_none(), "did not expect env");
 }
