@@ -131,8 +131,8 @@ fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
 #[rstest]
 fn create_container_privileged_mode_has_minimal_overrides(
     runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let runtime_handle = runtime?;
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
     let (creator, captured) = success_creator("container-id");
     let request = CreateContainerRequest::new(
         "ghcr.io/example/sandbox:latest",
@@ -142,105 +142,99 @@ fn create_container_privileged_mode_has_minimal_overrides(
             selinux_label_mode: SelinuxLabelMode::KeepDefault,
         },
     )
-    .map_err(|error| io_error(format!("request construction should succeed: {error}")))?
+    .expect("request construction should succeed")
     .with_name(Some(String::from("podbot-test")));
 
     let container_id = runtime_handle
         .block_on(EngineConnector::create_container_async(&creator, &request))
-        .map_err(|error| io_error(format!("container creation should succeed: {error}")))?;
+        .expect("container creation should succeed");
 
-    ensure(
+    assert!(
         container_id == "container-id",
-        format!("expected container-id, got {container_id}"),
-    )?;
-    ensure(call_count(&captured) == 1, "expected one engine call")?;
+        "expected container-id, got {container_id}"
+    );
+    assert!(call_count(&captured) == 1, "expected one engine call");
 
-    let options =
-        take_options(&captured).ok_or_else(|| io_error("create options should be captured"))?;
-    ensure(
+    let options = take_options(&captured).expect("create options should be captured");
+    assert!(
         options.name.as_deref() == Some("podbot-test"),
-        "expected create options name podbot-test",
-    )?;
+        "expected create options name podbot-test"
+    );
 
-    let body = take_body(&captured).ok_or_else(|| io_error("container body should be captured"))?;
-    let host_config = body
-        .host_config
-        .ok_or_else(|| io_error("host config should be set"))?;
-    ensure(
+    let body = take_body(&captured).expect("container body should be captured");
+    let host_config = body.host_config.expect("host config should be set");
+    assert!(
         host_config.privileged == Some(true),
-        "expected privileged host config",
-    )?;
-    ensure(host_config.cap_add.is_none(), "did not expect cap_add")?;
-    ensure(host_config.devices.is_none(), "did not expect devices")?;
-    ensure(
+        "expected privileged host config"
+    );
+    assert!(host_config.cap_add.is_none(), "did not expect cap_add");
+    assert!(host_config.devices.is_none(), "did not expect devices");
+    assert!(
         host_config.security_opt.is_none(),
-        "did not expect security_opt",
-    )
+        "did not expect security_opt"
+    );
 }
 
 #[rstest]
-fn create_container_minimal_mode_mounts_fuse(
-    runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let runtime_handle = runtime?;
+fn create_container_minimal_mode_mounts_fuse(runtime: std::io::Result<tokio::runtime::Runtime>) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
     let (creator, captured) = success_creator("container-id");
     let request = CreateContainerRequest::new(
         "ghcr.io/example/sandbox:latest",
         ContainerSecurityOptions::default(),
     )
-    .map_err(|error| io_error(format!("request construction should succeed: {error}")))?;
+    .expect("request construction should succeed");
 
     let _ = runtime_handle
         .block_on(EngineConnector::create_container_async(&creator, &request))
-        .map_err(|error| io_error(format!("container creation should succeed: {error}")))?;
+        .expect("container creation should succeed");
 
-    let body = take_body(&captured).ok_or_else(|| io_error("container body should be captured"))?;
-    let host_config = body
-        .host_config
-        .ok_or_else(|| io_error("host config should be set"))?;
+    let body = take_body(&captured).expect("container body should be captured");
+    let host_config = body.host_config.expect("host config should be set");
 
-    ensure(
+    assert!(
         host_config.privileged == Some(false),
-        "expected privileged=false for minimal mode",
-    )?;
-    ensure(
+        "expected privileged=false for minimal mode"
+    );
+    assert!(
         host_config.cap_add == Some(vec![String::from("SYS_ADMIN")]),
-        "expected SYS_ADMIN capability",
-    )?;
-    ensure(
+        "expected SYS_ADMIN capability"
+    );
+    assert!(
         host_config.security_opt == Some(vec![String::from("label=disable")]),
-        "expected label=disable security option",
-    )?;
+        "expected label=disable security option"
+    );
 
     let devices = host_config
         .devices
-        .ok_or_else(|| io_error("/dev/fuse device should be mounted"))?;
-    ensure(
+        .expect("/dev/fuse device should be mounted");
+    assert!(
         devices.len() == 1,
-        format!("expected one /dev/fuse mapping, got {}", devices.len()),
-    )?;
+        "expected one /dev/fuse mapping, got {}",
+        devices.len()
+    );
     let device = devices
         .first()
-        .ok_or_else(|| io_error("`/dev/fuse` mapping should include one device"))?;
-    ensure(
+        .expect("`/dev/fuse` mapping should include one device");
+    assert!(
         device.path_on_host.as_deref() == Some("/dev/fuse"),
-        "expected path_on_host /dev/fuse",
-    )?;
-    ensure(
+        "expected path_on_host /dev/fuse"
+    );
+    assert!(
         device.path_in_container.as_deref() == Some("/dev/fuse"),
-        "expected path_in_container /dev/fuse",
-    )?;
-    ensure(
+        "expected path_in_container /dev/fuse"
+    );
+    assert!(
         device.cgroup_permissions.as_deref() == Some("rwm"),
-        "expected /dev/fuse permissions rwm",
-    )
+        "expected /dev/fuse permissions rwm"
+    );
 }
 
 #[rstest]
 fn create_container_minimal_without_fuse_avoids_mount(
     runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let runtime_handle = runtime?;
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
     let (creator, captured) = success_creator("container-id");
     let request = CreateContainerRequest::new(
         "ghcr.io/example/sandbox:latest",
@@ -250,27 +244,25 @@ fn create_container_minimal_without_fuse_avoids_mount(
             selinux_label_mode: SelinuxLabelMode::DisableForContainer,
         },
     )
-    .map_err(|error| io_error(format!("request construction should succeed: {error}")))?;
+    .expect("request construction should succeed");
 
     let _ = runtime_handle
         .block_on(EngineConnector::create_container_async(&creator, &request))
-        .map_err(|error| io_error(format!("container creation should succeed: {error}")))?;
+        .expect("container creation should succeed");
 
-    let body = take_body(&captured).ok_or_else(|| io_error("container body should be captured"))?;
-    let host_config = body
-        .host_config
-        .ok_or_else(|| io_error("host config should be set"))?;
+    let body = take_body(&captured).expect("container body should be captured");
+    let host_config = body.host_config.expect("host config should be set");
 
-    ensure(
+    assert!(
         host_config.privileged == Some(false),
-        "expected privileged=false for minimal mode",
-    )?;
-    ensure(host_config.cap_add.is_none(), "did not expect cap_add")?;
-    ensure(host_config.devices.is_none(), "did not expect devices")?;
-    ensure(
+        "expected privileged=false for minimal mode"
+    );
+    assert!(host_config.cap_add.is_none(), "did not expect cap_add");
+    assert!(host_config.devices.is_none(), "did not expect devices");
+    assert!(
         host_config.security_opt == Some(vec![String::from("label=disable")]),
-        "expected label=disable security option",
-    )
+        "expected label=disable security option"
+    );
 }
 
 #[rstest]
@@ -291,51 +283,45 @@ fn create_container_requires_image() {
 }
 
 #[rstest]
-fn create_container_maps_engine_error(
-    runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let runtime_handle = runtime?;
+fn create_container_maps_engine_error(runtime: std::io::Result<tokio::runtime::Runtime>) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
     let (creator, _) = failing_creator(bollard::errors::Error::RequestTimeoutError);
     let request = CreateContainerRequest::new(
         "ghcr.io/example/sandbox:latest",
         ContainerSecurityOptions::default(),
     )
-    .map_err(|error| io_error(format!("request construction should succeed: {error}")))?;
+    .expect("request construction should succeed");
 
     let result =
         runtime_handle.block_on(EngineConnector::create_container_async(&creator, &request));
 
-    match result {
-        Err(PodbotError::Container(ContainerError::CreateFailed { message }))
-            if message.contains("Timeout error") =>
-        {
-            Ok(())
-        }
-        other => Err(io_error(format!(
-            "expected create-failed timeout mapping, got: {other:?}"
-        ))),
-    }
+    assert!(
+        matches!(
+            result,
+            Err(PodbotError::Container(ContainerError::CreateFailed { ref message }))
+                if message.contains("Timeout error")
+        ),
+        "expected create-failed timeout mapping, got: {result:?}"
+    );
 }
 
 #[rstest]
-fn create_container_sync_uses_provided_runtime(
-    runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let runtime_handle = runtime?;
+fn create_container_sync_uses_provided_runtime(runtime: std::io::Result<tokio::runtime::Runtime>) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
     let (creator, captured) = success_creator("container-id");
     let request = CreateContainerRequest::new(
         "ghcr.io/example/sandbox:latest",
         ContainerSecurityOptions::default(),
     )
-    .map_err(|error| io_error(format!("request construction should succeed: {error}")))?;
+    .expect("request construction should succeed");
 
     let container_id =
         EngineConnector::create_container(runtime_handle.handle(), &creator, &request)
-            .map_err(|error| io_error(format!("sync create should succeed: {error}")))?;
+            .expect("sync create should succeed");
 
-    ensure(
+    assert!(
         container_id == "container-id",
-        format!("expected container-id, got {container_id}"),
-    )?;
-    ensure(call_count(&captured) == 1, "expected one engine call")
+        "expected container-id, got {container_id}"
+    );
+    assert!(call_count(&captured) == 1, "expected one engine call");
 }

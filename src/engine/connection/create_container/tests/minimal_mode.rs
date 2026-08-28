@@ -69,84 +69,97 @@ fn minimal_create(
 #[rstest]
 fn create_container_minimal_mode_with_selinux_keep_default(
     runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let (_, body) = minimal_create(&runtime?, true, SelinuxLabelMode::KeepDefault)?;
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    let (_, body) = minimal_create(&runtime_handle, true, SelinuxLabelMode::KeepDefault)
+        .expect("minimal-mode creation should succeed");
     let host_config = body
         .host_config
         .as_ref()
-        .ok_or_else(|| io_error("host config should be set"))?;
-    ensure(
+        .expect("host config should be set");
+    assert!(
         host_config.security_opt.is_none(),
-        "did not expect security_opt with KeepDefault",
-    )?;
-    ensure(
+        "did not expect security_opt with KeepDefault"
+    );
+    assert!(
         host_config.cap_add == Some(vec![String::from("SYS_ADMIN")]),
-        "expected SYS_ADMIN capability for fuse mount",
-    )?;
-    ensure(
+        "expected SYS_ADMIN capability for fuse mount"
+    );
+    assert!(
         host_config.devices.is_some(),
-        "expected /dev/fuse device to be mounted",
-    )
+        "expected /dev/fuse device to be mounted"
+    );
 }
 
 #[rstest]
 fn create_container_minimal_mode_without_fuse_omits_capabilities(
     runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let (_, body) = minimal_create(&runtime?, false, SelinuxLabelMode::DisableForContainer)?;
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    let (_, body) = minimal_create(
+        &runtime_handle,
+        false,
+        SelinuxLabelMode::DisableForContainer,
+    )
+    .expect("minimal-mode creation should succeed");
     let host_config = body
         .host_config
         .as_ref()
-        .ok_or_else(|| io_error("host config should be set"))?;
-    ensure(host_config.cap_add.is_none(), "did not expect cap_add")?;
-    ensure(host_config.devices.is_none(), "did not expect devices")?;
-    ensure(
+        .expect("host config should be set");
+    assert!(host_config.cap_add.is_none(), "did not expect cap_add");
+    assert!(host_config.devices.is_none(), "did not expect devices");
+    assert!(
         host_config.security_opt == Some(vec![String::from("label=disable")]),
-        "expected label=disable security option in minimal mode without fuse",
-    )
+        "expected label=disable security option in minimal mode without fuse"
+    );
 }
 
 #[rstest]
 fn create_container_minimal_mode_with_fuse_verifies_device_details(
     runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let (_, body) = minimal_create(&runtime?, true, SelinuxLabelMode::DisableForContainer)?;
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    let (_, body) = minimal_create(&runtime_handle, true, SelinuxLabelMode::DisableForContainer)
+        .expect("minimal-mode creation should succeed");
     let host_config = body
         .host_config
         .as_ref()
-        .ok_or_else(|| io_error("host config should be set"))?;
+        .expect("host config should be set");
     let devices = host_config
         .devices
         .as_ref()
-        .ok_or_else(|| io_error("/dev/fuse device should be mounted"))?;
-    ensure(
+        .expect("/dev/fuse device should be mounted");
+    assert!(
         devices.len() == 1,
-        format!("expected one /dev/fuse mapping, got {}", devices.len()),
-    )?;
+        "expected one /dev/fuse mapping, got {}",
+        devices.len()
+    );
     let device = devices
         .first()
-        .ok_or_else(|| io_error("/dev/fuse mapping should include one device"))?;
-    ensure(
+        .expect("/dev/fuse mapping should include one device");
+    assert!(
         device.path_on_host.as_deref() == Some("/dev/fuse"),
-        "expected path_on_host /dev/fuse",
-    )?;
-    ensure(
+        "expected path_on_host /dev/fuse"
+    );
+    assert!(
         device.path_in_container.as_deref() == Some("/dev/fuse"),
-        "expected path_in_container /dev/fuse",
-    )?;
-    ensure(
+        "expected path_in_container /dev/fuse"
+    );
+    assert!(
         device.cgroup_permissions.as_deref() == Some("rwm"),
-        "expected /dev/fuse permissions rwm",
-    )
+        "expected /dev/fuse permissions rwm"
+    );
 }
 
 #[rstest]
 fn create_container_minimal_mode_without_optional_fields(
     runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let (opts, body) = minimal_create(&runtime?, true, SelinuxLabelMode::DisableForContainer)?;
-    ensure(opts.is_none(), "expected no create options")?;
-    ensure(body.image.is_some(), "expected image to be set")?;
-    ensure(body.cmd.is_none(), "did not expect cmd")?;
-    ensure(body.env.is_none(), "did not expect env")
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    let (opts, body) = minimal_create(&runtime_handle, true, SelinuxLabelMode::DisableForContainer)
+        .expect("minimal-mode creation should succeed");
+    assert!(opts.is_none(), "expected no create options");
+    assert!(body.image.is_some(), "expected image to be set");
+    assert!(body.cmd.is_none(), "did not expect cmd");
+    assert!(body.env.is_none(), "did not expect env");
 }
