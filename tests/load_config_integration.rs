@@ -7,7 +7,7 @@
 
 mod test_support;
 
-use crate::test_support::{env_with, temp_config_file};
+use crate::test_support::{env_with, temp_config_path};
 use camino::Utf8PathBuf;
 use podbot::config::{
     CommandIntent, ConfigLoadOptions, ConfigOverrides, SelinuxLabelMode, load_config_with_env,
@@ -42,10 +42,8 @@ fn load_config_loads_from_config_file() {
         [sandbox]
         privileged = true
     "#;
-    let config_file =
-        temp_config_file(toml_content).expect("temp config file creation should succeed");
-    let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
-        .expect("path should be valid UTF-8");
+    let (_config_file, config_path) =
+        temp_config_path(toml_content).expect("temp config file creation should succeed");
 
     let env = env_with(&[]);
     let options = ConfigLoadOptions {
@@ -91,10 +89,8 @@ fn load_config_podbot_config_path_behaviour(
     #[case] expected_socket: Option<&str>,
 ) {
     let toml_content = format!(r#"engine_socket = "{socket_in_env_config}""#);
-    let config_file =
-        temp_config_file(&toml_content).expect("temp config file creation should succeed");
-    let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
-        .expect("path should be valid UTF-8");
+    let (_config_file, config_path) =
+        temp_config_path(&toml_content).expect("temp config file creation should succeed");
     let env_values = [("PODBOT_CONFIG_PATH", config_path.as_str())];
     let env = env_with(&env_values);
 
@@ -118,10 +114,8 @@ fn load_config_overrides_take_precedence_over_config_file() {
         engine_socket = "unix:///from/config/file.sock"
         image = "file-image:v1"
     "#;
-    let config_file =
-        temp_config_file(toml_content).expect("temp config file creation should succeed");
-    let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
-        .expect("path should be valid UTF-8");
+    let (_config_file, config_path) =
+        temp_config_path(toml_content).expect("temp config file creation should succeed");
 
     let env = env_with(&[]);
     let options = ConfigLoadOptions {
@@ -170,10 +164,8 @@ fn load_config_rejects_malformed_config_file() {
     let toml_content = r"
         this is not valid TOML {{{
     ";
-    let config_file =
-        temp_config_file(toml_content).expect("temp config file creation should succeed");
-    let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
-        .expect("path should be valid UTF-8");
+    let (_config_file, config_path) =
+        temp_config_path(toml_content).expect("temp config file creation should succeed");
 
     let env = env_with(&[]);
     let options = ConfigLoadOptions {
@@ -195,10 +187,8 @@ fn load_config_preserves_nested_config_defaults() {
     let toml_content = r#"
         engine_socket = "unix:///test.sock"
     "#;
-    let config_file =
-        temp_config_file(toml_content).expect("temp config file creation should succeed");
-    let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
-        .expect("path should be valid UTF-8");
+    let (_config_file, config_path) =
+        temp_config_path(toml_content).expect("temp config file creation should succeed");
 
     let env = env_with(&[]);
     let options = ConfigLoadOptions {

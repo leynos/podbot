@@ -59,6 +59,41 @@ fn runtime() -> Result<tokio::runtime::Runtime, std::io::Error> {
     tokio::runtime::Runtime::new()
 }
 
+/// Asserts that an exec result satisfies `check`, reporting `description` on
+/// failure.
+///
+/// A macro rather than a function so the panic is raised inside the calling
+/// test, keeping failure line numbers at the call site.
+macro_rules! assert_exec_outcome_matches {
+    ($result:expr, $check:expr, $description:expr $(,)?) => {{
+        let result = $result;
+        assert!(($check)(&result), "{}, got: {result:?}", $description);
+    }};
+}
+
+/// Asserts that an exec result failed with `ContainerError::ExecFailed` for the
+/// container under test.
+///
+/// A macro rather than a function so the panic is raised inside the calling
+/// test; `exec_failure` must be in scope at the call site.
+macro_rules! assert_exec_failed_with_container_error {
+    ($result:expr, $fail_at:expr $(,)?) => {{
+        let fail_at = $fail_at;
+        let failure = exec_failure($result).unwrap_or_else(|actual| {
+            panic!("error should be ContainerError::ExecFailed for {fail_at:?}, got: {actual}")
+        });
+
+        assert_eq!(
+            failure.container_id, "embed-sandbox",
+            "exec failure for {fail_at:?} should name the container under test"
+        );
+        assert!(
+            !failure.message.is_empty(),
+            "exec failure for {fail_at:?} should carry a message"
+        );
+    }};
+}
+
 // -------------------------------------------------------------------------
 // Configuration loading from host-style call path
 // -------------------------------------------------------------------------
@@ -119,18 +154,19 @@ struct LibraryApiExecTestCase {
 fn exec_via_library_api_returns_expected_outcome(
     runtime: Result<tokio::runtime::Runtime, std::io::Error>,
     #[case] test_case: LibraryApiExecTestCase,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let rt = runtime?;
+) {
+    let rt = runtime.expect("tokio runtime should be created");
     let mut client = MockEmbedClient::new();
-    configure_successful_exec(&mut client, test_case.exit_code, test_case.mode);
+    configure_successful_exec(&mut client, test_case.exit_code, test_case.mode)
+        .expect("mock exec expectations should be configurable for the requested mode");
 
-    let request = ExecRequest::new("embed-sandbox", test_case.command)?
+    let request = ExecRequest::new("embed-sandbox", test_case.command)
+        .expect("exec request should be valid")
         .with_mode(test_case.mode)
         .with_tty(false);
     let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
-    assert_exec_outcome_matches(&result, test_case.check, test_case.description);
-    Ok(())
+    assert_exec_outcome_matches!(result, test_case.check, test_case.description);
 }
 
 // -------------------------------------------------------------------------
@@ -145,21 +181,21 @@ fn exec_via_library_api_returns_expected_outcome(
 fn exec_failure_returns_container_error(
     runtime: Result<tokio::runtime::Runtime, std::io::Error>,
     #[case] fail_at: FailAt,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let rt = runtime?;
+) {
+    let rt = runtime.expect("tokio runtime should be created");
     let mut client = MockEmbedClient::new();
     let mode = configure_failing_exec(&mut client, fail_at);
 
     let request = ExecRequest::new(
         "embed-sandbox",
         vec![String::from("echo"), String::from("fail")],
-    )?
+    )
+    .expect("exec request should be valid")
     .with_mode(mode)
     .with_tty(false);
     let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
-    assert_exec_failed_with_container_error(&result, fail_at);
-    Ok(())
+    assert_exec_failed_with_container_error!(result, fail_at);
 }
 
 // Note: resize_exec failure testing is omitted from library boundary tests because:
@@ -315,29 +351,41 @@ fn configure_failing_exec(client: &mut MockEmbedClient, fail_at: FailAt) -> Exec
     }
 }
 
-fn assert_exec_outcome_matches(
-    result: &Result<CommandOutcome, PodbotError>,
-    check: fn(&Result<CommandOutcome, PodbotError>) -> bool,
-    description: &str,
-) {
-    assert!(check(result), "{description}, got: {result:?}");
+/// The payload of a `ContainerError::ExecFailed` error, extracted for
+/// assertion.
+#[derive(Debug)]
+struct ExecFailure {
+    container_id: String,
+    message: String,
 }
 
-fn assert_exec_failed_with_container_error(
-    result: &Result<CommandOutcome, PodbotError>,
-    fail_at: FailAt,
-) {
-    assert!(result.is_err(), "exec should return an error");
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
-        ),
-        "error should be ContainerError::ExecFailed for {fail_at:?}, got: {result:?}"
-    );
+/// Extracts the `ExecFailed` payload from an exec result.
+///
+/// Returns the debug rendering of the actual result in the error case so the
+/// caller can report the mismatch; this helper never panics.
+fn exec_failure(result: Result<CommandOutcome, PodbotError>) -> Result<ExecFailure, String> {
+    match result {
+        Err(PodbotError::Container(ContainerError::ExecFailed {
+            container_id,
+            message,
+        })) => Ok(ExecFailure {
+            container_id,
+            message,
+        }),
+        other => Err(format!("{other:?}")),
+    }
 }
 
-fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode: ExecMode) {
+/// Configures the mock client for a successful exec in `mode`.
+///
+/// `ExecMode` is `#[non_exhaustive]`, so unsupported future variants are
+/// reported as an error for the calling test to surface rather than panicking
+/// here.
+fn configure_successful_exec(
+    client: &mut MockEmbedClient,
+    exit_code: i64,
+    mode: ExecMode,
+) -> Result<(), String> {
     client.expect_create_exec().times(1).returning(|_, _| {
         Box::pin(async {
             Ok(CreateExecResults {
@@ -346,7 +394,7 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         })
     });
 
-    // ExecMode is marked #[non_exhaustive], so we must handle the wildcard pattern.
+    // ExecMode is marked #[non_exhaustive], so the wildcard arm must remain.
     // If new variants are added, this match will need updating.
     match mode {
         ExecMode::Attached | ExecMode::Protocol => {
@@ -375,10 +423,10 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         _ => {
             // Fallback for future ExecMode variants that haven't been explicitly handled.
             // Tests using unsupported modes will fail with a clear error message.
-            panic!(
+            return Err(format!(
                 "configure_successful_exec does not support ExecMode::{mode:?}. \
                  Please add explicit handling for this variant."
-            );
+            ));
         }
     }
 
@@ -390,4 +438,6 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         };
         Box::pin(async move { Ok(inspect) })
     });
+
+    Ok(())
 }
