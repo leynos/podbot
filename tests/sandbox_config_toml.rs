@@ -7,11 +7,18 @@
 use podbot::config::{AppConfig, SandboxConfig};
 use rstest::rstest;
 
+/// Serialises `config` to TOML and parses it back, reporting either failure as
+/// a message so the calling test performs the panic.
+fn round_trip_toml(config: &SandboxConfig) -> Result<SandboxConfig, String> {
+    let toml_str =
+        toml::to_string(config).map_err(|error| format!("serialization failed: {error}"))?;
+    toml::from_str(&toml_str).map_err(|error| format!("deserialization failed: {error}"))
+}
+
 #[rstest]
 fn sandbox_config_serializes_to_toml() {
     let config = SandboxConfig::default();
-    let toml_str = toml::to_string(&config).expect("serialization should succeed");
-    let parsed: SandboxConfig = toml::from_str(&toml_str).expect("deserialization should succeed");
+    let parsed = round_trip_toml(&config).expect("round trip should succeed");
     assert!(!parsed.privileged, "default privileged should be false");
     assert!(
         parsed.mount_dev_fuse,
@@ -26,8 +33,7 @@ fn sandbox_config_round_trips_through_toml() {
         mount_dev_fuse: false,
         ..Default::default()
     };
-    let toml_str = toml::to_string(&config).expect("serialization should succeed");
-    let parsed: SandboxConfig = toml::from_str(&toml_str).expect("deserialization should succeed");
+    let parsed = round_trip_toml(&config).expect("round trip should succeed");
     assert_eq!(parsed.privileged, config.privileged);
     assert_eq!(parsed.mount_dev_fuse, config.mount_dev_fuse);
     assert_eq!(parsed.selinux_label_mode, config.selinux_label_mode);
@@ -48,8 +54,7 @@ fn sandbox_config_all_combinations(
         mount_dev_fuse,
         ..Default::default()
     };
-    let toml_str = toml::to_string(&config).expect("serialization should succeed");
-    let parsed: SandboxConfig = toml::from_str(&toml_str).expect("deserialization should succeed");
+    let parsed = round_trip_toml(&config).expect("round trip should succeed");
     assert_eq!(
         parsed.privileged, privileged,
         "privileged mismatch for {description}"
