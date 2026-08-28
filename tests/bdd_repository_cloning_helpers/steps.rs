@@ -181,10 +181,13 @@ fn mock_exec_client(
     let observed = Arc::clone(observed_execs);
 
     client.expect_create_exec().returning(move |_, options| {
-        let mut execs = match observed.lock() {
-            Ok(guard) => guard,
-            Err(poison) => panic!("observed_execs lock poisoned during create_exec: {poison}"),
-        };
+        // A mockall closure cannot surface a step error, and the double's
+        // invariants survive a poisoned lock: the recorded execs are appended
+        // in place, so a panic elsewhere leaves the log consistent. Recover
+        // the guard rather than cascading the panic.
+        let mut execs = observed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         execs.push(ObservedExec {
             command: options.cmd.unwrap_or_default(),
             env: options.env.unwrap_or_default(),
@@ -201,10 +204,11 @@ fn mock_exec_client(
         .returning(|_, _| Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) }));
     client.expect_inspect_exec().returning(move |_| {
         let code = {
-            let mut exit_codes = match exits.lock() {
-                Ok(guard) => guard,
-                Err(poison) => panic!("exit_codes lock poisoned during inspect_exec: {poison}"),
-            };
+            // As above, the queued exit codes remain valid after a poisoning
+            // panic elsewhere, so recover the guard instead of panicking.
+            let mut exit_codes = exits
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if exit_codes.is_empty() {
                 1
             } else {

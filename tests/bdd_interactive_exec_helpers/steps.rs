@@ -1,9 +1,7 @@
 //! Given/When steps for interactive execution scenarios.
 
 use bollard::container::LogOutput;
-use bollard::errors::Error as BollardError;
 use futures_util::stream;
-use mockall::mock;
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, EngineConnector, ExecMode, ExecRequest,
     InspectExecFuture, ResizeExecFuture, StartExecFuture,
@@ -15,16 +13,14 @@ use crate::test_utils::TestStdinForwardingGuard;
 
 pub type StepResult<T> = Result<T, String>;
 
-mock! {
-    #[derive(Debug)]
-    ExecClient {}
-
-    impl ContainerExecClient for ExecClient {
-        fn create_exec(&self, container_id: &str, options: bollard::exec::CreateExecOptions<String>) -> CreateExecFuture<'_>;
-        fn start_exec(&self, exec_id: &str, options: Option<bollard::exec::StartExecOptions>) -> StartExecFuture<'_>;
-        fn inspect_exec(&self, exec_id: &str) -> InspectExecFuture<'_>;
-        fn resize_exec(&self, exec_id: &str, options: bollard::exec::ResizeExecOptions) -> ResizeExecFuture<'_>;
-    }
+// The double and the create-exec, resize, and inspect expectations are shared
+// with the orchestration suite; only the start-exec expectations below differ.
+crate::define_exec_client_mock! {
+    mock_base = ExecClient,
+    mock_type = MockExecClient,
+    exec_mode = ExecMode,
+    container_id = "bdd-sandbox",
+    exec_id = "bdd-exec-id",
 }
 
 #[given("attached execution mode is selected")]
@@ -96,11 +92,11 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
         .with_tty(tty_enabled);
 
     let mut client = MockExecClient::new();
-    configure_create_exec_expectation(&mut client, create_exec_should_fail);
+    configure_create_exec(&mut client, create_exec_should_fail);
     if !create_exec_should_fail {
-        configure_start_exec_expectation(&mut client, mode, tty_enabled);
-        configure_resize_expectation(&mut client, mode);
-        configure_inspect_expectation(&mut client, omit_exit_code, exit_code);
+        configure_start_exec(&mut client, mode, tty_enabled)?;
+        configure_resize(&mut client, mode)?;
+        configure_inspect(&mut client, (!omit_exit_code).then_some(exit_code));
     }
 
     let runtime = tokio::runtime::Runtime::new()
@@ -124,125 +120,72 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
     Ok(())
 }
 
-fn configure_create_exec_expectation(client: &mut MockExecClient, should_fail: bool) {
-    if should_fail {
-        client
-            .expect_create_exec()
-            .times(1)
-            .returning(|_, _| Box::pin(async { Err(BollardError::RequestTimeoutError) }));
-        return;
+/// Returns the exact start-exec options this suite expects for `mode`.
+///
+/// Pure query so the expectation builder stays small; unknown modes surface
+/// as step errors rather than panics.
+fn expected_start_options(
+    mode: ExecMode,
+    tty_enabled: bool,
+) -> StepResult<bollard::exec::StartExecOptions> {
+    match mode {
+        ExecMode::Attached => Ok(bollard::exec::StartExecOptions {
+            detach: false,
+            tty: tty_enabled,
+            output_capacity: None,
+        }),
+        ExecMode::Protocol => Ok(bollard::exec::StartExecOptions {
+            detach: false,
+            tty: false,
+            output_capacity: Some(65_536),
+        }),
+        ExecMode::Detached => Ok(bollard::exec::StartExecOptions {
+            detach: true,
+            tty: false,
+            output_capacity: None,
+        }),
+        other => Err(format!(
+            "unexpected exec mode in start-exec expectation: {other:?}"
+        )),
     }
-
-    client
-        .expect_create_exec()
-        .times(1)
-        .returning(|container_id, options| {
-            assert_eq!(container_id, "bdd-sandbox");
-            assert!(options.cmd.is_some(), "command should be forwarded");
-            Box::pin(async {
-                Ok(bollard::exec::CreateExecResults {
-                    id: String::from("bdd-exec-id"),
-                })
-            })
-        });
 }
 
-fn configure_start_exec_expectation(
+/// Builds the canned attached start-exec response used by these scenarios.
+fn attached_start_results() -> bollard::exec::StartExecResults {
+    let output_stream = stream::iter(vec![Ok(LogOutput::StdOut {
+        message: Vec::from(&b"bdd output"[..]).into(),
+    })]);
+    bollard::exec::StartExecResults::Attached {
+        output: Box::pin(output_stream),
+        input: Box::pin(tokio::io::sink()),
+    }
+}
+
+/// Expects the start-exec options this suite requires for `mode`.
+///
+/// Unlike the orchestration suite, these scenarios assert the exact options
+/// handed to the daemon, so the builder stays local to this module. `withf`
+/// pins the options; a mismatch fails the test via mockall's
+/// unmatched-expectation report rather than a panic here.
+fn configure_start_exec(
     client: &mut MockExecClient,
     mode: ExecMode,
     tty_enabled: bool,
-) {
-    match mode {
-        ExecMode::Attached => {
-            client
-                .expect_start_exec()
-                .times(1)
-                .returning(move |_, options| {
-                    assert_eq!(
-                        options,
-                        Some(bollard::exec::StartExecOptions {
-                            detach: false,
-                            tty: tty_enabled,
-                            output_capacity: None
-                        })
-                    );
-                    let output_stream = stream::iter(vec![Ok(LogOutput::StdOut {
-                        message: Vec::from(&b"bdd output"[..]).into(),
-                    })]);
-                    Box::pin(async move {
-                        Ok(bollard::exec::StartExecResults::Attached {
-                            output: Box::pin(output_stream),
-                            input: Box::pin(tokio::io::sink()),
-                        })
-                    })
-                });
-        }
-        ExecMode::Protocol => {
-            client.expect_start_exec().times(1).returning(|_, options| {
-                assert_eq!(
-                    options,
-                    Some(bollard::exec::StartExecOptions {
-                        detach: false,
-                        tty: false,
-                        output_capacity: Some(65_536)
-                    })
-                );
-                let output_stream = stream::iter(vec![Ok(LogOutput::StdOut {
-                    message: Vec::from(&b"bdd output"[..]).into(),
-                })]);
-                Box::pin(async move {
-                    Ok(bollard::exec::StartExecResults::Attached {
-                        output: Box::pin(output_stream),
-                        input: Box::pin(tokio::io::sink()),
-                    })
+) -> StepResult<()> {
+    let expected = expected_start_options(mode, tty_enabled)?;
+    let is_detached = matches!(mode, ExecMode::Detached);
+    client
+        .expect_start_exec()
+        .times(1)
+        .withf(move |_, options| *options == Some(expected))
+        .returning(move |_, _| {
+            Box::pin(async move {
+                Ok(if is_detached {
+                    bollard::exec::StartExecResults::Detached
+                } else {
+                    attached_start_results()
                 })
-            });
-        }
-        ExecMode::Detached => {
-            client.expect_start_exec().times(1).returning(|_, options| {
-                assert_eq!(
-                    options,
-                    Some(bollard::exec::StartExecOptions {
-                        detach: true,
-                        tty: false,
-                        output_capacity: None
-                    })
-                );
-                Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
-            });
-        }
-        _ => panic!("unexpected exec mode in BDD start-exec expectation"),
-    }
-}
-
-fn configure_resize_expectation(client: &mut MockExecClient, mode: ExecMode) {
-    match mode {
-        ExecMode::Attached => {
-            // Attached mode may still skip resize when terminal dimensions are
-            // unavailable, so this expectation intentionally allows zero calls.
-            client
-                .expect_resize_exec()
-                .times(0..)
-                .returning(|_, _| Box::pin(async { Ok(()) }));
-        }
-        ExecMode::Detached | ExecMode::Protocol => {
-            client.expect_resize_exec().never();
-        }
-        _ => panic!("unexpected exec mode in BDD resize expectation"),
-    }
-}
-
-fn configure_inspect_expectation(
-    client: &mut MockExecClient,
-    omit_exit_code: bool,
-    exit_code: i64,
-) {
-    client.expect_inspect_exec().times(1).returning(move |_| {
-        let inspect = bollard::models::ExecInspectResponse {
-            running: Some(false),
-            exit_code: (!omit_exit_code).then_some(exit_code),
-            ..bollard::models::ExecInspectResponse::default()
-        };
-        Box::pin(async move { Ok(inspect) })
-    });
+            })
+        });
+    Ok(())
 }
