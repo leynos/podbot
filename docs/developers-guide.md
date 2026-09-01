@@ -385,18 +385,20 @@ When adding a new execution mode:
   code.
 - Behaviour-Driven Development (BDD) scenarios use Gherkin-style naming
   in `protocol_proxy_bdd.rs`.
-- Shared fixtures and helpers are grouped under `tests/proxy_helpers/`.
+- Shared fixtures and helpers are grouped with their owning test domain.
+  Reusable integration-test utilities live under `tests/test_utils/` and
+  `tests/test_support/`.
 
 ### 8.2. Test doubles
 
 - `RecordingWriter`: captures bytes written to a stream for assertion.
 - `ProtocolProxyIo::new(stdin, stdout, stderr)`: injects host-IO
   handles so tests can supply in-memory readers and writers.
-- `run_lifecycle_session(runtime, stdin_bytes, output)`: convenience
-  wrapper around `run_session` for lifecycle purity tests that only need to
-  inspect stdout. It creates `RecordingWriter` handles internally and returns
-  `(Result<(), PodbotError>, Arc<Mutex<Vec<u8>>>)` — the session result paired
-  with captured stdout bytes.
+- `run_policy_session(container_id, policy, host_stdin_bytes, output_frame)`:
+  shared ACP policy-session harness for protocol tests. It returns
+  `io::Result<CapturedSessionIo>`, where `CapturedSessionIo` contains the
+  captured host-stdout and container-stdin bytes. Setup and session failures
+  are propagated as `io::Error` values.
 - `ContainerExecClient` mock implementations for unit testing without a
   live daemon.
 
@@ -504,6 +506,39 @@ attach a tracing span that carries the container ID, the selected
 limit. Denial events, send failures, buffer overflow events, and partial-frame
 drops should be emitted inside that span so logs and metrics can be correlated
 during incident analysis.
+
+#### 8.2.4. Shared integration-test utilities
+
+Reusable integration-test support has explicit ownership boundaries:
+
+- `tests/test_utils/mod.rs` owns cross-crate integration utilities, including
+  environment guards, the `clean_env` fixture, and the API-to-engine exec
+  bridge. An integration-test crate opts in by declaring `mod test_utils;`;
+  production modules must not depend on this directory.
+- `tests/test_utils/exec_client_mock.rs` owns the exported
+  `define_exec_client_mock!` macro. The macro is for behavioural test crates
+  under `tests/` that need contract-level `ContainerExecClient` doubles. It
+  expands into the invoking module, so each suite owns its generated mock and
+  expectation builders. Callers must provide the documented engine future
+  types, `ContainerExecClient`, `StepResult`, and `ExecMode` in scope. Compose
+  the generated create, resize, and inspect builders with a suite-owned
+  start-exec builder; start-exec expectations remain local because the suites
+  assert different daemon options.
+- `tests/test_support/mod.rs` owns configuration-loader integration support.
+  `temp_config_path(content)` writes a temporary TOML file and returns
+  `io::Result<(NamedTempFile, Utf8PathBuf)>`; callers must retain the returned
+  `NamedTempFile` for as long as the path is used and should propagate the
+  result rather than duplicate temporary-file setup.
+- `src/engine/connection/exec/acp_test_support.rs` owns the test-only ACP
+  session harness and its recording writer and frame builders. ACP protocol
+  tests compose `run_policy_session` with their policy and input/output
+  frames, then assert on the returned captured streams. Keep policy-session
+  setup in this harness and keep scenario-specific assertions in the calling
+  test module.
+
+These helpers are test seams, not additional production APIs. New shared
+helpers should be added to the narrowest owning support module and composed by
+callers without moving domain-specific assertions into the shared layer.
 
 ### 8.3. Parameterized tests
 
