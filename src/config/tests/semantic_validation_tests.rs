@@ -6,6 +6,26 @@ use rstest::rstest;
 use crate::config::{AgentKind, AgentMode, AppConfig, CommandIntent, WorkspaceSource};
 use crate::error::{ConfigError, PodbotError};
 
+/// Asserts that a validation result is a `ConfigError::InvalidValue` naming
+/// `expected_field` with a reason mentioning `expected_reason`.
+///
+/// A macro rather than a function so the panic is raised inside the calling
+/// test, keeping failure line numbers at the call site.
+macro_rules! assert_invalid_value {
+    ($result:expr, $expected_field:expr, $expected_reason:expr $(,)?) => {{
+        let error = extract_invalid_value($result)
+            .expect("validation result should be ConfigError::InvalidValue");
+
+        assert_eq!(error.field, $expected_field);
+        assert!(
+            error.reason.contains($expected_reason),
+            "expected '{}' to mention '{}'",
+            error.reason,
+            $expected_reason
+        );
+    }};
+}
+
 struct HostMountCase {
     host_path: Option<Utf8PathBuf>,
     container_path: Option<Utf8PathBuf>,
@@ -21,7 +41,7 @@ fn custom_agent_requires_command() {
     config.agent.kind = AgentKind::Custom;
     config.agent.mode = AgentMode::CodexAppServer;
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(CommandIntent::Host),
         "agent.command",
         "requires a non-empty",
@@ -33,7 +53,7 @@ fn builtin_agents_reject_custom_command_fields() {
     let mut config = AppConfig::default();
     config.agent.command = Some(String::from("opencode"));
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(CommandIntent::Run),
         "agent.command",
         "built-in agent kinds",
@@ -45,7 +65,7 @@ fn builtin_agents_reject_custom_args_fields() {
     let mut config = AppConfig::default();
     config.agent.args = vec![String::from("--verbose")];
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(CommandIntent::Run),
         "agent.args",
         "built-in agent kinds",
@@ -93,7 +113,7 @@ fn host_mount_validation(#[case] case: HostMountCase) {
         config.agent.mode = agent_mode;
     }
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(case.intent),
         case.expected_field,
         case.expected_reason,
@@ -105,7 +125,7 @@ fn run_rejects_hosted_modes() {
     let mut config = AppConfig::default();
     config.agent.mode = AgentMode::CodexAppServer;
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(CommandIntent::Run),
         "agent.mode",
         "hosted modes require `podbot host`",
@@ -116,7 +136,7 @@ fn run_rejects_hosted_modes() {
 fn host_rejects_podbot_mode() {
     let mut config = AppConfig::default();
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(CommandIntent::Host),
         "agent.mode",
         "interactive mode requires `podbot run`",
@@ -139,7 +159,7 @@ fn github_clone_rejects_host_mount_fields(
     config.workspace.host_path = host_path;
     config.workspace.container_path = container_path;
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(CommandIntent::Any),
         field,
         "only valid when `workspace.source = \"host_mount\"`",
@@ -151,7 +171,7 @@ fn workspace_base_dir_rejects_relative_path() {
     let mut config = AppConfig::default();
     config.workspace.base_dir = Utf8PathBuf::from("relative/path");
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(CommandIntent::Any),
         "workspace.base_dir",
         "must be an absolute container path",
@@ -167,28 +187,28 @@ fn env_allowlist_rejects_empty_or_whitespace_entries() {
         String::from("   "),
     ];
 
-    assert_invalid_value(
+    assert_invalid_value!(
         config.normalize_and_validate(CommandIntent::Any),
         "agent.env_allowlist",
         "must not be empty or whitespace only",
     );
 }
 
-fn assert_invalid_value(
-    result: crate::error::Result<()>,
-    expected_field: &str,
-    expected_reason: &str,
-) {
-    let error = result.expect_err("validation should fail");
+/// Extracted `field`/`reason` pair from a `ConfigError::InvalidValue`.
+#[derive(Debug, PartialEq, Eq)]
+struct InvalidValueError {
+    field: String,
+    reason: String,
+}
 
-    match error {
-        PodbotError::Config(ConfigError::InvalidValue { field, reason }) => {
-            assert_eq!(field, expected_field);
-            assert!(
-                reason.contains(expected_reason),
-                "expected '{reason}' to mention '{expected_reason}'"
-            );
+/// Extract the `field`/`reason` pair from a validation result, or describe
+/// the unexpected outcome (success, or a different error variant).
+fn extract_invalid_value(result: crate::error::Result<()>) -> Result<InvalidValueError, String> {
+    match result {
+        Ok(()) => Err(String::from("validation should fail")),
+        Err(PodbotError::Config(ConfigError::InvalidValue { field, reason })) => {
+            Ok(InvalidValueError { field, reason })
         }
-        other => panic!("expected ConfigError::InvalidValue, got {other:?}"),
+        Err(other) => Err(format!("expected ConfigError::InvalidValue, got {other:?}")),
     }
 }

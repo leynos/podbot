@@ -34,7 +34,8 @@ fn privileged_create(
     let _ = rt
         .block_on(EngineConnector::create_container_async(&creator, &req))
         .map_err(|e| io_error(format!("container creation should succeed: {e}")))?;
-    let body = take_body(&captured).ok_or_else(|| io_error("container body should be captured"))?;
+    let body = clone_captured_body(&captured)
+        .ok_or_else(|| io_error("container body should be captured"))?;
     let host_config = body
         .host_config
         .as_ref()
@@ -49,7 +50,7 @@ fn privileged_create(
         host_config.security_opt.is_none(),
         "did not expect security_opt",
     )?;
-    Ok((take_options(&captured), body))
+    Ok((clone_captured_options(&captured), body))
 }
 
 #[rstest]
@@ -59,17 +60,21 @@ fn create_container_privileged_mode_ignores_irrelevant_settings(
     runtime: std::io::Result<tokio::runtime::Runtime>,
     #[case] fuse: bool,
     #[case] selinux: SelinuxLabelMode,
-) -> std::io::Result<()> {
-    privileged_create(&runtime?, fuse, selinux).map(|_| ())
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    privileged_create(&runtime_handle, fuse, selinux)
+        .expect("privileged-mode creation should succeed");
 }
 
 #[rstest]
 fn create_container_privileged_mode_without_optional_fields(
     runtime: std::io::Result<tokio::runtime::Runtime>,
-) -> std::io::Result<()> {
-    let (opts, body) = privileged_create(&runtime?, true, SelinuxLabelMode::KeepDefault)?;
-    ensure(opts.is_none(), "expected no create options")?;
-    ensure(body.image.is_some(), "expected image to be set")?;
-    ensure(body.cmd.is_none(), "did not expect cmd")?;
-    ensure(body.env.is_none(), "did not expect env")
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    let (opts, body) = privileged_create(&runtime_handle, true, SelinuxLabelMode::KeepDefault)
+        .expect("privileged-mode creation should succeed");
+    assert!(opts.is_none(), "expected no create options");
+    assert!(body.image.is_some(), "expected image to be set");
+    assert!(body.cmd.is_none(), "did not expect cmd");
+    assert!(body.env.is_none(), "did not expect env");
 }

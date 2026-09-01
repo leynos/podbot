@@ -1,0 +1,16 @@
+error: unexpected end of macro invocation
+ --> tests/ui/exec_client_mock_malformed_invocation.rs:7:28
+  |
+7 |     mock_base = ExecClient,
+  |                            ^ missing tokens in macro arguments
+  |
+ ::: tests/ui/../test_utils/exec_client_mock.rs
+  |
+  | macro_rules! define_exec_client_mock {
+  | ------------------------------------ when calling this macro
+  |
+note: while trying to match `mock_type`
+ --> tests/ui/../test_utils/exec_client_mock.rs
+  |
+  |         mock_type = $mock_type:ident,
+  |         ^^^^^^^^^

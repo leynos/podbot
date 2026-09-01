@@ -22,23 +22,18 @@ use observability_helpers::{
     capture_run_logs,
 };
 
-#[test]
-fn normalize_process_exit_code_preserves_valid_range() {
-    assert_eq!(normalize_process_exit_code(0), 0);
-    assert_eq!(normalize_process_exit_code(42), 42);
-    assert_eq!(normalize_process_exit_code(255), 255);
-}
-
-#[test]
-fn normalize_process_exit_code_maps_negative_values_to_one() {
-    assert_eq!(normalize_process_exit_code(-1), 1);
-    assert_eq!(normalize_process_exit_code(i64::MIN), 1);
-}
-
-#[test]
-fn normalize_process_exit_code_clamps_oversized_values() {
-    assert_eq!(normalize_process_exit_code(256), 255);
-    assert_eq!(normalize_process_exit_code(i64::MAX), 255);
+/// Exit codes inside the byte range pass through unchanged; negative codes
+/// collapse to `1` and oversized codes clamp to `255`.
+#[rstest]
+#[case::zero(0, 0)]
+#[case::mid_range(42, 42)]
+#[case::upper_bound(255, 255)]
+#[case::negative_one(-1, 1)]
+#[case::most_negative(i64::MIN, 1)]
+#[case::just_above_upper_bound(256, 255)]
+#[case::most_positive(i64::MAX, 255)]
+fn normalize_process_exit_code_maps_codes_into_byte_range(#[case] raw: i64, #[case] expected: i32) {
+    assert_eq!(normalize_process_exit_code(raw), expected);
 }
 
 #[test]

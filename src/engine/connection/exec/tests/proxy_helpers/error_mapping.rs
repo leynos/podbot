@@ -46,7 +46,8 @@ fn protocol_proxy_maps_stdout_failures(
         Box::pin(RecordingInputWriter::new()),
         RecordingWriter::with_failure(failure_mode),
         RecordingWriter::new(),
-    );
+    )
+    .expect("session harness should build");
 
     assert_exec_failed_message(result, expected_fragment);
 }
@@ -70,7 +71,8 @@ fn protocol_proxy_maps_stderr_failures(
         Box::pin(RecordingInputWriter::new()),
         RecordingWriter::new(),
         RecordingWriter::with_failure(failure_mode),
-    );
+    )
+    .expect("session harness should build");
 
     assert_exec_failed_message(result, expected_fragment);
 }
@@ -88,7 +90,8 @@ fn protocol_proxy_maps_container_input_flush_failure(runtime: RuntimeFixture) {
         Box::pin(RecordingInputWriter::with_flush_failure()),
         RecordingWriter::new(),
         RecordingWriter::new(),
-    );
+    )
+    .expect("session harness should build");
 
     assert_exec_failed_message(result, "failed forwarding stdin to exec input");
 }
@@ -104,7 +107,8 @@ fn protocol_proxy_maps_daemon_stream_errors(runtime: RuntimeFixture) {
         Box::pin(RecordingInputWriter::new()),
         RecordingWriter::new(),
         RecordingWriter::new(),
-    );
+    )
+    .expect("session harness should build");
 
     assert_exec_failed_message(result, "exec stream failed");
 }

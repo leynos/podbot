@@ -12,6 +12,13 @@ use podbot::config::env_var_names;
 use podbot::engine::ContainerExecClient;
 use rstest::{fixture, rstest};
 
+/// Shared exec-client mock scaffolding for the behavioural suites.
+///
+/// The module only defines a `#[macro_export]` macro, so it is reachable from
+/// every test crate that declares `mod test_utils;` regardless of declaration
+/// order.
+mod exec_client_mock;
+
 /// Global mutex protecting environment variable access.
 ///
 /// All tests that read or modify environment variables must acquire this lock

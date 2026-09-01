@@ -28,18 +28,21 @@ use octocrab::service::middleware::retry::RateLimitMetrics;
 use super::PodbotOctocrabRetryMetrics;
 use crate::github::test_support::{CounterEvent, RecordingMetrics};
 
-fn github_request() -> Request<octocrab::OctoBody> {
-    match Request::builder()
+/// Build a minimal GET request against the GitHub API for retry-metrics
+/// tests. Returns `Result` so callers report build failures with
+/// test-specific context via `.expect(...)`.
+fn github_request() -> http::Result<Request<octocrab::OctoBody>> {
+    Request::builder()
         .method(Method::GET)
         .uri("https://api.github.com/repos/leynos/podbot")
         .body(octocrab::OctoBody::empty())
-    {
-        Ok(request) => request,
-        Err(error) => panic!("request should build: {error}"),
-    }
 }
 
-fn capture_retry_logs(run_test: impl FnOnce()) -> String {
+/// Run `run_test` under a `tracing` subscriber that captures `WARN`-level
+/// output, returning the captured logs as UTF-8 text. Returns `Result` so
+/// callers report capture failures with test-specific context via
+/// `.expect(...)`.
+fn capture_retry_logs(run_test: impl FnOnce()) -> Result<String, String> {
     let buffer = Arc::new(Mutex::new(Vec::<u8>::new()));
     let writer = SharedLogBuffer {
         buffer: Arc::clone(&buffer),
@@ -53,14 +56,11 @@ fn capture_retry_logs(run_test: impl FnOnce()) -> String {
 
     tracing::subscriber::with_default(subscriber, run_test);
 
-    let bytes = match buffer.lock() {
-        Ok(logs) => logs.clone(),
-        Err(error) => panic!("log buffer lock should not be poisoned: {error}"),
-    };
-    match String::from_utf8(bytes) {
-        Ok(logs) => logs,
-        Err(error) => panic!("logs should be UTF-8: {error}"),
-    }
+    let bytes = buffer
+        .lock()
+        .map_err(|error| format!("log buffer lock should not be poisoned: {error}"))?
+        .clone();
+    String::from_utf8(bytes).map_err(|error| format!("logs should be UTF-8: {error}"))
 }
 
 #[derive(Clone)]
@@ -99,12 +99,13 @@ impl std::io::Write for SharedLogWriter {
 #[test]
 fn retry_after_error_logs_and_records_retryable_response_metric() {
     let recorder = RecordingMetrics::default();
-    let request = github_request();
+    let request = github_request().expect("request should build");
     let logs = metrics::with_local_recorder(&recorder, || {
         capture_retry_logs(|| {
             PodbotOctocrabRetryMetrics.retry_after_error(&request, StatusCode::BAD_GATEWAY, 2);
         })
-    });
+    })
+    .expect("retry logs should be captured");
 
     assert!(
         logs.contains("Octocrab retry policy observed a retryable GitHub API response"),
@@ -140,12 +141,13 @@ fn retry_after_error_logs_and_records_retryable_response_metric() {
 #[test]
 fn rate_limited_logs_wait_duration_and_records_rate_limit_metric() {
     let recorder = RecordingMetrics::default();
-    let request = github_request();
+    let request = github_request().expect("request should build");
     let logs = metrics::with_local_recorder(&recorder, || {
         capture_retry_logs(|| {
             PodbotOctocrabRetryMetrics.rate_limited(&request, StatusCode::TOO_MANY_REQUESTS, 1, 30);
         })
-    });
+    })
+    .expect("retry logs should be captured");
 
     assert!(
         logs.contains("Octocrab retry policy is waiting before retrying a GitHub API request"),

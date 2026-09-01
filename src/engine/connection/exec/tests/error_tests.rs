@@ -42,15 +42,13 @@ struct ErrorScenario {
     expected_container_id: Some("sandbox-123"),
     expected_message_fragment: "detached start result",
 })]
-fn exec_async_error_scenarios(
-    runtime: RuntimeFixture,
-    #[case] scenario: ErrorScenario,
-) -> TestResult {
-    let runtime_handle = runtime?;
+fn exec_async_error_scenarios(runtime: RuntimeFixture, #[case] scenario: ErrorScenario) {
+    let runtime_handle = runtime.expect("runtime fixture should initialize");
     let mut client = MockExecClient::new();
     (scenario.setup_failure)(&mut client);
 
-    let request = ExecRequest::new("sandbox-123", scenario.command, scenario.mode)?;
+    let request = ExecRequest::new("sandbox-123", scenario.command, scenario.mode)
+        .expect("exec request should build");
     let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
     let assertion_context = format!(
         "{} ({}) expected error mapping",
@@ -58,19 +56,17 @@ fn exec_async_error_scenarios(
     );
 
     if let Some(expected_container_id) = scenario.expected_container_id {
-        assert_exec_failed_for_container_with_message(
+        assert_exec_failed!(
             result,
-            expected_container_id,
+            container: expected_container_id,
             scenario.expected_message_fragment,
             &assertion_context,
         );
     } else {
-        assert_exec_failed_with_message(
+        assert_exec_failed!(
             result,
             scenario.expected_message_fragment,
             &assertion_context,
         );
     }
-
-    Ok(())
 }

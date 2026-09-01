@@ -2,60 +2,25 @@
 
 use std::io;
 
-use bollard::container::LogOutput;
-use futures_util::stream;
 use rstest::rstest;
 
-use super::super::{ProtocolProxyIo, ProtocolSessionOptions, run_protocol_session_with_io_async};
-use crate::engine::connection::exec::acp_test_support::{RecordingWriter, jsonrpc_frame};
+use crate::engine::connection::exec::acp_test_support::{
+    CapturedSessionIo, jsonrpc_frame, run_policy_session,
+};
 use crate::engine::connection::exec::session::CapabilityPolicy;
-use crate::engine::connection::exec::{ExecMode, ExecRequest};
-use crate::error::PodbotError;
 
-fn protocol_request() -> Result<ExecRequest, PodbotError> {
-    ExecRequest::new(
-        "policy-selection-sandbox",
-        vec![String::from("codex"), String::from("app-server")],
-        ExecMode::Protocol,
-    )
-}
+const POLICY_CONTAINER_ID: &str = "policy-selection-sandbox";
 
 fn blocked_request_frame(id: i64) -> Result<Vec<u8>, serde_json::Error> {
     jsonrpc_frame(Some(&serde_json::json!(id)), "terminal/create", b"\n")
 }
 
-fn drive_policy_session(policy: CapabilityPolicy) -> io::Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
-    let runtime = tokio::runtime::Runtime::new()?;
+/// Drives a policy session whose host stdin carries an ACP `initialize` frame
+/// and whose daemon output carries a blocked `terminal/create` request.
+fn drive_policy_session(policy: CapabilityPolicy) -> io::Result<CapturedSessionIo> {
     let initialize = super::initialize_frame("\n").map_err(io::Error::other)?;
-    let host_stdin = runtime.block_on(super::build_host_stdin(&initialize))?;
-    let host_stdout = RecordingWriter::default();
-    let host_stdout_handle = host_stdout.clone();
-    let host_stderr = RecordingWriter::default();
-    let host_stderr_handle = host_stderr.clone();
-    let container_input = RecordingWriter::new();
-    let container_recorder = container_input.clone();
     let blocked = blocked_request_frame(7).map_err(io::Error::other)?;
-    let output = stream::iter([Ok(LogOutput::StdOut {
-        message: blocked.into(),
-    })]);
-    let request = protocol_request().map_err(io::Error::other)?;
-    let stdio = ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr)
-        .with_options(ProtocolSessionOptions::new().with_capability_policy(policy));
-
-    runtime
-        .block_on(run_protocol_session_with_io_async(
-            &request,
-            Box::pin(output),
-            Box::pin(container_input),
-            stdio,
-        ))
-        .map_err(io::Error::other)?;
-
-    Ok((
-        container_recorder.snapshot(),
-        host_stdout_handle.snapshot(),
-        host_stderr_handle.snapshot(),
-    ))
+    run_policy_session(POLICY_CONTAINER_ID, policy, &initialize, &blocked)
 }
 
 fn parse_json_line(bytes: &[u8]) -> Result<serde_json::Value, serde_json::Error> {
@@ -89,14 +54,14 @@ fn synthesized_response_for_method(bytes: &[u8], method: &str) -> bool {
 
 #[test]
 fn mask_and_deny_masks_initialize_and_synthesizes_blocked_response() {
-    let (container_stdin, host_stdout, _host_stderr) =
+    let captured =
         drive_policy_session(CapabilityPolicy::MaskAndDeny).expect("policy session should run");
-    let lines = split_lines(&container_stdin);
+    let lines = split_lines(&captured.container_stdin);
     let initialize = super::initialize_frame("\n").expect("initialize frame should serialize");
     let expected_initialize = super::mask_acp_initialize_frame(&initialize);
 
     assert!(
-        host_stdout.is_empty(),
+        captured.host_stdout.is_empty(),
         "blocked outbound request must not reach host stdout",
     );
     assert!(
@@ -120,8 +85,7 @@ fn non_enforcing_policies_stream_blocked_frames_to_host_stdout(
     #[case] policy: CapabilityPolicy,
     #[case] masks_initialize: bool,
 ) {
-    let (container_stdin, host_stdout, _host_stderr) =
-        drive_policy_session(policy).expect("policy session should run");
+    let captured = drive_policy_session(policy).expect("policy session should run");
     let initialize = super::initialize_frame("\n").expect("initialize frame should serialize");
     let blocked = blocked_request_frame(7).expect("blocked request should serialize");
     let expected_stdin = if masks_initialize {
@@ -131,11 +95,11 @@ fn non_enforcing_policies_stream_blocked_frames_to_host_stdout(
     };
 
     assert_eq!(
-        container_stdin, expected_stdin,
+        captured.container_stdin, expected_stdin,
         "{policy:?} should forward host stdin with the expected masking",
     );
     assert_eq!(
-        host_stdout, blocked,
+        captured.host_stdout, blocked,
         "{policy:?} should not enforce the outbound denylist",
     );
 }

@@ -27,7 +27,8 @@ fn protocol_proxy_forwards_stdin_bytes_and_shuts_down_input(runtime: RuntimeFixt
         Box::pin(container_input),
         host_stdout,
         host_stderr,
-    );
+    )
+    .expect("session harness should build");
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
