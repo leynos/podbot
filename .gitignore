@@ -3,6 +3,7 @@ target/
 .typos-oxendict-base.toml
 .uv-cache/
 .uv-tools/
+.coverage
 __pycache__/
 *.py[cod]
 *$py.class
