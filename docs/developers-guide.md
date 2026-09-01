@@ -45,6 +45,14 @@ graph through tooling dependencies rather than an application database path.
 Keep the ignore scoped to `RUSTSEC-2023-0071`, and remove it if SQLx leaves the
 tool dependency graph or if Podbot adds a MySQL runtime integration.
 
+### 2.2. Namespace GitHub Actions runners
+
+Podbot's repository-owned Linux CI, main-branch coverage, and scheduled audit
+jobs run on `namespace-profile-default`: the shared Ubuntu 22.04 Linux/amd64
+profile with 4 vCPU and 16 GB memory. Its Namespace cache volume is disabled
+for this baseline rollout. Existing workflow cache actions remain unchanged;
+they are not backed by a Namespace cache volume.
+
 ## 3. Repository layout (exec subsystem)
 
 The exec subsystem lives under `src/engine/connection/exec/` and implements
