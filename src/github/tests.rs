@@ -132,7 +132,7 @@ fn load_private_key_missing_parent_returns_error() {
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\n",
         "-----END PUBLIC KEY-----\n"
     ),
-    "public key"
+    &["public key"]
 )]
 #[case::rsa_public_key(
     concat!(
@@ -140,7 +140,7 @@ fn load_private_key_missing_parent_returns_error() {
         "MIIBCgKCAQEA4LAdQBFm\n",
         "-----END RSA PUBLIC KEY-----\n"
     ),
-    "public key"
+    &["public key"]
 )]
 #[case::certificate(
     concat!(
@@ -148,7 +148,7 @@ fn load_private_key_missing_parent_returns_error() {
         "MIICGzCCAaGgAwIBAgIBADAK\n",
         "-----END CERTIFICATE-----\n"
     ),
-    "certificate"
+    &["certificate"]
 )]
 #[case::encrypted_pkcs8(
     concat!(
@@ -156,7 +156,7 @@ fn load_private_key_missing_parent_returns_error() {
         "MIIFHDBOBgkqhkiG9w0BBQ0w\n",
         "-----END ENCRYPTED PRIVATE KEY-----\n"
     ),
-    "encrypted"
+    &["encrypted"]
 )]
 #[case::legacy_encrypted(
     concat!(
@@ -167,21 +167,21 @@ fn load_private_key_missing_parent_returns_error() {
         "MIIBCgKCAQEA4LAdQBFm\n",
         "-----END RSA PRIVATE KEY-----\n"
     ),
-    "encrypted"
+    &["encrypted"]
 )]
 #[case::ec_key(
     include_str!("../../tests/fixtures/test_ec_private_key.pem"),
-    "ECDSA"
+    &["ECDSA", "RSA"]
 )]
 #[case::ed25519_key(
     include_str!("../../tests/fixtures/test_ed25519_private_key.pem"),
-    "invalid RSA private key"
+    &["invalid RSA private key"]
 )]
-#[case::invalid_pem("this is not a PEM file at all", "invalid RSA private key")]
+#[case::invalid_pem("this is not a PEM file at all", &["invalid RSA private key"])]
 fn load_invalid_key_types_return_clear_error(
     temp_key_dir: io::Result<(TempDir, Utf8Dir)>,
     #[case] pem_content: &str,
-    #[case] expected_keyword: &str,
+    #[case] expected_keywords: &[&str],
 ) {
     let (_tmp, dir) = temp_key_dir.expect("temp key dir should be created");
     let file_name = "key.pem";
@@ -190,10 +190,12 @@ fn load_invalid_key_types_return_clear_error(
     let display = format!("/config/{file_name}");
     let path = Utf8Path::new(&display);
     let result = load_private_key_from_dir(&dir, file_name, path);
-    assert!(result.is_err(), "expected Err for {expected_keyword}");
+    assert!(result.is_err(), "expected an invalid-key error");
     let message = result.err().map(|e| e.to_string()).unwrap_or_default();
-    assert!(
-        message.contains(expected_keyword),
-        "error should mention '{expected_keyword}': {message}"
-    );
+    for &expected_keyword in expected_keywords {
+        assert!(
+            message.contains(expected_keyword),
+            "error should mention '{expected_keyword}': {message}"
+        );
+    }
 }

@@ -97,13 +97,15 @@ fn captured_call(captured: &Arc<Mutex<CapturedCreateCall>>) -> MutexGuard<'_, Ca
     captured.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-pub(super) fn take_options(
+pub(super) fn clone_captured_options(
     captured: &Arc<Mutex<CapturedCreateCall>>,
 ) -> Option<CreateContainerOptions> {
     captured_call(captured).options.clone()
 }
 
-pub(super) fn take_body(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<ContainerCreateBody> {
+pub(super) fn clone_captured_body(
+    captured: &Arc<Mutex<CapturedCreateCall>>,
+) -> Option<ContainerCreateBody> {
     captured_call(captured).body.clone()
 }
 
