@@ -7,7 +7,7 @@
 use podbot::config::{AppConfig, SandboxConfig};
 use rstest::rstest;
 
-/// Serialises `config` to TOML and parses it back, reporting either failure as
+/// Serializes `config` to TOML and parses it back, reporting either failure as
 /// a message so the calling test performs the panic.
 fn round_trip_toml(config: &SandboxConfig) -> Result<SandboxConfig, String> {
     let toml_str =

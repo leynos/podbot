@@ -99,11 +99,13 @@ fn captured_call(
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-fn take_options(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<CreateContainerOptions> {
+fn clone_captured_options(
+    captured: &Arc<Mutex<CapturedCreateCall>>,
+) -> Option<CreateContainerOptions> {
     captured_call(captured).options.clone()
 }
 
-fn take_body(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<ContainerCreateBody> {
+fn clone_captured_body(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<ContainerCreateBody> {
     captured_call(captured).body.clone()
 }
 
@@ -155,13 +157,13 @@ fn create_container_privileged_mode_has_minimal_overrides(
     );
     assert!(call_count(&captured) == 1, "expected one engine call");
 
-    let options = take_options(&captured).expect("create options should be captured");
+    let options = clone_captured_options(&captured).expect("create options should be captured");
     assert!(
         options.name.as_deref() == Some("podbot-test"),
         "expected create options name podbot-test"
     );
 
-    let body = take_body(&captured).expect("container body should be captured");
+    let body = clone_captured_body(&captured).expect("container body should be captured");
     let host_config = body.host_config.expect("host config should be set");
     assert!(
         host_config.privileged == Some(true),
@@ -189,7 +191,7 @@ fn create_container_minimal_mode_mounts_fuse(runtime: std::io::Result<tokio::run
         .block_on(EngineConnector::create_container_async(&creator, &request))
         .expect("container creation should succeed");
 
-    let body = take_body(&captured).expect("container body should be captured");
+    let body = clone_captured_body(&captured).expect("container body should be captured");
     let host_config = body.host_config.expect("host config should be set");
 
     assert!(
@@ -250,7 +252,7 @@ fn create_container_minimal_without_fuse_avoids_mount(
         .block_on(EngineConnector::create_container_async(&creator, &request))
         .expect("container creation should succeed");
 
-    let body = take_body(&captured).expect("container body should be captured");
+    let body = clone_captured_body(&captured).expect("container body should be captured");
     let host_config = body.host_config.expect("host config should be set");
 
     assert!(

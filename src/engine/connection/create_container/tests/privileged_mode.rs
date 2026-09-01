@@ -34,7 +34,8 @@ fn privileged_create(
     let _ = rt
         .block_on(EngineConnector::create_container_async(&creator, &req))
         .map_err(|e| io_error(format!("container creation should succeed: {e}")))?;
-    let body = take_body(&captured).ok_or_else(|| io_error("container body should be captured"))?;
+    let body = clone_captured_body(&captured)
+        .ok_or_else(|| io_error("container body should be captured"))?;
     let host_config = body
         .host_config
         .as_ref()
@@ -49,7 +50,7 @@ fn privileged_create(
         host_config.security_opt.is_none(),
         "did not expect security_opt",
     )?;
-    Ok((take_options(&captured), body))
+    Ok((clone_captured_options(&captured), body))
 }
 
 #[rstest]

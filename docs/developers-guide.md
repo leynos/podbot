@@ -519,11 +519,11 @@ Reusable integration-test support has explicit ownership boundaries:
   `define_exec_client_mock!` macro. The macro is for behavioural test crates
   under `tests/` that need contract-level `ContainerExecClient` doubles. It
   expands into the invoking module, so each suite owns its generated mock and
-  expectation builders. Callers must provide the documented engine future
-  types, `ContainerExecClient`, `StepResult`, and `ExecMode` in scope. Compose
-  the generated create, resize, and inspect builders with a suite-owned
-  start-exec builder; start-exec expectations remain local because the suites
-  assert different daemon options.
+  expectation builders. Callers must provide the documented engine future types,
+  `ContainerExecClient`, `StepResult`, and `ExecMode` in scope. Compose the
+  generated create, resize, and inspect builders with a suite-owned start-exec
+  builder; start-exec expectations remain local because the suites assert
+  different daemon options.
 - `tests/test_support/mod.rs` owns configuration-loader integration support.
   `temp_config_path(content)` writes a temporary TOML file and returns
   `io::Result<(NamedTempFile, Utf8PathBuf)>`; callers must retain the returned
@@ -531,10 +531,9 @@ Reusable integration-test support has explicit ownership boundaries:
   result rather than duplicate temporary-file setup.
 - `src/engine/connection/exec/acp_test_support.rs` owns the test-only ACP
   session harness and its recording writer and frame builders. ACP protocol
-  tests compose `run_policy_session` with their policy and input/output
-  frames, then assert on the returned captured streams. Keep policy-session
-  setup in this harness and keep scenario-specific assertions in the calling
-  test module.
+  tests compose `run_policy_session` with their policy and input/output frames,
+  then assert on the returned captured streams. Keep policy-session setup in
+  this harness and keep scenario-specific assertions in the calling test module.
 
 These helpers are test seams, not additional production APIs. New shared
 helpers should be added to the narrowest owning support module and composed by

@@ -140,9 +140,7 @@ pub fn assert_config_has_defaults(config: &AppConfig) {
 pub fn create_composer_with_file_and_env() -> ComposerResult {
     use ortho_config::serde_json::json;
 
-    let mut composer = MergeComposer::new();
-    let defaults = ortho_config::serde_json::to_value(AppConfig::default())?;
-    composer.push_defaults(defaults);
+    let mut composer = create_composer_with_defaults()?;
 
     // Standard file layer for precedence tests
     composer.push_file(

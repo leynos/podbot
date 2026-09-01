@@ -29,6 +29,15 @@ fn config_internal_reexport_is_available_with_internal() {
 }
 
 #[test]
+#[cfg(feature = "internal")]
+fn exec_client_mock_contract_compiles() {
+    let test_cases = trybuild::TestCases::new();
+    test_cases.pass("tests/ui/exec_client_mock_compiles.rs");
+    test_cases.compile_fail("tests/ui/exec_client_mock_missing_step_result.rs");
+    test_cases.compile_fail("tests/ui/exec_client_mock_malformed_invocation.rs");
+}
+
+#[test]
 #[cfg(not(feature = "internal"))]
 fn config_internal_reexport_is_unavailable_without_internal() {
     let test_cases = trybuild::TestCases::new();
