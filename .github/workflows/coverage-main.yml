@@ -16,7 +16,7 @@ name: Coverage (main)
 
 jobs:
   coverage-upload:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-default
     permissions:
       contents: read
     env:
