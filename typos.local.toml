@@ -12,8 +12,8 @@ accepted = []
 
 [patterns]
 ignore = [
-  # Official documentation name.
-  'Azure Architecture\s+Center\s+\|\s+Microsoft Learn',
+  # Inline code spans are masked; the shared dictionary does not mask them yet.
+  '`[^`\n]+`',
   # Public design identifiers are exact API names.
   '(?m)^### HookArtifact and HookSubscription$',
   # Tokio's type, method, and macro arguments are upstream API tokens.

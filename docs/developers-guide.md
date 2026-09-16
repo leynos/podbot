@@ -984,22 +984,27 @@ Documentation uses British English with Oxford spelling (`en-GB-oxendict`):
 
 The words "outwith" and "caveat" are acceptable.
 
-Run `make spelling` to enforce this policy with the pinned Typos release. The
-tracked `typos.toml` is generated from the shared estate dictionary and the
-narrow repository policy in `typos.local.toml`; never edit the generated file
-by hand.
+Run the spelling gate with:
 
-`make spelling-config-write` invokes the exact, commit-pinned
-`typos-config-builder` CLI to refresh the untracked shared-dictionary cache
-when its authority is newer and write the deterministic configuration. Use
-`make spelling-config` to verify cache and generated-config drift. The builder
-only parses, refreshes, merges and renders spelling policy. Harvesting, Typos
-execution, phrase enforcement and Mermaid validation remain consumer-owned.
+```bash
+make spelling
+```
 
-The phrase checker rejects punctuation-sensitive shared corrections such as
-`hand-written` in tracked UTF-8 text. Repository exceptions belong in the local
-overlay as narrow exact or full-line patterns; do not add bare accepted words
-for machine interfaces or formal names.
+The tracked `typos.toml` is regenerated on every run from the live shared
+dictionary and the repository-specific `typos.local.toml` overlay. Never edit
+generated entries by hand; add only narrow repository terminology to the
+overlay. Because the dictionary is live, `typos.toml` must never be drift
+checked in continuous integration.
+
+The pinned `typos-config-builder` CLI refreshes the shared dictionary into an
+untracked local cache only when the authoritative copy is newer, so a valid
+cache remains usable when the network is unavailable. The same command then
+runs the pinned Typos binary over the tracked Markdown and enforces the shared
+phrase corrections, such as `hand-written`, that Typos cannot express.
+
+Repository exceptions belong in the overlay as narrow exact or full-line
+patterns; do not add bare accepted words for machine interfaces or formal
+names.
 
 ## 16. Behavioural test infrastructure
 
