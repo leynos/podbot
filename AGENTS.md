@@ -308,12 +308,11 @@ project:
 ## Markdown guidance
 
 - Validate Markdown files using `make markdownlint`. This target also runs
-  `make spelling` to enforce en-GB-oxendict spelling with Typos.
-- `typos.toml` is generated from the shared Oxford dictionary and the local
-  `typos.local.toml` overlay. Do not edit the generated file by hand.
-- Run `make spelling-config-write` to regenerate the configuration, or
-  `make spelling-config` to verify it. The focused shared builder refreshes the
-  untracked dictionary cache only when the authoritative copy is newer.
+  `make spelling` to enforce en-GB-oxendict spelling.
+- Enforce spelling with `make spelling`. It regenerates `typos.toml` from the
+  live shared dictionary and the `typos.local.toml` overlay, then checks the
+  tracked Markdown. Never edit generated entries by hand; add narrow
+  repository-specific entries to `typos.local.toml` instead.
 - Quoted APIs and identifiers retain upstream spelling. Protect them with
   narrow exact or full-line patterns rather than bare accepted words.
 - Run `make fmt` after any documentation changes to format all Markdown
