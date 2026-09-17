@@ -20,21 +20,27 @@ For user-facing behaviour and configuration reference, see
 
 All quality gates must pass before committing. The canonical targets are:
 
-| Target              | Command                                                                | Purpose                                                            |
-| ------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `make check-fmt`    | `cargo fmt --workspace -- --check`                                     | Verify formatting                                                  |
-| `make fmt`          | `cargo fmt --workspace`                                                | Apply formatting fixes                                             |
-| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Lint with all warnings denied                                      |
-| `make test`         | `cargo test --workspace`                                               | Run full test suite                                                |
-| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                 | Type-check the workspace                                           |
-| `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`        | Derive workspace root with `python3`; run `cargo audit` once there |
-| `make markdownlint` | markdownlint-cli                                                       | Validate Markdown files                                            |
-| `make nixie`        | Mermaid diagram validator                                              | Validate diagrams in Markdown                                      |
+| Target              | Command                                                                     | Purpose                                                            |
+| ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `make check-fmt`    | `cargo fmt --workspace -- --check`; `mdtablefix --check`                    | Verify Rust and Markdown table formatting                          |
+| `make fmt`          | `cargo fmt --workspace`; `mdtablefix --in-place`; `markdownlint-cli2 --fix` | Apply Rust and Markdown formatting fixes                           |
+| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings`      | Lint with all warnings denied                                      |
+| `make test`         | `cargo test --workspace`                                                    | Run full test suite                                                |
+| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                      | Type-check the workspace                                           |
+| `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`             | Derive workspace root with `python3`; run `cargo audit` once there |
+| `make markdownlint` | markdownlint-cli                                                            | Validate Markdown files                                            |
+| `make nixie`        | Mermaid diagram validator                                                   | Validate diagrams in Markdown                                      |
 
 _Table 1: Quality gates and corresponding commands._
 
 Run long commands through `tee` and `set -o pipefail` so truncated output can
 be reviewed from the log file.
+
+`make fmt` and `make check-fmt` run `mdtablefix` (version 0.6.0, the same
+release CI installs); install it once with
+`cargo install --locked mdtablefix --version 0.6.0`. `make fmt` also runs
+`markdownlint-cli2`, which CI provides through its GitHub action; locally
+install it with `bun install -g markdownlint-cli2` (or `npm install -g`).
 
 ### 2.1. Security audit ignores
 
