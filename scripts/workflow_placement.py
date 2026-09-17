@@ -15,6 +15,7 @@ regardless, so a green run is not evidence the defect is absent.
 
 from __future__ import annotations
 
+import collections.abc as cabc
 import typing as typ
 
 import yaml
@@ -120,18 +121,24 @@ def _node_pairs(node: object) -> list[tuple[str, typ.Any]]:
     ]
 
 
-def runs_on_declarations(texts: typ.Mapping[str, str]) -> tuple[RunsOn, ...]:
-    """Return every job's runner placement, parsed beside raw.
+def runs_on_declarations(texts: cabc.Mapping[str, str]) -> tuple[RunsOn, ...]:
+    r"""Return every job's runner placement, parsed beside raw.
 
     Parameters
     ----------
-    texts : typ.Mapping[str, str]
+    texts : cabc.Mapping[str, str]
         Workflow file name to file text.
 
     Returns
     -------
     tuple[RunsOn, ...]
         One entry per job that declares `runs-on`.
+
+    Examples
+    --------
+    >>> text = "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+    >>> [(d.job, d.value) for d in runs_on_declarations({"ci.yml": text})]
+    [('build', 'ubuntu-latest')]
     """
     found: list[RunsOn] = []
     for workflow, text in texts.items():
@@ -174,8 +181,13 @@ def line_break_fault(value: object) -> str | None:
     --------
     >>> line_break_fault("ubuntu-latest") is None
     True
-    >>> line_break_fault("${{ a\n  && 'b' || 'c' }}")
-    "${{ a\n  && 'b' || 'c' }}"
+    >>> broken = "${{ a" + chr(10) + "  && 'b' || 'c' }}"
+    >>> line_break_fault(broken) == broken
+    True
+    >>> line_break_fault(["ubuntu-latest", broken]) == broken
+    True
+    >>> line_break_fault("trailing break is not a fault" + chr(10)) is None
+    True
     """
     if isinstance(value, str):
         return value if "\n" in value.rstrip("\n") else None

@@ -40,19 +40,26 @@ from pathlib import Path
 
 import pytest
 
+# The readers live in `scripts/`, which is not a package and is not on
+# `sys.path` when pytest collects this file from the repository root.
+# The bootstrap therefore has to run before the imports below, which is
+# what E402 forbids and why each of them carries the suppression: the
+# import order is not a preference here, it is the only order that
+# resolves.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from workflow_contracts import (  # noqa: E402
+from workflow_contracts import (  # noqa: E402 - must follow the sys.path bootstrap above
     COVERAGE_ACTION,
     WATCHDOG_VARIABLE,
-    WRAPPER_LESS_PINS,
+    WRAPPER_EXPORT_COMMIT,
+    WRAPPER_EXPORTING_PINS,
     load_workflow_documents,
     of_type,
     shared_actions_references,
 )
-from workflow_contracts import parse as parse_workflow  # noqa: E402
-from workflow_contracts import coverage_jobs as coverage_jobs_in  # noqa: E402
-from workflow_placement import (  # noqa: E402
+from workflow_contracts import parse as parse_workflow  # noqa: E402 - must follow the sys.path bootstrap above
+from workflow_contracts import coverage_jobs as coverage_jobs_in  # noqa: E402 - must follow the sys.path bootstrap above
+from workflow_placement import (  # noqa: E402 - must follow the sys.path bootstrap above
     line_break_fault,
     runs_on_declarations,
 )
@@ -129,27 +136,35 @@ def test_every_shared_actions_reference_moves_together(
     )
 
 
-def test_no_reference_names_a_wrapper_less_pin(
+def test_every_reference_names_a_pin_known_to_export_the_wrapper(
     workflow_texts: dict[str, str],
 ) -> None:
-    """The known pins that install sccache and use it for nothing.
+    """An allowlist, because a blacklist of bad pins cannot be complete.
 
-    Named individually rather than bounded by date, because the property
-    that matters is not recency: it is whether that tree's `setup-rust`
-    exports `RUSTC_WRAPPER`. A newer commit lacking the export would be
-    just as wrong, and would be caught by the measurement rather than
-    here, but these six are the ones this repository can reach today:
-    the two it sat on until the repin, and four a dependency bump or a
-    revert can propose.
+    The first version of this contract named the pins known to lack the
+    wrapper export. A reviewer pointed out the hole: any commit outside
+    that set passes every other rule here while restoring exactly the
+    no-cache state this file exists to prevent, and Dependabot chooses
+    from the whole history rather than from a list. A newer pin short of
+    the export reads as pins brought up to date, which is how this
+    repository got into the state the repin fixed.
+
+    Refusing an unknown pin fails closed and costs a verification. That
+    verification is the work the contract is asking for: check the pin
+    descends from the export commit on shared-actions' default branch,
+    then add it here with that evidence in the comment.
     """
     for reference in shared_actions_references(workflow_texts):
-        assert reference.ref not in WRAPPER_LESS_PINS, (
+        assert reference.ref in WRAPPER_EXPORTING_PINS, (
             f"{reference.workflow} pins {reference.path} at "
-            f"{reference.ref[:8]}, whose setup-rust exports no RUSTC_WRAPPER; "
-            f"sccache would be installed and started on every Rust job and "
-            f"used by nothing. The export landed on shared-actions at "
-            f"c6125f1 on 2026-09-04; Dependabot's #164 proposes 57a33fa6, "
-            f"which is newer than the old pins and still short of it"
+            f"{reference.ref[:8]}, which is not on the list of pins verified "
+            f"to export RUSTC_WRAPPER. If sccache is installed and the "
+            f"wrapper is not exported, it is started on every Rust job and "
+            f"used by nothing, and the only symptom is a slow lane. The "
+            f"export landed on shared-actions at {WRAPPER_EXPORT_COMMIT} on "
+            f"2026-09-04: confirm this pin descends from it on the default "
+            f"branch, then add it to WRAPPER_EXPORTING_PINS with that "
+            f"evidence rather than widening the rule"
         )
 
 
@@ -195,10 +210,20 @@ def test_the_contracts_are_run_by_ci(workflow_texts: dict[str, str]) -> None:
         for job in of_type(document.get("jobs"), dict).values()
         for step in of_type(of_type(job, dict).get("steps"), list)
     ]
-    running = [step for step in steps if CONTRACT_COMMAND in str(step.get("run", ""))]
+    # An equality on the normalized command, not a substring search. A
+    # search is satisfied by `echo 'make workflow-contracts'`, by the text
+    # in a shell comment, and by any command that merely mentions it, so a
+    # contract written that way asserts that the string appears rather than
+    # that the contracts run. That is the defect this contract exists to
+    # refuse, one level up.
+    running = [
+        step for step in steps if str(step.get("run", "")).strip() == CONTRACT_COMMAND
+    ]
 
     assert len(running) == 1, (
-        f"exactly one step in ci.yml must run {CONTRACT_COMMAND!r}; {len(running)} do"
+        f"exactly one step in ci.yml must run exactly {CONTRACT_COMMAND!r}; "
+        f"{len(running)} do. A step whose run: merely contains that text, "
+        f"such as an echo or a comment, does not count"
     )
     assert "if" not in running[0], (
         f"the step running {CONTRACT_COMMAND!r} is guarded by "

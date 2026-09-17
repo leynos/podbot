@@ -108,6 +108,8 @@ workflow-contracts: ## Assert what the workflow files must say
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(WORKFLOW_PY_SRCS)
 	@$(WORKFLOW_PYTEST) scripts/tests/test_workflow_contracts.py \
 		scripts/tests/test_runner_placement_rule.py \
+		scripts/workflow_contracts.py scripts/workflow_placement.py \
+		--doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 
 nixie: ## Validate Mermaid diagrams
