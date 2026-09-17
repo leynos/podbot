@@ -22,6 +22,7 @@ run is not evidence that it is absent.
 from __future__ import annotations
 
 import pathlib
+import collections.abc as cabc
 import typing as typ
 
 import yaml
@@ -33,31 +34,37 @@ import yaml
 #: nobody thought to add.
 SHARED_ACTIONS_PREFIX: typ.Final[str] = "leynos/shared-actions/"
 
-#: Pins of the shared-actions repository whose `setup-rust` installs
-#: sccache and exports no `RUSTC_WRAPPER`, so Cargo routes no
-#: compilation through it. A reference on any of these leaves sccache
-#: downloaded and started on every Rust job, caching nothing and
-#: reporting nothing.
+#: Pins of the shared-actions repository whose `setup-rust` is known to
+#: export `RUSTC_WRAPPER` and select a backend, so a reference on one of
+#: them compiles through sccache.
 #:
-#: The export landed on shared-actions at `c6125f1` on 2026-09-04, so
-#: every commit before it belongs to this class. These six are the ones
-#: reachable from this repository today: the last two are what every
-#: reference here sat on until the repin that added this file, and
-#: `57a33fa6` is what Dependabot's open group bump (#164) proposes. That
-#: one moves the pins three weeks FORWARD and still stops short of the
-#: export, so it reads as pins being brought up to date while leaving
-#: the cache off. Being newer is not the property that matters; carrying
-#: the export is.
-WRAPPER_LESS_PINS: typ.Final[frozenset[str]] = frozenset(
+#: An allowlist, and the direction matters more than the contents. The
+#: first draft of this contract named the pins known to be *wrapper-less*,
+#: and a reviewer pointed out that the set cannot be complete: any commit
+#: outside it passes every other rule here while restoring exactly the
+#: no-cache state this file exists to prevent, and Dependabot chooses from
+#: the whole history rather than from a list. Refusing an unknown pin
+#: until someone checks it fails closed; accepting one until someone
+#: blacklists it fails open, and the failure is silent because a cache
+#: that is never consulted reports nothing.
+#:
+#: The export landed at `c6125f1` on 2026-09-04. A descendant of it on
+#: shared-actions' default branch belongs here, once someone has verified
+#: that descent; that verification is the cost of a repin, and it is the
+#: work this contract is asking for rather than an obstacle to it.
+WRAPPER_EXPORTING_PINS: typ.Final[frozenset[str]] = frozenset(
     {
-        "074f7d8ba75a6e5d18532b72cbe38fccbda4e9c6",
-        "18bed1ca49a6de3d8882bd72635a32ae3f023d57",
-        "32c8ea649ea44d40119f348ad48861212532061f",
-        "57a33fa65e329db7edc81ece661f1a2e1d39868f",
-        "1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7",
-        "d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8",
+        # 0e3c4d24, 2026-09-14. Verified descendant of `c6125f1`, and of
+        # both pins this repository used before the repin that added this
+        # file.
+        "0e3c4d24e43aa48b511d94f3b902711eb02138df",
     }
 )
+
+#: The commit at which `setup-rust` began exporting the wrapper, named so
+#: a diagnostic can tell a reader what to check rather than only that the
+#: pin is unknown.
+WRAPPER_EXPORT_COMMIT: typ.Final[str] = "c6125f1"
 
 #: The action whose cargo invocation the watchdog bounds.
 COVERAGE_ACTION: typ.Final[str] = (
@@ -105,7 +112,7 @@ class SharedActionsReference(typ.NamedTuple):
 def load_workflow_documents(
     directory: pathlib.Path | None = None,
 ) -> dict[str, str]:
-    """Return every workflow file's text, keyed by file name.
+    r"""Return every workflow file's text, keyed by file name.
 
     Both YAML extensions are read: a lane in the other one would
     otherwise escape every contract without failing anything.
@@ -124,6 +131,15 @@ def load_workflow_documents(
     ------
     WorkflowReadError
         If a file cannot be read or decoded.
+
+    Examples
+    --------
+    >>> import pathlib, tempfile
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     path = pathlib.Path(directory, "ci.yml")
+    ...     _ = path.write_text("jobs: {}\n", encoding="utf-8")
+    ...     sorted(load_workflow_documents(pathlib.Path(directory)))
+    ['ci.yml']
     """
     directory = WORKFLOWS_DIRECTORY if directory is None else directory
     texts: dict[str, str] = {}
@@ -137,7 +153,7 @@ def load_workflow_documents(
 
 
 def parse(workflow: str, text: str) -> dict[str, object]:
-    """Return one workflow's parsed document.
+    r"""Return one workflow's parsed document.
 
     Parameters
     ----------
@@ -155,6 +171,11 @@ def parse(workflow: str, text: str) -> dict[str, object]:
     ------
     WorkflowReadError
         If the text is not a YAML mapping.
+
+    Examples
+    --------
+    >>> parse("ci.yml", "jobs:\n  build:\n    runs-on: ubuntu-latest\n")
+    {'jobs': {'build': {'runs-on': 'ubuntu-latest'}}}
     """
     try:
         document = yaml.safe_load(text)
@@ -242,19 +263,28 @@ def _reference(workflow: str, value: object) -> SharedActionsReference | None:
 
 
 def shared_actions_references(
-    texts: typ.Mapping[str, str],
+    texts: cabc.Mapping[str, str],
 ) -> tuple[SharedActionsReference, ...]:
-    """Return every `uses:` naming the shared-actions repository.
+    r"""Return every `uses:` naming the shared-actions repository.
 
     Parameters
     ----------
-    texts : typ.Mapping[str, str]
+    texts : cabc.Mapping[str, str]
         Workflow file name to file text.
 
     Returns
     -------
     tuple[SharedActionsReference, ...]
         One entry per reference, in file and job order.
+
+    Examples
+    --------
+    >>> text = (
+    ...     "jobs:\n  build:\n    steps:\n"
+    ...     "      - uses: leynos/shared-actions/.github/actions/setup-rust@abc\n"
+    ... )
+    >>> [(r.path.rsplit("/", 1)[-1], r.ref) for r in shared_actions_references({"ci.yml": text})]
+    [('setup-rust', 'abc')]
     """
     return tuple(
         reference
@@ -265,12 +295,19 @@ def shared_actions_references(
     )
 
 
-def watchdog_of(document: dict[str, object], job: dict[str, object]) -> object:
-    """Return the watchdog budget in force for one job.
+def watchdog_of(
+    document: dict[str, object],
+    job: dict[str, object],
+    step: dict[str, object] | None = None,
+) -> object:
+    """Return the watchdog budget in force for one coverage step.
 
-    Both levels GitHub resolves are read, innermost first. A contract
-    reading only the job would report a workflow-level declaration as
-    absent, which is exactly backwards.
+    All three levels GitHub resolves are read, innermost first: the step's
+    own `env`, then the job's, then the workflow's. A contract reading only
+    the job reports the job's value while the action receives the step's,
+    so it can assert that 1800 is in force when it is not. A contract
+    reading only the job would equally report a workflow-level declaration
+    as absent, which is the same error in the other direction.
 
     Parameters
     ----------
@@ -278,6 +315,9 @@ def watchdog_of(document: dict[str, object], job: dict[str, object]) -> object:
         The whole workflow document.
     job : dict[str, object]
         The parsed job.
+    step : dict[str, object] or None
+        The coverage step, when the caller has matched one. Omitted only
+        by a caller that has no step in hand.
 
     Returns
     -------
@@ -286,8 +326,18 @@ def watchdog_of(document: dict[str, object], job: dict[str, object]) -> object:
         The value is returned as written so a contract can refuse a
         blank declaration, which parses to "" or to None depending on
         its spelling and masks the outer scope either way.
+
+    Examples
+    --------
+    >>> document = {"env": {"RUN_RUST_CARGO_WAIT_TIMEOUT": "600"}}
+    >>> job = {"env": {"RUN_RUST_CARGO_WAIT_TIMEOUT": "1800"}}
+    >>> watchdog_of(document, job)
+    '1800'
+    >>> watchdog_of(document, job, {"env": {"RUN_RUST_CARGO_WAIT_TIMEOUT": "60"}})
+    '60'
     """
-    for owner in (job, document):
+    scopes = (step, job, document) if step is not None else (job, document)
+    for owner in scopes:
         env = of_type(owner.get("env"), dict)
         if WATCHDOG_VARIABLE in env:
             return env[WATCHDOG_VARIABLE]
@@ -295,19 +345,30 @@ def watchdog_of(document: dict[str, object], job: dict[str, object]) -> object:
 
 
 def coverage_jobs(
-    texts: typ.Mapping[str, str],
+    texts: cabc.Mapping[str, str],
 ) -> tuple[tuple[str, str, object], ...]:
-    """Return every job invoking the coverage action, with its watchdog.
+    r"""Return every job invoking the coverage action, with its watchdog.
 
     Parameters
     ----------
-    texts : typ.Mapping[str, str]
+    texts : cabc.Mapping[str, str]
         Workflow file name to file text.
 
     Returns
     -------
     tuple[tuple[str, str, object], ...]
         Workflow name, job name and declared watchdog value.
+
+    Examples
+    --------
+    >>> text = (
+    ...     "jobs:\n  test:\n    env:\n"
+    ...     "      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'\n"
+    ...     "    steps:\n      - uses: "
+    ...     "leynos/shared-actions/.github/actions/generate-coverage@abc\n"
+    ... )
+    >>> coverage_jobs({"ci.yml": text})
+    (('ci.yml', 'test', '1800'),)
     """
     found: list[tuple[str, str, object]] = []
     for workflow, text in texts.items():
@@ -317,7 +378,16 @@ def coverage_jobs(
             steps = [
                 of_type(step, dict) for step in of_type(job_map.get("steps"), list)
             ]
-            if not any(COVERAGE_ACTION in str(step.get("uses", "")) for step in steps):
+            coverage = [
+                step for step in steps if COVERAGE_ACTION in str(step.get("uses", ""))
+            ]
+            if not coverage:
                 continue
-            found.append((workflow, str(name), watchdog_of(document, job_map)))
+            # One entry per coverage step, not per job. A job invoking the
+            # action twice gets two watchdogs, and reporting one would hide
+            # whichever step disagreed.
+            found.extend(
+                (workflow, str(name), watchdog_of(document, job_map, step))
+                for step in coverage
+            )
     return tuple(found)

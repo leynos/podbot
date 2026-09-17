@@ -1408,3 +1408,53 @@ When adding another repository source or clone option:
 4. Add BDD scenarios for user-visible success and failure paths.
 5. Update this section, `docs/users-guide.md`, and any roadmap or ExecPlan that
    describes the changed clone contract.
+
+## 19. Workflow contract readers
+
+`scripts/workflow_contracts.py` and `scripts/workflow_placement.py` turn the
+files in `.github/workflows/` into values the contracts in `scripts/tests/`
+assert against. They are kept apart from those contracts for two reasons.
+
+A reader can be wrong while no workflow is wrong, and a reader exercised only
+against this repository's own files cannot show that: parametrized over four
+correct documents it passes whether or not it discriminates anything.
+Separating the reading lets a contract drive it with documents built in the
+test, including shapes this repository does not contain and should never
+contain.
+
+The raw text also matters as much as the parsed value. A folded scalar whose
+continuation is indented more deeply than its first line keeps the line
+break, and the resulting `runs-on` carries a newline inside an expression
+GitHub evaluates anyway. The parse tolerates it, so a reader returning only
+the parsed value cannot refuse it.
+
+### `of_type`, and why it is shared
+
+`of_type(value, kind)` returns `value` when it has the expected shape and an
+empty instance of `kind` otherwise. Both reader modules use it.
+
+**Scope.** Walking a parsed workflow document, and nothing else. A workflow
+is a tree of `object`, and every step of a walk down it has to say what it
+expected and what to do when the file says something else. Returning "an
+empty one of those" keeps the walks flat and keeps a malformed file from
+raising out of what reads like a query.
+
+**Permitted call sites.** The two reader modules only. It is deliberately
+not exported for use in production code under `src/`: swallowing an
+unexpected shape is the right behaviour when surveying a configuration file
+and the wrong behaviour almost everywhere else, where the unexpected shape
+is the bug you want to hear about.
+
+**Composition.** It is a narrowing step inside a walk, never the last word.
+A contract that cares whether a value was absent or malformed must check
+that itself before or after the walk; `of_type` cannot tell those apart by
+design, and a caller relying on it to do so has misread it. Where a shape
+genuinely cannot be read, the reader raises `WorkflowReadError` rather than
+returning an empty value, so that a refusal is distinguishable from an
+absence.
+
+**Why not two copies.** The sweep before writing it found no equivalent in
+this repository. Both modules walk the same document shape, and two copies
+would drift: the failure mode is one module tolerating a shape the other
+refuses, which makes a contract's verdict depend on which module happened
+to read the file.
