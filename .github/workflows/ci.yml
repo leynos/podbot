@@ -14,6 +14,18 @@ jobs:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
       WHITAKER_INSTALLER_VERSION: '0.2.7'
+      # Pinned rather than inherited. `generate-coverage` defaults the
+      # cargo watchdog to 1800 s, sized for a cold sccache store; stating
+      # the same value here means a later change to the action's default
+      # cannot silently move the budget this job runs under. The measured
+      # worst case for the coverage step is 487 s (run 31733608869), so
+      # 1800 s is about 3.7 times the worst seen. This job passes
+      # `use-cargo-nextest: 'false'`, so cargo carries no inner test
+      # timer and the watchdog is the only one bounding it. The
+      # environment variable wins over the action's `cargo-wait-timeout`
+      # input, which is why it is set here and at job level, where every
+      # step can see it.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
@@ -28,6 +40,12 @@ jobs:
       # suite asserts this exact step.
       - name: Workflow contracts
         run: make test-workflow-contracts
+      - name: Workflow contracts
+        # Unguarded and named by its command: a step with an `if:` can be
+        # skipped without failing anything, and a step matched by name
+        # keeps asserting nothing if its `run:` is changed. The contract
+        # next door asserts this exact command.
+        run: make workflow-contracts
       - name: Format
         run: make check-fmt
       - name: Enforce en-GB-oxendict spelling
@@ -94,6 +112,15 @@ jobs:
           format: lcov
           use-cargo-nextest: 'false'
           with-ratchet: 'true'
+      - name: Report compiler cache effectiveness
+        # After the compiling steps and on failure too, because a red lane
+        # is exactly when "did anything reach the cache" is worth knowing.
+        # This is the evidence for the repin above: on the pins this job
+        # used before, sccache was installed and started on every run and
+        # Cargo routed nothing through it, so these counters were all zero
+        # and nobody was looking.
+        if: always()
+        run: sccache --show-stats
       - name: Set up Rust for Merman
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master
         with:

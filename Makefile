@@ -1,6 +1,7 @@
 .PHONY: help all clean test build release lint typecheck fmt check-fmt audit rust-audit \
         markdownlint nixie spelling spelling-config spelling-config-write \
-        spelling-phrase-check spelling-helper-test test-workflow-contracts
+        spelling-phrase-check spelling-helper-test test-workflow-contracts \
+        workflow-contracts
 
 SHELL := bash
 
@@ -37,11 +38,17 @@ WORKFLOW_CONTRACTS_DIR := tests/workflow_contracts
 WORKFLOW_CONTRACTS_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
 	--with pytest==9.0.2 --with pyyaml==$(PYYAML_VERSION) \
 	--with hypothesis==$(HYPOTHESIS_VERSION) python -m pytest
+WORKFLOW_PY_SRCS := \
+	scripts/workflow_contracts.py scripts/workflow_placement.py \
+	scripts/tests/test_workflow_contracts.py \
+	scripts/tests/test_runner_placement_rule.py
+WORKFLOW_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
+	--with pytest==9.0.2 --with pyyaml==6.0.3 python -m pytest
 
 build: target/debug/$(TARGET) ## Build debug binary
 release: target/release/$(TARGET) ## Build release binary
 
-all: check-fmt lint test-workflow-contracts test spelling ## Perform a comprehensive check of code
+all: check-fmt lint test-workflow-contracts workflow-contracts test spelling ## Perform a comprehensive check of code
 
 clean: ## Remove build artefacts
 	$(CARGO) clean
@@ -95,6 +102,13 @@ test-workflow-contracts: ## Assert what the workflow files must say
 	$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(WORKFLOW_CONTRACTS_DIR)
 	$(WORKFLOW_CONTRACTS_PYTEST) $(WORKFLOW_CONTRACTS_DIR) --doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider -q
+
+workflow-contracts: ## Assert what the workflow files must say
+	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(WORKFLOW_PY_SRCS)
+	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(WORKFLOW_PY_SRCS)
+	@$(WORKFLOW_PYTEST) scripts/tests/test_workflow_contracts.py \
+		scripts/tests/test_runner_placement_rule.py \
+		-c /dev/null --rootdir=. -p no:cacheprovider
 
 nixie: ## Validate Mermaid diagrams
 	$(NIXIE) --no-sandbox
