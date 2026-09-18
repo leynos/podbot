@@ -75,6 +75,12 @@ COVERAGE_ACTION: typ.Final[str] = (
     "leynos/shared-actions/.github/actions/generate-coverage"
 )
 
+#: The command that reports what reached the compiler cache. The repin
+#: this contract guards is only observable through these counters, so a
+#: report step that is absent, guarded, or placed before the compiling
+#: work would leave the repin unevidenced while every other rule passed.
+CACHE_REPORT_COMMAND: typ.Final[str] = "sccache --show-stats"
+
 #: The variable naming that watchdog. It takes precedence over the
 #: action's `cargo-wait-timeout` input, so a caller pinning the budget
 #: sets it here.
@@ -515,4 +521,110 @@ def command_steps(document: dict[str, object], command: str) -> tuple[CommandSte
                     step_guard=step_map.get("if"),
                 )
             )
+    return tuple(found)
+
+
+class CacheReport(typ.NamedTuple):
+    """Where a cache report sits relative to the coverage step that precedes it.
+
+    Attributes
+    ----------
+    workflow : str
+        The workflow file's name.
+    job : str
+        The owning job's name.
+    coverage_index : int
+        The coverage step's position in the job's step list.
+    report_index : int
+        The report step's position, or -1 when the job has none.
+    guard : object
+        The report step's `if:`, or `None`.
+    """
+
+    workflow: str
+    job: str
+    coverage_index: int
+    report_index: int
+    guard: object
+
+    @property
+    def follows_coverage(self) -> bool:
+        """Report whether a report step exists after the coverage step.
+
+        Returns
+        -------
+        bool
+            True when a report step was found at a later index.
+
+        Examples
+        --------
+        >>> CacheReport("ci.yml", "test", 3, 4, "always()").follows_coverage
+        True
+        >>> CacheReport("ci.yml", "test", 3, 1, "always()").follows_coverage
+        False
+        >>> CacheReport("ci.yml", "test", 3, -1, None).follows_coverage
+        False
+        """
+        return self.report_index > self.coverage_index
+
+
+def cache_reports(texts: cabc.Mapping[str, str]) -> tuple[CacheReport, ...]:
+    r"""Return one entry per coverage step, with the cache report that follows it.
+
+    An entry is produced whether or not a report was found, so a missing
+    report is a row with `report_index` of -1 rather than an absent row. A
+    reader that simply omitted the job would make "no report anywhere" and
+    "no coverage job at all" the same empty answer, and the contract could
+    not tell which it was looking at.
+
+    Parameters
+    ----------
+    texts : cabc.Mapping[str, str]
+        Workflow file name to file text.
+
+    Returns
+    -------
+    tuple[CacheReport, ...]
+        One entry per coverage step.
+
+    Examples
+    --------
+    >>> text = (
+    ...     "jobs:\n  test:\n    steps:\n      - uses: "
+    ...     "leynos/shared-actions/.github/actions/generate-coverage@abc\n"
+    ...     "      - if: always()\n        run: sccache --show-stats\n"
+    ... )
+    >>> found = cache_reports({"ci.yml": text})
+    >>> found[0].follows_coverage, found[0].guard
+    (True, 'always()')
+    """
+    found: list[CacheReport] = []
+    for workflow, text in texts.items():
+        document = parse(workflow, text)
+        for name, job in of_type(document.get("jobs"), dict).items():
+            steps = [
+                of_type(step, dict)
+                for step in of_type(of_type(job, dict).get("steps"), list)
+            ]
+            reports = [
+                index
+                for index, step in enumerate(steps)
+                if str(step.get("run", "")).strip() == CACHE_REPORT_COMMAND
+            ]
+            for coverage_index, step in enumerate(steps):
+                if str(step.get("uses", "")).partition("@")[0] != COVERAGE_ACTION:
+                    continue
+                later = [index for index in reports if index > coverage_index]
+                report_index = later[0] if later else -1
+                found.append(
+                    CacheReport(
+                        workflow=workflow,
+                        job=str(name),
+                        coverage_index=coverage_index,
+                        report_index=report_index,
+                        guard=(
+                            steps[report_index].get("if") if report_index >= 0 else None
+                        ),
+                    )
+                )
     return tuple(found)
