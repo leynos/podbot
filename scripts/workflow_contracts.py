@@ -568,6 +568,83 @@ class CacheReport(typ.NamedTuple):
         return self.report_index > self.coverage_index
 
 
+def _report_indices(steps: list[dict[str, object]]) -> list[int]:
+    """Return the positions of the steps running exactly the report command.
+
+    Equality on the stripped value, not a search: `echo sccache --show-stats`
+    is a step that reports nothing.
+
+    Parameters
+    ----------
+    steps : list[dict[str, object]]
+        One job's steps, in order.
+
+    Returns
+    -------
+    list[int]
+        Each matching step's index.
+
+    Examples
+    --------
+    >>> _report_indices([{"run": "make"}, {"run": "sccache --show-stats"}])
+    [1]
+    >>> _report_indices([{"run": "echo sccache --show-stats"}])
+    []
+    """
+    return [
+        index
+        for index, step in enumerate(steps)
+        if str(step.get("run", "")).strip() == CACHE_REPORT_COMMAND
+    ]
+
+
+def _reports_in(
+    workflow: str, job: str, steps: list[dict[str, object]]
+) -> list[CacheReport]:
+    """Return one entry per coverage step in one job.
+
+    Parameters
+    ----------
+    workflow : str
+        The workflow file's name.
+    job : str
+        The job's name.
+    steps : list[dict[str, object]]
+        The job's steps, in order.
+
+    Returns
+    -------
+    list[CacheReport]
+        One entry per coverage step, in order.
+
+    Examples
+    --------
+    >>> steps = [
+    ...     {"uses": COVERAGE_ACTION + "@abc"},
+    ...     {"if": "always()", "run": CACHE_REPORT_COMMAND},
+    ... ]
+    >>> _reports_in("ci.yml", "test", steps)[0].follows_coverage
+    True
+    """
+    reports = _report_indices(steps)
+    found: list[CacheReport] = []
+    for index, step in enumerate(steps):
+        if str(step.get("uses", "")).partition("@")[0] != COVERAGE_ACTION:
+            continue
+        later = [position for position in reports if position > index]
+        report_index = later[0] if later else -1
+        found.append(
+            CacheReport(
+                workflow=workflow,
+                job=job,
+                coverage_index=index,
+                report_index=report_index,
+                guard=steps[report_index].get("if") if report_index >= 0 else None,
+            )
+        )
+    return found
+
+
 def cache_reports(texts: cabc.Mapping[str, str]) -> tuple[CacheReport, ...]:
     r"""Return one entry per coverage step, with the cache report that follows it.
 
@@ -606,25 +683,5 @@ def cache_reports(texts: cabc.Mapping[str, str]) -> tuple[CacheReport, ...]:
                 of_type(step, dict)
                 for step in of_type(of_type(job, dict).get("steps"), list)
             ]
-            reports = [
-                index
-                for index, step in enumerate(steps)
-                if str(step.get("run", "")).strip() == CACHE_REPORT_COMMAND
-            ]
-            for coverage_index, step in enumerate(steps):
-                if str(step.get("uses", "")).partition("@")[0] != COVERAGE_ACTION:
-                    continue
-                later = [index for index in reports if index > coverage_index]
-                report_index = later[0] if later else -1
-                found.append(
-                    CacheReport(
-                        workflow=workflow,
-                        job=str(name),
-                        coverage_index=coverage_index,
-                        report_index=report_index,
-                        guard=(
-                            steps[report_index].get("if") if report_index >= 0 else None
-                        ),
-                    )
-                )
+            found.extend(_reports_in(workflow, str(name), steps))
     return tuple(found)
