@@ -53,8 +53,8 @@ from workflow_contracts import (  # noqa: E402 - must follow the sys.path bootst
     WATCHDOG_VARIABLE,
     WRAPPER_EXPORT_COMMIT,
     WRAPPER_EXPORTING_PINS,
+    command_steps,
     load_workflow_documents,
-    of_type,
     shared_actions_references,
 )
 from workflow_contracts import parse as parse_workflow  # noqa: E402 - must follow the sys.path bootstrap above
@@ -195,40 +195,116 @@ def test_every_coverage_job_states_its_watchdog(
         )
 
 
+def test_a_longer_action_path_is_not_the_coverage_action() -> None:
+    """The reader matches the path exactly, not as a substring.
+
+    A substring also selects an action whose path extends this one, such as
+    a `generate-coverage-disabled`. The discovery assertion next door only
+    checks the result is non-empty, so a false-positive match would satisfy
+    it and the watchdog assertion would then be about the wrong step.
+
+    Driven over a constructed workflow because this repository contains no
+    such action: parametrized over the real files the rule passes whether it
+    compares paths or searches for text.
+    """
+    text = (
+        "jobs:\n  test:\n    env:\n"
+        f"      {WATCHDOG_VARIABLE}: '1800'\n"
+        "    steps:\n"
+        f"      - uses: {COVERAGE_ACTION}-disabled@abc\n"
+        f"      - uses: {COVERAGE_ACTION}-v2@abc\n"
+    )
+
+    assert coverage_jobs_in({"ci.yml": text}) == ()
+
+
+def test_the_coverage_action_itself_is_found_at_any_ref() -> None:
+    """Narrow as well as sufficient: the real path must still match.
+
+    A rule that refused everything would pass the test above and break the
+    contract it serves, so the accepting case is asserted beside it.
+    """
+    text = (
+        "jobs:\n  test:\n    env:\n"
+        f"      {WATCHDOG_VARIABLE}: '1800'\n"
+        "    steps:\n"
+        f"      - uses: {COVERAGE_ACTION}@0123456789abcdef0123456789abcdef01234567\n"
+    )
+
+    assert coverage_jobs_in({"ci.yml": text}) == (("ci.yml", "test", "1800"),)
+
+
 def test_the_contracts_are_run_by_ci(workflow_texts: dict[str, str]) -> None:
     """A contract nothing runs is a comment.
 
     The assertion is on the command rather than on a step named
     "Workflow contracts": a step can be renamed, and a step whose `run:`
     was changed to something else would keep the name and stop asserting
-    anything. It is also unguarded, so there is no `if:` that could
-    leave it as dead code.
+    anything. Equality on the stripped value, not a substring search, since
+    a search is satisfied by `echo 'make workflow-contracts'`.
+
+    Both guards are checked. A step with no `if:` inside a job with
+    `if: false` is dead code, and a contract reading only the step's own
+    attributes stays green while the command never runs.
     """
     document = parse_workflow("ci.yml", workflow_texts["ci.yml"])
-    steps = [
-        of_type(step, dict)
-        for job in of_type(document.get("jobs"), dict).values()
-        for step in of_type(of_type(job, dict).get("steps"), list)
-    ]
-    # An equality on the normalized command, not a substring search. A
-    # search is satisfied by `echo 'make workflow-contracts'`, by the text
-    # in a shell comment, and by any command that merely mentions it, so a
-    # contract written that way asserts that the string appears rather than
-    # that the contracts run. That is the defect this contract exists to
-    # refuse, one level up.
-    running = [
-        step for step in steps if str(step.get("run", "")).strip() == CONTRACT_COMMAND
-    ]
+    running = command_steps(document, CONTRACT_COMMAND)
 
     assert len(running) == 1, (
         f"exactly one step in ci.yml must run exactly {CONTRACT_COMMAND!r}; "
         f"{len(running)} do. A step whose run: merely contains that text, "
         f"such as an echo or a comment, does not count"
     )
-    assert "if" not in running[0], (
-        f"the step running {CONTRACT_COMMAND!r} is guarded by "
-        f"{running[0]['if']!r}, so it can be skipped without failing anything"
+    assert running[0].can_run, (
+        f"the step running {CONTRACT_COMMAND!r} in job {running[0].job!r} is "
+        f"guarded by {running[0].describe_guards()}, so it can be skipped "
+        "without failing anything"
     )
+
+
+@pytest.mark.parametrize(
+    ("job_guard", "step_guard", "can_run"),
+    [
+        ("", "", True),
+        ("    if: false\n", "", False),
+        ("", "        if: false\n", False),
+        ("    if: ${{ github.event_name == 'push' }}\n", "", False),
+        ("", "        if: ${{ false }}\n", False),
+    ],
+    ids=["unguarded", "job-guard", "step-guard", "job-expression", "step-expression"],
+)
+def test_a_guard_at_either_scope_stops_the_command_running(
+    job_guard: str, step_guard: str, can_run: bool
+) -> None:
+    """Driven over constructed workflows, because the real one is unguarded.
+
+    The contract above is parametrized over a file that has no `if:`
+    anywhere, so it passes whether or not the rule reads the job. Only a
+    constructed guarded job shows the job scope being read at all.
+    """
+    text = (
+        "jobs:\n  lint:\n"
+        f"{job_guard}"
+        "    steps:\n"
+        f"      - run: {CONTRACT_COMMAND}\n"
+        f"{step_guard}"
+    )
+    found = command_steps(parse_workflow("ci.yml", text), CONTRACT_COMMAND)
+
+    assert len(found) == 1
+    assert found[0].job == "lint"
+    assert found[0].can_run is can_run
+
+
+def test_a_mentioned_command_is_not_a_running_one() -> None:
+    """Equality, shown to reject the spellings a search accepts."""
+    text = (
+        "jobs:\n  lint:\n    steps:\n"
+        f"      - run: echo '{CONTRACT_COMMAND}'\n"
+        f"      - run: '# {CONTRACT_COMMAND}'\n"
+        f"      - run: {CONTRACT_COMMAND} --dry-run\n"
+    )
+    assert command_steps(parse_workflow("ci.yml", text), CONTRACT_COMMAND) == ()
 
 
 def test_no_runner_placement_carries_a_line_break(
