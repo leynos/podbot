@@ -1428,7 +1428,24 @@ break, and the resulting `runs-on` carries a newline inside an expression
 GitHub evaluates anyway. The parse tolerates it, so a reader returning only
 the parsed value cannot refuse it.
 
-### `of_type`, and why it is shared
+### 19.1. Running the contracts
+
+```bash
+make workflow-contracts
+```
+
+The target runs four things over `scripts/workflow_contracts.py`,
+`scripts/workflow_placement.py` and their tests: a Ruff format check, a Ruff
+lint pass, the contract tests themselves, and the modules' doctests, which
+`--doctest-modules` collects so a documented example is executed rather than
+merely read. It is part of `make all`, and CI runs it as an unguarded step
+whose `run:` is asserted to be exactly this command.
+
+Ruff runs `--isolated` at a pinned version, so these files are checked the
+same way wherever the target is invoked. The target needs Python 3.14 and
+`pytest`, both supplied by `uv` at the pinned versions named in the Makefile.
+
+### 19.2. `of_type`, and why it is shared
 
 `of_type(value, kind)` returns `value` when it has the expected shape and an
 empty instance of `kind` otherwise. Both reader modules use it.
@@ -1443,7 +1460,7 @@ raising out of what reads like a query.
 not exported for use in production code under `src/`: swallowing an
 unexpected shape is the right behaviour when surveying a configuration file
 and the wrong behaviour almost everywhere else, where the unexpected shape
-is the bug you want to hear about.
+is a defect that must remain visible.
 
 **Composition.** It is a narrowing step inside a walk, never the last word.
 A contract that cares whether a value was absent or malformed must check
