@@ -426,6 +426,13 @@ class CommandStep(typ.NamedTuple):
         -------
         bool
             True when neither the step nor its job declares an `if:`.
+
+        Examples
+        --------
+        >>> CommandStep("lint", None, None).can_run
+        True
+        >>> CommandStep("lint", False, None).can_run
+        False
         """
         return self.job_guard is None and self.step_guard is None
 
@@ -436,6 +443,13 @@ class CommandStep(typ.NamedTuple):
         -------
         str
             A description naming each guard, or "nothing" when unguarded.
+
+        Examples
+        --------
+        >>> CommandStep("lint", False, "${{ false }}").describe_guards()
+        "job if: False; step if: '${{ false }}'"
+        >>> CommandStep("lint", None, None).describe_guards()
+        'nothing'
         """
         parts = [
             f"{scope} if: {guard!r}"
