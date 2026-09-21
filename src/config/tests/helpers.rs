@@ -7,8 +7,12 @@ use rstest::fixture;
 use std::sync::Arc;
 
 /// Fixture providing an `AppConfig` parsed from a full TOML example.
+///
+/// A fixture arranges state and arrangement can fail, so the parse result is
+/// returned rather than ending the run here. Each test body decides that a
+/// parse failure is its verdict.
 #[fixture]
-pub fn app_config_from_full_toml() -> AppConfig {
+pub fn app_config_from_full_toml() -> Result<AppConfig, toml::de::Error> {
     let toml = r#"
         engine_socket = "unix:///run/podman/podman.sock"
         image = "ghcr.io/example/sandbox:latest"
@@ -30,17 +34,19 @@ pub fn app_config_from_full_toml() -> AppConfig {
         base_dir = "/home/user/work"
     "#;
 
-    toml::from_str(toml).expect("TOML parsing should succeed")
+    toml::from_str(toml)
 }
 
 /// Fixture providing an `AppConfig` parsed from a minimal TOML example.
+///
+/// Fallible for the same reason as [`app_config_from_full_toml`].
 #[fixture]
-pub fn app_config_from_partial_toml() -> AppConfig {
+pub fn app_config_from_partial_toml() -> Result<AppConfig, toml::de::Error> {
     let toml = r#"
         engine_socket = "unix:///tmp/docker.sock"
     "#;
 
-    toml::from_str(toml).expect("TOML parsing should succeed")
+    toml::from_str(toml)
 }
 
 /// Fixture providing a fully configured `GitHubConfig`.

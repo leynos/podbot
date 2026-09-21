@@ -89,9 +89,14 @@ fn assert_protocol_start_options(options: &StartExecOptions) {
     );
 }
 
-fn assert_exit_code(result: Result<ExecResult, PodbotError>, expected: i64, context: &str) {
-    let exec_result = result.expect(context);
-    assert_eq!(exec_result.exit_code(), expected, "exit code should match");
+/// Asserts an exec result carries the expected exit code.
+///
+/// The helper takes the value rather than the `Result`, so deciding that an
+/// exec failure is the verdict stays with the test. The assertion itself
+/// stays in a helper because these tests return `TestResult`, and
+/// `clippy::panic_in_result_fn` denies an assertion in the body of one.
+fn assert_exit_code(exec_result: &ExecResult, expected: i64, context: &str) {
+    assert_eq!(exec_result.exit_code(), expected, "{context}");
 }
 
 #[rstest]
@@ -172,9 +177,10 @@ fn protocol_exec_maps_exit_code(
     setup_inspect_exec_once(&mut client, Some(case.inspect_exit_code));
 
     let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
-    let result = runtime_handle
-        .block_on(EngineConnector::exec_async_without_protocol_stdin_forwarding(&client, &request));
-    assert_exit_code(result, case.expected_exit_code, case.context);
+    let exec_result = runtime_handle.block_on(
+        EngineConnector::exec_async_without_protocol_stdin_forwarding(&client, &request),
+    )?;
+    assert_exit_code(&exec_result, case.expected_exit_code, case.context);
     Ok(())
 }
 
