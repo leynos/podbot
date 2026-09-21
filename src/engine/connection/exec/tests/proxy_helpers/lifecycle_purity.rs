@@ -1,6 +1,8 @@
 //! Lifecycle stream-purity tests covering startup, steady-state, shutdown, and
 //! error paths.
 
+use std::sync::PoisonError;
+
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use rstest::rstest;
@@ -12,7 +14,7 @@ use super::*;
     reason = "test helper needs all parameters to fully specify test case"
 )]
 fn run_stdout_purity_test(
-    runtime: RuntimeFixture,
+    runtime: &Runtime,
     output_chunks: Vec<Result<LogOutput, BollardError>>,
     expected_stdout: &[u8],
     success_msg: &str,
@@ -30,7 +32,9 @@ fn run_stdout_purity_test(
         RecordingWriter::new(),
     );
     assert!(result.is_ok(), "{success_msg}");
-    let captured = captured_stdout.lock().expect("mutex should not poison");
+    let captured = captured_stdout
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     assert_eq!(captured.as_slice(), expected_stdout, "{stdout_msg}");
 }
 
@@ -55,8 +59,9 @@ fn single_chunk_stdout_purity(
     #[case] success_msg: &'static str,
     #[case] stdout_msg: &'static str,
 ) {
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
     run_stdout_purity_test(
-        runtime,
+        &runtime_handle,
         vec![Ok(LogOutput::StdOut {
             message: payload.to_vec().into(),
         })],
@@ -71,8 +76,9 @@ fn single_chunk_stdout_purity(
 /// diagnostic bytes are injected.
 #[rstest]
 fn lifecycle_purity_no_stdout_bytes(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
     run_stdout_purity_test(
-        runtime,
+        &runtime_handle,
         Vec::new(),
         b"",
         "session should succeed even with no stdout",
@@ -84,6 +90,7 @@ fn lifecycle_purity_no_stdout_bytes(runtime: RuntimeFixture) {
 /// console bytes, routing stderr separately, and suppressing stdin echoes.
 #[rstest]
 fn steady_state_purity_mixed_streams(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
     let output_chunks = vec![
         Ok(LogOutput::StdOut {
             message: b"stdout-1".to_vec().into(),
@@ -111,7 +118,7 @@ fn steady_state_purity_mixed_streams(runtime: RuntimeFixture) {
     let captured_stdout = host_stdout.bytes.clone();
     let captured_stderr = host_stderr.bytes.clone();
     let result = run_session(
-        runtime,
+        &runtime_handle,
         b"",
         output,
         Box::pin(RecordingInputWriter::new()),
@@ -140,6 +147,7 @@ fn steady_state_purity_mixed_streams(runtime: RuntimeFixture) {
 /// when the daemon stream errors midway.
 #[rstest]
 fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
     let output_chunks = vec![
         Ok(LogOutput::StdOut {
             message: b"output-before-error".to_vec().into(),
@@ -154,7 +162,7 @@ fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
     let host_stdout = RecordingWriter::new();
     let captured_stdout = host_stdout.bytes.clone();
     let result = run_session(
-        runtime,
+        &runtime_handle,
         b"",
         output,
         Box::pin(RecordingInputWriter::new()),
@@ -168,7 +176,9 @@ fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
     );
     assert_exec_failed_message(result, "exec stream failed");
 
-    let captured = captured_stdout.lock().expect("mutex should not poison");
+    let captured = captured_stdout
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     assert_eq!(
         captured.as_slice(),
         b"output-before-error",
@@ -182,20 +192,23 @@ fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
 /// adding banners, diagnostics, or framing bytes to the protocol stdout path.
 #[rstest]
 fn regression_zero_bytes_before_first_and_after_last_proxied_byte(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
     let known_output = b"PROTOCOL_OUTPUT";
     let output_chunks = vec![Ok(LogOutput::StdOut {
         message: known_output.to_vec().into(),
     })];
     let output = make_output_stream(output_chunks);
 
-    let (result, captured_stdout) = run_lifecycle_session(runtime, b"", output);
+    let (result, captured_stdout) = run_lifecycle_session(&runtime_handle, b"", output);
 
     assert!(
         result.is_ok(),
         "regression test session should complete successfully"
     );
 
-    let captured = captured_stdout.lock().expect("mutex should not poison");
+    let captured = captured_stdout
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     assert_eq!(
         captured.as_slice(),
         known_output,
@@ -224,6 +237,8 @@ fn regression_stdout_bounded_buffering_preserves_all_bytes(runtime: RuntimeFixtu
     const TOTAL_SIZE: usize = 70 * 1024; // 70 KiB
     const CHUNK_SIZE: usize = 8 * 1024 + 123; // ~8 KiB, intentionally non-power-of-two
 
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
+
     let mut expected = Vec::with_capacity(TOTAL_SIZE);
     let mut output_chunks = Vec::new();
 
@@ -251,7 +266,7 @@ fn regression_stdout_bounded_buffering_preserves_all_bytes(runtime: RuntimeFixtu
 
     let output = make_output_stream(output_chunks);
 
-    let (result, captured_stdout) = run_lifecycle_session(runtime, b"", output);
+    let (result, captured_stdout) = run_lifecycle_session(&runtime_handle, b"", output);
 
     assert!(
         result.is_ok(),
@@ -260,7 +275,9 @@ fn regression_stdout_bounded_buffering_preserves_all_bytes(runtime: RuntimeFixtu
 
     // The host stdout must exactly equal the concatenation of all stdout chunks,
     // with no extra or missing bytes.
-    let captured = captured_stdout.lock().expect("mutex should not poison");
+    let captured = captured_stdout
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     assert_eq!(
         captured.as_slice(),
         expected.as_slice(),

@@ -92,82 +92,106 @@ fn app_config_workspace_defaults_to_work_dir() {
 }
 
 #[rstest]
-fn app_config_toml_sets_engine_socket_and_image(app_config_from_full_toml: AppConfig) {
+fn app_config_toml_sets_engine_socket_and_image(
+    #[from(app_config_from_full_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the full TOML example parses");
     assert_eq!(
-        app_config_from_full_toml.engine_socket.as_deref(),
+        config.engine_socket.as_deref(),
         Some("unix:///run/podman/podman.sock")
     );
     assert_eq!(
-        app_config_from_full_toml.image.as_deref(),
+        config.image.as_deref(),
         Some("ghcr.io/example/sandbox:latest")
     );
 }
 
 #[rstest]
-fn app_config_toml_sets_github_ids(app_config_from_full_toml: AppConfig) {
-    assert_eq!(app_config_from_full_toml.github.app_id, Some(12345));
+fn app_config_toml_sets_github_ids(
+    #[from(app_config_from_full_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the full TOML example parses");
+    assert_eq!(config.github.app_id, Some(12345));
+    assert_eq!(config.github.installation_id, Some(67890));
+}
+
+#[rstest]
+fn app_config_toml_sets_sandbox_flags(
+    #[from(app_config_from_full_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the full TOML example parses");
+    assert!(config.sandbox.privileged);
+    assert!(!config.sandbox.mount_dev_fuse);
+}
+
+#[rstest]
+fn app_config_toml_sets_agent_config(
+    #[from(app_config_from_full_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the full TOML example parses");
+    assert_eq!(config.agent.kind, AgentKind::Codex);
+    assert_eq!(config.agent.mode, AgentMode::Podbot);
+}
+
+#[rstest]
+fn app_config_toml_sets_workspace_base_dir(
+    #[from(app_config_from_full_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the full TOML example parses");
+    assert_eq!(config.workspace.base_dir.as_str(), "/home/user/work");
+}
+
+#[rstest]
+fn app_config_partial_toml_sets_engine_socket(
+    #[from(app_config_from_partial_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the minimal TOML example parses");
     assert_eq!(
-        app_config_from_full_toml.github.installation_id,
-        Some(67890)
-    );
-}
-
-#[rstest]
-fn app_config_toml_sets_sandbox_flags(app_config_from_full_toml: AppConfig) {
-    assert!(app_config_from_full_toml.sandbox.privileged);
-    assert!(!app_config_from_full_toml.sandbox.mount_dev_fuse);
-}
-
-#[rstest]
-fn app_config_toml_sets_agent_config(app_config_from_full_toml: AppConfig) {
-    assert_eq!(app_config_from_full_toml.agent.kind, AgentKind::Codex);
-    assert_eq!(app_config_from_full_toml.agent.mode, AgentMode::Podbot);
-}
-
-#[rstest]
-fn app_config_toml_sets_workspace_base_dir(app_config_from_full_toml: AppConfig) {
-    assert_eq!(
-        app_config_from_full_toml.workspace.base_dir.as_str(),
-        "/home/user/work"
-    );
-}
-
-#[rstest]
-fn app_config_partial_toml_sets_engine_socket(app_config_from_partial_toml: AppConfig) {
-    assert_eq!(
-        app_config_from_partial_toml.engine_socket.as_deref(),
+        config.engine_socket.as_deref(),
         Some("unix:///tmp/docker.sock")
     );
 }
 
 #[rstest]
-fn app_config_partial_toml_image_defaults_to_none(app_config_from_partial_toml: AppConfig) {
-    assert!(app_config_from_partial_toml.image.is_none());
+fn app_config_partial_toml_image_defaults_to_none(
+    #[from(app_config_from_partial_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the minimal TOML example parses");
+    assert!(config.image.is_none());
 }
 
 #[rstest]
-fn app_config_partial_toml_github_app_id_defaults_to_none(app_config_from_partial_toml: AppConfig) {
-    assert!(app_config_from_partial_toml.github.app_id.is_none());
+fn app_config_partial_toml_github_app_id_defaults_to_none(
+    #[from(app_config_from_partial_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the minimal TOML example parses");
+    assert!(config.github.app_id.is_none());
 }
 
 #[rstest]
-fn app_config_partial_toml_sandbox_defaults_apply(app_config_from_partial_toml: AppConfig) {
-    assert!(!app_config_from_partial_toml.sandbox.privileged);
-    assert!(app_config_from_partial_toml.sandbox.mount_dev_fuse);
+fn app_config_partial_toml_sandbox_defaults_apply(
+    #[from(app_config_from_partial_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the minimal TOML example parses");
+    assert!(!config.sandbox.privileged);
+    assert!(config.sandbox.mount_dev_fuse);
 }
 
 #[rstest]
-fn app_config_partial_toml_agent_defaults_apply(app_config_from_partial_toml: AppConfig) {
-    assert_eq!(app_config_from_partial_toml.agent.kind, AgentKind::Claude);
-    assert_eq!(app_config_from_partial_toml.agent.mode, AgentMode::Podbot);
+fn app_config_partial_toml_agent_defaults_apply(
+    #[from(app_config_from_partial_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the minimal TOML example parses");
+    assert_eq!(config.agent.kind, AgentKind::Claude);
+    assert_eq!(config.agent.mode, AgentMode::Podbot);
 }
 
 #[rstest]
-fn app_config_partial_toml_workspace_default_applies(app_config_from_partial_toml: AppConfig) {
-    assert_eq!(
-        app_config_from_partial_toml.workspace.base_dir.as_str(),
-        "/work"
-    );
+fn app_config_partial_toml_workspace_default_applies(
+    #[from(app_config_from_partial_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the minimal TOML example parses");
+    assert_eq!(config.workspace.base_dir.as_str(), "/work");
 }
 
 #[rstest]
@@ -211,17 +235,23 @@ fn app_config_sandbox_selinux_label_mode_defaults_to_disable() {
 }
 
 #[rstest]
-fn app_config_toml_sets_selinux_label_mode(app_config_from_full_toml: AppConfig) {
+fn app_config_toml_sets_selinux_label_mode(
+    #[from(app_config_from_full_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the full TOML example parses");
     assert_eq!(
-        app_config_from_full_toml.sandbox.selinux_label_mode,
+        config.sandbox.selinux_label_mode,
         SelinuxLabelMode::KeepDefault
     );
 }
 
 #[rstest]
-fn app_config_partial_toml_selinux_label_mode_defaults(app_config_from_partial_toml: AppConfig) {
+fn app_config_partial_toml_selinux_label_mode_defaults(
+    #[from(app_config_from_partial_toml)] parsed: Result<AppConfig, toml::de::Error>,
+) {
+    let config = parsed.expect("the minimal TOML example parses");
     assert_eq!(
-        app_config_from_partial_toml.sandbox.selinux_label_mode,
+        config.sandbox.selinux_label_mode,
         SelinuxLabelMode::DisableForContainer
     );
 }

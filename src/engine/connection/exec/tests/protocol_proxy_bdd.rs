@@ -1,6 +1,7 @@
 //! Behavioural tests for protocol exec byte proxying.
 
 use std::io;
+use std::sync::PoisonError;
 
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
@@ -145,21 +146,21 @@ fn store_proxy_results(
         captured
             .stdout
             .lock()
-            .expect("writer mutex should not poison")
+            .unwrap_or_else(PoisonError::into_inner)
             .clone(),
     );
     state.host_stderr.set(
         captured
             .stderr
             .lock()
-            .expect("writer mutex should not poison")
+            .unwrap_or_else(PoisonError::into_inner)
             .clone(),
     );
     state.container_stdin.set(
         captured
             .stdin
             .lock()
-            .expect("writer mutex should not poison")
+            .unwrap_or_else(PoisonError::into_inner)
             .clone(),
     );
 
