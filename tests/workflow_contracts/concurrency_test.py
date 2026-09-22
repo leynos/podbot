@@ -47,6 +47,10 @@ WORKFLOW_SUFFIXES: tuple[str, ...] = (".yml", ".yaml")
 #: never equals this.
 CANCEL_EXPRESSION = "${{ github.event_name == 'pull_request' }}"
 
+#: The trigger that puts a workflow in scope. `pull_request_target` is
+#: deliberately absent; see the module docstring.
+PULL_REQUEST = "pull_request"
+
 #: Expressions that are unique to a single run. A group built from one of these
 #: can never match another run, so it queues nothing and cancels nothing while
 #: looking exactly like a concurrency control.
@@ -119,12 +123,17 @@ def _workflow_paths() -> list[Path]:
     )
 
 
-def _triggers(document: dict[str, object]) -> dict[str, object]:
-    """Return a workflow's `on:` mapping.
+def _trigger_names(document: dict[str, object]) -> frozenset[str] | None:
+    """Return the event names a workflow declares under `on:`.
 
-    PyYAML resolves an unquoted `on:` key to the boolean ``True``, so a
-    workflow that omits the quotes would otherwise read as having no triggers
-    and pass every assertion below vacuously.
+    GitHub accepts three shapes: a mapping of event to configuration, a list
+    of event names, and a bare event name. All three are read here. A reader
+    that modelled only the mapping would drop a workflow written either other
+    way out of discovery, and a contract over a filtered list reports nothing
+    at all about a workflow it never sees.
+
+    PyYAML also resolves an unquoted `on:` key to the boolean ``True``, so
+    both spellings of the key are read.
 
     Parameters
     ----------
@@ -133,12 +142,24 @@ def _triggers(document: dict[str, object]) -> dict[str, object]:
 
     Returns
     -------
-    dict
-        The declared triggers, empty when the workflow uses the list or
-        scalar shorthand, neither of which this repository writes.
+    frozenset of str, or None
+        The declared event names, empty when the workflow declares no `on:`
+        at all, in which case nothing can start it. ``None`` when `on:` is
+        present in a shape this reader does not model; the caller decides
+        what to do about that, and
+        `test_every_workflow_declares_a_trigger_set_this_reader_models`
+        reports it by name rather than letting discovery drop it in silence.
     """
     declared = document.get("on", document.get(True))
-    return declared if isinstance(declared, dict) else {}
+    if declared is None:
+        return frozenset()
+    if isinstance(declared, dict):
+        return frozenset(key for key in declared if isinstance(key, str))
+    if isinstance(declared, list):
+        return frozenset(event for event in declared if isinstance(event, str))
+    if isinstance(declared, str):
+        return frozenset({declared})
+    return None
 
 
 def _pull_request_workflows() -> list[Path]:
@@ -149,7 +170,11 @@ def _pull_request_workflows() -> list[Path]:
     list of Path
         Workflow paths declaring a `pull_request` trigger, in name order.
     """
-    return [path for path in _workflow_paths() if "pull_request" in _triggers(_load(path))]
+    return [
+        path
+        for path in _workflow_paths()
+        if PULL_REQUEST in (_trigger_names(_load(path)) or frozenset())
+    ]
 
 
 def _concurrency(path: Path) -> dict[str, object]:
@@ -189,6 +214,25 @@ def test_discovery_still_finds_the_known_pull_request_workflows() -> None:
         f"these workflows start on pull_request but discovery missed them: "
         f"{', '.join(missing)}; the contracts below would pass without "
         "asserting anything about them"
+    )
+
+
+def test_every_workflow_declares_a_trigger_set_this_reader_models() -> None:
+    """No workflow's `on:` defeats the reader that decides what is in scope.
+
+    Discovery filters on the event names it can read, and a workflow whose
+    `on:` the reader cannot model is dropped from that filter. Dropped
+    silently it would take every contract below with it, each passing while
+    saying nothing about that workflow. This is the half that makes the
+    silence loud.
+    """
+    unreadable = sorted(
+        path.name for path in _workflow_paths() if _trigger_names(_load(path)) is None
+    )
+    assert not unreadable, (
+        f"these workflows declare an `on:` this reader does not model: "
+        f"{', '.join(unreadable)}; each is dropped from discovery, so every "
+        "contract below would pass without asserting anything about it"
     )
 
 
