@@ -1,18 +1,22 @@
 name: Coverage (main)
 
-# CodeScene accepts `cs-coverage upload` only for analysed branches, so
-# main-branch coverage is uploaded here on push; pull requests only
-# generate coverage in ci.yml (the changed-line `cs-coverage check` gate
-# is deferred until the project's coverage-gates configuration is
-# enabled — see the comment in ci.yml). This workflow also advances the
-# coverage ratchet baseline: caches saved on main are readable by every
-# pull-request run, so the baseline written here is the one PR ratchet
-# checks compare against.
+# CodeScene coverage belongs to main (CV-005). This is the only workflow
+# that talks to CodeScene: it uploads main's coverage on push, and it
+# advances the coverage ratchet baseline, since caches saved on main are
+# readable by every pull-request run. Pull requests gate on that ratchet
+# in ci.yml and never contact CodeScene, whose token no fork can read.
 
 'on':
   push:
     branches: [main]
   workflow_dispatch:
+
+# Runs queue rather than cancel. A cancelled publisher abandons both its
+# upload and its baseline write; GitHub keeps one pending run per group,
+# so a newer push replaces a pending one and the newest baseline wins.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   coverage-upload:
@@ -37,9 +41,12 @@ jobs:
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: ${{ env.CS_ACCESS_TOKEN }}
+        # A dispatch can name any branch, so the ref is checked here, not
+        # only in the trigger filter.
+        if: github.ref == 'refs/heads/main' && env.CS_ACCESS_TOKEN != ''
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8
         with:
           format: lcov
+          mode: upload
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}

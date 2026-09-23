@@ -22,6 +22,12 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
       - name: Setup uv
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      # The contracts read `.github/workflows` and need no Rust build, so
+      # they fail fast. Unguarded and a command of its own: a step with an
+      # `if:` can be skipped without failing anything, and the contract
+      # suite asserts this exact step.
+      - name: Workflow contracts
+        run: make test-workflow-contracts
       - name: Format
         run: make check-fmt
       - name: Enforce en-GB-oxendict spelling
@@ -76,6 +82,10 @@ jobs:
         run: cargo test --no-default-features --test cli_feature_gating --test compile_contract
       - name: Internal compatibility tests
         run: cargo test --features internal
+      # CodeScene coverage belongs to main (CV-005): coverage-main.yml is
+      # the only workflow that talks to CodeScene. This lane keeps the
+      # ratchet, which gates on this repository's own baseline, needs no
+      # token, and applies to pull requests from forks too.
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
         with:
@@ -84,17 +94,6 @@ jobs:
           format: lcov
           use-cargo-nextest: 'false'
           with-ratchet: 'true'
-      - name: Check coverage against CodeScene gates
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: github.event_name == 'pull_request' && env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
-        with:
-          format: lcov
-          mode: check
-          project-url: https://api.codescene.io/v2/projects/75835
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
       - name: Set up Rust for Merman
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master
         with:
@@ -105,6 +104,3 @@ jobs:
           cargo +1.95.0 install merman-cli --version '=0.7.0' --locked
       - name: Validate Mermaid diagrams
         run: make nixie
-      # Coverage is uploaded to CodeScene from coverage-main.yml on push to
-      # main instead of here: CodeScene's `cs-coverage upload` only accepts
-      # analysed branches, and this job runs on pull_request only.

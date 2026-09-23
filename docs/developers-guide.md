@@ -1408,3 +1408,96 @@ When adding another repository source or clone option:
 4. Add BDD scenarios for user-visible success and failure paths.
 5. Update this section, `docs/users-guide.md`, and any roadmap or ExecPlan that
    describes the changed clone contract.
+
+## 19. CodeScene coverage belongs to main (CV-005)
+
+`coverage-main.yml` is the only workflow in this repository that talks to
+CodeScene. It runs on pushes to `main`, generates ratcheted coverage, and
+uploads with `mode: upload`. No workflow a pull request can reach names the
+upload action, invokes `cs-coverage`, puts `CS_ACCESS_TOKEN` in reach of a
+process, or names the `codescene.io` host.
+
+This is the estate rule `main-owned-codescene-coverage`, and it is a policy
+rather than a gap. A pull request from a fork cannot read the repository's
+secrets, so the changed-line check on that lane was a silent skip for exactly
+the contributions least likely to have been measured already. On a branch it
+put a second tool on the critical path: the uploader calls CodeScene's API and
+refuses to run when the answer changes shape, and when the project stopped
+returning a gates configuration that check failed every pull request here over
+a defect in none of them. The pull-request lane keeps `generate-coverage` with
+`with-ratchet: 'true'`, which gates on this repository's own baseline, needs no
+token, and applies to forks too.
+
+### 19.1. The publisher
+
+The upload step is guarded on
+`github.ref == 'refs/heads/main' && env.CS_ACCESS_TOKEN != ''`. The workflow
+also answers `workflow_dispatch`, which can name any branch, so the trigger
+filter alone does not confine the upload. The step binds
+`CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}` in its own `env` and passes
+`access-token: ${{ env.CS_ACCESS_TOKEN }}`; no other scope declares or reads the
+secret. The binding is asserted positively because GitHub reads a missing
+context property as `''`: with the binding deleted the guard stays well formed
+and the upload skips on every run with nothing failing.
+
+The workflow declares a concurrency group without `cancel-in-progress`. A
+cancelled publisher abandons both its upload and its ratchet baseline write.
+Without cancelling, GitHub keeps one pending run per group, so a newer push
+replaces a pending one and the newest baseline wins.
+
+### 19.2. The contract
+
+`make test-workflow-contracts` runs `tests/workflow_contracts/` through pytest,
+with Ruff format and lint checks first, and CI runs it as an unguarded step of
+its own early in `build-test`. The modules are:
+
+| Module                        | Subject                                                              |
+| ----------------------------- | -------------------------------------------------------------------- |
+| `workflow_reading.py`         | Strict parsing, trigger forms, push filters, and the workflow files  |
+| `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps      |
+| `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host         |
+| `publisher_rules.py`          | The upload guard, the credential binding, and cancellation           |
+| `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command          |
+| `codescene_coverage_test.py`  | The rule over this repository's workflows                            |
+| `codescene_publisher_test.py` | The publisher's upload step                                          |
+| `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain    |
+
+_Table 2: Workflow contract modules._
+
+The readings are built so that each one fails loudly rather than passing over
+nothing:
+
+- **The pull-request lane is a closure, not a trigger list.** A workflow
+  declaring only `workflow_call` runs on a pull request when a pull-request
+  workflow calls it, and `secrets: inherit` hands it the token. Every
+  pull-request clause runs over the pull-request workflows and everything they
+  call, transitively. A local call is recognized by shape: a leading `./` or
+  `$/` is stripped, and the remainder must name a file directly under
+  `.github/workflows/`. A call to this repository at a ref
+  (`leynos/podbot/.github/workflows/x.yml@main`, or a local prefix with `@`)
+  runs a version the closure cannot read, so it is refused rather than
+  followed.
+- **The secret and the host are read over the whole document.** Every key and
+  scalar is visited, case-folded, so a workflow-level `env`, a
+  `defaults.run.shell` wrapper, a reusable call's `with`, or a callee's
+  `workflow_call` secret declaration cannot reach CodeScene unseen. The secret
+  is found as a key naming it, an expression reading it, or `secrets: inherit`.
+  The parser discards comments, so prose explaining this policy is not read as
+  a breach of it.
+- **The upload guard is split on `&&`, and an unquoted `||` is refused.**
+  `&&` binds tighter than `||`, so a guard containing the ref test as a
+  substring, or even as a whole conjunct, can still make it optional.
+- **Workflows load through a loader refusing duplicate keys.** PyYAML keeps the
+  last of two equal keys silently, so a doubled `runs-on` would otherwise read
+  as whichever half the contract happened to see.
+- **Triggers are read as a mapping, a sequence, or a string**, under both the
+  `on` key and the boolean `True` that YAML 1.1 resolves an unquoted `on:` to.
+  Push filters are read as globs with `!` negation, so `'**'` counts as naming
+  `main`.
+- **A required command is read as a step's sole command.** `false && X`,
+  `echo X` and a step guarded by `if:` all contain `X` and run nothing, so the
+  contract step and the ratcheting coverage step must each be unguarded, and
+  the contract command must be the whole of its step.
+
+Every clause was proved by mutating the workflows or the reader and watching
+the named test fail; the pull request adopting CV-005 records the table.
