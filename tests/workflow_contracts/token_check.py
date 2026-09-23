@@ -21,7 +21,7 @@ import re
 import typing as typ
 
 from codescene_reach import token_sites
-from shell_commands import runs_unconditionally
+from publisher_rules import MAIN_REF_CONJUNCT, guard_conjuncts
 
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
     from workflow_reading import WorkflowDocument
@@ -55,22 +55,58 @@ def _mapping(value: object) -> dict[str, object]:
 def available_conjunct(step_id: str) -> str:
     """Return the guard conjunct that reads a check step's output.
 
+    Parameters
+    ----------
+    step_id : str
+        The check step's `id`.
+
+    Returns
+    -------
+    str
+        The conjunct, in the canonical spelling `guard_conjuncts` yields.
+
+    Examples
+    --------
     >>> available_conjunct("codescene-token")
     "steps.codescene-token.outputs.available == 'true'"
     """
     return f"steps.{step_id}.outputs.available == 'true'"
 
 
+def _confined_to_main(step: dict[str, object]) -> bool:
+    """Return whether a step's `if:` is exactly the main-ref test."""
+    condition = step.get("if")
+    return isinstance(condition, str) and guard_conjuncts(condition) == [
+        MAIN_REF_CONJUNCT
+    ]
+
+
 def is_token_check(step: dict[str, object]) -> bool:
     """Return whether a step is the token check, in its one allowed shape.
 
-    It has an `id`, binds the secret in its own `env`, runs the check
-    command as its sole command, and carries no `if:` or
-    `continue-on-error`, since a check that can be skipped reports
-    nothing.
+    It has an `id` and binds the secret in its own `env`. Its `run` is
+    exactly the check command, so a leading assignment such as
+    `CS_ACCESS_TOKEN= ...` cannot clear the token and turn every run into a
+    skip. Its only guard is the main-ref test, because a dispatch can check
+    out any branch and the script runs from the checkout with the secret in
+    reach; any other `if:`, or `continue-on-error`, could stop it writing
+    the output on main.
 
+    Parameters
+    ----------
+    step : dict[str, object]
+        One parsed workflow step.
+
+    Returns
+    -------
+    bool
+        True when the step has exactly that shape.
+
+    Examples
+    --------
     >>> is_token_check({
     ...     "id": "t",
+    ...     "if": "github.ref == 'refs/heads/main'",
     ...     "env": {"CS_ACCESS_TOKEN": "${{ secrets.CS_ACCESS_TOKEN }}"},
     ...     "run": "python3 scripts/codescene_token_available.py",
     ... })
@@ -81,15 +117,28 @@ def is_token_check(step: dict[str, object]) -> bool:
     return (
         isinstance(step.get("id"), str)
         and _expression(_mapping(step.get("env")).get(SECRET_NAME)) == SECRET_REFERENCE
-        and "if" not in step
+        and _confined_to_main(step)
         and "continue-on-error" not in step
-        and runs_unconditionally(str(step.get("run", "")), TOKEN_CHECK_COMMAND)
+        and str(step.get("run", "")).strip() == TOKEN_CHECK_COMMAND
     )
 
 
 def passes_the_secret_directly(step: dict[str, object]) -> bool:
     """Return whether an upload step takes the secret as its input only.
 
+    Parameters
+    ----------
+    step : dict[str, object]
+        The parsed upload step.
+
+    Returns
+    -------
+    bool
+        True when `access-token` is `${{ secrets.CS_ACCESS_TOKEN }}` and the
+        step's `env` binds nothing of that name.
+
+    Examples
+    --------
     >>> passes_the_secret_directly({"with": {"access-token": "${{secrets.CS_ACCESS_TOKEN}}"}})
     True
     >>> passes_the_secret_directly({
@@ -112,6 +161,24 @@ def stray_credential_sites(
     `access-token`. Anywhere else, a wider `env` or the upload step's own
     `env` included, puts it in reach of a process with no use for it.
 
+    Parameters
+    ----------
+    name : str
+        The workflow's file name, for the sites.
+    document : WorkflowDocument
+        The parsed workflow.
+    check_path : str
+        The check step's path, such as `jobs.a.steps[1]`.
+    upload_path : str
+        The upload step's path.
+
+    Returns
+    -------
+    list[str]
+        Every other site that reads or declares the secret.
+
+    Examples
+    --------
     >>> from workflow_reading import load_workflow
     >>> body = "env:\n  CS_ACCESS_TOKEN: x\njobs: {}\n"
     >>> stray_credential_sites("m.yml", load_workflow(body), "jobs.a.steps[0]", "jobs.a.steps[1]")

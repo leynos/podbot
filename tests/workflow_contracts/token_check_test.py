@@ -24,6 +24,7 @@ from workflow_reading import load_workflow
 #: The check step as the publisher writes it, parsed.
 CHECK: typ.Final[dict[str, object]] = {
     "id": "codescene-token",
+    "if": "github.ref == 'refs/heads/main'",
     "env": {"CS_ACCESS_TOKEN": "${{ secrets.CS_ACCESS_TOKEN }}"},
     "run": TOKEN_CHECK_COMMAND,
 }
@@ -31,7 +32,9 @@ CHECK: typ.Final[dict[str, object]] = {
 
 def test_the_publishers_check_step_is_accepted() -> None:
     """Narrow as well as sufficient: the real shape passes."""
-    assert is_token_check(CHECK)
+    assert is_token_check(CHECK), (
+        f"the publisher's own check shape was refused: {CHECK}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -42,7 +45,16 @@ def test_the_publishers_check_step_is_accepted() -> None:
         pytest.param(
             {"env": {"CS_ACCESS_TOKEN": "${{ secrets.OTHER }}"}}, id="other-secret"
         ),
-        pytest.param({"if": "false"}, id="guarded"),
+        pytest.param({"if": "false"}, id="guarded-otherwise"),
+        pytest.param({"if": None}, id="unconfined"),
+        pytest.param(
+            {"if": "github.ref == 'refs/heads/main' || github.event_name == 'push'"},
+            id="main-or-more",
+        ),
+        pytest.param(
+            {"run": f"CS_ACCESS_TOKEN= {TOKEN_CHECK_COMMAND}"}, id="token-cleared"
+        ),
+        pytest.param({"run": f"{TOKEN_CHECK_COMMAND} --flag"}, id="extra-argument"),
         pytest.param({"continue-on-error": "true"}, id="may-fail"),
         pytest.param({"run": f"echo {TOKEN_CHECK_COMMAND}"}, id="echoed"),
         pytest.param({"run": f"false && {TOKEN_CHECK_COMMAND}"}, id="short-circuited"),
@@ -112,4 +124,4 @@ def test_every_read_but_the_two_allowed_is_a_stray() -> None:
         "m.yml: jobs.a.steps[0].run",
         "m.yml: jobs.a.steps[2].env.CS_ACCESS_TOKEN<key>",
         "m.yml: jobs.a.steps[2].env.CS_ACCESS_TOKEN",
-    ]
+    ], f"unexpected stray sites: {strays}"

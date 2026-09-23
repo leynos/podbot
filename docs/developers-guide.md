@@ -1431,10 +1431,16 @@ token, and applies to forks too.
 ### 19.1. The publisher
 
 A step of its own checks for the token. It binds
-`CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}` in its `env` and runs
-`python3 scripts/codescene_token_available.py` as its only command, with no
-`if:`. The script writes `available=true` or `available=false` to the step's
-outputs, and never the secret. The upload step is guarded on
+`CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}` in its `env` and runs exactly
+`python3 scripts/codescene_token_available.py`. Its only guard is
+`if: github.ref == 'refs/heads/main'`. The step runs a script from the checkout
+with the secret in reach, and a dispatch can check out any branch. The script
+writes `available=true` or `available=false` to the step's outputs, never the
+secret. It also records the decision in a fixed vocabulary, as a `::notice::`
+line and a job-summary line, for example
+`operation=codescene_upload token_available=true ref=main decision=upload`.
+The upload step's own conclusion (success, failure or skipped), read from the
+jobs API, is the countable outcome. The upload step is guarded on
 `steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'`,
 and it passes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. Nothing
 else in the workflow binds or reads the secret, and the upload step's own `env`
@@ -1472,17 +1478,18 @@ reason: coverage built from one commit must not be recorded against another.
 with Ruff format and lint checks first, and CI runs it as an unguarded step of
 its own early in `build-test`. The modules are:
 
-| Module                        | Subject                                                              |
-| ----------------------------- | -------------------------------------------------------------------- |
-| `workflow_reading.py`         | Strict parsing, trigger forms, push filters, and the workflow files  |
-| `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps      |
-| `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host         |
-| `publisher_rules.py`          | The upload guard, the credential binding, and cancellation           |
-| `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command          |
-| `codescene_coverage_test.py`  | The rule over this repository's workflows                            |
-| `codescene_publisher_test.py` | The publisher's upload step                                          |
-| `codescene_uploader_test.py`  | The uploader's approved pin and its retired checksum input           |
-| `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain    |
+| Module                        | Subject                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| `workflow_reading.py`         | Strict parsing, trigger forms, push filters, and the workflow files     |
+| `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps         |
+| `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host            |
+| `publisher_rules.py`          | The upload guard and the publisher's cancellation                       |
+| `token_check.py`              | The token-check step, the upload's input, and stray reads of the secret |
+| `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command             |
+| `codescene_coverage_test.py`  | The rule over this repository's workflows                               |
+| `codescene_publisher_test.py` | The publisher's upload step                                             |
+| `codescene_uploader_test.py`  | The uploader's approved pin and its retired checksum input              |
+| `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain       |
 
 _Table 2: Workflow contract modules._
 
@@ -1515,7 +1522,11 @@ nothing:
 - **Triggers are read as a mapping, a sequence, or a string**, under both the
   `on` key and the boolean `True` that YAML 1.1 resolves an unquoted `on:` to.
   Push filters are read as globs with `!` negation, so `'**'` counts as naming
-  `main`.
+  `main`. A workflow that declares triggers under
+  both keys is refused with a `WorkflowReadingError`: a resolving loader turns
+  an unquoted `on:` into `True` and leaves a quoted `'on':` as a string,
+  GitHub merges the two, and a reader that picked one key would miss the
+  other's triggers.
 - **A required command is read as a step's sole command.** `false && X`,
   `echo X` and a step guarded by `if:` all contain `X` and run nothing, so the
   contract step and the ratcheting coverage step must each be unguarded, and

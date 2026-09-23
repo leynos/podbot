@@ -67,7 +67,11 @@ jobs:
         # The token is bound here and nowhere else in the job. This step
         # writes only whether it is present. The upload action is composite
         # and would hand its own step's env to every step nested inside it.
+        # A dispatch can check out any branch, so the step, which runs a
+        # script from the checkout with the secret in reach, runs on main
+        # only.
         id: codescene-token
+        if: github.ref == 'refs/heads/main'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         run: python3 scripts/codescene_token_available.py
