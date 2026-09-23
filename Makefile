@@ -42,6 +42,8 @@ WORKFLOW_PY_SRCS := \
 	scripts/workflow_contracts.py scripts/workflow_commands.py \
 	scripts/workflow_coverage.py scripts/workflow_placement.py \
 	scripts/check_sccache_health.py scripts/tests/test_check_sccache_health.py \
+	scripts/codescene_token_available.py \
+	scripts/tests/test_codescene_token_available.py \
 	scripts/tests/conftest.py scripts/tests/test_workflow_contracts.py \
 	scripts/tests/test_command_contracts.py \
 	scripts/tests/test_coverage_contracts.py \
@@ -115,7 +117,7 @@ workflow-contracts: ## Assert what the workflow files must say
 	@$(WORKFLOW_PYTEST) $(WORKFLOW_PY_TESTS) \
 		scripts/workflow_contracts.py scripts/workflow_commands.py \
 		scripts/workflow_coverage.py scripts/workflow_placement.py \
-		scripts/check_sccache_health.py \
+		scripts/check_sccache_health.py scripts/codescene_token_available.py \
 		--doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 

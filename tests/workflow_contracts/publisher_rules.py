@@ -1,4 +1,4 @@
-"""What the one CodeScene publisher's upload step must say, as readings.
+"""The publisher's upload guard and concurrency, as readings.
 
 ``coverage-main.yml`` answers ``workflow_dispatch`` as well as a push to
 ``main``, and a dispatch can name any branch, so the trigger filter does
@@ -8,10 +8,7 @@ anywhere refused rather than interpreted, because
 ``... && github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'``
 contains the ref test as a substring and makes every conjunct optional.
 
-The credential is asserted positively as well. GitHub evaluates a
-missing context property as ``''``, so a guard on
-``env.CS_ACCESS_TOKEN != ''`` stays well formed with the step's binding
-deleted, and the upload then skips on every run with nothing failing.
+How the secret reaches the upload is read in ``token_check``.
 """
 
 from __future__ import annotations
@@ -19,21 +16,11 @@ from __future__ import annotations
 import re
 import typing as typ
 
-from codescene_reach import token_sites
-
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
     from workflow_reading import WorkflowDocument
 
 #: The conjunct confining a step to the trunk, in its canonical spelling.
 MAIN_REF_CONJUNCT: typ.Final[str] = "github.ref == 'refs/heads/main'"
-
-#: The conjunct skipping the upload when the secret is absent, as on a
-#: fork or after a rotation, rather than failing the publisher run.
-CREDENTIAL_PRESENT_CONJUNCT: typ.Final[str] = "env.CS_ACCESS_TOKEN != ''"
-
-#: The step binding and the action input that together hand the secret on.
-SECRET_REFERENCE: typ.Final[str] = "secrets.CS_ACCESS_TOKEN"
-ENVIRONMENT_REFERENCE: typ.Final[str] = "env.CS_ACCESS_TOKEN"
 
 #: A single-quoted expression string, which may itself contain ``||``.
 _QUOTED: typ.Final[re.Pattern[str]] = re.compile(r"'(?:[^']|'')*'")
@@ -94,53 +81,6 @@ def requires(condition: object, conjunct: str) -> bool:
 def _mapping(value: object) -> dict[str, object]:
     """Return a value when it is a mapping, and an empty one otherwise."""
     return value if isinstance(value, dict) else {}
-
-
-def binds_the_credential(step: dict[str, object]) -> bool:
-    """Return whether an upload step binds the secret and passes it on.
-
-    >>> binds_the_credential({
-    ...     "env": {"CS_ACCESS_TOKEN": "${{ secrets.CS_ACCESS_TOKEN }}"},
-    ...     "with": {"access-token": "${{env.CS_ACCESS_TOKEN}}"},
-    ... })
-    True
-    >>> binds_the_credential({"with": {"access-token": "${{ env.CS_ACCESS_TOKEN }}"}})
-    False
-    """
-    bound = _mapping(step.get("env")).get("CS_ACCESS_TOKEN")
-    passed = _mapping(step.get("with")).get("access-token")
-    return (
-        isinstance(bound, str)
-        and isinstance(passed, str)
-        and _unwrapped(bound) == SECRET_REFERENCE
-        and _unwrapped(passed) == ENVIRONMENT_REFERENCE
-    )
-
-
-def stray_credential_sites(
-    name: str, document: WorkflowDocument, upload_path: str
-) -> list[str]:
-    r"""Return every site reading the secret outside the upload step's three.
-
-    The upload step may bind it in ``env``, pass it as ``access-token``
-    and test it in ``if``. Anywhere else, a wider ``env`` scope or
-    another step, puts it in reach of a process that has no use for it.
-
-    >>> from workflow_reading import load_workflow
-    >>> body = "env:\n  CS_ACCESS_TOKEN: x\njobs: {}\n"
-    >>> stray_credential_sites("m.yml", load_workflow(body), "jobs.a.steps[0]")
-    ['m.yml: env.CS_ACCESS_TOKEN<key>']
-    """
-    allowed = {
-        f"{name}: {upload_path}.{suffix}"
-        for suffix in (
-            "env.CS_ACCESS_TOKEN<key>",
-            "env.CS_ACCESS_TOKEN",
-            "with.access-token",
-            "if",
-        )
-    }
-    return [site for site in token_sites(name, document) if site not in allowed]
 
 
 def _cancels(concurrency: object) -> bool:

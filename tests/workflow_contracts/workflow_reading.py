@@ -108,7 +108,16 @@ def load_workflow(text: str) -> WorkflowDocument:
 
 
 def _declared_triggers(document: WorkflowDocument) -> object:
-    """Return the ``on`` value under the string key or the boolean one."""
+    """Return the ``on`` value under the string key or the boolean one.
+
+    A document holding both is refused. A resolving loader turns an unquoted
+    ``on:`` into ``True`` and leaves a quoted ``'on':`` as a string, so one
+    file can declare triggers under both keys; GitHub merges them, and a
+    reader that picked either would be blind to the other half.
+    """
+    if "on" in document and True in document:
+        message = "a workflow declares triggers under both `on` and `True`"
+        raise WorkflowReadingError(message, reader="triggers")
     return document.get("on", document.get(True))
 
 

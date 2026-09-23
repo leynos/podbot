@@ -63,14 +63,21 @@ jobs:
         # not turn a pull request red.
         if: always()
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
-      - name: Upload coverage data to CodeScene
+      - name: Check for the CodeScene token
+        # The token is bound here and nowhere else in the job. This step
+        # writes only whether it is present. The upload action is composite
+        # and would hand its own step's env to every step nested inside it.
+        id: codescene-token
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
+        run: python3 scripts/codescene_token_available.py
+      - name: Upload coverage data to CodeScene
         # A dispatch can name any branch, so the ref is checked here, not
-        # only in the trigger filter.
-        if: github.ref == 'refs/heads/main' && env.CS_ACCESS_TOKEN != ''
+        # only in the trigger filter. A fork or a rotated secret skips the
+        # upload instead of failing the run.
+        if: steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           format: lcov
           mode: upload
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          access-token: ${{ secrets.CS_ACCESS_TOKEN }}

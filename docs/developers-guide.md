@@ -1430,15 +1430,29 @@ token, and applies to forks too.
 
 ### 19.1. The publisher
 
-The upload step is guarded on
-`github.ref == 'refs/heads/main' && env.CS_ACCESS_TOKEN != ''`. The workflow
-also answers `workflow_dispatch`, which can name any branch, so the trigger
-filter alone does not confine the upload. The step binds
-`CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}` in its own `env` and passes
-`access-token: ${{ env.CS_ACCESS_TOKEN }}`; no other scope declares or reads the
-secret. The binding is asserted positively because GitHub reads a missing
-context property as `''`: with the binding deleted the guard stays well formed
-and the upload skips on every run with nothing failing.
+A step of its own checks for the token. It binds
+`CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}` in its `env` and runs
+`python3 scripts/codescene_token_available.py` as its only command, with no
+`if:`. The script writes `available=true` or `available=false` to the step's
+outputs, and never the secret. The upload step is guarded on
+`steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'`,
+and it passes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. Nothing
+else in the workflow binds or reads the secret, and the upload step's own `env`
+in particular does not. The upload action is composite, and a composite action
+hands the calling step's `env` to every step nested inside it, including the
+artefact and cache steps. The workflow also answers `workflow_dispatch`, which
+can name any branch, so the ref test confines the upload where the trigger
+filter cannot.
+
+The check step is asserted positively, not only the absence of the old
+binding. GitHub reads a missing step output as `''`, so with the check deleted
+the guard stays well formed and the upload skips on every run, with nothing
+failing.
+
+A Dependabot pull request merged by automerge with `GITHUB_TOKEN` fires no
+`push` event, so that merge does not run this publisher. This is a known
+exception: the next push to `main` publishes. No `schedule` trigger is added to
+cover it.
 
 The workflow declares a concurrency group without `cancel-in-progress`. A
 cancelled publisher abandons both its upload and its ratchet baseline write, so
