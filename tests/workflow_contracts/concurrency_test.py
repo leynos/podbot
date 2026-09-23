@@ -66,9 +66,12 @@ RUN_UNIQUE_EXPRESSIONS: tuple[str, ...] = (
 #: Expressions that differ between two pull requests. A group naming none of
 #: them is shared by every branch, so one pull request's push would cancel
 #: another's gates.
+#: `github.head_ref` is deliberately absent: two pull requests from different
+#: forks can share a source branch name, so a group keyed on it alone would
+#: let one cancel the other. For a pull request, `github.ref` is
+#: `refs/pull/<number>/merge`, which is unique.
 PER_PULL_REQUEST_EXPRESSIONS: tuple[str, ...] = (
     "github.event.pull_request.number",
-    "github.head_ref",
     "github.ref",
 )
 
@@ -401,6 +404,9 @@ def test_cancellation_is_conditioned_on_the_event(workflow: Path) -> None:
         pytest.param("${{ github.workflow }}-${{ github.ref }}", True, id="evaluated"),
         pytest.param("ci-github.ref", False, id="bare-text"),
         pytest.param("${{ 'github.event.pull_request.number' }}", False, id="quoted"),
+        pytest.param(
+            "${{ github.workflow }}-${{ github.head_ref }}", False, id="head-ref-only"
+        ),
     ],
 )
 def test_only_an_evaluated_reference_keys_the_group(group: str, *, keyed: bool) -> None:
