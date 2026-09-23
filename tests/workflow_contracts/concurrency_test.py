@@ -436,10 +436,28 @@ def test_an_explicit_empty_on_is_unsupported_not_absent(
     assert _trigger_names(load_workflow(body)) == expected
 
 
-def test_an_unreadable_workflow_is_the_readers_fault(tmp_path: Path) -> None:
-    """A file that is not YAML is reported by name as a reading error."""
-    broken = tmp_path / "broken.yml"
-    broken.write_text("on: [\n", encoding="utf-8")
+@pytest.mark.parametrize(
+    ("body", "cause"),
+    [
+        pytest.param(None, OSError, id="missing-file"),
+        pytest.param("on: [\n", yaml.YAMLError, id="not-yaml"),
+        pytest.param("- a list\n", TypeError, id="not-a-mapping"),
+    ],
+)
+def test_an_unreadable_workflow_is_the_readers_fault(
+    tmp_path: Path, body: str | None, cause: type[Exception]
+) -> None:
+    """Every read, parse and shape failure is a named reading error.
+
+    The original failure is chained as the cause, so the reason survives the
+    translation.
+    """
+    workflow = tmp_path / "broken.yml"
+    if body is not None:
+        workflow.write_text(body, encoding="utf-8")
     with pytest.raises(WorkflowReadingError) as raised:
-        _load(broken)
-    assert raised.value.path == str(broken)
+        _load(workflow)
+    assert raised.value.reader == "concurrency", raised.value
+    assert raised.value.path == str(workflow), raised.value
+    assert "broken.yml" in str(raised.value), raised.value
+    assert isinstance(raised.value.__cause__, cause), raised.value.__cause__
