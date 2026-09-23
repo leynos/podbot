@@ -1467,6 +1467,7 @@ its own early in `build-test`. The modules are:
 | `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command          |
 | `codescene_coverage_test.py`  | The rule over this repository's workflows                            |
 | `codescene_publisher_test.py` | The publisher's upload step                                          |
+| `codescene_uploader_test.py`  | The uploader's approved pin and its retired checksum input           |
 | `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain    |
 
 _Table 2: Workflow contract modules._
@@ -1508,6 +1509,41 @@ nothing:
 
 Every clause was proved by mutating the workflows or the reader and watching
 the named test fail; the pull request adopting CV-005 records the table.
+
+### 19.3. The uploader pin and its trust anchor
+
+The publisher runs `upload-codescene-coverage` at shared-actions
+`a5765019912a8ab6882b12db049c7cde635f3a85`. At that commit the action pins the
+cs-coverage CLI through its committed `cli-manifest.json`, which names the
+approved version and the archive's digest. It rejects a non-empty
+`installer-checksum` outright. This repository therefore passes no checksum
+input. The `CODESCENE_CLI_SHA256` repository variable that used to feed it has
+no consumer. The `get-codescene-sha.yml` dispatch workflow that refreshed the
+variable must not return. `archive-checksum` is not a renamed
+`installer-checksum`: it could only repeat the manifest's digest, so it is not
+passed either.
+
+`codescene_uploader_test.py` asserts all four points over the parsed
+workflows, so a commented-out `uses:` line cannot stand in for an upload step:
+
+- at least one uploader step exists, and every one runs at the approved pin;
+- no document passes `installer-checksum`;
+- no expression reads `CODESCENE_CLI_SHA256`;
+- `get-codescene-sha.yml` is absent from the workflow directory.
+
+It runs under `make test-workflow-contracts`.
+
+To move the uploader pin, take these steps in the same commit:
+
+1. Diff the action's `action.yml` inputs across the old and new SHAs, because a
+   repin drops an undeclared input with only a warning.
+2. Confirm that the new commit is on shared-actions' default branch and
+   descends from `c6125f1`.
+3. Add the new commit to `WRAPPER_EXPORTING_PINS` (section 20).
+4. Update `APPROVED_UPLOADER_PIN`.
+
+The pin contract in section 20 requires every shared-actions reference to name
+one commit, so the other references move with it.
 
 ## 20. Pin, budget and placement contract readers
 

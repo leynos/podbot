@@ -58,6 +58,10 @@ WRAPPER_EXPORTING_PINS: typ.Final[frozenset[str]] = frozenset(
         # both pins this repository used before the repin that added this
         # file.
         "0e3c4d24e43aa48b511d94f3b902711eb02138df",
+        # a5765019, 2026-09-17. Verified descendant of `c6125f1` and of
+        # `0e3c4d24` on shared-actions' default branch; the uploader's
+        # committed CLI manifest arrived here.
+        "a5765019912a8ab6882b12db049c7cde635f3a85",
     }
 )
 
