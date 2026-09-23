@@ -16,3 +16,4 @@ __pycache__/
 .claude/
 *.swp
 *.swo
+.coverage
