@@ -11,6 +11,8 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
+from workflow_contracts import of_type
+from workflow_contracts import parse as parse_workflow
 from workflow_coverage import (
     CACHE_REPORT_COMMAND,
     COVERAGE_ACTION,
@@ -295,3 +297,42 @@ def test_the_cache_report_carries_its_job_guard(
     (found,) = cache_reports({"ci.yml": text})
 
     assert found.job_guard == expected
+
+
+#: The two steps that turn the cache report into a verdict, in order.
+HEALTH_STEPS: typ.Final[tuple[str, ...]] = (
+    "sccache --show-stats --stats-format json > sccache-stats.json",
+    "python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json",
+)
+
+
+def test_every_cache_report_is_checked_for_health(
+    workflow_texts: dict[str, str],
+) -> None:
+    """Printing the counters is not checking them.
+
+    A lane whose sccache bound local disk, wrapped nothing, or failed every
+    store still compiles and stays green, and the report above would say so
+    only to someone reading it. After each report, the lane writes the
+    statistics as JSON and runs the health check on them, each as its own
+    step and in that order, and neither is guarded by anything but
+    `always()`, so a red lane is still judged.
+    """
+    for report in cache_reports(workflow_texts):
+        document = parse_workflow(report.workflow, workflow_texts[report.workflow])
+        job = of_type(of_type(document.get("jobs"), dict).get(report.job), dict)
+        later = [of_type(step, dict) for step in of_type(job.get("steps"), list)][
+            report.report_index + 1 :
+        ]
+        runs = [str(step.get("run", "")).strip() for step in later]
+        positions = [
+            runs.index(command) if command in runs else -1 for command in HEALTH_STEPS
+        ]
+        assert -1 not in positions and positions == sorted(positions), (
+            f"{report.workflow}:{report.job} must run, after its cache report "
+            f"and in this order: {HEALTH_STEPS}; it runs {runs}"
+        )
+        guards = {later[index].get("if") for index in positions}
+        assert guards == {"always()"}, (
+            f"{report.workflow}:{report.job} guards its health steps with {guards}"
+        )

@@ -41,6 +41,7 @@ WORKFLOW_CONTRACTS_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
 WORKFLOW_PY_SRCS := \
 	scripts/workflow_contracts.py scripts/workflow_commands.py \
 	scripts/workflow_coverage.py scripts/workflow_placement.py \
+	scripts/check_sccache_health.py scripts/tests/test_check_sccache_health.py \
 	scripts/tests/conftest.py scripts/tests/test_workflow_contracts.py \
 	scripts/tests/test_command_contracts.py \
 	scripts/tests/test_coverage_contracts.py \
@@ -114,6 +115,7 @@ workflow-contracts: ## Assert what the workflow files must say
 	@$(WORKFLOW_PYTEST) $(WORKFLOW_PY_TESTS) \
 		scripts/workflow_contracts.py scripts/workflow_commands.py \
 		scripts/workflow_coverage.py scripts/workflow_placement.py \
+		scripts/check_sccache_health.py \
 		--doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 

@@ -121,6 +121,17 @@ jobs:
         # and nobody was looking.
         if: always()
         run: sccache --show-stats
+      - name: Write compiler cache statistics
+        # The JSON form of the report above, for the health check below.
+        if: always()
+        run: sccache --show-stats --stats-format json > sccache-stats.json
+      - name: Check compiler cache health
+        # Fails a structurally broken integration: the wrong backend, nothing
+        # wrapped, or every store or read failing. Isolated write or read
+        # errors only warn, because a cache hiccup costs one compile and must
+        # not turn a pull request red.
+        if: always()
+        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
       - name: Set up Rust for Merman
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master
         with:

@@ -1550,6 +1550,18 @@ reusable-workflow call; every coverage step and its cache report; and every
 runner declaration, raw and parsed. A change that adds or removes an entry
 fails that module until its expected inventory is updated in the same commit.
 
+Both coverage lanes also check the compiler cache after reporting on it.
+`sccache --show-stats --stats-format json > sccache-stats.json` writes the
+statistics, and `scripts/check_sccache_health.py --expect-location ghac`,
+ported from Whitaker, fails the job only when the integration is structurally
+broken. That means one of: the cache location is not the GitHub Actions
+backend; sccache handled no compile requests; every store failed; or every
+read failed. Isolated read errors, write errors and timeouts only produce a
+warning: one failed store costs one compile, and failing on it would make the
+lane as flaky as the cache service. Both steps run under `always()`, so a red
+lane is still judged, and the coverage contracts assert them after every cache
+report.
+
 ### 20.1. Running the contracts
 
 ```bash
