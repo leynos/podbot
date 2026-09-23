@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import subprocess
-import sys
 import types
 import typing as typ
 from pathlib import Path
@@ -89,9 +89,11 @@ def test_the_output_is_one_of_two_fixed_lines(token: str | None) -> None:
 
 
 def _run(environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
-    """Run the script as the workflow does, in a child process."""
+    """Run the script as the workflow does: `python3` from PATH, in a child process."""
+    python3 = shutil.which("python3")
+    assert python3, "the workflow runs `python3`, which must be on PATH"
     return subprocess.run(  # noqa: S603 - fixed argv
-        [sys.executable, str(SCRIPT)],
+        [python3, str(SCRIPT)],
         env={"PATH": os.environ.get("PATH", "")} | environment,
         capture_output=True,
         text=True,
@@ -106,6 +108,16 @@ class CommandCase(typ.NamedTuple):
     ref: str
     expected: str
     record: str
+
+    @property
+    def availability(self) -> str:
+        """Return the record's token field for this case."""
+        return f"token_available={'true' if self.token.strip() else 'false'}"
+
+    @property
+    def ref_class(self) -> str:
+        """Return the record's ref field for this case."""
+        return f"ref={'main' if self.ref == 'refs/heads/main' else 'other'}"
 
 
 @pytest.mark.parametrize(
@@ -144,9 +156,13 @@ def test_the_command_writes_the_output_and_a_secret_free_record(
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+    record = (
+        f"operation=codescene_upload {case.availability} {case.ref_class} {case.record}"
+    )
     assert output.read_text(encoding="utf-8") == f"{case.expected}\n"
+    assert result.stdout == f"::notice::{record}\n", result.stdout
+    assert summary.read_text(encoding="utf-8") == f"CodeScene upload: `{record}`\n"
     everything = result.stdout + result.stderr + summary.read_text(encoding="utf-8")
-    assert case.record in result.stdout and case.record in everything, everything
     assert SECRET not in everything, "the secret must never be written"
 
 
