@@ -29,25 +29,47 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # The same stated budget as ci.yml's build-test, for the same
+      # reason: this job runs the coverage action once, with
+      # `use-cargo-nextest: 'false'`, so the watchdog is the only timer
+      # bounding cargo. See that job for the measurement it is sized
+      # against.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
+        uses: leynos/shared-actions/.github/actions/setup-rust@0e3c4d24e43aa48b511d94f3b902711eb02138df
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           features: internal
           output-path: lcov.info
           format: lcov
           use-cargo-nextest: 'false'
           with-ratchet: 'true'
+      - name: Report compiler cache effectiveness
+        # On failure too: a red lane is exactly when "did anything reach
+        # the cache" is worth knowing.
+        if: always()
+        run: sccache --show-stats
+      - name: Write compiler cache statistics
+        # The JSON form of the report above, for the health check below.
+        if: always()
+        run: sccache --show-stats --stats-format json > sccache-stats.json
+      - name: Check compiler cache health
+        # Fails a structurally broken integration: the wrong backend, nothing
+        # wrapped, or every store or read failing. Isolated write or read
+        # errors only warn, because a cache hiccup costs one compile and must
+        # not turn a pull request red.
+        if: always()
+        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         # A dispatch can name any branch, so the ref is checked here, not
         # only in the trigger filter.
         if: github.ref == 'refs/heads/main' && env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@d3cbe87e745e07b3ad53ddcb87deb19ffa95c9b8
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           format: lcov
           mode: upload

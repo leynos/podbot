@@ -14,12 +14,24 @@ jobs:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
       WHITAKER_INSTALLER_VERSION: '0.2.7'
+      # Pinned rather than inherited. `generate-coverage` defaults the
+      # cargo watchdog to 1800 s, sized for a cold sccache store; stating
+      # the same value here means a later change to the action's default
+      # cannot silently move the budget this job runs under. The measured
+      # worst case for the coverage step is 487 s (run 31733608869), so
+      # 1800 s is about 3.7 times the worst seen. This job passes
+      # `use-cargo-nextest: 'false'`, so cargo carries no inner test
+      # timer and the watchdog is the only one bounding it. The
+      # environment variable wins over the action's `cargo-wait-timeout`
+      # input, which is why it is set here and at job level, where every
+      # step can see it.
+      RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
+        uses: leynos/shared-actions/.github/actions/setup-rust@0e3c4d24e43aa48b511d94f3b902711eb02138df
       - name: Setup uv
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
       # The contracts read `.github/workflows` and need no Rust build, so
@@ -28,6 +40,12 @@ jobs:
       # suite asserts this exact step.
       - name: Workflow contracts
         run: make test-workflow-contracts
+      - name: Pin, budget and placement contracts
+        # Unguarded and named by its command: a step with an `if:` can be
+        # skipped without failing anything, and a step matched by name
+        # keeps asserting nothing if its `run:` is changed. The contract
+        # next door asserts this exact command.
+        run: make workflow-contracts
       - name: Format
         run: make check-fmt
       - name: Enforce en-GB-oxendict spelling
@@ -87,13 +105,33 @@ jobs:
       # ratchet, which gates on this repository's own baseline, needs no
       # token, and applies to pull requests from forks too.
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@1c1a46f0b4fde6dd78a9757fc475a5d06ee891c7
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0e3c4d24e43aa48b511d94f3b902711eb02138df
         with:
           features: internal
           output-path: lcov.info
           format: lcov
           use-cargo-nextest: 'false'
           with-ratchet: 'true'
+      - name: Report compiler cache effectiveness
+        # After the compiling steps and on failure too, because a red lane
+        # is exactly when "did anything reach the cache" is worth knowing.
+        # This is the evidence for the repin above: on the pins this job
+        # used before, sccache was installed and started on every run and
+        # Cargo routed nothing through it, so these counters were all zero
+        # and nobody was looking.
+        if: always()
+        run: sccache --show-stats
+      - name: Write compiler cache statistics
+        # The JSON form of the report above, for the health check below.
+        if: always()
+        run: sccache --show-stats --stats-format json > sccache-stats.json
+      - name: Check compiler cache health
+        # Fails a structurally broken integration: the wrong backend, nothing
+        # wrapped, or every store or read failing. Isolated write or read
+        # errors only warn, because a cache hiccup costs one compile and must
+        # not turn a pull request red.
+        if: always()
+        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
       - name: Set up Rust for Merman
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # master
         with:
