@@ -1509,11 +1509,14 @@ nothing:
 Every clause was proved by mutating the workflows or the reader and watching
 the named test fail; the pull request adopting CV-005 records the table.
 
-## 19. Workflow contract readers
+## 20. Pin, budget and placement contract readers
 
 `scripts/workflow_contracts.py` and `scripts/workflow_placement.py` turn the
 files in `.github/workflows/` into values the contracts in `scripts/tests/`
-assert against. They are kept apart from those contracts for two reasons.
+assert against. This suite runs under `make workflow-contracts`, beside the
+CodeScene coverage suite that section 19 describes, and CI runs each as its own
+unguarded step. The readers are kept apart from their contracts for two
+reasons.
 
 A reader can be wrong while no workflow is wrong, and a reader exercised only
 against this repository's own files cannot show that: parametrized over four
@@ -1528,7 +1531,7 @@ break, and the resulting `runs-on` carries a newline inside an expression
 GitHub evaluates anyway. The parse tolerates it, so a reader returning only
 the parsed value cannot refuse it.
 
-### 19.1. Running the contracts
+### 20.1. Running the contracts
 
 ```bash
 make workflow-contracts
@@ -1545,7 +1548,7 @@ Ruff runs `--isolated` at a pinned version, so these files are checked the
 same way wherever the target is invoked. The target needs Python 3.14 and
 `pytest`, both supplied by `uv` at the pinned versions named in the Makefile.
 
-### 19.2. `of_type`, and why it is shared
+### 20.2. `of_type`, and why it is shared
 
 `of_type(value, kind)` returns `value` when it has the expected shape and an
 empty instance of `kind` otherwise. Both reader modules use it.

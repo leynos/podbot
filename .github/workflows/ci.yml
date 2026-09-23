@@ -40,7 +40,7 @@ jobs:
       # suite asserts this exact step.
       - name: Workflow contracts
         run: make test-workflow-contracts
-      - name: Workflow contracts
+      - name: Pin, budget and placement contracts
         # Unguarded and named by its command: a step with an `if:` can be
         # skipped without failing anything, and a step matched by name
         # keeps asserting nothing if its `run:` is changed. The contract
