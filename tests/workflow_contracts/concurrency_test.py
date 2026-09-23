@@ -28,6 +28,7 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -107,8 +108,10 @@ def _load(path: Path) -> dict[str, object]:
     return document
 
 
-def _workflow_paths() -> list[Path]:
-    """Return every workflow file in the repository.
+def _workflow_paths(directory: Path = WORKFLOW_DIR) -> list[Path]:
+    """Return every workflow file in a directory, this repository's by default.
+
+    Suffixes are compared case-folded, because GitHub runs `CI.YML` too.
 
     Returns
     -------
@@ -118,8 +121,8 @@ def _workflow_paths() -> list[Path]:
     """
     return sorted(
         path
-        for path in WORKFLOW_DIR.iterdir()
-        if path.is_file() and path.suffix in WORKFLOW_SUFFIXES
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix.casefold() in WORKFLOW_SUFFIXES
     )
 
 
@@ -175,6 +178,30 @@ def _pull_request_workflows() -> list[Path]:
         for path in _workflow_paths()
         if PULL_REQUEST in (_trigger_names(_load(path)) or frozenset())
     ]
+
+
+#: A `${{ }}` expression, and a single-quoted string literal inside one.
+_EXPRESSION = re.compile(r"\$\{\{(?P<body>.*?)\}\}", re.DOTALL)
+_QUOTED = re.compile(r"'(?:[^']|'')*'")
+
+
+def _evaluated_text(value: str) -> str:
+    """Return the parts of a value GitHub evaluates as context references.
+
+    Only the bodies of `${{ }}` expressions are evaluated, and a quoted
+    string inside one is a literal. So `github.ref` written bare, or
+    `${{ 'github.event.pull_request.number' }}`, names the context without
+    reading it, and yields a constant group.
+
+    Examples
+    --------
+    >>> _evaluated_text("ci-${{ github.ref }}").strip()
+    'github.ref'
+    >>> "github.ref" in _evaluated_text("ci-github.ref-${{ 'github.ref' }}")
+    False
+    """
+    bodies = (match.group("body") for match in _EXPRESSION.finditer(value))
+    return " ".join(_QUOTED.sub("''", body) for body in bodies)
 
 
 def _concurrency(path: Path) -> dict[str, object]:
@@ -276,9 +303,11 @@ def test_the_group_distinguishes_one_pull_request_from_another(
     """The group varies with the pull request, so branches do not cancel each other.
 
     A constant group would put every open pull request in one queue, and the
-    first push anywhere would cancel the gates running everywhere else.
+    first push anywhere would cancel the gates running everywhere else. The
+    name must be evaluated: `group: github.ref` or a quoted name inside an
+    expression is a constant that merely looks like the context.
     """
-    group = str(_concurrency(workflow).get("group", ""))
+    group = _evaluated_text(str(_concurrency(workflow).get("group", "")))
     assert any(name in group for name in PER_PULL_REQUEST_EXPRESSIONS), (
         f"{workflow.name} must key its concurrency group on the pull request, "
         f"by naming one of {', '.join(PER_PULL_REQUEST_EXPRESSIONS)}; a group "
@@ -301,3 +330,24 @@ def test_cancellation_is_conditioned_on_the_event(workflow: Path) -> None:
         "superseded runs in flight and a literal true also cancels pushes to "
         "main, schedules, and dispatches"
     )
+
+
+@pytest.mark.parametrize(
+    ("group", "keyed"),
+    [
+        pytest.param("${{ github.workflow }}-${{ github.ref }}", True, id="evaluated"),
+        pytest.param("ci-github.ref", False, id="bare-text"),
+        pytest.param("${{ 'github.event.pull_request.number' }}", False, id="quoted"),
+    ],
+)
+def test_only_an_evaluated_reference_keys_the_group(group: str, *, keyed: bool) -> None:
+    """The reading is narrow: a name written as text is not a key."""
+    evaluated = _evaluated_text(group)
+    assert any(name in evaluated for name in PER_PULL_REQUEST_EXPRESSIONS) is keyed
+
+
+def test_a_workflow_with_an_upper_case_suffix_is_discovered(tmp_path: Path) -> None:
+    """GitHub runs `CI.YML`, so discovery must not skip it."""
+    (tmp_path / "CI.YML").write_text("jobs: {}\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("jobs: {}\n", encoding="utf-8")
+    assert [path.name for path in _workflow_paths(tmp_path)] == ["CI.YML"]

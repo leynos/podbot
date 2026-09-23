@@ -1671,7 +1671,13 @@ Two halves matter, and each fails in a way nothing else would notice.
   `cancel-in-progress: true` reads as the stricter setting and is a
   regression. A push to `main`, a schedule, and a dispatch have no successor
   waiting, and the run on `main` writes the warm cache and records the
-  coverage that no later run repeats.
+  coverage that no later run repeats. Such a run is never cancelled once it
+  is running. GitHub still keeps one pending run per group, so a third
+  dispatch on the same ref replaces a second that is still queued. The newer
+  run covers the same ref, so nothing is lost.
+- **The key is evaluated.** The group must read the pull request inside
+  `${{ }}`. `group: github.ref`, or a quoted name inside an expression, is a
+  constant that only looks like the context.
 
 `pull_request_target` workflows are out of scope. They run against the base
 repository to carry a token, and the ones here automate pull-request
