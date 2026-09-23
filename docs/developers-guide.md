@@ -1511,9 +1511,18 @@ the named test fail; the pull request adopting CV-005 records the table.
 
 ## 20. Pin, budget and placement contract readers
 
-`scripts/workflow_contracts.py` and `scripts/workflow_placement.py` turn the
-files in `.github/workflows/` into values the contracts in `scripts/tests/`
-assert against. This suite runs under `make workflow-contracts`, beside the
+Four reader modules turn the files in `.github/workflows/` into values that
+the contracts in `scripts/tests/` assert against:
+
+- `workflow_contracts.py` reads and parses the files and finds the
+  shared-actions references.
+- `workflow_commands.py` finds the steps that run a given command, with their
+  guards.
+- `workflow_coverage.py` covers the coverage steps, their watchdog and their
+  cache reports.
+- `workflow_placement.py` covers runner placement.
+
+ This suite runs under `make workflow-contracts`, beside the
 CodeScene coverage suite that section 19 describes, and CI runs each as its own
 unguarded step. The readers are kept apart from their contracts for two
 reasons.
@@ -1531,18 +1540,27 @@ break, and the resulting `runs-on` carries a newline inside an expression
 GitHub evaluates anyway. The parse tolerates it, so a reader returning only
 the parsed value cannot refuse it.
 
+Parsing refuses a mapping that declares a key twice, because PyYAML would
+otherwise keep only the second of two `runs-on` lines. Workflow file suffixes
+are compared case-folded, because GitHub runs `CI.YML` too. Every contract
+over the real files also checks that its reader found something. That alone
+cannot show that nothing was dropped, so `test_workflow_inventory.py` asserts
+the exact inventory: every shared-actions reference, including the job-level
+reusable-workflow call; every coverage step and its cache report; and every
+runner declaration, raw and parsed. A change that adds or removes an entry
+fails that module until its expected inventory is updated in the same commit.
+
 ### 20.1. Running the contracts
 
 ```bash
 make workflow-contracts
 ```
 
-The target runs four things over `scripts/workflow_contracts.py`,
-`scripts/workflow_placement.py` and their tests: a Ruff format check, a Ruff
-lint pass, the contract tests themselves, and the modules' doctests, which
-`--doctest-modules` collects so a documented example is executed rather than
-merely read. It is part of `make all`, and CI runs it as an unguarded step
-whose `run:` is asserted to be exactly this command.
+The target runs four things over the reader modules and their tests: a Ruff
+format check, a Ruff lint pass, the contract tests themselves, and the modules'
+doctests, which `--doctest-modules` collects so a documented example is
+executed rather than merely read. It is part of `make all`, and CI runs it as
+an unguarded step whose `run:` is asserted to be exactly this command.
 
 Ruff runs `--isolated` at a pinned version, so these files are checked the
 same way wherever the target is invoked. The target needs Python 3.14 and

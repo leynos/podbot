@@ -19,21 +19,11 @@ reading of the value will find the broken form.
 
 from __future__ import annotations
 
-import sys
 import typing as typ
-from pathlib import Path
 
 import pytest
 
-# The readers live in `scripts/`, which is not a package and is not on
-# `sys.path` when pytest collects this file from the repository root.
-# The bootstrap therefore has to run before the imports below, which is
-# what E402 forbids and why each of them carries the suppression: the
-# import order is not a preference here, it is the only order that
-# resolves.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from workflow_placement import (  # noqa: E402 - must follow the sys.path bootstrap above
+from workflow_placement import (
     line_break_fault,
     runs_on_declarations,
 )

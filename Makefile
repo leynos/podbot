@@ -39,9 +39,14 @@ WORKFLOW_CONTRACTS_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
 	--with pytest==9.0.2 --with pyyaml==$(PYYAML_VERSION) \
 	--with hypothesis==$(HYPOTHESIS_VERSION) python -m pytest
 WORKFLOW_PY_SRCS := \
-	scripts/workflow_contracts.py scripts/workflow_placement.py \
-	scripts/tests/test_workflow_contracts.py \
+	scripts/workflow_contracts.py scripts/workflow_commands.py \
+	scripts/workflow_coverage.py scripts/workflow_placement.py \
+	scripts/tests/conftest.py scripts/tests/test_workflow_contracts.py \
+	scripts/tests/test_command_contracts.py \
+	scripts/tests/test_coverage_contracts.py \
+	scripts/tests/test_workflow_inventory.py \
 	scripts/tests/test_runner_placement_rule.py
+WORKFLOW_PY_TESTS := $(filter scripts/tests/test_%,$(WORKFLOW_PY_SRCS))
 WORKFLOW_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
 	--with pytest==9.0.2 --with pyyaml==6.0.3 python -m pytest
 
@@ -106,9 +111,9 @@ test-workflow-contracts: ## Assert what the workflow files must say
 workflow-contracts: ## Assert what the workflow files must say
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(WORKFLOW_PY_SRCS)
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(WORKFLOW_PY_SRCS)
-	@$(WORKFLOW_PYTEST) scripts/tests/test_workflow_contracts.py \
-		scripts/tests/test_runner_placement_rule.py \
-		scripts/workflow_contracts.py scripts/workflow_placement.py \
+	@$(WORKFLOW_PYTEST) $(WORKFLOW_PY_TESTS) \
+		scripts/workflow_contracts.py scripts/workflow_commands.py \
+		scripts/workflow_coverage.py scripts/workflow_placement.py \
 		--doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 
