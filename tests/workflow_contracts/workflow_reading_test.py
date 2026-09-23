@@ -154,6 +154,21 @@ def test_an_empty_workflow_directory_is_a_reader_fault(tmp_path: pathlib.Path) -
     assert raised.value.path == str(tmp_path)
 
 
+def test_a_missing_workflow_directory_is_a_reader_fault(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A directory that cannot be listed is reported as the reader's, with its path.
+
+    Left to escape, it would surface as a bare ``OSError`` that no caller
+    can tell apart from a fault in the workflows.
+    """
+    missing = tmp_path / "absent"
+    with pytest.raises(WorkflowReadingError) as raised:
+        read_workflows(missing)
+    assert raised.value.reader == "read_workflows"
+    assert raised.value.path == str(missing)
+
+
 @pytest.mark.parametrize(
     "body",
     [

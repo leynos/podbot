@@ -164,6 +164,17 @@ TOKEN_ROADS: typ.Final[list[tuple[str, str, str]]] = [
         "jobs.a.steps[0].run",
     ),
     (
+        "whole-object",
+        "jobs:\n  a:\n    steps:\n      - run: echo '${{ toJSON(secrets) }}' > s\n",
+        "jobs.a.steps[0].run",
+    ),
+    (
+        "computed-index",
+        "jobs:\n  a:\n    steps:\n"
+        "      - run: echo ${{ secrets[format('CS_{0}', 'ACCESS_TOKEN')] }}\n",
+        "jobs.a.steps[0].run",
+    ),
+    (
         "action-input",
         "jobs:\n  a:\n    steps:\n      - uses: x/y@v1\n"
         "        with:\n          token: ${{ secrets.CS_ACCESS_TOKEN }}\n",
@@ -215,6 +226,10 @@ def test_the_token_clause_reads_every_road(body: str, site: str) -> None:
             "jobs:\n  a:\n    env:\n      T: ${{ secrets.OTHER }}\n", id="other"
         ),
         pytest.param("# ${{ secrets.CS_ACCESS_TOKEN }}\nname: x\n", id="a-comment"),
+        pytest.param(
+            "jobs:\n  a:\n    env:\n      T: ${{ secrets['OTHER'] }}\n",
+            id="other-by-index",
+        ),
     ],
 )
 def test_the_token_clause_ignores_a_mention(body: str) -> None:

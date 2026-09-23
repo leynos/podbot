@@ -120,8 +120,9 @@ def test_the_publisher_never_cancels_a_run(upload: Upload) -> None:
     """Publisher runs are grouped, and a run in progress is never cancelled.
 
     A cancelled run abandons both its upload and its ratchet baseline
-    write. Without cancelling, GitHub keeps one pending run per group,
-    so a newer push replaces a pending one and the newest baseline wins.
+    write. Without cancelling, GitHub keeps at most one pending run per
+    group and a run queued later replaces it, so a burst of pushes
+    publishes the last one queued.
     """
     concurrency = upload.document.get("concurrency")
     assert isinstance(concurrency, dict), (

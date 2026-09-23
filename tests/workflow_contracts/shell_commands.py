@@ -37,6 +37,20 @@ _OPERATOR_CHARACTERS: typ.Final[str] = ";&|()"
 #: after it rather than being the command.
 _ASSIGNMENT: typ.Final[re.Pattern[str]] = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
+#: Variables that change how `make` runs rather than what it builds:
+#: `MAKEFLAGS=-n` turns the command into a dry run through the environment.
+_MAKE_FLAG_VARIABLES: typ.Final[frozenset[str]] = frozenset(
+    {"MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS"}
+)
+
+
+def _is_neutral_assignment(word: str) -> bool:
+    """Return whether a word is an assignment that cannot change how make runs."""
+    return (
+        bool(_ASSIGNMENT.match(word))
+        and word.split("=", 1)[0] not in _MAKE_FLAG_VARIABLES
+    )
+
 
 def _is_operator(token: str) -> bool:
     """Return whether a token is a list, pipeline or subshell operator."""
@@ -77,12 +91,17 @@ def runs_unconditionally(script: str, command: str) -> bool:
     -------
     bool
         True when the script, once comments and blank lines are removed, is a
-        single simple command with no operator, whose words after any leading
-        variable assignments begin with those of `command`.
+        single simple command with no operator, made of the words of `command`
+        and, around them, only variable assignments. A flag such as `-n` or
+        `-i`, or an assignment to `MAKEFLAGS`, `MFLAGS` or `GNUMAKEFLAGS`,
+        can make the command a dry run or ignore its failures, so it is
+        refused.
 
     >>> runs_unconditionally("RUSTFLAGS=-Dwarnings make coverage", "make coverage")
     True
     >>> runs_unconditionally("false && make coverage", "make coverage")
+    False
+    >>> runs_unconditionally("make coverage -n", "make coverage")
     False
     """
     joined = script.replace("\\\n", " ")
@@ -90,5 +109,9 @@ def runs_unconditionally(script: str, command: str) -> bool:
     if len(lines) != 1 or any(_is_operator(token) for token in lines[0]):
         return False
     words = list(itertools.dropwhile(_ASSIGNMENT.match, lines[0]))
+    leading = lines[0][: len(lines[0]) - len(words)]
     expected = command.split()
-    return words[: len(expected)] == expected
+    trailing = words[len(expected) :]
+    return words[: len(expected)] == expected and all(
+        _is_neutral_assignment(word) for word in [*leading, *trailing]
+    )

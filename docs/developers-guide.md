@@ -1441,9 +1441,16 @@ context property as `''`: with the binding deleted the guard stays well formed
 and the upload skips on every run with nothing failing.
 
 The workflow declares a concurrency group without `cancel-in-progress`. A
-cancelled publisher abandons both its upload and its ratchet baseline write.
-Without cancelling, GitHub keeps one pending run per group, so a newer push
-replaces a pending one and the newest baseline wins.
+cancelled publisher abandons both its upload and its ratchet baseline write, so
+a run in progress always finishes. GitHub keeps at most one pending run per
+group, and a run queued later replaces it, so a burst of pushes publishes the
+last one queued. Pushes to `main` queue in push order in practice. GitHub does
+not document that order as guaranteed: were two runs ever queued out of order,
+the baseline would lag by one commit until the next push to `main` wrote a
+fresh one. Each upload is attributed to the commit its run built, so a replaced
+run leaves that commit unmeasured rather than mislabelled. The publisher checks
+out the commit that triggered it rather than the branch head for the same
+reason: coverage built from one commit must not be recorded against another.
 
 ### 19.2. The contract
 

@@ -11,9 +11,12 @@ name: Coverage (main)
     branches: [main]
   workflow_dispatch:
 
-# Runs queue rather than cancel. A cancelled publisher abandons both its
-# upload and its baseline write; GitHub keeps one pending run per group,
-# so a newer push replaces a pending one and the newest baseline wins.
+# A run in progress is never cancelled: a cancelled publisher abandons
+# both its upload and its baseline write. GitHub keeps at most one pending
+# run per group, and a run queued later replaces it, so a burst of pushes
+# publishes the last one queued. Pushes to main queue in push order in
+# practice; were two ever queued out of order, the baseline would lag by
+# one commit until the next push to main.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false

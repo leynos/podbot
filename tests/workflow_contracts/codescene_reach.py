@@ -36,6 +36,14 @@ ACTION_NAME: typ.Final[str] = CODESCENE_ACTION.rsplit("/", 1)[-1]
 #: A ``${{ }}`` expression, which may span lines in a block scalar.
 _EXPRESSION: typ.Final[re.Pattern[str]] = re.compile(r"\$\{\{.*?\}\}", re.DOTALL)
 
+#: ``secrets`` read whole or through a computed index, as in
+#: ``toJSON(secrets)`` or ``secrets[format(...)]``. Either reaches every
+#: secret without naming one; only ``secrets.NAME`` and ``secrets['NAME']``
+#: name what they read.
+_OPAQUE_SECRETS: typ.Final[re.Pattern[str]] = re.compile(
+    r"\bsecrets\b(?!\s*\.\s*[A-Za-z_]|\s*\[\s*'[^']*'\s*\])", re.IGNORECASE
+)
+
 
 def _is_key(where: str) -> bool:
     """Return whether a path from ``scalars`` names a key rather than a value."""
@@ -48,13 +56,17 @@ def _names(text: str, needle: str) -> bool:
 
 
 def _expression_reads(text: str) -> bool:
-    """Return whether an expression in a value names the secret.
+    """Return whether an expression in a value can read the secret.
 
     Secret names are case-insensitive to GitHub, and an expression can
     reach one as ``secrets.X``, ``secrets['X']``, ``env.X`` or
-    ``vars.X``; every one of those names it inside ``${{ }}``.
+    ``vars.X``; every one of those names it inside ``${{ }}``. The whole
+    ``secrets`` object, or a computed index into it, reaches it unnamed.
     """
-    return any(_names(match, FORBIDDEN_VARIABLE) for match in _EXPRESSION.findall(text))
+    return any(
+        _names(match, FORBIDDEN_VARIABLE) or _OPAQUE_SECRETS.search(match) is not None
+        for match in _EXPRESSION.findall(text)
+    )
 
 
 def _inherits(where: str, text: str) -> bool:

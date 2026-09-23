@@ -68,17 +68,24 @@ def test_a_lone_command_is_accepted(script: str) -> None:
         pytest.param(
             "make test-workflow-contracts\necho 'oops", id="beside-an-unreadable-line"
         ),
+        pytest.param("make test-workflow-contracts -n", id="a-dry-run-flag"),
+        pytest.param("make test-workflow-contracts --dry-run", id="a-long-dry-run"),
+        pytest.param("make test-workflow-contracts -i", id="ignoring-errors"),
+        pytest.param("MAKEFLAGS=-n make test-workflow-contracts", id="makeflags"),
+        pytest.param("make test-workflow-contracts MAKEFLAGS=-k", id="trailing-flags"),
         pytest.param("", id="nothing"),
     ],
 )
 def test_anything_else_is_refused(script: str) -> None:
     """The narrow half, and the reason the reader exists.
 
-    Every row contains the words. The first five do not run the command to
-    completion, or not at all; the next two might, but the reader refuses
-    rather than reason about what else a step does, which is why the lane gives
-    the command a step of its own; the rest only mention it. A line the reader
-    cannot tokenize refuses the whole script rather than being skipped, which
-    is what the last row but one proves.
+    Every row contains the words. Some do not run the command to completion,
+    or at all (a failing `&&`, an `exit`, the background); some might, but the
+    reader refuses rather than reason about what else a step does, which is
+    why the lane gives the command a step of its own; some only mention it. A
+    line the reader cannot tokenize refuses the whole script rather than being
+    skipped (`beside-an-unreadable-line`). A flag or a `MAKEFLAGS` assignment
+    can turn the command into a dry run or ignore its failures, so the only
+    extra words accepted are ordinary variable assignments.
     """
     assert not runs_unconditionally(script, COMMAND), f"{script!r} is refused"

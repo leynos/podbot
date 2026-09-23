@@ -36,7 +36,13 @@ from codescene_coverage import (
 )
 from codescene_reach import action_sites, cli_sites, codescene_contacts, token_sites
 from shell_commands import runs_unconditionally
-from workflow_reading import job_steps, read_workflows, workflow_jobs, workflow_steps
+from workflow_reading import (
+    enforces,
+    job_steps,
+    read_workflows,
+    workflow_jobs,
+    workflow_steps,
+)
 
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
     from collections.abc import Callable
@@ -52,7 +58,18 @@ CONTRACT_COMMAND: typ.Final[str] = "make test-workflow-contracts"
 #: The inputs deciding what a coverage run measures, as opposed to what
 #: happens to the report afterwards.
 SELECTION: typ.Final[frozenset[str]] = frozenset(
-    {"output-path", "format", "features", "with-default-features", "language"}
+    {
+        "output-path",
+        "format",
+        "features",
+        "with-default-features",
+        "language",
+        "cargo-manifest",
+        "use-cargo-nextest",
+        "with-cucumber-rs",
+        "cucumber-rs-features",
+        "cucumber-rs-args",
+    }
 )
 
 
@@ -207,24 +224,43 @@ def test_the_ratcheting_lane_matches_its_baseline(
         assert theirs == ours, f"{name} builds {theirs}; {publisher} builds {ours}"
 
 
-def test_every_pull_request_lane_ratchets_unconditionally(
+def _coverage_steps_with_jobs(
+    document: WorkflowDocument,
+) -> list[tuple[dict[str, object], dict[str, object]]]:
+    """Return one workflow's coverage steps, each paired with its job."""
+    return [
+        (job, step)
+        for job in workflow_jobs(document).values()
+        for step in job_steps(job)
+        if invokes(step, COVERAGE_ACTION)
+    ]
+
+
+def _gate_settings(scope: dict[str, object]) -> dict[str, object]:
+    """Return the settings that can stop a job or step from gating."""
+    return {key: scope[key] for key in ("if", "continue-on-error") if key in scope}
+
+
+def test_every_coverage_lane_ratchets_and_enforces_it(
     documents: dict[str, WorkflowDocument],
 ) -> None:
     """The ratchet is the gate CV-005 leaves, so it must stay switched on.
 
-    Deleting ``with-ratchet``, or guarding the step with an ``if:``,
-    leaves every other clause green while the lane stops gating. The
-    publisher must ratchet too, since its run writes the baseline.
+    Deleting ``with-ratchet``, guarding the step or its job with an
+    ``if:``, or letting either continue on error leaves every other
+    clause green while the lane stops gating. The publisher is held to
+    the same rule, since a failure there would hide a failed baseline
+    write.
     """
-    steps = coverage_steps(documents)
     (publisher,) = publishers(documents)
     for name in [publisher, *_pull_request_lanes(documents)]:
-        (step,) = steps[name]
+        ((job, step),) = _coverage_steps_with_jobs(documents[name])
         inputs = step.get("with")
         ratchet = inputs.get("with-ratchet") if isinstance(inputs, dict) else None
         assert ratchet == "true", f"{name} must ratchet; with-ratchet is {ratchet!r}"
-        assert "if" not in step, (
-            f"{name}'s coverage step is guarded: {step.get('if')!r}"
+        assert enforces(job, step), (
+            f"{name}'s coverage step can be skipped or fail quietly: "
+            f"{_gate_settings(job)} on the job, {_gate_settings(step)} on the step"
         )
 
 
@@ -233,19 +269,18 @@ def test_the_pull_request_lane_runs_these_contracts(
 ) -> None:
     """A contract nothing runs protects nothing.
 
-    Required as a step's sole command, in an unguarded step of an
-    unguarded job: ``echo make test-workflow-contracts`` contains the
-    words, ``false && make test-workflow-contracts`` contains the
-    command, and an ``if:`` that is never true skips it; none of them
-    runs the suite.
+    Required as a step's sole command, in a step and job with no ``if:``
+    and no ``continue-on-error``: ``echo make test-workflow-contracts``
+    contains the words, ``false && make test-workflow-contracts``
+    contains the command, an ``if:`` that is never true skips it, and
+    ``continue-on-error`` lets it fail quietly; none of them gates.
     """
     running = [
         f"{name}: job {job_name}"
         for name, document in pull_request_workflows(documents).items()
         for job_name, job in workflow_jobs(document).items()
-        if "if" not in job
         for step in job_steps(job)
-        if "if" not in step
+        if enforces(job, step)
         and runs_unconditionally(str(step.get("run", "")), CONTRACT_COMMAND)
     ]
     assert running, (

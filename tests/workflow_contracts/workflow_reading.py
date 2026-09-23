@@ -32,7 +32,7 @@ if typ.TYPE_CHECKING:  # pragma: no cover - typing only
 #: but a reader that declared ``dict[str, object]`` and then looked
 #: under ``True`` would be claiming something the type says cannot
 #: happen.
-WorkflowDocument = dict[typ.Union[str, bool], object]
+WorkflowDocument = dict[str | bool, object]
 
 #: Triggers that mean a workflow serves pull requests. The second runs
 #: with the base repository's secrets, which is the more dangerous of
@@ -243,6 +243,34 @@ def job_steps(job: dict[str, object]) -> list[dict[str, object]]:
     return [step for step in steps if isinstance(step, dict)]
 
 
+def _tolerates_failure(scope: dict[str, object]) -> bool:
+    """Return whether a job or step may fail without failing its run.
+
+    Fails closed: ``continue-on-error`` may be an expression, so only an
+    explicit ``false``, or no setting at all, reads as enforcing.
+    """
+    return str(scope.get("continue-on-error", "false")).strip() != "false"
+
+
+def enforces(job: dict[str, object], step: dict[str, object]) -> bool:
+    r"""Return whether a step runs on every run of its job and its failure fails it.
+
+    A gate that can be skipped or can fail quietly gates nothing, so an
+    ``if:`` or a ``continue-on-error`` other than ``false`` on either
+    the job or the step disqualifies it.
+
+    >>> enforces({}, {"run": "make gate"})
+    True
+    >>> enforces({"continue-on-error": "true"}, {"run": "make gate"})
+    False
+    >>> enforces({}, {"if": "always()", "run": "make gate"})
+    False
+    """
+    return all(
+        "if" not in scope and not _tolerates_failure(scope) for scope in (job, step)
+    )
+
+
 def workflow_steps(document: WorkflowDocument) -> list[dict[str, object]]:
     r"""Return every step of every job in one workflow.
 
@@ -303,12 +331,19 @@ def read_workflows(directory: pathlib.Path) -> dict[str, WorkflowDocument]:
     The only filesystem access here. The suffix is compared case-folded,
     because GitHub runs ``CI.YML`` as readily as ``ci.yml``, and a sweep
     that skipped it would report repository-wide coverage while ignoring
-    a lane. Raises ``WorkflowReadingError`` when the directory holds no
-    workflow, or one cannot be read or parsed.
+    a lane. Raises ``WorkflowReadingError`` when the directory cannot be
+    listed or holds no workflow, or when one cannot be read or parsed.
     """
+    try:
+        paths = sorted(directory.iterdir())
+    except OSError as error:
+        message = f"{directory} could not be listed: {error}"
+        raise WorkflowReadingError(
+            message, reader="read_workflows", path=str(directory)
+        ) from error
     found = {
         path.name: _read_one(path)
-        for path in sorted(directory.iterdir())
+        for path in paths
         if path.is_file() and path.suffix.casefold() in WORKFLOW_SUFFIXES
     }
     if not found:
