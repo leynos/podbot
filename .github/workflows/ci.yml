@@ -7,12 +7,11 @@ name: CI
 
 # A push to a pull request supersedes the run already in flight, and there is
 # nothing left to learn from the superseded one. Cancellation is conditioned
-# on the event, so a dispatch is never cancelled once it is running. GitHub
-# still keeps only one pending run per group, so a third dispatch on the same
-# ref replaces a second one that is still queued; the newer run covers the
-# same ref, so nothing is lost.
+# on the event, and only a pull request shares a group: every other event
+# falls back to its own run id, so a dispatch is neither cancelled nor
+# replaced while it waits.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

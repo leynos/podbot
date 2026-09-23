@@ -1655,29 +1655,36 @@ concurrency block:
 
 ```yaml
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 ```
 
-Two halves matter, and each fails in a way nothing else would notice.
+Three things matter, and each fails in a way nothing else would notice.
 
-- **The group keys on the pull request.** A group built from
-  `github.run_id` is unique to one run, so it matches no predecessor and
-  cancels nothing while reading exactly like a concurrency control. A
-  constant group is the opposite failure: every open pull request shares one
-  queue, and the first push anywhere cancels the gates running everywhere
-  else.
+- **The group keys on the pull request.** For a pull request, a group
+  built from `github.run_id` is unique to one run, so it matches no
+  predecessor and cancels nothing while reading exactly like a concurrency
+  control. A constant group is the opposite failure: every open pull request
+  shares one queue, and the first push anywhere cancels the gates running
+  everywhere else. `github.run_id` appears only as the fallback after the
+  pull-request number, which only non-pull-request events reach. Each of
+  those runs therefore has a group of its own. GitHub keeps at most one
+  pending run per group, so a shared group for dispatches would let a third
+  dispatch replace a queued second one.
 - **Cancellation is conditioned on the event.** A literal
   `cancel-in-progress: true` reads as the stricter setting and is a
   regression. A push to `main`, a schedule, and a dispatch have no successor
   waiting, and the run on `main` writes the warm cache and records the
-  coverage that no later run repeats. Such a run is never cancelled once it
-  is running. GitHub still keeps one pending run per group, so a third
-  dispatch on the same ref replaces a second that is still queued. The newer
-  run covers the same ref, so nothing is lost.
+  coverage that no later run repeats. With its own group, such a run is
+  neither cancelled nor replaced.
 - **The key is evaluated.** The group must read the pull request inside
   `${{ }}`. `group: github.ref`, or a quoted name inside an expression, is a
   constant that only looks like the context.
+
+A superseded run ends with the conclusion `cancelled`. The Actions runs API
+(`gh run list --workflow ci.yml --json conclusion,event`) shows how often
+that happens on pull requests, which is the minutes this saves. A cancelled
+run on any other event would mean the grouping has regressed.
 
 `pull_request_target` workflows are out of scope. They run against the base
 repository to carry a token, and the ones here automate pull-request

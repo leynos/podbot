@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from workflow_reading import WorkflowDocument, WorkflowReadingError, load_workflow
 
 #: The repository's workflow directory. The module sits two levels below the
 #: repository root, in `tests/workflow_contracts/`.
@@ -82,30 +83,22 @@ KNOWN_PULL_REQUEST_WORKFLOWS: frozenset[str] = frozenset(
 )
 
 
-def _load(path: Path) -> dict[str, object]:
-    """Read and parse one workflow file.
+def _load(path: Path) -> WorkflowDocument:
+    """Read and parse one workflow file through the shared strict reader.
 
-    Parameters
-    ----------
-    path
-        Workflow file to read.
-
-    Returns
-    -------
-    dict
-        The parsed workflow document.
-
-    Raises
-    ------
-    AssertionError
-        If the document does not parse as a mapping, which means it is not a
-        workflow at all.
+    ``load_workflow`` keeps every scalar a string and refuses a mapping that
+    declares a key twice, so a doubled ``concurrency`` or ``on`` cannot hide
+    its first half. Every failure, unreadable, not YAML, or not a mapping, is
+    raised as a ``WorkflowReadingError`` naming the file, so the fault is
+    visible as the reader's rather than surfacing from inside a query.
     """
-    document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(document, dict):
-        message = f"{path.name} must parse as a mapping"
-        raise AssertionError(message)
-    return document
+    try:
+        return load_workflow(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, TypeError, yaml.YAMLError) as error:
+        message = f"{path.name} could not be read as a workflow: {error}"
+        raise WorkflowReadingError(
+            message, reader="concurrency", path=str(path)
+        ) from error
 
 
 def _workflow_paths(directory: Path = WORKFLOW_DIR) -> list[Path]:
@@ -148,21 +141,26 @@ def _trigger_names(document: dict[str, object]) -> frozenset[str] | None:
     frozenset of str, or None
         The declared event names, empty when the workflow declares no `on:`
         at all, in which case nothing can start it. ``None`` when `on:` is
-        present in a shape this reader does not model; the caller decides
+        present in a shape this reader does not model, an explicit empty
+        value included; the caller decides
         what to do about that, and
         `test_every_workflow_declares_a_trigger_set_this_reader_models`
         reports it by name rather than letting discovery drop it in silence.
     """
-    declared = document.get("on", document.get(True))
-    if declared is None:
+    if "on" not in document and True not in document:
         return frozenset()
-    if isinstance(declared, dict):
-        return frozenset(key for key in declared if isinstance(key, str))
-    if isinstance(declared, list):
-        return frozenset(event for event in declared if isinstance(event, str))
-    if isinstance(declared, str):
-        return frozenset({declared})
-    return None
+    match document.get("on", document.get(True)):
+        case dict() as events:
+            return frozenset(key for key in events if isinstance(key, str))
+        case list() as events:
+            return frozenset(event for event in events if isinstance(event, str))
+        case str() as event if event.strip():
+            return frozenset({event})
+        case _:
+            # An explicit empty `on:` loads as "" or None. It is present but
+            # names no event, which is a shape this reader does not model,
+            # not an absent key.
+            return None
 
 
 def _pull_request_workflows() -> list[Path]:
@@ -280,20 +278,85 @@ def test_every_pull_request_workflow_declares_a_concurrency_group(
     )
 
 
+#: The one place a run-unique value may appear in a group: as the fallback a
+#: non-pull-request event selects. A pull request always has a number, so it
+#: never reaches the fallback, and every other event gets a group of its own.
+_NON_PULL_REQUEST_FALLBACK = re.compile(
+    r"github\.event\.pull_request\.number\s*\|\|\s*github\.run_id\b"
+)
+
+
+def _run_unique_names(group: str) -> list[str]:
+    """Return the run-unique names a pull request's group would evaluate.
+
+    Examples
+    --------
+    >>> _run_unique_names("${{ github.event.pull_request.number || github.run_id }}")
+    []
+    >>> _run_unique_names("${{ github.run_id || github.event.pull_request.number }}")
+    ['github.run_id']
+    """
+    evaluated = _NON_PULL_REQUEST_FALLBACK.sub("", _evaluated_text(group))
+    return [name for name in RUN_UNIQUE_EXPRESSIONS if name in evaluated]
+
+
 @pytest.mark.parametrize("workflow", PULL_REQUEST_WORKFLOWS, ids=WORKFLOW_IDS)
 def test_the_group_is_not_unique_to_one_run(workflow: Path) -> None:
-    """The group is shared by successive runs of the same pull request.
+    """A pull request's successive runs share one group.
 
-    A group built from the run identifier or the commit SHA matches no other
-    run, so it cancels nothing while reading as a concurrency control.
+    A group a pull request builds from the run identifier or the commit SHA
+    matches no other run, so it cancels nothing while reading as a
+    concurrency control. The run identifier is allowed only as the fallback
+    after the pull-request number, where only other events can select it.
     """
     group = str(_concurrency(workflow).get("group", ""))
-    offenders = [name for name in RUN_UNIQUE_EXPRESSIONS if name in group]
+    offenders = _run_unique_names(group)
     assert not offenders, (
-        f"{workflow.name} builds its concurrency group from "
+        f"{workflow.name} builds its pull-request concurrency group from "
         f"{', '.join(offenders)}, which is unique to one run; the group would "
         "never match a superseded run and would cancel nothing"
     )
+
+
+@pytest.mark.parametrize("workflow", PULL_REQUEST_WORKFLOWS, ids=WORKFLOW_IDS)
+def test_every_other_event_gets_a_group_of_its_own(workflow: Path) -> None:
+    """A dispatch or a push falls back to its run id, so nothing replaces it.
+
+    GitHub keeps at most one pending run per group. A shared fallback such as
+    `github.ref` would let a third dispatch replace a queued second one, which
+    conditioning `cancel-in-progress` on the event does not prevent.
+    """
+    group = _evaluated_text(str(_concurrency(workflow).get("group", "")))
+    assert _NON_PULL_REQUEST_FALLBACK.search(group), (
+        f"{workflow.name} must fall back to github.run_id after "
+        f"github.event.pull_request.number; its group evaluates {group!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("group", "unique"),
+    [
+        pytest.param(
+            "${{ github.event.pull_request.number || github.run_id }}",
+            False,
+            id="fallback",
+        ),
+        pytest.param("${{ github.run_id }}", True, id="run-id-alone"),
+        pytest.param(
+            "${{ github.run_id || github.event.pull_request.number }}",
+            True,
+            id="run-id-first",
+        ),
+        pytest.param(
+            "${{ github.event.pull_request.number }}-${{ github.sha }}", True, id="sha"
+        ),
+    ],
+)
+def test_a_run_unique_value_is_allowed_only_as_the_fallback(
+    group: str, *, unique: bool
+) -> None:
+    """Narrow as well as sufficient: only the non-pull-request fallback passes."""
+    assert bool(_run_unique_names(group)) is unique
 
 
 @pytest.mark.parametrize("workflow", PULL_REQUEST_WORKFLOWS, ids=WORKFLOW_IDS)
@@ -351,3 +414,32 @@ def test_a_workflow_with_an_upper_case_suffix_is_discovered(tmp_path: Path) -> N
     (tmp_path / "CI.YML").write_text("jobs: {}\n", encoding="utf-8")
     (tmp_path / "notes.txt").write_text("jobs: {}\n", encoding="utf-8")
     assert [path.name for path in _workflow_paths(tmp_path)] == ["CI.YML"]
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        pytest.param("name: x\n", frozenset(), id="no-on-key"),
+        pytest.param("on:\n", None, id="explicit-empty"),
+        pytest.param("on: ''\n", None, id="empty-string"),
+        pytest.param("on: [pull_request]\n", frozenset({"pull_request"}), id="list"),
+    ],
+)
+def test_an_explicit_empty_on_is_unsupported_not_absent(
+    body: str, expected: frozenset[str] | None
+) -> None:
+    """An `on:` with no value is present, so it is not read as absent.
+
+    Read as absent, a workflow written that way would leave discovery in
+    silence while the known-workflow floor still passed.
+    """
+    assert _trigger_names(load_workflow(body)) == expected
+
+
+def test_an_unreadable_workflow_is_the_readers_fault(tmp_path: Path) -> None:
+    """A file that is not YAML is reported by name as a reading error."""
+    broken = tmp_path / "broken.yml"
+    broken.write_text("on: [\n", encoding="utf-8")
+    with pytest.raises(WorkflowReadingError) as raised:
+        _load(broken)
+    assert raised.value.path == str(broken)
