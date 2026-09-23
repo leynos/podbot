@@ -99,46 +99,54 @@ def _run(environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
     )
 
 
+class CommandCase(typ.NamedTuple):
+    """One end-to-end run: the environment given and what must come out."""
+
+    token: str
+    ref: str
+    expected: str
+    record: str
+
+
 @pytest.mark.parametrize(
-    ("token", "ref", "expected", "record"),
+    "case",
     [
         pytest.param(
-            SECRET, "refs/heads/main", "available=true", "decision=upload", id="main"
+            CommandCase(SECRET, "refs/heads/main", "available=true", "decision=upload"),
+            id="main",
         ),
         pytest.param(
-            "",
-            "refs/heads/main",
-            "available=false",
-            "decision=skip_no_token",
+            CommandCase(
+                "", "refs/heads/main", "available=false", "decision=skip_no_token"
+            ),
             id="no-token",
         ),
         pytest.param(
-            SECRET,
-            "refs/heads/wip",
-            "available=true",
-            "decision=skip_not_main",
+            CommandCase(
+                SECRET, "refs/heads/wip", "available=true", "decision=skip_not_main"
+            ),
             id="branch",
         ),
     ],
 )
 def test_the_command_writes_the_output_and_a_secret_free_record(
-    tmp_path: Path, token: str, ref: str, expected: str, record: str
+    tmp_path: Path, case: CommandCase
 ) -> None:
     """End to end: the exact command, a real output file, a real summary."""
     output, summary = tmp_path / "output", tmp_path / "summary"
     result = _run(
         {
-            "CS_ACCESS_TOKEN": token,
-            "GITHUB_REF": ref,
+            "CS_ACCESS_TOKEN": case.token,
+            "GITHUB_REF": case.ref,
             "GITHUB_OUTPUT": str(output),
             "GITHUB_STEP_SUMMARY": str(summary),
         }
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert output.read_text(encoding="utf-8") == f"{expected}\n"
+    assert output.read_text(encoding="utf-8") == f"{case.expected}\n"
     everything = result.stdout + result.stderr + summary.read_text(encoding="utf-8")
-    assert record in result.stdout and record in everything, everything
+    assert case.record in result.stdout and case.record in everything, everything
     assert SECRET not in everything, "the secret must never be written"
 
 
