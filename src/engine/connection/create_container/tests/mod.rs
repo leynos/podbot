@@ -122,16 +122,17 @@ fn create_container_privileged_mode_has_minimal_overrides(
         container_id == "container-id",
         format!("expected container-id, got {container_id}"),
     )?;
-    ensure(call_count(&captured) == 1, "expected one engine call")?;
+    ensure(call_count(&captured)? == 1, "expected one engine call")?;
 
     let options =
-        take_options(&captured).ok_or_else(|| io_error("create options should be captured"))?;
+        take_options(&captured)?.ok_or_else(|| io_error("create options should be captured"))?;
     ensure(
         options.name.as_deref() == Some("podbot-test"),
         "expected create options name podbot-test",
     )?;
 
-    let body = take_body(&captured).ok_or_else(|| io_error("container body should be captured"))?;
+    let body =
+        take_body(&captured)?.ok_or_else(|| io_error("container body should be captured"))?;
     let host_config = body
         .host_config
         .ok_or_else(|| io_error("host config should be set"))?;
@@ -163,7 +164,8 @@ fn create_container_minimal_mode_mounts_fuse(
         .block_on(EngineConnector::create_container_async(&creator, &request))
         .map_err(|error| io_error(format!("container creation should succeed: {error}")))?;
 
-    let body = take_body(&captured).ok_or_else(|| io_error("container body should be captured"))?;
+    let body =
+        take_body(&captured)?.ok_or_else(|| io_error("container body should be captured"))?;
     let host_config = body
         .host_config
         .ok_or_else(|| io_error("host config should be set"))?;
@@ -225,7 +227,8 @@ fn create_container_minimal_without_fuse_avoids_mount(
         .block_on(EngineConnector::create_container_async(&creator, &request))
         .map_err(|error| io_error(format!("container creation should succeed: {error}")))?;
 
-    let body = take_body(&captured).ok_or_else(|| io_error("container body should be captured"))?;
+    let body =
+        take_body(&captured)?.ok_or_else(|| io_error("container body should be captured"))?;
     let host_config = body
         .host_config
         .ok_or_else(|| io_error("host config should be set"))?;
@@ -255,7 +258,10 @@ fn create_container_requires_image() {
         ),
         "expected missing image validation error, got: {request:?}"
     );
-    assert_eq!(call_count(&captured), 0);
+    assert!(
+        matches!(call_count(&captured), Ok(0)),
+        "expected no engine call"
+    );
     let _ = creator;
 }
 
@@ -306,5 +312,22 @@ fn create_container_sync_uses_provided_runtime(
         container_id == "container-id",
         format!("expected container-id, got {container_id}"),
     )?;
-    ensure(call_count(&captured) == 1, "expected one engine call")
+    ensure(call_count(&captured)? == 1, "expected one engine call")
+}
+
+#[rstest]
+fn a_poisoned_capture_is_an_error_not_a_count() {
+    let (creator, captured) = success_creator("container-id");
+    let held = std::sync::Arc::clone(&captured);
+    let holder = std::thread::spawn(move || {
+        let _guard = held.lock();
+        panic!("a holder panics while the capture lock is held");
+    });
+    drop(holder.join());
+
+    assert!(
+        call_count(&captured).is_err(),
+        "a poisoned capture must be an error, not a count read through it"
+    );
+    drop(creator);
 }

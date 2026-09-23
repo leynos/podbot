@@ -3,12 +3,13 @@
 mod error_mapping;
 mod forwarding;
 mod lifecycle_purity;
+mod poisoned_capture;
 mod routing;
 
 use std::io;
 use std::io::Cursor;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use bollard::container::LogOutput;
@@ -19,6 +20,35 @@ use tokio::runtime::Runtime;
 
 use super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_io_async};
 use super::*;
+
+/// Builds the error a recording writer reports when its capture lock was
+/// poisoned.
+///
+/// A capture lock is poisoned only by a panic while it was held, and that
+/// panic has already failed the test. Reporting it as an error rather than
+/// reading through it keeps the test from asserting on half-written bytes.
+fn poisoned_capture() -> io::Error {
+    io::Error::other("a recording writer's capture lock was poisoned by a panicking holder")
+}
+
+/// Returns a copy of the bytes a recording writer captured.
+///
+/// # Errors
+///
+/// Returns an error when the capture lock was poisoned.
+pub(super) fn captured_bytes(bytes: &Mutex<Vec<u8>>) -> io::Result<Vec<u8>> {
+    bytes
+        .lock()
+        .map(|captured| captured.clone())
+        .map_err(|_| poisoned_capture())
+}
+
+/// Appends written bytes to a capture, reporting a poisoned lock as an error.
+fn record_write(bytes: &Mutex<Vec<u8>>, buf: &[u8]) -> io::Result<usize> {
+    let mut captured = bytes.lock().map_err(|_| poisoned_capture())?;
+    captured.extend_from_slice(buf);
+    Ok(buf.len())
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum WriterFailureMode {
@@ -57,11 +87,7 @@ impl AsyncWrite for RecordingWriter {
             return Poll::Ready(Err(io::Error::other("writer failure")));
         }
 
-        self.bytes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
+        Poll::Ready(record_write(&self.bytes, buf))
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -107,11 +133,7 @@ impl AsyncWrite for RecordingInputWriter {
         _cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        self.bytes
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
+        Poll::Ready(record_write(&self.bytes, buf))
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -123,11 +145,12 @@ impl AsyncWrite for RecordingInputWriter {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        *self
+        let shutdown = self
             .shutdown_called
             .lock()
-            .unwrap_or_else(PoisonError::into_inner) = true;
-        Poll::Ready(Ok(()))
+            .map(|mut called| *called = true)
+            .map_err(|_| poisoned_capture());
+        Poll::Ready(shutdown)
     }
 }
 

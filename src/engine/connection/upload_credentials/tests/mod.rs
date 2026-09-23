@@ -5,7 +5,7 @@ mod upload_flow;
 mod upload_flow_filesystem_errors;
 
 use std::io;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use bollard::query_parameters::UploadToContainerOptions;
 use camino::Utf8Path;
@@ -53,6 +53,49 @@ fn exhausted_double_error(operation: &str) -> bollard::errors::Error {
     }
 }
 
+/// Builds the error a double reports when one of its locks was poisoned.
+///
+/// A lock here is poisoned only by a panic while it was held, and that panic
+/// has already failed the test. Reporting it as an engine error rather than
+/// reading through it keeps the test from asserting on half-written state.
+fn poisoned_lock_error(lock: &str) -> bollard::errors::Error {
+    bollard::errors::Error::IOError {
+        err: io::Error::other(format!(
+            "the {lock} lock was poisoned by a panicking holder"
+        )),
+    }
+}
+
+/// Records one call to the double: its target, options, archive and count.
+fn record_upload(
+    captured: &Mutex<CapturedUploadCall>,
+    container_id: &str,
+    options: Option<UploadToContainerOptions>,
+    archive_bytes: Vec<u8>,
+) -> Result<(), bollard::errors::Error> {
+    let mut call = captured
+        .lock()
+        .map_err(|_| poisoned_lock_error("captured upload call"))?;
+    call.call_count += 1;
+    call.container_id = Some(String::from(container_id));
+    call.options = options;
+    call.archive_bytes = archive_bytes;
+    Ok(())
+}
+
+/// Takes the double's single queued response, or reports it already used.
+fn next_upload_response(
+    response_state: &Mutex<Option<Result<(), bollard::errors::Error>>>,
+) -> Result<(), bollard::errors::Error> {
+    response_state
+        .lock()
+        .map_err(|_| poisoned_lock_error("queued response"))?
+        .take()
+        .unwrap_or_else(|| Err(exhausted_double_error("credential upload")))
+}
+
+/// Builds an uploader double answering one call with `result`, and the
+/// capture of what that call was given.
 fn uploader_with_result(
     result: Result<(), bollard::errors::Error>,
 ) -> (MockUploader, Arc<Mutex<CapturedUploadCall>>) {
@@ -66,22 +109,9 @@ fn uploader_with_result(
     uploader
         .expect_upload_to_container()
         .returning(move |container_id, options, archive_bytes| {
-            {
-                let mut captured_lock = captured_for_closure
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner);
-                captured_lock.call_count += 1;
-                captured_lock.container_id = Some(String::from(container_id));
-                captured_lock.options = options;
-                captured_lock.archive_bytes = archive_bytes;
-            }
-
-            let response = response_state_for_closure
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take()
-                .unwrap_or_else(|| Err(exhausted_double_error("credential upload")));
-
+            let response =
+                record_upload(&captured_for_closure, container_id, options, archive_bytes)
+                    .and_then(|()| next_upload_response(&response_state_for_closure));
             Box::pin(async move { response })
         });
 

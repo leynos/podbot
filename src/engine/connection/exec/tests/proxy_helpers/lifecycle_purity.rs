@@ -1,8 +1,6 @@
 //! Lifecycle stream-purity tests covering startup, steady-state, shutdown, and
 //! error paths.
 
-use std::sync::PoisonError;
-
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use rstest::rstest;
@@ -32,10 +30,11 @@ fn run_stdout_purity_test(
         RecordingWriter::new(),
     );
     assert!(result.is_ok(), "{success_msg}");
-    let captured = captured_stdout
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-    assert_eq!(captured.as_slice(), expected_stdout, "{stdout_msg}");
+    assert_eq!(
+        captured_bytes(&captured_stdout).ok().as_deref(),
+        Some(expected_stdout),
+        "{stdout_msg}"
+    );
 }
 
 /// Single-chunk stdout purity: proxy delivers exactly one StdOut chunk's
@@ -176,12 +175,9 @@ fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
     );
     assert_exec_failed_message(result, "exec stream failed");
 
-    let captured = captured_stdout
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
     assert_eq!(
-        captured.as_slice(),
-        b"output-before-error",
+        captured_bytes(&captured_stdout).ok().as_deref(),
+        Some(b"output-before-error".as_slice()),
         "host stdout must contain only the bytes from chunks that succeeded"
     );
 }
@@ -206,20 +202,19 @@ fn regression_zero_bytes_before_first_and_after_last_proxied_byte(runtime: Runti
         "regression test session should complete successfully"
     );
 
-    let captured = captured_stdout
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
     assert_eq!(
-        captured.as_slice(),
-        known_output,
+        captured_bytes(&captured_stdout).ok().as_deref(),
+        Some(known_output.as_slice()),
         "host stdout must contain exactly the known protocol output with zero \
          prefix bytes and zero suffix bytes"
     );
 
     // Additional verification: the byte length must match exactly
     assert_eq!(
-        captured.len(),
-        known_output.len(),
+        captured_bytes(&captured_stdout)
+            .ok()
+            .map(|captured| captured.len()),
+        Some(known_output.len()),
         "captured byte count must match the known output byte count exactly, \
          proving no extra bytes were written"
     );
@@ -275,12 +270,9 @@ fn regression_stdout_bounded_buffering_preserves_all_bytes(runtime: RuntimeFixtu
 
     // The host stdout must exactly equal the concatenation of all stdout chunks,
     // with no extra or missing bytes.
-    let captured = captured_stdout
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
     assert_eq!(
-        captured.as_slice(),
-        expected.as_slice(),
+        captured_bytes(&captured_stdout).ok().as_deref(),
+        Some(expected.as_slice()),
         "host stdout must be exactly the concatenation of all StdOut chunks \
          even when total size exceeds the bounded buffer size"
     );

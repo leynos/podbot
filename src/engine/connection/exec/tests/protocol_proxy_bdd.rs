@@ -1,7 +1,6 @@
 //! Behavioural tests for protocol exec byte proxying.
 
 use std::io;
-use std::sync::PoisonError;
 
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
@@ -12,7 +11,9 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then, when};
 use tokio::io::{AsyncWriteExt, DuplexStream};
 
 use super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_io_async};
-use super::proxy_helpers::{RecordingInputWriter, RecordingWriter, WriterFailureMode};
+use super::proxy_helpers::{
+    RecordingInputWriter, RecordingWriter, WriterFailureMode, captured_bytes,
+};
 use super::*;
 
 type StepResult<T> = Result<T, String>;
@@ -137,32 +138,16 @@ struct CapturedIo {
     stdin: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
 }
 
+/// Stores what the proxy wrote and how it ended in the scenario state.
 fn store_proxy_results(
     state: &ProtocolProxyState,
     captured: &CapturedIo,
     result: Result<(), PodbotError>,
-) {
-    state.host_stdout.set(
-        captured
-            .stdout
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone(),
-    );
-    state.host_stderr.set(
-        captured
-            .stderr
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone(),
-    );
-    state.container_stdin.set(
-        captured
-            .stdin
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone(),
-    );
+) -> StepResult<()> {
+    let read = |bytes| captured_bytes(bytes).map_err(|error| error.to_string());
+    state.host_stdout.set(read(&captured.stdout)?);
+    state.host_stderr.set(read(&captured.stderr)?);
+    state.container_stdin.set(read(&captured.stdin)?);
 
     match result {
         Ok(()) => state.outcome.set(ProtocolProxyOutcome::Success),
@@ -170,6 +155,7 @@ fn store_proxy_results(
             .outcome
             .set(ProtocolProxyOutcome::Failure(error.to_string())),
     }
+    Ok(())
 }
 
 #[when("the protocol proxy runs")]
@@ -209,9 +195,7 @@ fn the_protocol_proxy_runs(protocol_proxy_state: &ProtocolProxyState) -> StepRes
         ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
     ));
 
-    store_proxy_results(protocol_proxy_state, &captured, result);
-
-    Ok(())
+    store_proxy_results(protocol_proxy_state, &captured, result)
 }
 
 fn assert_channel_receives(
