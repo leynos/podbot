@@ -1,6 +1,6 @@
 .PHONY: help all clean test build release lint typecheck fmt check-fmt audit rust-audit \
         markdownlint nixie spelling spelling-config spelling-config-write \
-        spelling-phrase-check spelling-helper-test
+        spelling-phrase-check spelling-helper-test test-workflow-contracts
 
 SHELL := bash
 
@@ -20,6 +20,8 @@ UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 RUFF_VERSION ?= 0.15.12
 PATHSPEC_VERSION ?= 1.1.1
 TYPOS_VERSION ?= 1.48.0
+PYYAML_VERSION ?= 6.0.3
+HYPOTHESIS_VERSION ?= 6.151.9
 TYPOS_CONFIG_BUILDER_COMMIT := d6da92f02240a79a945c835f69bdd08a888da1d0
 TYPOS_CONFIG_BUILDER_SOURCE := git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_COMMIT)
 TYPOS_CONFIG_BUILDER := $(UV_ENV) $(UV) tool run --python 3.14 \
@@ -31,11 +33,15 @@ SPELLING_COVERAGE_ARGS := --cov=typos_rollout_check --cov-fail-under=90
 SPELLING_HELPER_PYTEST = PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project \
 	--python 3.14 --with pathspec==$(PATHSPEC_VERSION) --with pytest==9.0.2 \
 	--with pytest-cov==7.0.0 python -m pytest
+WORKFLOW_CONTRACTS_DIR := tests/workflow_contracts
+WORKFLOW_CONTRACTS_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
+	--with pytest==9.0.2 --with pyyaml==$(PYYAML_VERSION) \
+	--with hypothesis==$(HYPOTHESIS_VERSION) python -m pytest
 
 build: target/debug/$(TARGET) ## Build debug binary
 release: target/release/$(TARGET) ## Build release binary
 
-all: check-fmt lint test spelling ## Perform a comprehensive check of code
+all: check-fmt lint test-workflow-contracts test spelling ## Perform a comprehensive check of code
 
 clean: ## Remove build artefacts
 	$(CARGO) clean
@@ -83,6 +89,12 @@ spelling-helper-test: ## Validate the shared spelling-policy integration
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(SPELLING_PY_SRCS)
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(SPELLING_PY_SRCS)
 	@$(SPELLING_HELPER_PYTEST) $(SPELLING_PY_TESTS) -c /dev/null --rootdir=. -p no:cacheprovider $(SPELLING_COVERAGE_ARGS)
+
+test-workflow-contracts: ## Assert what the workflow files must say
+	$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(WORKFLOW_CONTRACTS_DIR)
+	$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(WORKFLOW_CONTRACTS_DIR)
+	$(WORKFLOW_CONTRACTS_PYTEST) $(WORKFLOW_CONTRACTS_DIR) --doctest-modules \
+		-c /dev/null --rootdir=. -p no:cacheprovider -q
 
 nixie: ## Validate Mermaid diagrams
 	$(NIXIE) --no-sandbox

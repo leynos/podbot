@@ -6,14 +6,16 @@ mod lifecycle_purity;
 mod routing;
 
 use std::io;
+use std::io::Cursor;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Context, Poll};
 
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use futures_util::stream;
-use tokio::io::{AsyncWrite, AsyncWriteExt, DuplexStream};
+use tokio::io::AsyncWrite;
+use tokio::runtime::Runtime;
 
 use super::super::protocol::{ProtocolProxyIo, run_protocol_session_with_io_async};
 use super::*;
@@ -57,7 +59,7 @@ impl AsyncWrite for RecordingWriter {
 
         self.bytes
             .lock()
-            .expect("writer mutex should not poison")
+            .unwrap_or_else(PoisonError::into_inner)
             .extend_from_slice(buf);
         Poll::Ready(Ok(buf.len()))
     }
@@ -107,7 +109,7 @@ impl AsyncWrite for RecordingInputWriter {
     ) -> Poll<io::Result<usize>> {
         self.bytes
             .lock()
-            .expect("writer mutex should not poison")
+            .unwrap_or_else(PoisonError::into_inner)
             .extend_from_slice(buf);
         Poll::Ready(Ok(buf.len()))
     }
@@ -124,17 +126,19 @@ impl AsyncWrite for RecordingInputWriter {
         *self
             .shutdown_called
             .lock()
-            .expect("shutdown mutex should not poison") = true;
+            .unwrap_or_else(PoisonError::into_inner) = true;
         Poll::Ready(Ok(()))
     }
 }
 
-pub(super) async fn make_host_stdin(bytes: &[u8]) -> io::Result<DuplexStream> {
-    let capacity = bytes.len().max(1);
-    let (mut writer, reader) = tokio::io::duplex(capacity);
-    writer.write_all(bytes).await?;
-    drop(writer);
-    Ok(reader)
+/// Builds the host stdin reader a protocol session forwards from.
+///
+/// An in-memory cursor yields the bytes and then end-of-file, which is all
+/// the proxy reads. Unlike the duplex pair this replaces, it cannot fail to
+/// be set up, so a fallible arrangement step disappears from the helper
+/// rather than its panic moving somewhere else.
+pub(super) fn make_host_stdin(bytes: &[u8]) -> Cursor<Vec<u8>> {
+    Cursor::new(bytes.to_vec())
 }
 
 pub(super) fn make_protocol_request() -> Result<ExecRequest, PodbotError> {
@@ -164,20 +168,17 @@ pub(super) fn assert_exec_failed_message(result: Result<(), PodbotError>, expect
     reason = "test helper wires protocol sessions with explicit stream handles"
 )]
 pub(super) fn run_session(
-    runtime: RuntimeFixture,
+    runtime: &Runtime,
     stdin_bytes: &[u8],
     output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
     container_input: Pin<Box<dyn AsyncWrite + Send>>,
     host_stdout: RecordingWriter,
     host_stderr: RecordingWriter,
 ) -> Result<(), PodbotError> {
-    let runtime_handle = runtime.expect("runtime fixture should initialize");
-    let request = make_protocol_request().expect("protocol request should build");
-    let host_stdin = runtime_handle
-        .block_on(make_host_stdin(stdin_bytes))
-        .expect("host stdin should build");
+    let request = make_protocol_request()?;
+    let host_stdin = make_host_stdin(stdin_bytes);
 
-    runtime_handle.block_on(run_protocol_session_with_io_async(
+    runtime.block_on(run_protocol_session_with_io_async(
         &request,
         output,
         container_input,
@@ -190,7 +191,7 @@ pub(super) fn run_session(
     reason = "test helper returns the paired captured writer buffers"
 )]
 pub(super) fn run_routing_session(
-    runtime: RuntimeFixture,
+    runtime: &Runtime,
     output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
 ) -> (
     Result<(), PodbotError>,
@@ -216,7 +217,7 @@ pub(super) fn run_routing_session(
 /// Creates recording writers, runs the session, and returns the result
 /// with captured stdout bytes.
 pub(super) fn run_lifecycle_session(
-    runtime: RuntimeFixture,
+    runtime: &Runtime,
     stdin_bytes: &[u8],
     output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
 ) -> (Result<(), PodbotError>, Arc<Mutex<Vec<u8>>>) {

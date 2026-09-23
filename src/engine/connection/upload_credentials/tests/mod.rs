@@ -5,7 +5,7 @@ mod upload_flow;
 mod upload_flow_filesystem_errors;
 
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use bollard::query_parameters::UploadToContainerOptions;
 use camino::Utf8Path;
@@ -39,6 +39,20 @@ struct CapturedUploadCall {
     archive_bytes: Vec<u8>,
 }
 
+/// Builds the error a mock returns once its single queued response is gone.
+///
+/// The doubles here answer exactly one call. Reporting a second call as an
+/// engine error rather than ending the process keeps the helper free of a
+/// verdict: the test still sees the extra call through `call_count`, and the
+/// failure it reads is the one it asserted on.
+fn exhausted_double_error(operation: &str) -> bollard::errors::Error {
+    bollard::errors::Error::IOError {
+        err: std::io::Error::other(format!(
+            "the {operation} double was already called; it answers one call"
+        )),
+    }
+}
+
 fn uploader_with_result(
     result: Result<(), bollard::errors::Error>,
 ) -> (MockUploader, Arc<Mutex<CapturedUploadCall>>) {
@@ -55,7 +69,7 @@ fn uploader_with_result(
             {
                 let mut captured_lock = captured_for_closure
                     .lock()
-                    .expect("capture lock should succeed");
+                    .unwrap_or_else(PoisonError::into_inner);
                 captured_lock.call_count += 1;
                 captured_lock.container_id = Some(String::from(container_id));
                 captured_lock.options = options;
@@ -64,9 +78,9 @@ fn uploader_with_result(
 
             let response = response_state_for_closure
                 .lock()
-                .expect("response lock should succeed")
+                .unwrap_or_else(PoisonError::into_inner)
                 .take()
-                .expect("mock response should be configured");
+                .unwrap_or_else(|| Err(exhausted_double_error("credential upload")));
 
             Box::pin(async move { response })
         });

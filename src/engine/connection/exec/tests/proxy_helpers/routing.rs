@@ -7,6 +7,7 @@ use super::*;
 
 #[rstest]
 fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
     let output = make_output_stream(vec![
         Ok(LogOutput::StdOut {
             message: Vec::from(&b"alpha"[..]).into(),
@@ -16,7 +17,7 @@ fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixtu
         }),
     ]);
 
-    let (result, stdout_bytes, stderr_bytes) = run_routing_session(runtime, output);
+    let (result, stdout_bytes, stderr_bytes) = run_routing_session(&runtime_handle, output);
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
@@ -37,6 +38,7 @@ fn protocol_proxy_routes_stdout_and_console_to_host_stdout(runtime: RuntimeFixtu
 
 #[rstest]
 fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
     let output = make_output_stream(vec![
         Ok(LogOutput::StdErr {
             message: Vec::from(&b"warn"[..]).into(),
@@ -46,7 +48,7 @@ fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
         }),
     ]);
 
-    let (result, stdout_bytes, stderr_bytes) = run_routing_session(runtime, output);
+    let (result, stdout_bytes, stderr_bytes) = run_routing_session(&runtime_handle, output);
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(
@@ -67,6 +69,7 @@ fn protocol_proxy_routes_stderr_to_host_stderr(runtime: RuntimeFixture) {
 
 #[rstest]
 fn protocol_proxy_ignores_stdin_echo_chunks(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("the runtime fixture initialises");
     let output = make_output_stream(vec![
         Ok(LogOutput::StdIn {
             message: Vec::from(&b"echo"[..]).into(),
@@ -76,7 +79,7 @@ fn protocol_proxy_ignores_stdin_echo_chunks(runtime: RuntimeFixture) {
         }),
     ]);
 
-    let (result, stdout_bytes, _) = run_routing_session(runtime, output);
+    let (result, stdout_bytes, _) = run_routing_session(&runtime_handle, output);
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
     assert_eq!(

@@ -1,104 +1,15 @@
 //! Unit tests for container-creation request mapping and error handling.
 
+mod doubles;
 mod minimal_mode;
 mod privileged_mode;
 
-use std::sync::{Arc, Mutex};
-
-use bollard::models::ContainerCreateResponse;
-use mockall::mock;
 use rstest::{fixture, rstest};
 
+use self::doubles::{call_count, failing_creator, success_creator, take_body, take_options};
 use super::*;
 use crate::config::AppConfig;
 use crate::error::{ConfigError, ContainerError};
-
-mock! {
-    #[derive(Debug)]
-    Creator {}
-
-    impl ContainerCreator for Creator {
-        fn create_container<'a>(
-            &'a self,
-            options: Option<CreateContainerOptions>,
-            config: ContainerCreateBody,
-        ) -> CreateContainerFuture<'a>;
-    }
-}
-
-#[derive(Debug, Default)]
-struct CapturedCreateCall {
-    call_count: usize,
-    options: Option<CreateContainerOptions>,
-    body: Option<ContainerCreateBody>,
-}
-
-fn creator_with_result(
-    result: Result<ContainerCreateResponse, bollard::errors::Error>,
-) -> (MockCreator, Arc<Mutex<CapturedCreateCall>>) {
-    let mut creator = MockCreator::new();
-    let captured = Arc::new(Mutex::new(CapturedCreateCall::default()));
-    let captured_for_closure = Arc::clone(&captured);
-    let response_state = Arc::new(Mutex::new(Some(result)));
-    let response_state_for_closure = Arc::clone(&response_state);
-
-    creator
-        .expect_create_container()
-        .returning(move |options, config| {
-            {
-                let mut captured_locked = captured_for_closure
-                    .lock()
-                    .expect("mock capture lock should succeed");
-                captured_locked.call_count += 1;
-                captured_locked.options = options;
-                captured_locked.body = Some(config);
-            }
-
-            let response = response_state_for_closure
-                .lock()
-                .expect("mock response lock should succeed")
-                .take()
-                .expect("mock response should be configured for the test");
-
-            Box::pin(async move { response })
-        });
-
-    (creator, captured)
-}
-
-fn success_creator(container_id: &str) -> (MockCreator, Arc<Mutex<CapturedCreateCall>>) {
-    creator_with_result(Ok(ContainerCreateResponse {
-        id: String::from(container_id),
-        warnings: vec![],
-    }))
-}
-
-fn failing_creator(error: bollard::errors::Error) -> (MockCreator, Arc<Mutex<CapturedCreateCall>>) {
-    creator_with_result(Err(error))
-}
-
-fn take_options(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<CreateContainerOptions> {
-    captured
-        .lock()
-        .expect("mock capture lock should succeed")
-        .options
-        .clone()
-}
-
-fn take_body(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<ContainerCreateBody> {
-    captured
-        .lock()
-        .expect("mock capture lock should succeed")
-        .body
-        .clone()
-}
-
-fn call_count(captured: &Arc<Mutex<CapturedCreateCall>>) -> usize {
-    captured
-        .lock()
-        .expect("mock capture lock should succeed")
-        .call_count
-}
 
 fn io_error(message: impl Into<String>) -> std::io::Error {
     std::io::Error::other(message.into())
