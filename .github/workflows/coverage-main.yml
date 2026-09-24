@@ -64,17 +64,12 @@ jobs:
         if: always()
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
       - name: Check for the CodeScene token
-        # The token is bound here and nowhere else in the job. This step
-        # writes only whether it is present. The upload action is composite
-        # and would hand its own step's env to every step nested inside it.
-        # A dispatch can check out any branch, so the step, which runs a
-        # script from the checkout with the secret in reach, runs on main
-        # only.
+        # GitHub evaluates the expression before the shell starts, so the
+        # command sees only `true` or `false` and the token enters no
+        # process and no step's env. The upload action is composite and
+        # would hand its own step's env to every step nested inside it.
         id: codescene-token
-        if: github.ref == 'refs/heads/main'
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        run: python3 scripts/codescene_token_available.py
+        run: echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
       - name: Upload coverage data to CodeScene
         # A dispatch can name any branch, so the ref is checked here, not
         # only in the trigger filter. A fork or a rotated secret skips the

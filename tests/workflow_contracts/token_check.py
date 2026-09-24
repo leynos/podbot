@@ -3,10 +3,12 @@
 The upload action is composite, and a composite action hands the calling
 step's `env` to every step nested inside it, including artefact and cache
 steps that have no use for the secret. So the secret is not bound on the
-upload step at all. A step of its own binds it, runs one exact command
-that writes only `available=true` or `available=false` to the step's
-outputs, and the upload's guard reads that output. The action receives
-the secret through its `access-token` input alone.
+upload step at all. A step of its own runs one exact command, in which
+GitHub evaluates `secrets.CS_ACCESS_TOKEN != ''` before the shell starts,
+so the command writes only `available=true` or `available=false` to the
+step's outputs and the token enters no process. The upload's guard reads
+that output, and the action receives the secret through its
+`access-token` input alone.
 
 The positive shape is asserted, not only the absence of the old one.
 GitHub reads a missing step output as an empty string, so a guard on
@@ -21,7 +23,6 @@ import re
 import typing as typ
 
 from codescene_reach import token_sites
-from publisher_rules import MAIN_REF_CONJUNCT, guard_conjuncts
 
 if typ.TYPE_CHECKING:  # pragma: no cover - typing only
     from workflow_reading import WorkflowDocument
@@ -30,8 +31,11 @@ if typ.TYPE_CHECKING:  # pragma: no cover - typing only
 SECRET_NAME: typ.Final[str] = "CS_ACCESS_TOKEN"
 SECRET_REFERENCE: typ.Final[str] = f"secrets.{SECRET_NAME}"
 
-#: The one command the check step runs.
-TOKEN_CHECK_COMMAND: typ.Final[str] = "python3 scripts/codescene_token_available.py"
+#: The one command the check step runs. The expression is evaluated before
+#: the shell starts, so the shell sees `true` or `false`, never the secret.
+TOKEN_CHECK_COMMAND: typ.Final[str] = (
+    'echo "available=${{ secrets.CS_ACCESS_TOKEN != \'\' }}" >> "$GITHUB_OUTPUT"'
+)
 
 #: A whole-value `${{ }}` expression, with the whitespace GitHub allows.
 _WRAPPER: typ.Final[re.Pattern[str]] = re.compile(
@@ -73,24 +77,16 @@ def available_conjunct(step_id: str) -> str:
     return f"steps.{step_id}.outputs.available == 'true'"
 
 
-def _confined_to_main(step: dict[str, object]) -> bool:
-    """Return whether a step's `if:` is exactly the main-ref test."""
-    condition = step.get("if")
-    return isinstance(condition, str) and guard_conjuncts(condition) == [
-        MAIN_REF_CONJUNCT
-    ]
-
-
 def is_token_check(step: dict[str, object]) -> bool:
     """Return whether a step is the token check, in its one allowed shape.
 
-    It has an `id` and binds the secret in its own `env`. Its `run` is
-    exactly the check command, so a leading assignment such as
-    `CS_ACCESS_TOKEN= ...` cannot clear the token and turn every run into a
-    skip. Its only guard is the main-ref test, because a dispatch can check
-    out any branch and the script runs from the checkout with the secret in
-    reach; any other `if:`, or `continue-on-error`, could stop it writing
-    the output on main.
+    It has an `id`, and its `run` is exactly the check command, so no
+    wrapper such as `false && ...` or `echo ...` can contain the command
+    without running it. It has no `if:` and no `continue-on-error`, either
+    of which could stop it writing the output. It binds nothing: the token
+    reaches the command only as the evaluated `true` or `false`, so no
+    process, including a script checked out from a dispatched branch, ever
+    holds it.
 
     Parameters
     ----------
@@ -104,20 +100,14 @@ def is_token_check(step: dict[str, object]) -> bool:
 
     Examples
     --------
-    >>> is_token_check({
-    ...     "id": "t",
-    ...     "if": "github.ref == 'refs/heads/main'",
-    ...     "env": {"CS_ACCESS_TOKEN": "${{ secrets.CS_ACCESS_TOKEN }}"},
-    ...     "run": "python3 scripts/codescene_token_available.py",
-    ... })
+    >>> is_token_check({"id": "t", "run": TOKEN_CHECK_COMMAND})
     True
-    >>> is_token_check({"id": "t", "run": "python3 scripts/codescene_token_available.py"})
+    >>> is_token_check({"id": "t", "if": "always()", "run": TOKEN_CHECK_COMMAND})
     False
     """
     return (
         isinstance(step.get("id"), str)
-        and _expression(_mapping(step.get("env")).get(SECRET_NAME)) == SECRET_REFERENCE
-        and _confined_to_main(step)
+        and "if" not in step
         and "continue-on-error" not in step
         and str(step.get("run", "")).strip() == TOKEN_CHECK_COMMAND
     )
@@ -157,9 +147,10 @@ def stray_credential_sites(
 ) -> list[str]:
     r"""Return every read of the secret other than the two allowed ones.
 
-    The check step binds it in its `env`, and the upload step passes it as
-    `access-token`. Anywhere else, a wider `env` or the upload step's own
-    `env` included, puts it in reach of a process with no use for it.
+    The check step tests it in its `run` expression, and the upload step
+    passes it as `access-token`. Anywhere else, any `env` on the job, the
+    check step's and the upload step's own included, puts it in reach of a
+    process.
 
     Parameters
     ----------
@@ -185,8 +176,7 @@ def stray_credential_sites(
     ['m.yml: env.CS_ACCESS_TOKEN<key>']
     """
     allowed = {
-        f"{name}: {check_path}.env.{SECRET_NAME}<key>",
-        f"{name}: {check_path}.env.{SECRET_NAME}",
+        f"{name}: {check_path}.run",
         f"{name}: {upload_path}.with.access-token",
     }
     return [site for site in token_sites(name, document) if site not in allowed]

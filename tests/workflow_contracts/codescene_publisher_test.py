@@ -17,6 +17,7 @@ import pytest
 from codescene_coverage import CODESCENE_ACTION, invokes, publishers
 from publisher_rules import MAIN_REF_CONJUNCT, cancelling_scopes, guard_conjuncts
 from token_check import (
+    TOKEN_CHECK_COMMAND,
     available_conjunct,
     is_token_check,
     passes_the_secret_directly,
@@ -91,8 +92,8 @@ def _token_check(upload: Upload) -> tuple[str, dict[str, object]]:
     """Return the single token-check step that precedes the upload in its job."""
     checks = [(path, step) for path, step in upload.earlier if is_token_check(step)]
     assert len(checks) == 1, (
-        f"exactly one step before the upload must bind CS_ACCESS_TOKEN in its "
-        f"own env and run the token check as its sole, unguarded command; "
+        f"exactly one step before the upload must have an id and run "
+        f"{TOKEN_CHECK_COMMAND!r} as its sole, unguarded command; "
         f"found {[path for path, _ in checks]}"
     )
     return checks[0]

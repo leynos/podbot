@@ -1430,25 +1430,27 @@ token, and applies to forks too.
 
 ### 19.1. The publisher
 
-A step of its own checks for the token. It binds
-`CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}` in its `env` and runs exactly
-`python3 scripts/codescene_token_available.py`. Its only guard is
-`if: github.ref == 'refs/heads/main'`. The step runs a script from the checkout
-with the secret in reach, and a dispatch can check out any branch. The script
-writes `available=true` or `available=false` to the step's outputs, never the
-secret. It also records the decision in a fixed vocabulary, as a `::notice::`
-line and a job-summary line, for example
-`operation=codescene_upload token_available=true ref=main decision=upload`.
-The upload step's own conclusion (success, failure or skipped), read from the
-jobs API, is the countable outcome. The upload step is guarded on
+A step of its own checks for the token. It has the id `codescene-token`, no
+`env` and no `if:`, and its sole command is exactly
+`echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`.
+GitHub evaluates the expression before the shell starts, so the command sees
+only `true` or `false`: the token enters no process, and in particular no
+script checked out from the branch a dispatch names. The upload step is guarded
+on
 `steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'`,
 and it passes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. Nothing
-else in the workflow binds or reads the secret, and the upload step's own `env`
-in particular does not. The upload action is composite, and a composite action
-hands the calling step's `env` to every step nested inside it, including the
-artefact and cache steps. The workflow also answers `workflow_dispatch`, which
-can name any branch, so the ref test confines the upload where the trigger
-filter cannot.
+else in the workflow binds or reads the secret, and no `env` on the job,
+including the upload step's own, does. The upload action is composite, and a
+composite action hands the calling step's `env` to every step nested inside it,
+including the artefact and cache steps. The workflow also answers
+`workflow_dispatch`, which can name any branch, so the ref test confines the
+upload where the trigger filter cannot. The upload step's conclusion (success,
+failure or skipped), read from the jobs API, records whether a run published.
+
+The check step is deliberately not confined to `main`. It holds no secret, so
+there is nothing for a branch to read. The residual risk is a dispatcher who
+edits the workflow file itself on their branch, and only a protected
+environment, not a condition in the file, stops that.
 
 The check step is asserted positively, not only the absence of the old
 binding. GitHub reads a missing step output as `''`, so with the check deleted

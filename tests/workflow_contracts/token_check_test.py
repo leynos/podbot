@@ -24,8 +24,6 @@ from workflow_reading import load_workflow
 #: The check step as the publisher writes it, parsed.
 CHECK: typ.Final[dict[str, object]] = {
     "id": "codescene-token",
-    "if": "github.ref == 'refs/heads/main'",
-    "env": {"CS_ACCESS_TOKEN": "${{ secrets.CS_ACCESS_TOKEN }}"},
     "run": TOKEN_CHECK_COMMAND,
 }
 
@@ -41,24 +39,25 @@ def test_the_publishers_check_step_is_accepted() -> None:
     "change",
     [
         pytest.param({"id": None}, id="no-id"),
-        pytest.param({"env": {}}, id="binding-deleted"),
-        pytest.param(
-            {"env": {"CS_ACCESS_TOKEN": "${{ secrets.OTHER }}"}}, id="other-secret"
-        ),
-        pytest.param({"if": "false"}, id="guarded-otherwise"),
-        pytest.param({"if": None}, id="unconfined"),
-        pytest.param(
-            {"if": "github.ref == 'refs/heads/main' || github.event_name == 'push'"},
-            id="main-or-more",
-        ),
-        pytest.param(
-            {"run": f"CS_ACCESS_TOKEN= {TOKEN_CHECK_COMMAND}"}, id="token-cleared"
-        ),
-        pytest.param({"run": f"{TOKEN_CHECK_COMMAND} --flag"}, id="extra-argument"),
+        pytest.param({"if": "false"}, id="guarded"),
+        pytest.param({"if": "github.ref == 'refs/heads/main'"}, id="main-only"),
         pytest.param({"continue-on-error": "true"}, id="may-fail"),
+        pytest.param(
+            {"run": TOKEN_CHECK_COMMAND.replace("!= ''", "== ''")}, id="inverted"
+        ),
+        pytest.param(
+            {"run": TOKEN_CHECK_COMMAND.replace("CS_ACCESS_TOKEN", "OTHER")},
+            id="other-secret",
+        ),
+        pytest.param(
+            {"run": 'echo "available=true" >> "$GITHUB_OUTPUT"'}, id="constant"
+        ),
+        pytest.param({"run": f"{TOKEN_CHECK_COMMAND} || true"}, id="extra-command"),
         pytest.param({"run": f"echo {TOKEN_CHECK_COMMAND}"}, id="echoed"),
         pytest.param({"run": f"false && {TOKEN_CHECK_COMMAND}"}, id="short-circuited"),
-        pytest.param({"run": "python3 scripts/other.py"}, id="another-command"),
+        pytest.param(
+            {"run": "python3 scripts/codescene_token_available.py"}, id="script"
+        ),
     ],
 )
 def test_a_check_step_in_any_other_shape_is_refused(change: dict[str, object]) -> None:
@@ -114,7 +113,7 @@ STRAYS: typ.Final[str] = (
 
 
 def test_every_read_but_the_two_allowed_is_a_stray() -> None:
-    """The check's binding and the upload's input are allowed; nothing else is."""
+    """The check's command and the upload's input are allowed; nothing else is."""
     strays = stray_credential_sites(
         "m.yml", load_workflow(STRAYS), "jobs.a.steps[1]", "jobs.a.steps[2]"
     )
@@ -122,6 +121,8 @@ def test_every_read_but_the_two_allowed_is_a_stray() -> None:
         "m.yml: env.T",
         "m.yml: jobs.a.env.CS_ACCESS_TOKEN<key>",
         "m.yml: jobs.a.steps[0].run",
+        "m.yml: jobs.a.steps[1].env.CS_ACCESS_TOKEN<key>",
+        "m.yml: jobs.a.steps[1].env.CS_ACCESS_TOKEN",
         "m.yml: jobs.a.steps[2].env.CS_ACCESS_TOKEN<key>",
         "m.yml: jobs.a.steps[2].env.CS_ACCESS_TOKEN",
     ], f"unexpected stray sites: {strays}"
