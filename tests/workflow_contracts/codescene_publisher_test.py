@@ -17,8 +17,12 @@ import pytest
 from codescene_coverage import CODESCENE_ACTION, invokes, publishers
 from publisher_rules import MAIN_REF_CONJUNCT, cancelling_scopes, guard_conjuncts
 from token_check import (
+    CHECK_ID,
+    DECISION_RECORD_COMMAND,
     TOKEN_CHECK_COMMAND,
+    UPLOAD_ID,
     available_conjunct,
+    is_decision_record,
     is_token_check,
     passes_the_secret_directly,
     stray_credential_sites,
@@ -33,13 +37,14 @@ WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
 
 
 class Upload(typ.NamedTuple):
-    """The publisher's upload step, with where it sits and what precedes it."""
+    """The publisher's upload step, with where it sits and its neighbours."""
 
     workflow: str
     document: WorkflowDocument
     path: str
     step: dict[str, object]
     earlier: list[tuple[str, dict[str, object]]]
+    later: list[dict[str, object]]
 
 
 def _raw_steps(job: dict[str, object]) -> list[object]:
@@ -62,6 +67,11 @@ def upload() -> Upload:
                 (f"jobs.{job_name}.steps[{position}]", earlier)
                 for position, earlier in enumerate(_raw_steps(job)[:index])
                 if isinstance(earlier, dict)
+            ],
+            [
+                later
+                for later in _raw_steps(job)[index + 1 :]
+                if isinstance(later, dict)
             ],
         )
         for job_name, job in workflow_jobs(document).items()
@@ -136,6 +146,28 @@ def test_the_upload_takes_the_secret_only_as_its_input(upload: Upload) -> None:
     assert passes_the_secret_directly(upload.step), (
         "the upload step must pass access-token: ${{ secrets.CS_ACCESS_TOKEN }} "
         f"and bind nothing named CS_ACCESS_TOKEN in its env; it has {upload.step!r}"
+    )
+
+
+def test_the_upload_decision_is_recorded(upload: Upload) -> None:
+    """A step after the upload records why it ran or skipped, and how it ended.
+
+    The record reads both steps by id, so each id is asserted too: renamed,
+    either would read as empty and the record would say `unknown` or
+    `not_run` on every run.
+    """
+    _, check = _token_check(upload)
+    assert check.get("id") == CHECK_ID, (
+        f"the token check must have the id {CHECK_ID!r}; it has {check.get('id')!r}"
+    )
+    assert upload.step.get("id") == UPLOAD_ID, (
+        f"the upload step must have the id {UPLOAD_ID!r}; "
+        f"it has {upload.step.get('id')!r}"
+    )
+    records = [step for step in upload.later if is_decision_record(step)]
+    assert len(records) == 1, (
+        f"exactly one step after the upload must run {DECISION_RECORD_COMMAND!r} "
+        f"under `if: always()`; found {len(records)}"
     )
 
 

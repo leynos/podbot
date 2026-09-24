@@ -14,7 +14,9 @@ import typing as typ
 
 import pytest
 from token_check import (
+    DECISION_RECORD_COMMAND,
     TOKEN_CHECK_COMMAND,
+    is_decision_record,
     is_token_check,
     passes_the_secret_directly,
     stray_credential_sites,
@@ -64,6 +66,55 @@ def test_a_check_step_in_any_other_shape_is_refused(change: dict[str, object]) -
     """Each change leaves a step that cannot be relied on to write the output."""
     step = {key: value for key, value in (CHECK | change).items() if value is not None}
     assert not is_token_check(step), step
+
+
+#: The decision record as the publisher writes it, parsed.
+RECORD: typ.Final[dict[str, object]] = {
+    "if": "always()",
+    "run": DECISION_RECORD_COMMAND,
+}
+
+
+def test_the_publishers_decision_record_is_accepted() -> None:
+    """Narrow as well as sufficient: the real shape passes."""
+    assert is_decision_record(RECORD), (
+        f"the publisher's own record shape was refused: {RECORD}"
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param({"if": None}, id="skipped-with-the-job"),
+        pytest.param({"if": "success()"}, id="success-only"),
+        pytest.param({"continue-on-error": "true"}, id="may-fail"),
+        pytest.param(
+            {
+                "run": DECISION_RECORD_COMMAND.replace(
+                    "GITHUB_STEP_SUMMARY", "GITHUB_ENV"
+                )
+            },
+            id="other-surface",
+        ),
+        pytest.param(
+            {"run": DECISION_RECORD_COMMAND.replace("codescene-upload", "other")},
+            id="other-step",
+        ),
+        pytest.param(
+            {"run": DECISION_RECORD_COMMAND.replace("github.ref", "github.head_ref")},
+            id="other-ref",
+        ),
+        pytest.param(
+            {"run": f"false && {DECISION_RECORD_COMMAND}"}, id="short-circuited"
+        ),
+    ],
+)
+def test_a_decision_record_in_any_other_shape_is_refused(
+    change: dict[str, object],
+) -> None:
+    """Each change leaves a record that is missing, silent, or reads the wrong input."""
+    step = {key: value for key, value in (RECORD | change).items() if value is not None}
+    assert not is_decision_record(step), step
 
 
 @pytest.mark.parametrize(

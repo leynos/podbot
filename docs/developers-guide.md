@@ -1433,10 +1433,11 @@ token, and applies to forks too.
 A step of its own checks for the token. It has the id `codescene-token`, no
 `env` and no `if:`, and its sole command is exactly
 `echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`.
-GitHub evaluates the expression before the shell starts, so the command sees
-only `true` or `false`: the token enters no process, and in particular no
-script checked out from the branch a dispatch names. The upload step is guarded
-on
+GitHub evaluates the expression before the shell starts, so the check step's
+shell receives only `true` or `false`, never the token, and no script checked
+out from the branch a dispatch names runs with it in reach. The only step that
+receives the token is the upload, through the action's `access-token` input.
+The upload step has the id `codescene-upload`, and it is guarded on
 `steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'`,
 and it passes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. Nothing
 else in the workflow binds or reads the secret, and no `env` on the job,
@@ -1444,13 +1445,39 @@ including the upload step's own, does. The upload action is composite, and a
 composite action hands the calling step's `env` to every step nested inside it,
 including the artefact and cache steps. The workflow also answers
 `workflow_dispatch`, which can name any branch, so the ref test confines the
-upload where the trigger filter cannot. The upload step's conclusion (success,
-failure or skipped), read from the jobs API, records whether a run published.
+upload where the trigger filter cannot.
 
-The check step is deliberately not confined to `main`. It holds no secret, so
-there is nothing for a branch to read. The residual risk is a dispatcher who
-edits the workflow file itself on their branch, and only a protected
-environment, not a condition in the file, stops that.
+A skipped upload looks the same whatever skipped it, so a final step, guarded
+on `if: always()`, writes one line to the job summary, for example:
+
+```text
+operation=codescene_upload token_available=true ref_is_main=true upload_outcome=success
+```
+
+`token_available` is `true`, `false` or `unknown`; `ref_is_main` is `true` or
+`false`; `upload_outcome` is the upload step's outcome, `success`, `failure`,
+`cancelled` or `skipped`, or `not_run`. Every value is an expression result
+from a closed set, so the line holds no secret and nothing a branch name could
+inject. An operator reads the cause from it:
+
+- `token_available=unknown`: an earlier step failed or the run was cancelled
+  before the check ran, so the upload never ran either.
+- `token_available=false`: the secret is absent or empty, as on a fork or
+  after a rotation.
+- `ref_is_main=false`: a dispatch named another branch.
+- `upload_outcome=skipped` with both inputs `true`: the upload was skipped for
+  another reason, which the job's step conclusions show.
+- `upload_outcome=failure`: the upload action failed.
+- `upload_outcome=success`: the action exited successfully. That does not
+  show that CodeScene accepted the report, which only CodeScene shows.
+
+The jobs API gives the upload step's conclusion for counting runs; this
+repository's CI has no metrics recorder.
+
+The check step is deliberately not confined to `main`. Its shell never holds
+the secret, so there is nothing for a branch to read. The residual risk is a
+dispatcher who edits the workflow file itself on their branch, and only a
+protected environment, not a condition in the file, stops that.
 
 The check step is asserted positively, not only the absence of the old
 binding. GitHub reads a missing step output as `''`, so with the check deleted
@@ -1486,7 +1513,7 @@ its own early in `build-test`. The modules are:
 | `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps         |
 | `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host            |
 | `publisher_rules.py`          | The upload guard and the publisher's cancellation                       |
-| `token_check.py`              | The token-check step, the upload's input, and stray reads of the secret |
+| `token_check.py`              | The token check, the upload's input, the decision record, stray reads   |
 | `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command             |
 | `codescene_coverage_test.py`  | The rule over this repository's workflows                               |
 | `codescene_publisher_test.py` | The publisher's upload step                                             |

@@ -37,6 +37,21 @@ TOKEN_CHECK_COMMAND: typ.Final[str] = (
     'echo "available=${{ secrets.CS_ACCESS_TOKEN != \'\' }}" >> "$GITHUB_OUTPUT"'
 )
 
+#: The ids the decision record reads.
+CHECK_ID: typ.Final[str] = "codescene-token"
+UPLOAD_ID: typ.Final[str] = "codescene-upload"
+
+#: The one command the decision record runs. Every value is an expression
+#: result from a closed set, so the record holds no secret and no text a
+#: branch name could inject.
+DECISION_RECORD_COMMAND: typ.Final[str] = (
+    'echo "operation=codescene_upload'
+    f" token_available=${{{{ steps.{CHECK_ID}.outputs.available || 'unknown' }}}}"
+    " ref_is_main=${{ github.ref == 'refs/heads/main' }}"
+    f" upload_outcome=${{{{ steps.{UPLOAD_ID}.outcome || 'not_run' }}}}"
+    '" >> "$GITHUB_STEP_SUMMARY"'
+)
+
 #: A whole-value `${{ }}` expression, with the whitespace GitHub allows.
 _WRAPPER: typ.Final[re.Pattern[str]] = re.compile(
     r"^\$\{\{(?P<body>.*)\}\}$", re.DOTALL
@@ -110,6 +125,39 @@ def is_token_check(step: dict[str, object]) -> bool:
         and "if" not in step
         and "continue-on-error" not in step
         and str(step.get("run", "")).strip() == TOKEN_CHECK_COMMAND
+    )
+
+
+def is_decision_record(step: dict[str, object]) -> bool:
+    """Return whether a step records the upload decision, in its one shape.
+
+    It runs whatever happened before it, so its only guard is `always()`
+    and it cannot be allowed to fail quietly. Its `run` is exactly the
+    record command, which writes the token's availability, whether the ref
+    is main, and the upload step's outcome to the job summary. A skipped
+    upload otherwise looks the same whatever skipped it.
+
+    Parameters
+    ----------
+    step : dict[str, object]
+        One parsed workflow step.
+
+    Returns
+    -------
+    bool
+        True when the step has exactly that shape.
+
+    Examples
+    --------
+    >>> is_decision_record({"if": "always()", "run": DECISION_RECORD_COMMAND})
+    True
+    >>> is_decision_record({"run": DECISION_RECORD_COMMAND})
+    False
+    """
+    return (
+        step.get("if") == "always()"
+        and "continue-on-error" not in step
+        and str(step.get("run", "")).strip() == DECISION_RECORD_COMMAND
     )
 
 
