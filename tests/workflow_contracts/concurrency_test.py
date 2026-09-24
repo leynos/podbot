@@ -1,0 +1,469 @@
+"""Contracts cancelling superseded pull-request runs.
+
+Every push to a pull request starts a fresh run of each gate, and the run
+already in flight is answering a question about a commit nobody will merge.
+Left alone it holds a runner until it finishes, so the branch pays twice for
+one answer. A concurrency group keyed on the pull request makes the newer run
+cancel the older one.
+
+Cancellation has to stay conditioned on the event. A literal
+``cancel-in-progress: true`` would also cancel a push to `main`, a schedule,
+and a dispatch, none of which has a successor waiting: the run that writes the
+warm cache on `main` would be killed by the next merge, and the coverage
+history would gain holes. The condition is therefore part of the contract, not
+an implementation detail, and `test_cancellation_is_conditioned_on_the_event`
+fails on the literal.
+
+The group also has to distinguish one pull request from another. A group
+derived from ``github.run_id`` is unique per run and so cancels nothing, while
+a constant group would let one branch cancel another's gates.
+
+Only `pull_request` is in scope. A `pull_request_target` workflow runs against
+the base repository to carry a token, and the workflows that use it here automate
+pull-request housekeeping rather than build; cancelling an auto-merge
+mid-flight is a hazard with no minutes to win.
+
+Run via ``make test-workflow-contracts``.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+import yaml
+from workflow_reading import WorkflowDocument, WorkflowReadingError, load_workflow
+
+#: The repository's workflow directory. The module sits two levels below the
+#: repository root, in `tests/workflow_contracts/`.
+WORKFLOW_DIR = Path(__file__).resolve().parents[2] / ".github" / "workflows"
+
+#: Extensions GitHub accepts for a workflow file. Scanning only `.yml` would
+#: silently exempt a `.yaml` workflow from every contract here.
+WORKFLOW_SUFFIXES: tuple[str, ...] = (".yml", ".yaml")
+
+#: The exact `cancel-in-progress` expression every pull-request workflow
+#: carries. Comparing against one string rather than searching for a substring
+#: is what makes the literal `true` mutation fail: `true` is a YAML boolean and
+#: never equals this.
+CANCEL_EXPRESSION = "${{ github.event_name == 'pull_request' }}"
+
+#: The trigger that puts a workflow in scope. `pull_request_target` is
+#: deliberately absent; see the module docstring.
+PULL_REQUEST = "pull_request"
+
+#: Expressions that are unique to a single run. A group built from one of these
+#: can never match another run, so it queues nothing and cancels nothing while
+#: looking exactly like a concurrency control.
+RUN_UNIQUE_EXPRESSIONS: tuple[str, ...] = (
+    "github.run_id",
+    "github.run_number",
+    "github.run_attempt",
+    "github.sha",
+)
+
+#: Expressions that differ between two pull requests. A group naming none of
+#: them is shared by every branch, so one pull request's push would cancel
+#: another's gates.
+#: `github.head_ref` is deliberately absent: two pull requests from different
+#: forks can share a source branch name, so a group keyed on it alone would
+#: let one cancel the other. For a pull request, `github.ref` is
+#: `refs/pull/<number>/merge`, which is unique.
+PER_PULL_REQUEST_EXPRESSIONS: tuple[str, ...] = (
+    "github.event.pull_request.number",
+    "github.ref",
+)
+
+#: Workflows known to start on `pull_request`. Discovery below is dynamic so a
+#: new workflow is covered the day it lands, but a dynamic list that silently
+#: empties turns every parametrized test into a vacuous pass. This names the
+#: floor discovery must still reach.
+KNOWN_PULL_REQUEST_WORKFLOWS: frozenset[str] = frozenset(
+    {
+        "ci.yml",
+    }
+)
+
+
+def _load(path: Path) -> WorkflowDocument:
+    """Read and parse one workflow file through the shared strict reader.
+
+    ``load_workflow`` keeps every scalar a string and refuses a mapping that
+    declares a key twice, so a doubled ``concurrency`` or ``on`` cannot hide
+    its first half. Every failure, unreadable, not YAML, or not a mapping, is
+    raised as a ``WorkflowReadingError`` naming the file, so the fault is
+    visible as the reader's rather than surfacing from inside a query.
+    """
+    try:
+        return load_workflow(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, TypeError, yaml.YAMLError) as error:
+        message = f"{path.name} could not be read as a workflow: {error}"
+        raise WorkflowReadingError(
+            message, reader="concurrency", path=str(path)
+        ) from error
+
+
+def _workflow_paths(directory: Path = WORKFLOW_DIR) -> list[Path]:
+    """Return every workflow file in a directory, this repository's by default.
+
+    Suffixes are compared case-folded, because GitHub runs `CI.YML` too.
+
+    Returns
+    -------
+    list of Path
+        Workflow paths sorted by name, so parametrized tests report in a
+        stable order.
+    """
+    return sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix.casefold() in WORKFLOW_SUFFIXES
+    )
+
+
+def _trigger_names(document: dict[str, object]) -> frozenset[str] | None:
+    """Return the event names a workflow declares under `on:`.
+
+    GitHub accepts three shapes: a mapping of event to configuration, a list
+    of event names, and a bare event name. All three are read here. A reader
+    that modelled only the mapping would drop a workflow written either other
+    way out of discovery, and a contract over a filtered list reports nothing
+    at all about a workflow it never sees.
+
+    PyYAML also resolves an unquoted `on:` key to the boolean ``True``, so
+    both spellings of the key are read.
+
+    Parameters
+    ----------
+    document
+        A parsed workflow document.
+
+    Returns
+    -------
+    frozenset of str, or None
+        The declared event names, empty when the workflow declares no `on:`
+        at all, in which case nothing can start it. ``None`` when `on:` is
+        present in a shape this reader does not model, an explicit empty
+        value included; the caller decides
+        what to do about that, and
+        `test_every_workflow_declares_a_trigger_set_this_reader_models`
+        reports it by name rather than letting discovery drop it in silence.
+    """
+    if "on" not in document and True not in document:
+        return frozenset()
+    match document.get("on", document.get(True)):
+        case dict() as events:
+            return frozenset(key for key in events if isinstance(key, str))
+        case list() as events:
+            return frozenset(event for event in events if isinstance(event, str))
+        case str() as event if event.strip():
+            return frozenset({event})
+        case _:
+            # An explicit empty `on:` loads as "" or None. It is present but
+            # names no event, which is a shape this reader does not model,
+            # not an absent key.
+            return None
+
+
+def _pull_request_workflows() -> list[Path]:
+    """Return every workflow a pull request can start.
+
+    Returns
+    -------
+    list of Path
+        Workflow paths declaring a `pull_request` trigger, in name order.
+    """
+    return [
+        path
+        for path in _workflow_paths()
+        if PULL_REQUEST in (_trigger_names(_load(path)) or frozenset())
+    ]
+
+
+#: A `${{ }}` expression, and a single-quoted string literal inside one.
+_EXPRESSION = re.compile(r"\$\{\{(?P<body>.*?)\}\}", re.DOTALL)
+_QUOTED = re.compile(r"'(?:[^']|'')*'")
+
+
+def _evaluated_text(value: str) -> str:
+    """Return the parts of a value GitHub evaluates as context references.
+
+    Only the bodies of `${{ }}` expressions are evaluated, and a quoted
+    string inside one is a literal. So `github.ref` written bare, or
+    `${{ 'github.event.pull_request.number' }}`, names the context without
+    reading it, and yields a constant group.
+
+    Examples
+    --------
+    >>> _evaluated_text("ci-${{ github.ref }}").strip()
+    'github.ref'
+    >>> "github.ref" in _evaluated_text("ci-github.ref-${{ 'github.ref' }}")
+    False
+    """
+    bodies = (match.group("body") for match in _EXPRESSION.finditer(value))
+    return " ".join(_QUOTED.sub("''", body) for body in bodies)
+
+
+def _concurrency(path: Path) -> dict[str, object]:
+    """Return a workflow's top-level concurrency mapping.
+
+    Parameters
+    ----------
+    path
+        Workflow file to read.
+
+    Returns
+    -------
+    dict
+        The concurrency mapping, empty when the workflow declares none or
+        declares the shorthand string form, which cannot carry
+        `cancel-in-progress` at all.
+    """
+    declared = _load(path).get("concurrency")
+    return declared if isinstance(declared, dict) else {}
+
+
+PULL_REQUEST_WORKFLOWS = _pull_request_workflows()
+WORKFLOW_IDS = [path.name for path in PULL_REQUEST_WORKFLOWS]
+
+
+def test_discovery_still_finds_the_known_pull_request_workflows() -> None:
+    """Discovery reaches its floor, so the parametrized contracts are not empty.
+
+    Every test below is parametrized over a list built by reading the workflow
+    estate. If that read were to break, or the `on:` key were to change shape,
+    the list would empty and each contract would report as passed having
+    asserted nothing.
+    """
+    discovered = set(WORKFLOW_IDS)
+    missing = sorted(KNOWN_PULL_REQUEST_WORKFLOWS - discovered)
+    assert not missing, (
+        f"these workflows start on pull_request but discovery missed them: "
+        f"{', '.join(missing)}; the contracts below would pass without "
+        "asserting anything about them"
+    )
+
+
+def test_every_workflow_declares_a_trigger_set_this_reader_models() -> None:
+    """No workflow's `on:` defeats the reader that decides what is in scope.
+
+    Discovery filters on the event names it can read, and a workflow whose
+    `on:` the reader cannot model is dropped from that filter. Dropped
+    silently it would take every contract below with it, each passing while
+    saying nothing about that workflow. This is the half that makes the
+    silence loud.
+    """
+    unreadable = sorted(
+        path.name for path in _workflow_paths() if _trigger_names(_load(path)) is None
+    )
+    assert not unreadable, (
+        f"these workflows declare an `on:` this reader does not model: "
+        f"{', '.join(unreadable)}; each is dropped from discovery, so every "
+        "contract below would pass without asserting anything about it"
+    )
+
+
+@pytest.mark.parametrize("workflow", PULL_REQUEST_WORKFLOWS, ids=WORKFLOW_IDS)
+def test_every_pull_request_workflow_declares_a_concurrency_group(
+    workflow: Path,
+) -> None:
+    """A workflow a pull request starts declares a concurrency group.
+
+    Without one, every push to the branch leaves its predecessor running to
+    completion on a paid runner.
+    """
+    group = _concurrency(workflow).get("group")
+    assert isinstance(group, str) and group.strip(), (
+        f"{workflow.name} starts on pull_request and must declare "
+        "concurrency.group; without it a superseded run holds a runner until "
+        "it finishes"
+    )
+
+
+#: The one place a run-unique value may appear in a group: as the fallback a
+#: non-pull-request event selects. A pull request always has a number, so it
+#: never reaches the fallback, and every other event gets a group of its own.
+_NON_PULL_REQUEST_FALLBACK = re.compile(
+    r"github\.event\.pull_request\.number\s*\|\|\s*github\.run_id\b"
+)
+
+
+def _run_unique_names(group: str) -> list[str]:
+    """Return the run-unique names a pull request's group would evaluate.
+
+    Examples
+    --------
+    >>> _run_unique_names("${{ github.event.pull_request.number || github.run_id }}")
+    []
+    >>> _run_unique_names("${{ github.run_id || github.event.pull_request.number }}")
+    ['github.run_id']
+    """
+    evaluated = _NON_PULL_REQUEST_FALLBACK.sub("", _evaluated_text(group))
+    return [name for name in RUN_UNIQUE_EXPRESSIONS if name in evaluated]
+
+
+@pytest.mark.parametrize("workflow", PULL_REQUEST_WORKFLOWS, ids=WORKFLOW_IDS)
+def test_the_group_is_not_unique_to_one_run(workflow: Path) -> None:
+    """A pull request's successive runs share one group.
+
+    A group a pull request builds from the run identifier or the commit SHA
+    matches no other run, so it cancels nothing while reading as a
+    concurrency control. The run identifier is allowed only as the fallback
+    after the pull-request number, where only other events can select it.
+    """
+    group = str(_concurrency(workflow).get("group", ""))
+    offenders = _run_unique_names(group)
+    assert not offenders, (
+        f"{workflow.name} builds its pull-request concurrency group from "
+        f"{', '.join(offenders)}, which is unique to one run; the group would "
+        "never match a superseded run and would cancel nothing"
+    )
+
+
+@pytest.mark.parametrize("workflow", PULL_REQUEST_WORKFLOWS, ids=WORKFLOW_IDS)
+def test_every_other_event_gets_a_group_of_its_own(workflow: Path) -> None:
+    """A dispatch or a push falls back to its run id, so nothing replaces it.
+
+    GitHub keeps at most one pending run per group. A shared fallback such as
+    `github.ref` would let a third dispatch replace a queued second one, which
+    conditioning `cancel-in-progress` on the event does not prevent.
+    """
+    group = _evaluated_text(str(_concurrency(workflow).get("group", "")))
+    assert _NON_PULL_REQUEST_FALLBACK.search(group), (
+        f"{workflow.name} must fall back to github.run_id after "
+        f"github.event.pull_request.number; its group evaluates {group!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("group", "unique"),
+    [
+        pytest.param(
+            "${{ github.event.pull_request.number || github.run_id }}",
+            False,
+            id="fallback",
+        ),
+        pytest.param("${{ github.run_id }}", True, id="run-id-alone"),
+        pytest.param(
+            "${{ github.run_id || github.event.pull_request.number }}",
+            True,
+            id="run-id-first",
+        ),
+        pytest.param(
+            "${{ github.event.pull_request.number }}-${{ github.sha }}", True, id="sha"
+        ),
+    ],
+)
+def test_a_run_unique_value_is_allowed_only_as_the_fallback(
+    group: str, *, unique: bool
+) -> None:
+    """Narrow as well as sufficient: only the non-pull-request fallback passes."""
+    assert bool(_run_unique_names(group)) is unique
+
+
+@pytest.mark.parametrize("workflow", PULL_REQUEST_WORKFLOWS, ids=WORKFLOW_IDS)
+def test_the_group_distinguishes_one_pull_request_from_another(
+    workflow: Path,
+) -> None:
+    """The group varies with the pull request, so branches do not cancel each other.
+
+    A constant group would put every open pull request in one queue, and the
+    first push anywhere would cancel the gates running everywhere else. The
+    name must be evaluated: `group: github.ref` or a quoted name inside an
+    expression is a constant that merely looks like the context.
+    """
+    group = _evaluated_text(str(_concurrency(workflow).get("group", "")))
+    assert any(name in group for name in PER_PULL_REQUEST_EXPRESSIONS), (
+        f"{workflow.name} must key its concurrency group on the pull request, "
+        f"by naming one of {', '.join(PER_PULL_REQUEST_EXPRESSIONS)}; a group "
+        "shared by every branch would cancel unrelated pull requests"
+    )
+
+
+@pytest.mark.parametrize("workflow", PULL_REQUEST_WORKFLOWS, ids=WORKFLOW_IDS)
+def test_cancellation_is_conditioned_on_the_event(workflow: Path) -> None:
+    """Cancellation applies to pull requests only, not to pushes or schedules.
+
+    A literal `true` here reads as a stricter setting and is a regression: it
+    would cancel the run on `main` that writes the warm cache and records
+    coverage, which no later run repeats.
+    """
+    declared = _concurrency(workflow).get("cancel-in-progress")
+    assert declared == CANCEL_EXPRESSION, (
+        f"{workflow.name} must set cancel-in-progress to "
+        f"{CANCEL_EXPRESSION!r}, not {declared!r}; a missing value leaves "
+        "superseded runs in flight and a literal true also cancels pushes to "
+        "main, schedules, and dispatches"
+    )
+
+
+@pytest.mark.parametrize(
+    ("group", "keyed"),
+    [
+        pytest.param("${{ github.workflow }}-${{ github.ref }}", True, id="evaluated"),
+        pytest.param("ci-github.ref", False, id="bare-text"),
+        pytest.param("${{ 'github.event.pull_request.number' }}", False, id="quoted"),
+        pytest.param(
+            "${{ github.workflow }}-${{ github.head_ref }}", False, id="head-ref-only"
+        ),
+    ],
+)
+def test_only_an_evaluated_reference_keys_the_group(group: str, *, keyed: bool) -> None:
+    """The reading is narrow: a name written as text is not a key."""
+    evaluated = _evaluated_text(group)
+    assert any(name in evaluated for name in PER_PULL_REQUEST_EXPRESSIONS) is keyed
+
+
+def test_a_workflow_with_an_upper_case_suffix_is_discovered(tmp_path: Path) -> None:
+    """GitHub runs `CI.YML`, so discovery must not skip it."""
+    (tmp_path / "CI.YML").write_text("jobs: {}\n", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("jobs: {}\n", encoding="utf-8")
+    assert [path.name for path in _workflow_paths(tmp_path)] == ["CI.YML"]
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        pytest.param("name: x\n", frozenset(), id="no-on-key"),
+        pytest.param("on:\n", None, id="explicit-empty"),
+        pytest.param("on: ''\n", None, id="empty-string"),
+        pytest.param("on: [pull_request]\n", frozenset({"pull_request"}), id="list"),
+    ],
+)
+def test_an_explicit_empty_on_is_unsupported_not_absent(
+    body: str, expected: frozenset[str] | None
+) -> None:
+    """An `on:` with no value is present, so it is not read as absent.
+
+    Read as absent, a workflow written that way would leave discovery in
+    silence while the known-workflow floor still passed.
+    """
+    assert _trigger_names(load_workflow(body)) == expected
+
+
+@pytest.mark.parametrize(
+    ("body", "cause"),
+    [
+        pytest.param(None, OSError, id="missing-file"),
+        pytest.param("on: [\n", yaml.YAMLError, id="not-yaml"),
+        pytest.param("- a list\n", TypeError, id="not-a-mapping"),
+    ],
+)
+def test_an_unreadable_workflow_is_the_readers_fault(
+    tmp_path: Path, body: str | None, cause: type[Exception]
+) -> None:
+    """Every read, parse and shape failure is a named reading error.
+
+    The original failure is chained as the cause, so the reason survives the
+    translation.
+    """
+    workflow = tmp_path / "broken.yml"
+    if body is not None:
+        workflow.write_text(body, encoding="utf-8")
+    with pytest.raises(WorkflowReadingError) as raised:
+        _load(workflow)
+    assert raised.value.reader == "concurrency", raised.value
+    assert raised.value.path == str(workflow), raised.value
+    assert "broken.yml" in str(raised.value), raised.value
+    assert isinstance(raised.value.__cause__, cause), raised.value.__cause__
