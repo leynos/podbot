@@ -1448,7 +1448,8 @@ including the artefact and cache steps. The workflow also answers
 upload where the trigger filter cannot.
 
 A skipped upload looks the same whatever skipped it, so a final step, guarded
-on `if: always()`, writes one line to the job summary, for example:
+on `if: always()`, writes one line to the job summary whenever it runs, for
+example:
 
 ```text
 operation=codescene_upload token_available=true ref_is_main=true upload_outcome=success
@@ -1460,8 +1461,9 @@ operation=codescene_upload token_available=true ref_is_main=true upload_outcome=
 from a closed set, so the line holds no secret and nothing a branch name could
 inject. An operator reads the cause from it:
 
-- `token_available=unknown`: an earlier step failed or the run was cancelled
-  before the check ran, so the upload never ran either.
+- `token_available=unknown`: the check produced no availability output,
+  because an earlier step failed, the check step itself failed, or the run was
+  cancelled before it; the upload did not run either.
 - `token_available=false`: the secret is absent or empty, as on a fork or
   after a rotation.
 - `ref_is_main=false`: a dispatch named another branch.
@@ -1471,8 +1473,9 @@ inject. An operator reads the cause from it:
 - `upload_outcome=success`: the action exited successfully. That does not
   show that CodeScene accepted the report, which only CodeScene shows.
 
-The jobs API gives the upload step's conclusion for counting runs; this
-repository's CI has no metrics recorder.
+A run cancelled before the final step starts writes no record at all; the
+jobs API then shows how far it got. The jobs API also gives the upload step's
+conclusion for counting runs; this repository's CI has no metrics recorder.
 
 The check step is deliberately not confined to `main`. Its shell never holds
 the secret, so there is nothing for a branch to read. The residual risk is a

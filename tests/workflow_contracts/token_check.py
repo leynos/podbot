@@ -5,10 +5,10 @@ step's `env` to every step nested inside it, including artefact and cache
 steps that have no use for the secret. So the secret is not bound on the
 upload step at all. A step of its own runs one exact command, in which
 GitHub evaluates `secrets.CS_ACCESS_TOKEN != ''` before the shell starts,
-so the command writes only `available=true` or `available=false` to the
-step's outputs and the token enters no process. The upload's guard reads
-that output, and the action receives the secret through its
-`access-token` input alone.
+so the check step's shell receives only a boolean and writes
+`available=true` or `available=false` to the step's outputs. The upload's
+guard reads that output, and the upload action alone receives the secret,
+through its `access-token` input.
 
 The positive shape is asserted, not only the absence of the old one.
 GitHub reads a missing step output as an empty string, so a guard on
@@ -99,9 +99,9 @@ def is_token_check(step: dict[str, object]) -> bool:
     wrapper such as `false && ...` or `echo ...` can contain the command
     without running it. It has no `if:` and no `continue-on-error`, either
     of which could stop it writing the output. It binds nothing: the token
-    reaches the command only as the evaluated `true` or `false`, so no
-    process, including a script checked out from a dispatched branch, ever
-    holds it.
+    reaches its shell only as the evaluated `true` or `false`, so no code
+    checked out from a dispatched branch runs with the token in reach. The
+    upload action is the one step that receives it.
 
     Parameters
     ----------

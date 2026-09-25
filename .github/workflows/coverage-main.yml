@@ -64,10 +64,11 @@ jobs:
         if: always()
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
       - name: Check for the CodeScene token
-        # GitHub evaluates the expression before the shell starts, so the
-        # command sees only `true` or `false` and the token enters no
-        # process and no step's env. The upload action is composite and
-        # would hand its own step's env to every step nested inside it.
+        # GitHub evaluates the expression before the shell starts, so this
+        # step's shell receives only `true` or `false`, and the token is in
+        # no step's env. Only the upload action receives it, through its
+        # `access-token` input: the action is composite and would hand its
+        # own step's env to every step nested inside it.
         id: codescene-token
         run: echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
       - name: Upload coverage data to CodeScene
