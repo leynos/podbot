@@ -63,14 +63,29 @@ jobs:
         # not turn a pull request red.
         if: always()
         run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
+      - name: Check for the CodeScene token
+        # GitHub evaluates the expression before the shell starts, so this
+        # step's shell receives only `true` or `false`, and the token is in
+        # no step's env. Only the upload action receives it, through its
+        # `access-token` input: the action is composite and would hand its
+        # own step's env to every step nested inside it.
+        id: codescene-token
+        run: echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
       - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         # A dispatch can name any branch, so the ref is checked here, not
-        # only in the trigger filter.
-        if: github.ref == 'refs/heads/main' && env.CS_ACCESS_TOKEN != ''
+        # only in the trigger filter. A fork or a rotated secret skips the
+        # upload instead of failing the run.
+        id: codescene-upload
+        if: steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
           format: lcov
           mode: upload
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
+          access-token: ${{ secrets.CS_ACCESS_TOKEN }}
+      - name: Record the CodeScene upload decision
+        # A skipped upload looks the same whatever skipped it, so the job
+        # summary records the inputs to the decision and its outcome. Every
+        # value is an expression result from a closed set, so the record
+        # holds no secret and nothing a branch name could inject.
+        if: always()
+        run: echo "operation=codescene_upload token_available=${{ steps.codescene-token.outputs.available || 'unknown' }} ref_is_main=${{ github.ref == 'refs/heads/main' }} upload_outcome=${{ steps.codescene-upload.outcome || 'not_run' }}" >> "$GITHUB_STEP_SUMMARY"

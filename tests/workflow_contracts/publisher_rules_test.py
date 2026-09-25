@@ -1,8 +1,8 @@
 """The publisher readings, driven on guards and steps this repository lacks.
 
 ``codescene_publisher_test`` asserts the real upload step, which uses
-one spelling of each guard and binding, so it agrees with a broken
-reading as readily as with a working one. Each case here is the shape
+one spelling of each guard, so it agrees with a broken reading as
+readily as with a working one. Each case here is the shape
 the reading exists to refuse, or the shape it must still accept.
 
 Run via ``make test-workflow-contracts``.
@@ -10,22 +10,14 @@ Run via ``make test-workflow-contracts``.
 
 from __future__ import annotations
 
-import typing as typ
-
 import pytest
 from publisher_rules import (
     MAIN_REF_CONJUNCT,
-    binds_the_credential,
     cancelling_scopes,
     guard_conjuncts,
     requires,
-    stray_credential_sites,
 )
 from workflow_reading import load_workflow
-
-#: The binding the upload step carries, as parsed.
-BOUND: typ.Final[dict[str, str]] = {"CS_ACCESS_TOKEN": "${{ secrets.CS_ACCESS_TOKEN }}"}
-PASSED: typ.Final[dict[str, str]] = {"access-token": "${{ env.CS_ACCESS_TOKEN }}"}
 
 
 @pytest.mark.parametrize(
@@ -88,51 +80,6 @@ def test_a_guard_that_confines_to_main_is_accepted(condition: str) -> None:
 def test_the_conjuncts_are_split_outside_quotes() -> None:
     """A quoted ``&&`` stays inside its conjunct."""
     assert guard_conjuncts("a == 'x && y' && b") == ["a == 'x && y'", "b"]
-
-
-@pytest.mark.parametrize(
-    "step",
-    [
-        pytest.param({"with": PASSED}, id="binding-deleted"),
-        pytest.param({"env": BOUND}, id="input-deleted"),
-        pytest.param(
-            {"env": {"CS_ACCESS_TOKEN": "${{ secrets.OTHER }}"}, "with": PASSED},
-            id="another-secret",
-        ),
-        pytest.param(
-            {"env": BOUND, "with": {"access-token": "literal"}}, id="literal-input"
-        ),
-        pytest.param({"env": "not-a-mapping", "with": PASSED}, id="env-malformed"),
-    ],
-)
-def test_an_upload_step_missing_half_the_binding_is_refused(
-    step: dict[str, object],
-) -> None:
-    """Either half deleted leaves the guard well formed and the upload skipped."""
-    assert not binds_the_credential(step), step
-
-
-#: A publisher whose upload is job ``a``'s second step, with a stray
-#: read of the secret at each place a wider or neighbouring scope puts it.
-STRAYS: typ.Final[str] = (
-    "env:\n  T: ${{ secrets.CS_ACCESS_TOKEN }}\n"
-    "jobs:\n  a:\n    env:\n      CS_ACCESS_TOKEN: x\n    steps:\n"
-    "      - run: echo ${{ env.CS_ACCESS_TOKEN }}\n"
-    "      - if: env.CS_ACCESS_TOKEN != ''\n"
-    "        env:\n          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}\n"
-    "        uses: x/upload@v1\n"
-    "        with:\n          access-token: ${{ env.CS_ACCESS_TOKEN }}\n"
-)
-
-
-def test_a_stray_credential_is_found_and_the_upload_step_is_not() -> None:
-    """The upload step's three uses are allowed; every other read is a stray."""
-    strays = stray_credential_sites("m.yml", load_workflow(STRAYS), "jobs.a.steps[1]")
-    assert strays == [
-        "m.yml: env.T",
-        "m.yml: jobs.a.env.CS_ACCESS_TOKEN<key>",
-        "m.yml: jobs.a.steps[0].run",
-    ]
 
 
 @pytest.mark.parametrize(

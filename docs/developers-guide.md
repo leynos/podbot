@@ -1430,15 +1430,67 @@ token, and applies to forks too.
 
 ### 19.1. The publisher
 
-The upload step is guarded on
-`github.ref == 'refs/heads/main' && env.CS_ACCESS_TOKEN != ''`. The workflow
-also answers `workflow_dispatch`, which can name any branch, so the trigger
-filter alone does not confine the upload. The step binds
-`CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}` in its own `env` and passes
-`access-token: ${{ env.CS_ACCESS_TOKEN }}`; no other scope declares or reads the
-secret. The binding is asserted positively because GitHub reads a missing
-context property as `''`: with the binding deleted the guard stays well formed
-and the upload skips on every run with nothing failing.
+A step of its own checks for the token. It has the id `codescene-token`, no
+`env` and no `if:`, and its sole command is exactly
+`echo "available=${{ secrets.CS_ACCESS_TOKEN != '' }}" >> "$GITHUB_OUTPUT"`.
+GitHub evaluates the expression before the shell starts, so the check step's
+shell receives only `true` or `false`, never the token, and no script checked
+out from the branch a dispatch names runs with it in reach. The only step that
+receives the token is the upload, through the action's `access-token` input.
+The upload step has the id `codescene-upload`, and it is guarded on
+`steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'`,
+and it passes `access-token: ${{ secrets.CS_ACCESS_TOKEN }}` directly. Nothing
+else in the workflow binds or reads the secret, and no `env` on the job,
+including the upload step's own, does. The upload action is composite, and a
+composite action hands the calling step's `env` to every step nested inside it,
+including the artefact and cache steps. The workflow also answers
+`workflow_dispatch`, which can name any branch, so the ref test confines the
+upload where the trigger filter cannot.
+
+A skipped upload looks the same whatever skipped it, so a final step, guarded
+on `if: always()`, writes one line to the job summary whenever it runs, for
+example:
+
+```text
+operation=codescene_upload token_available=true ref_is_main=true upload_outcome=success
+```
+
+`token_available` is `true`, `false` or `unknown`; `ref_is_main` is `true` or
+`false`; `upload_outcome` is the upload step's outcome, `success`, `failure`,
+`cancelled` or `skipped`, or `not_run`. Every value is an expression result
+from a closed set, so the line holds no secret and nothing a branch name could
+inject. An operator reads the cause from it:
+
+- `token_available=unknown`: the check produced no availability output,
+  because an earlier step failed, the check step itself failed, or the run was
+  cancelled before it; the upload did not run either.
+- `token_available=false`: the secret is absent or empty, as on a fork or
+  after a rotation.
+- `ref_is_main=false`: a dispatch named another branch.
+- `upload_outcome=skipped` with both inputs `true`: the upload was skipped for
+  another reason, which the job's step conclusions show.
+- `upload_outcome=failure`: the upload action failed.
+- `upload_outcome=success`: the action exited successfully. That does not
+  show that CodeScene accepted the report, which only CodeScene shows.
+
+A run cancelled before the final step starts writes no record at all; the
+jobs API then shows how far it got. The jobs API also gives the upload step's
+conclusion for counting runs; this repository's CI has no metrics recorder.
+
+The check step is deliberately not confined to `main`. Its shell never holds
+the secret, so there is nothing for a branch to read. The residual risk is a
+dispatcher who edits the workflow file itself on their branch, and only a
+protected environment, not a condition in the file, stops that.
+
+The check step is asserted positively, not only the absence of the old
+binding. GitHub reads a missing step output as `''`, so with the check deleted
+the guard stays well formed and the upload skips on every run, with nothing
+failing.
+
+A Dependabot pull request merged by automerge with `GITHUB_TOKEN` fires no
+`push` event, so that merge does not run this publisher. This is a known
+exception: the next push to `main` publishes. No `schedule` trigger is added to
+cover it.
 
 The workflow declares a concurrency group without `cancel-in-progress`. A
 cancelled publisher abandons both its upload and its ratchet baseline write, so
@@ -1458,17 +1510,18 @@ reason: coverage built from one commit must not be recorded against another.
 with Ruff format and lint checks first, and CI runs it as an unguarded step of
 its own early in `build-test`. The modules are:
 
-| Module                        | Subject                                                              |
-| ----------------------------- | -------------------------------------------------------------------- |
-| `workflow_reading.py`         | Strict parsing, trigger forms, push filters, and the workflow files  |
-| `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps      |
-| `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host         |
-| `publisher_rules.py`          | The upload guard, the credential binding, and cancellation           |
-| `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command          |
-| `codescene_coverage_test.py`  | The rule over this repository's workflows                            |
-| `codescene_publisher_test.py` | The publisher's upload step                                          |
-| `codescene_uploader_test.py`  | The uploader's approved pin and its retired checksum input           |
-| `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain    |
+| Module                        | Subject                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------- |
+| `workflow_reading.py`         | Strict parsing, trigger forms, push filters, and the workflow files     |
+| `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps         |
+| `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host            |
+| `publisher_rules.py`          | The upload guard and the publisher's cancellation                       |
+| `token_check.py`              | The token check, the upload's input, the decision record, stray reads   |
+| `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command             |
+| `codescene_coverage_test.py`  | The rule over this repository's workflows                               |
+| `codescene_publisher_test.py` | The publisher's upload step                                             |
+| `codescene_uploader_test.py`  | The uploader's approved pin and its retired checksum input              |
+| `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain       |
 
 _Table 2: Workflow contract modules._
 
@@ -1501,7 +1554,11 @@ nothing:
 - **Triggers are read as a mapping, a sequence, or a string**, under both the
   `on` key and the boolean `True` that YAML 1.1 resolves an unquoted `on:` to.
   Push filters are read as globs with `!` negation, so `'**'` counts as naming
-  `main`.
+  `main`. A workflow that declares triggers under
+  both keys is refused with a `WorkflowReadingError`: a resolving loader turns
+  an unquoted `on:` into `True` and leaves a quoted `'on':` as a string,
+  GitHub merges the two, and a reader that picked one key would miss the
+  other's triggers.
 - **A required command is read as a step's sole command.** `false && X`,
   `echo X` and a step guarded by `if:` all contain `X` and run nothing, so the
   contract step and the ratcheting coverage step must each be unguarded, and

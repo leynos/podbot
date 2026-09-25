@@ -15,12 +15,16 @@ import typing as typ
 
 import pytest
 from codescene_coverage import CODESCENE_ACTION, invokes, publishers
-from publisher_rules import (
-    CREDENTIAL_PRESENT_CONJUNCT,
-    MAIN_REF_CONJUNCT,
-    binds_the_credential,
-    cancelling_scopes,
-    guard_conjuncts,
+from publisher_rules import MAIN_REF_CONJUNCT, cancelling_scopes, guard_conjuncts
+from token_check import (
+    CHECK_ID,
+    DECISION_RECORD_COMMAND,
+    TOKEN_CHECK_COMMAND,
+    UPLOAD_ID,
+    available_conjunct,
+    is_decision_record,
+    is_token_check,
+    passes_the_secret_directly,
     stray_credential_sites,
 )
 from workflow_reading import read_workflows, workflow_jobs
@@ -33,12 +37,14 @@ WORKFLOWS: typ.Final[pathlib.Path] = REPOSITORY_ROOT / ".github" / "workflows"
 
 
 class Upload(typ.NamedTuple):
-    """The publisher's upload step, with where it sits."""
+    """The publisher's upload step, with where it sits and its neighbours."""
 
     workflow: str
     document: WorkflowDocument
     path: str
     step: dict[str, object]
+    earlier: list[tuple[str, dict[str, object]]]
+    later: list[dict[str, object]]
 
 
 def _raw_steps(job: dict[str, object]) -> list[object]:
@@ -52,7 +58,22 @@ def upload() -> Upload:
     """Return the publisher's single CodeScene upload step."""
     ((name, document),) = publishers(read_workflows(WORKFLOWS)).items()
     found = [
-        Upload(name, document, f"jobs.{job_name}.steps[{index}]", step)
+        Upload(
+            name,
+            document,
+            f"jobs.{job_name}.steps[{index}]",
+            step,
+            [
+                (f"jobs.{job_name}.steps[{position}]", earlier)
+                for position, earlier in enumerate(_raw_steps(job)[:index])
+                if isinstance(earlier, dict)
+            ],
+            [
+                later
+                for later in _raw_steps(job)[index + 1 :]
+                if isinstance(later, dict)
+            ],
+        )
         for job_name, job in workflow_jobs(document).items()
         for index, step in enumerate(_raw_steps(job))
         if isinstance(step, dict) and invokes(step, CODESCENE_ACTION)
@@ -77,13 +98,35 @@ def test_the_publisher_uploads_rather_than_checks(upload: Upload) -> None:
     )
 
 
+def _token_check(upload: Upload) -> tuple[str, dict[str, object]]:
+    """Return the single token-check step that precedes the upload in its job."""
+    checks = [(path, step) for path, step in upload.earlier if is_token_check(step)]
+    assert len(checks) == 1, (
+        f"exactly one step before the upload must have an id and run "
+        f"{TOKEN_CHECK_COMMAND!r} as its sole, unguarded command; "
+        f"found {[path for path, _ in checks]}"
+    )
+    return checks[0]
+
+
+def test_the_token_is_checked_in_a_step_of_its_own(upload: Upload) -> None:
+    """The check step exists, in its one allowed shape, before the upload.
+
+    GitHub reads a missing step output as an empty string, so without this
+    the guard below stays well formed with the check deleted, and the upload
+    skips on every run with nothing failing.
+    """
+    _token_check(upload)
+
+
 def test_the_publisher_uploads_only_from_main(upload: Upload) -> None:
-    """The ref is one conjunct of the guard, and no ``||`` can bypass it.
+    """The ref and the token check are conjuncts, and no ``||`` bypasses them.
 
     The publisher declares ``workflow_dispatch``, which can name any
-    branch, so without this a feature branch's coverage could publish as
-    the trunk's and every pull request would ratchet against it.
+    branch, so without the ref test a feature branch's coverage could
+    publish as the trunk's and every pull request would ratchet against it.
     """
+    _, check = _token_check(upload)
     condition = str(upload.step.get("if", ""))
     conjuncts = guard_conjuncts(condition)
     assert conjuncts is not None, f"the upload guard contains `||`: {condition!r}"
@@ -91,29 +134,50 @@ def test_the_publisher_uploads_only_from_main(upload: Upload) -> None:
         f"the upload step must be guarded on {MAIN_REF_CONJUNCT} as one `&&` "
         f"term; it is guarded on {condition!r}"
     )
-    assert CREDENTIAL_PRESENT_CONJUNCT in conjuncts, (
-        f"the upload step must skip, not fail, when the secret is absent: {condition!r}"
+    required = available_conjunct(str(check["id"]))
+    assert required in conjuncts, (
+        f"the upload step must skip, not fail, when the secret is absent, by "
+        f"reading the check step's output as {required!r}: {condition!r}"
     )
 
 
-def test_the_publisher_binds_the_credential_it_tests(upload: Upload) -> None:
-    """The guard's variable is bound on the step and handed to the action.
+def test_the_upload_takes_the_secret_only_as_its_input(upload: Upload) -> None:
+    """The composite action would pass its step's env to every nested step."""
+    assert passes_the_secret_directly(upload.step), (
+        "the upload step must pass access-token: ${{ secrets.CS_ACCESS_TOKEN }} "
+        f"and bind nothing named CS_ACCESS_TOKEN in its env; it has {upload.step!r}"
+    )
 
-    ``env.CS_ACCESS_TOKEN != ''`` stays well formed with the binding
-    deleted, because GitHub reads a missing property as ``''``; the
-    upload then skips on every run and nothing fails.
+
+def test_the_upload_decision_is_recorded(upload: Upload) -> None:
+    """A step after the upload records why it ran or skipped, and how it ended.
+
+    The record reads both steps by id, so each id is asserted too: renamed,
+    either would read as empty and the record would say `unknown` or
+    `not_run` on every run.
     """
-    assert binds_the_credential(upload.step), (
-        "the upload step must bind CS_ACCESS_TOKEN to "
-        "${{ secrets.CS_ACCESS_TOKEN }} and pass access-token: "
-        f"${{{{ env.CS_ACCESS_TOKEN }}}}; it has {upload.step!r}"
+    _, check = _token_check(upload)
+    assert check.get("id") == CHECK_ID, (
+        f"the token check must have the id {CHECK_ID!r}; it has {check.get('id')!r}"
+    )
+    assert upload.step.get("id") == UPLOAD_ID, (
+        f"the upload step must have the id {UPLOAD_ID!r}; "
+        f"it has {upload.step.get('id')!r}"
+    )
+    records = [step for step in upload.later if is_decision_record(step)]
+    assert len(records) == 1, (
+        f"exactly one step after the upload must run {DECISION_RECORD_COMMAND!r} "
+        f"under `if: always()`; found {len(records)}"
     )
 
 
 def test_the_credential_is_bound_nowhere_else(upload: Upload) -> None:
     """A wider scope puts the secret in reach of steps with no use for it."""
-    strays = stray_credential_sites(upload.workflow, upload.document, upload.path)
-    assert not strays, f"CS_ACCESS_TOKEN is read outside the upload step: {strays}"
+    check_path, _ = _token_check(upload)
+    strays = stray_credential_sites(
+        upload.workflow, upload.document, check_path, upload.path
+    )
+    assert not strays, f"CS_ACCESS_TOKEN is read outside its two sites: {strays}"
 
 
 def test_the_publisher_never_cancels_a_run(upload: Upload) -> None:

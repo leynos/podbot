@@ -71,6 +71,19 @@ def test_the_trigger_reader_survives_a_resolving_loader() -> None:
     assert triggers(document) == {"pull_request", "push"}
 
 
+def test_triggers_under_both_keys_are_refused() -> None:
+    """A quoted and an unquoted ``on:`` land under two keys in one document.
+
+    GitHub merges them, so a reader choosing either key would miss the
+    other's triggers; refusing is the only reading that sees both.
+    """
+    document = yaml.safe_load("on: push\n'on': pull_request\n")
+    assert "on" in document and True in document, "the premise: both keys"
+    with pytest.raises(WorkflowReadingError) as raised:
+        triggers(document)
+    assert raised.value.reader == "triggers"
+
+
 @pytest.mark.parametrize(
     ("filters", "expected"),
     [
