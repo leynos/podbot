@@ -168,6 +168,12 @@ def test_proc_locks_parser_classifies_parent_cycles_and_external_contention() ->
     assert classify_lock_waiter([holder], {200}, set()) == (
         "ordinary contention with an external lock holder"
     ), "a non-owned holder must be classified as ordinary external contention"
+    assert classify_lock_waiter([holder], {100, 200}, set()) == (
+        "contention between owned sibling processes"
+    ), "an owned non-ancestor holder is sibling contention"
+    assert classify_lock_waiter([], {200}, set()) == (
+        "waiter has no visible holder for this lock"
+    ), "an empty holder set must retain the no-visible-holder diagnosis"
 
 
 def test_configured_cargo_home_does_not_resolve_user_home(
