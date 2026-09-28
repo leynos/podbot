@@ -37,6 +37,7 @@ from test_runner_commands import (
 )
 from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
+from test_runner_context import TestRunnerContext
 from test_runner_supervise import supervise_command
 from test_runner_supervisor import ProcessSupervisor
 
@@ -96,12 +97,14 @@ def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) 
             parsed.watch_interval,
             enable_subreaper=enable_subreaper,
         ) as supervisor:
-            metadata = load_cargo_metadata(
-                cargo_command, options, cwd, environment, supervisor
-            )
+            context = TestRunnerContext(cargo_command, cwd, environment, supervisor)
+            metadata = load_cargo_metadata(context, options)
             plan = create_test_plan(metadata, options)
             environment["CARGO_TARGET_DIR"] = str(plan.target_directory)
-            return run_test_plan(cargo_command, plan, environment, supervisor)
+            context = TestRunnerContext(
+                cargo_command, plan.workspace_root, environment, supervisor
+            )
+            return run_test_plan(context, plan)
     except RunnerCommandFailure as exc:
         return exc.status
     except (OSError, RunnerError) as exc:
@@ -110,10 +113,8 @@ def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) 
 
 
 def run_test_plan(
-    cargo_command: tuple[str, ...],
+    context: TestRunnerContext,
     plan: CargoTestPlan,
-    environment: dict[str, str],
-    supervisor: ProcessSupervisor,
 ) -> int:
     """Run ordinary tests, doctests, and isolated nested-Cargo tests.
 
@@ -123,11 +124,10 @@ def run_test_plan(
     process has returned successfully.
     """
     if plan.options.no_run:
-        return _run_no_run(cargo_command, plan, environment, supervisor)
+        return _run_no_run(context, plan)
 
-    ordinary_results, should_stop = _run_ordinary_phase(
-        cargo_command, plan, environment, supervisor
-    )
+    ordinary_results, should_stop = _run_ordinary_phase(context, plan)
+    supervisor = context.supervisor
     if supervisor.terminal_status is not None:
         return supervisor.terminal_status
     if should_stop:
@@ -139,9 +139,7 @@ def run_test_plan(
         )
         return first_failure(ordinary_results)
 
-    doctest_results, should_stop = _run_doctest_phase(
-        cargo_command, plan, environment, supervisor
-    )
+    doctest_results, should_stop = _run_doctest_phase(context, plan)
     if supervisor.terminal_status is not None:
         return supervisor.terminal_status
     if should_stop:
@@ -152,17 +150,15 @@ def run_test_plan(
         )
         return first_failure((*ordinary_results, *doctest_results))
 
-    nested_results, _ = _run_nested_phase(cargo_command, plan, environment, supervisor)
+    nested_results, _ = _run_nested_phase(context, plan)
     if supervisor.terminal_status is not None:
         return supervisor.terminal_status
     return first_failure((*ordinary_results, *doctest_results, *nested_results))
 
 
 def _run_ordinary_phase(
-    cargo_command: tuple[str, ...],
+    context: TestRunnerContext,
     plan: CargoTestPlan,
-    environment: dict[str, str],
-    supervisor: ProcessSupervisor,
 ) -> tuple[tuple[int, ...], bool]:
     """Run ordinary package tests and report whether fail-fast stopped work."""
     if not plan.ordinary_package_args:
@@ -175,16 +171,13 @@ def _run_ordinary_phase(
             flush=True,
         )
         status = _run_cargo_test(
-            cargo_command,
+            context,
             plan.options,
             target_arguments,
-            plan.workspace_root,
-            environment,
-            supervisor,
             package_name=package_name,
         )
         statuses.append(status)
-        if supervisor.terminal_status is not None:
+        if context.supervisor.terminal_status is not None:
             return tuple(statuses), True
         if status and not plan.options.no_fail_fast:
             return tuple(statuses), True
@@ -192,10 +185,8 @@ def _run_ordinary_phase(
 
 
 def _run_doctest_phase(
-    cargo_command: tuple[str, ...],
+    context: TestRunnerContext,
     plan: CargoTestPlan,
-    environment: dict[str, str],
-    supervisor: ProcessSupervisor,
 ) -> tuple[tuple[int, ...], bool]:
     """Run documentation tests and report whether fail-fast stopped work."""
     if not plan.run_doctests:
@@ -203,22 +194,17 @@ def _run_doctest_phase(
         return (), False
     print("== Running Cargo documentation tests ==", flush=True)
     status = _run_cargo_test(
-        cargo_command,
+        context,
         plan.options,
         ("--doc",),
-        plan.workspace_root,
-        environment,
-        supervisor,
     )
     should_stop = bool(status and not plan.options.no_fail_fast)
     return (status,), should_stop
 
 
 def _run_nested_phase(
-    cargo_command: tuple[str, ...],
+    context: TestRunnerContext,
     plan: CargoTestPlan,
-    environment: dict[str, str],
-    supervisor: ProcessSupervisor,
 ) -> tuple[tuple[int, ...], bool]:
     """Run nested-Cargo tests and report whether fail-fast stopped work."""
     if not plan.nested_targets:
@@ -226,11 +212,9 @@ def _run_nested_phase(
         return (), False
     statuses: list[int] = []
     for target in plan.nested_targets:
-        status = _run_nested_target(
-            cargo_command, plan, target, environment, supervisor
-        )
+        status = _run_nested_target(context, plan, target)
         statuses.append(status)
-        if supervisor.terminal_status is not None:
+        if context.supervisor.terminal_status is not None:
             return tuple(statuses), True
         if status and not plan.options.no_fail_fast:
             return tuple(statuses), True
@@ -238,10 +222,8 @@ def _run_nested_phase(
 
 
 def _run_no_run(
-    cargo_command: tuple[str, ...],
+    context: TestRunnerContext,
     plan: CargoTestPlan,
-    environment: dict[str, str],
-    supervisor: ProcessSupervisor,
 ) -> int:
     """Preserve Cargo's compile-only mode without launching test harnesses.
 
@@ -249,25 +231,22 @@ def _run_no_run(
     executables remain unlaunched because `--no-run` applies to every target.
     """
     print("== Compiling selected tests without execution ==", flush=True)
-    command = [*cargo_command, "test", *plan.options.common]
+    command = [*context.cargo_command, "test", *plan.options.common]
     command.extend(plan.selected_target_args)
     if plan.options.test_filter:
         command.append(plan.options.test_filter)
     command.append("--no-run")
     if plan.options.harness_args:
         command.extend(["--", *plan.options.harness_args])
-    return supervisor.run_inherited(
-        command, plan.workspace_root, environment, purpose="Cargo test --no-run"
+    return context.supervisor.run_inherited(
+        command, plan.workspace_root, context.environment, purpose="Cargo test --no-run"
     )
 
 
 def _run_cargo_test(
-    cargo_command: tuple[str, ...],
+    context: TestRunnerContext,
     options: CargoTestOptions,
     target_arguments: tuple[str, ...],
-    cwd: pathlib.Path,
-    environment: dict[str, str],
-    supervisor: ProcessSupervisor,
     *,
     package_name: str | None = None,
 ) -> int:
@@ -278,22 +257,26 @@ def _run_cargo_test(
         else options.common
     )
     package_arguments = ["--package", package_name] if package_name else []
-    command = [*cargo_command, "test", *common, *package_arguments, *target_arguments]
+    command = [
+        *context.cargo_command,
+        "test",
+        *common,
+        *package_arguments,
+        *target_arguments,
+    ]
     if options.test_filter:
         command.append(options.test_filter)
     if options.harness_args:
         command.extend(["--", *options.harness_args])
-    return supervisor.run_inherited(
-        command, cwd, environment, purpose="ordinary Cargo tests"
+    return context.supervisor.run_inherited(
+        command, context.cwd, context.environment, purpose="ordinary Cargo tests"
     )
 
 
 def _run_nested_target(
-    cargo_command: tuple[str, ...],
+    context: TestRunnerContext,
     plan: CargoTestPlan,
     target: Target,
-    environment: dict[str, str],
-    supervisor: ProcessSupervisor,
 ) -> int:
     """Build one registered test target, then invoke its current artifact."""
     key = (target.package_id, target.name)
@@ -302,7 +285,7 @@ def _run_nested_target(
         flush=True,
     )
     command = [
-        *cargo_command,
+        *context.cargo_command,
         "test",
         *without_message_format(without_package_selection(plan.options.common)),
         "--package",
@@ -312,9 +295,7 @@ def _run_nested_target(
         "--message-format=json-render-diagnostics",
     ]
     messages: list[dict[str, typ.Any]] = []
-    status = _run_json_build(
-        command, plan.workspace_root, environment, messages, supervisor
-    )
+    status = _run_json_build(context, command, messages)
     print(f"Cargo no-run build exited with status {status}.", flush=True)
     if status != 0:
         return status
@@ -339,12 +320,10 @@ def _run_nested_target(
         )
         return 2
     test_environment = create_test_runtime_environment(
-        environment,
+        context,
         package,
         executable,
         messages,
-        target_directory=plan.target_directory,
-        cargo_command=cargo_command,
     )
     test_arguments = [plan.options.test_filter] if plan.options.test_filter else []
     test_arguments.extend(plan.options.harness_args)
@@ -352,7 +331,7 @@ def _run_nested_target(
         f"== Running {target.package_name}:{target.name} after Cargo exited ==",
         flush=True,
     )
-    return supervisor.run_inherited(
+    return context.supervisor.run_inherited(
         [str(executable), *test_arguments],
         target.manifest_dir,
         test_environment,
@@ -361,11 +340,9 @@ def _run_nested_target(
 
 
 def _run_json_build(
+    context: TestRunnerContext,
     command: list[str],
-    cwd: pathlib.Path,
-    environment: dict[str, str],
     messages: list[dict[str, typ.Any]],
-    supervisor: ProcessSupervisor,
 ) -> int:
     """Stream a JSON-mode Cargo build and retain its current artifacts."""
 
@@ -376,10 +353,10 @@ def _run_json_build(
         if message is not None:
             messages.append(message)
 
-    return supervisor.run_lines(
+    return context.supervisor.run_lines(
         command,
-        cwd,
-        environment,
+        context.cwd,
+        context.environment,
         purpose="Cargo nested-target build",
         on_line=emit_line,
     )

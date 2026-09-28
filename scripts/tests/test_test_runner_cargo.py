@@ -17,6 +17,8 @@ from test_runner_cargo import (
 from test_runner_models import RunnerError
 from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
+from test_runner_context import TestRunnerContext
+from test_runner_supervisor import ProcessSupervisor
 
 from test_runner_fixtures import package_document
 
@@ -87,15 +89,22 @@ def test_runtime_environment_restores_cargo_values_and_library_paths(
             "profile": {"test": False},
         },
     ]
-    inherited = {"LD_LIBRARY_PATH": "/caller/native"}
+    inherited = {
+        "LD_LIBRARY_PATH": "/caller/native",
+        "CARGO_TARGET_DIR": str(tmp_path / "target"),
+    }
+    context = TestRunnerContext(
+        ("cargo", "+1.88.0"),
+        tmp_path,
+        inherited,
+        ProcessSupervisor(timeout_seconds=1800),
+    )
 
     environment = create_test_runtime_environment(
-        inherited,
+        context,
         package,
         executable,
         messages,
-        target_directory=tmp_path / "target",
-        cargo_command=("cargo", "+1.88.0"),
     )
 
     assert environment["CARGO_MANIFEST_DIR"] == str(tmp_path), (
@@ -218,9 +227,8 @@ def test_relative_manifest_is_anchored_to_caller_directory(
         cwd=caller_directory,
     )
 
-    test_runner_cargo.load_cargo_metadata(
-        ("cargo",), options, workspace_directory, {}, FakeSupervisor()
-    )
+    context = TestRunnerContext(("cargo",), workspace_directory, {}, FakeSupervisor())
+    test_runner_cargo.load_cargo_metadata(context, options)
 
     assert observed["cwd"] == workspace_directory, (
         "metadata may run from the selected workspace root"

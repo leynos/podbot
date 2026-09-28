@@ -53,6 +53,12 @@ and direct test harnesses; it is not a general process manager. It cleans only
 its own descendants, never kills unrelated processes, and never deletes cache
 locks. On bounded failure, it reports lock and process diagnostics.
 
+`TestRunnerContext` carries the Cargo command, working directory, environment,
+and supervisor for one runner invocation. Use it only between
+`scripts/test_runner.py` and `scripts/test_runner_cargo.py`; the test plan owns
+target and feature selection. Do not retain the context between invocations or
+expose it to application code.
+
 ### 2.3. Supported test orchestration
 
 Use `make test` for the supported test path. Its default `TEST_FLAGS` are

@@ -19,15 +19,12 @@ import sys
 import typing as typ
 
 from test_runner_models import CargoTestOptions, RunnerError, Target
-from test_runner_supervisor import ProcessSupervisor
+from test_runner_context import TestRunnerContext
 
 
 def load_cargo_metadata(
-    cargo_command: tuple[str, ...],
+    context: TestRunnerContext,
     options: CargoTestOptions,
-    cwd: pathlib.Path,
-    environment: dict[str, str],
-    supervisor: ProcessSupervisor,
 ) -> dict[str, typ.Any]:
     """Return workspace metadata without downloading dependency metadata.
 
@@ -36,23 +33,29 @@ def load_cargo_metadata(
     The runner passes a versioned JSON request so package and target selection
     does not depend on Cargo's human-readable output.
     """
-    command = [*cargo_command, "metadata", "--no-deps", "--format-version", "1"]
+    command = [
+        *context.cargo_command,
+        "metadata",
+        "--no-deps",
+        "--format-version",
+        "1",
+    ]
     if options.manifest_path is not None:
         command.extend(["--manifest-path", str(options.manifest_path)])
     for flag in ("--offline", "--locked", "--frozen"):
         if flag in options.common and flag not in command:
             command.append(flag)
-    status, stdout, stderr = supervisor.run_capture(
+    status, stdout, stderr = context.supervisor.run_capture(
         command,
-        cwd,
-        environment,
+        context.cwd,
+        context.environment,
         purpose="Cargo metadata",
     )
     if status != 0:
         if stderr:
             sys.stderr.write(stderr)
-        if supervisor.terminal_status is not None:
-            raise RunnerCommandFailure(supervisor.terminal_status)
+        if context.supervisor.terminal_status is not None:
+            raise RunnerCommandFailure(context.supervisor.terminal_status)
         raise RunnerError(f"cargo metadata exited with status {status}")
     try:
         metadata = json.loads(stdout)
@@ -129,13 +132,10 @@ def select_test_executables(
 
 
 def create_test_runtime_environment(
-    base_environment: dict[str, str],
+    context: TestRunnerContext,
     package: dict[str, typ.Any],
     executable: pathlib.Path,
     messages: list[dict[str, typ.Any]],
-    *,
-    target_directory: pathlib.Path,
-    cargo_command: tuple[str, ...],
 ) -> dict[str, str]:
     """Add the Cargo package, target, binary, and dynamic-library environment.
 
@@ -144,15 +144,15 @@ def create_test_runtime_environment(
     The inherited library path remains present after Cargo's target paths are
     prepended, so custom native libraries remain discoverable.
     """
-    environment = base_environment.copy()
+    environment = context.environment.copy()
     _set_package_environment(environment, package)
-    environment["CARGO_TARGET_DIR"] = str(target_directory)
+    target_directory = pathlib.Path(environment["CARGO_TARGET_DIR"])
     target_temporary_directory = target_directory / "tmp"
     target_temporary_directory.mkdir(parents=True, exist_ok=True)
     environment["CARGO_TARGET_TMPDIR"] = str(target_temporary_directory)
-    environment["CARGO"] = _resolve_cargo_executable(cargo_command)
-    if len(cargo_command) > 1 and cargo_command[1].startswith("+"):
-        environment["RUSTUP_TOOLCHAIN"] = cargo_command[1][1:]
+    environment["CARGO"] = _resolve_cargo_executable(context.cargo_command)
+    if len(context.cargo_command) > 1 and context.cargo_command[1].startswith("+"):
+        environment["RUSTUP_TOOLCHAIN"] = context.cargo_command[1][1:]
     for message in messages:
         if message.get("reason") == "compiler-artifact":
             _record_binary_executable(environment, package, message)
