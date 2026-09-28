@@ -105,9 +105,9 @@ jobs:
       - name: No-CLI compile check
         run: cargo check --no-default-features
       - name: No-CLI boundary tests
-        run: cargo test --no-default-features --test cli_feature_gating --test compile_contract
+        run: make test TEST_FLAGS='--no-default-features --test cli_feature_gating --test compile_contract'
       - name: Internal compatibility tests
-        run: cargo test --features internal
+        run: make test TEST_FLAGS='--features internal'
       # CodeScene coverage belongs to main (CV-005): coverage-main.yml is
       # the only workflow that talks to CodeScene. This lane keeps the
       # ratchet, which gates on this repository's own baseline, needs no
