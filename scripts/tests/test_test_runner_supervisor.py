@@ -174,6 +174,12 @@ def test_proc_locks_parser_classifies_parent_cycles_and_external_contention() ->
     assert classify_lock_waiter([], {200}, set()) == (
         "waiter has no visible holder for this lock"
     ), "an empty holder set must retain the no-visible-holder diagnosis"
+    assert classify_lock_waiter(iter(()), {200}, set()) == (
+        "waiter has no visible holder for this lock"
+    ), "an empty one-shot iterable must retain the no-visible-holder diagnosis"
+    assert classify_lock_waiter(iter([holder]), {200}, set()) == (
+        "ordinary contention with an external lock holder"
+    ), "a one-shot iterable must retain its external-holder diagnosis"
 
 
 def test_configured_cargo_home_does_not_resolve_user_home(

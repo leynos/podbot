@@ -217,11 +217,12 @@ def classify_lock_waiter(
     owned_ancestors: set[int],
 ) -> str:
     """Distinguish runner-owned parent cycles from ordinary lock contention."""
-    if any(holder.pid in owned_ancestors for holder in holders):
+    holder_records = tuple(holders)
+    if any(holder.pid in owned_ancestors for holder in holder_records):
         return "parent/descendant lock cycle"
-    if any(holder.pid not in owned_pids for holder in holders):
+    if any(holder.pid not in owned_pids for holder in holder_records):
         return "ordinary contention with an external lock holder"
-    if not holders:
+    if not holder_records:
         return "waiter has no visible holder for this lock"
     return "contention between owned sibling processes"
 
