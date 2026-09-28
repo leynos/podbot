@@ -90,11 +90,13 @@ def test_proc_stat_parser_handles_parentheses_in_command_name() -> None:
         f"123 (cargo (nested)) {' '.join(fields)}", "cargo --offline build"
     )
 
-    assert parsed.pid == 123
-    assert parsed.parent_pid == 41
-    assert parsed.process_group == 42
-    assert parsed.start_time == 987654
-    assert parsed.command == "cargo --offline build"
+    assert parsed.pid == 123, "the stat parser must preserve the process ID"
+    assert parsed.parent_pid == 41, "the stat parser must preserve the parent ID"
+    assert parsed.process_group == 42, "the stat parser must preserve process groups"
+    assert parsed.start_time == 987654, "the stat parser must preserve start-time ticks"
+    assert parsed.command == "cargo --offline build", (
+        "the procfs command line must remain attached to its process snapshot"
+    )
 
 
 def test_proc_locks_parser_classifies_parent_cycles_and_external_contention() -> None:
@@ -109,15 +111,17 @@ def test_proc_locks_parser_classifies_parent_cycles_and_external_contention() ->
     )
     holder, waiter = records
 
-    assert waiter.waiter
-    assert waiter.pid == 200
-    assert waiter.device_inode == holder.device_inode
+    assert waiter.waiter, "the arrow row must be parsed as a waiting lock request"
+    assert waiter.pid == 200, "the waiter row must preserve its process ID"
+    assert waiter.device_inode == holder.device_inode, (
+        "holder and waiter must map to the same lock inode"
+    )
     assert classify_lock_waiter([holder], {100, 200}, {100}) == (
         "parent/descendant lock cycle"
-    )
+    ), "an owned ancestor holding the same lock is a parent/descendant cycle"
     assert classify_lock_waiter([holder], {200}, set()) == (
         "ordinary contention with an external lock holder"
-    )
+    ), "a non-owned holder must be classified as ordinary external contention"
 
 
 @pytest.mark.parametrize(

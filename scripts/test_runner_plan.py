@@ -101,6 +101,8 @@ def _ordinary_package_phases(
     options: CargoTestOptions,
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
     """Build ordinary Cargo target arguments independently for each package."""
+    if options.doc_only:
+        return ()
     phases: list[tuple[str, tuple[str, ...]]] = []
     for package in packages:
         package_id = str(package["id"])
