@@ -25,7 +25,7 @@ All quality gates must pass before committing. The canonical targets are:
 | `make check-fmt`    | `cargo fmt --workspace -- --check`, then `mdtablefix --check`               | Verify Rust and Markdown formatting                                |
 | `make fmt`          | `cargo fmt --workspace`, `mdtablefix --in-place`, `markdownlint-cli2 --fix` | Apply Rust and Markdown formatting fixes                           |
 | `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings`      | Lint with all warnings denied                                      |
-| `make test`         | `cargo test --workspace`                                                    | Run full test suite                                                |
+| `make test`         | `uv run --no-project --python 3.14 python scripts/test_runner.py`           | Run the full test suite through the supervised runner              |
 | `make typecheck`    | `cargo check --workspace --all-targets --all-features`                      | Type-check the workspace                                           |
 | `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`             | Derive workspace root with `python3`; run `cargo audit` once there |
 | `make markdownlint` | markdownlint-cli                                                            | Validate Markdown files                                            |
@@ -52,6 +52,54 @@ The private process supervisor owns only the subprocess tree launched by one
 and direct test harnesses; it is not a general process manager. It cleans only
 its own descendants, never kills unrelated processes, and never deletes cache
 locks. On bounded failure, it reports lock and process diagnostics.
+
+### 2.3. Supported test orchestration
+
+Use `make test` for the supported test path. Its default `TEST_FLAGS` are
+`--all-targets --all-features`; set `TEST_FLAGS` to choose another supported
+feature or target selection. The Make target forwards `RUST_FLAGS` as
+`RUSTFLAGS` (defaulting to `-D warnings`) and forwards `BUILD_JOBS` to Cargo.
+The runner invokes Python through `uv run --no-project --python 3.14`.
+
+The runner executes ordinary Cargo test phases first. It separately builds
+registered compile-contract targets with Cargo's `--no-run` mode, waits for
+that Cargo process to exit, then executes the exact harness artefact. This
+keeps nested-Cargo trybuild work outside the lifetime of the parent build
+process. Doctests remain a separate phase, and empty phases are reported as
+skipped.
+
+The run has one bounded deadline. Set `TEST_TIMEOUT` as a Make variable, or
+`PODBOT_TEST_TIMEOUT` in the environment; the default is 1800 seconds. A
+timeout exits with status 124. An interrupt exits with 128 plus the signal
+number. Periodic and terminal diagnostics include the command, process ancestry
+and elapsed time, toolchain details, and recognized Cargo cache or target-lock
+owners and waiters. On timeout or interruption the runner cleans up and reaps
+only its owned process tree. Read the report before retrying; it distinguishes
+an owned parent/descendant lock cycle from ordinary external contention where
+the platform exposes the lock data. Let unrelated Cargo work finish before
+retrying. Do not delete Cargo lock files, use a separate `CARGO_HOME`, or
+terminate unrelated processes. These diagnostics describe the observed process
+and lock state; they do not establish a Cargo-internal cause.
+
+### 2.4. Coverage action boundary
+
+The pull-request coverage step pins shared-actions
+[`generate-coverage` at `a5765019912a8ab6882b12db049c7cde635f3a85`](https://github.com/leynos/shared-actions/tree/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage).
+The workflow supplies `features: internal` and `use-cargo-nextest: 'false'`;
+the action's Rust runner invokes `cargo llvm-cov`. At this pin, `all-targets`
+defaults to false, and enabling it adds benches, examples, and every test
+target. `doctests` also defaults to false. Therefore the current action
+selection does not include every test target or the registered compile-contract
+target. The action remains outside the repository test runner, but its current
+selection does not run the nested compile-contract tests.
+
+The action's `RUN_RUST_CARGO_WAIT_TIMEOUT` is 1800 seconds. Its watchdog
+terminates the Cargo process it started; the pinned implementation does not
+demonstrate the repository runner's process-tree supervision. Reassess this
+boundary if the action's target selection broadens. The pinned sources are
+[`action.yml`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/action.yml),
+[`scripts/run_rust.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/run_rust.py),
+and [`scripts/_cargo_runner.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/_cargo_runner.py).
 
 ## 3. Repository layout (exec subsystem)
 
