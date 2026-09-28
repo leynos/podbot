@@ -45,6 +45,14 @@ graph through tooling dependencies rather than an application database path.
 Keep the ignore scoped to `RUSTSEC-2023-0071`, and remove it if SQLx leaves the
 tool dependency graph or if Podbot adds a MySQL runtime integration.
 
+### 2.2. Private Cargo test-runner process supervision
+
+The private process supervisor owns only the subprocess tree launched by one
+`scripts/test_runner.py` invocation. Reuse it only for metadata and Cargo phases
+and direct test harnesses; it is not a general process manager. It cleans only
+its own descendants, never kills unrelated processes, and never deletes cache
+locks. On bounded failure, it reports lock and process diagnostics.
+
 ## 3. Repository layout (exec subsystem)
 
 The exec subsystem lives under `src/engine/connection/exec/` and implements
