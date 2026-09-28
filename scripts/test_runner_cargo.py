@@ -135,7 +135,9 @@ def create_test_runtime_environment(
     environment = base_environment.copy()
     _set_package_environment(environment, package)
     environment["CARGO_TARGET_DIR"] = str(target_directory)
-    environment["CARGO_TARGET_TMPDIR"] = str(executable.parent.parent / "tmp")
+    target_temporary_directory = target_directory / "tmp"
+    target_temporary_directory.mkdir(parents=True, exist_ok=True)
+    environment["CARGO_TARGET_TMPDIR"] = str(target_temporary_directory)
     environment["CARGO"] = _resolve_cargo_executable(cargo_command)
     if len(cargo_command) > 1 and cargo_command[1].startswith("+"):
         environment["RUSTUP_TOOLCHAIN"] = cargo_command[1][1:]
