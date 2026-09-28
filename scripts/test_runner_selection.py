@@ -263,13 +263,18 @@ def _named_target_arguments(
 
 def validate_nested_registry(metadata: dict[str, typ.Any]) -> None:
     """Ensure registered nested-Cargo targets exist as enabled test targets."""
+    workspace_member_ids = set(metadata.get("workspace_members", []))
     all_targets = tuple(
         target
         for package in metadata.get("packages", [])
+        if package.get("id") in workspace_member_ids
         for target in targets_for_package(package)
     )
     known = {(target.package_name, target.name): target for target in all_targets}
+    workspace_package_names = {target.package_name for target in all_targets}
     for registered in NESTED_CARGO_TARGETS:
+        if registered[0] not in workspace_package_names:
+            continue
         target = known.get(registered)
         if target is None:
             raise RunnerError(
