@@ -31,9 +31,27 @@ def select_packages(
         for package in metadata.get("packages", [])
         if package.get("id") in workspace_ids
     ]
+    selected_ids = _initial_package_ids(metadata, options, packages)
+    if options.excludes:
+        selected_ids = _without_excluded(packages, selected_ids, options.excludes)
+    selected = tuple(
+        package for package in packages if package.get("id") in selected_ids
+    )
+    if not selected:
+        raise RunnerError("Cargo package selection contains no workspace packages")
+    return selected
+
+
+def _initial_package_ids(
+    metadata: dict[str, typ.Any],
+    options: CargoTestOptions,
+    packages: list[dict[str, typ.Any]],
+) -> set[str]:
+    """Resolve workspace, explicit-package, or default package identities."""
+    workspace_ids = set(metadata.get("workspace_members", []))
     if options.workspace:
-        selected_ids = workspace_ids
-    elif options.package_specs:
+        return workspace_ids
+    if options.package_specs:
         selected_ids = {
             str(package["id"])
             for package in packages
@@ -43,25 +61,26 @@ def select_packages(
         }
         if not selected_ids:
             raise RunnerError(f"no workspace package matches {options.package_specs!r}")
-    else:
-        selected_ids = set(metadata.get("workspace_default_members", workspace_ids))
-    if options.excludes:
-        selected_ids = {
-            package_id
-            for package_id in selected_ids
-            if not any(
-                _package_spec_matches(package, spec)
-                for package in packages
-                if package.get("id") == package_id
-                for spec in options.excludes
-            )
-        }
-    selected = tuple(
-        package for package in packages if package.get("id") in selected_ids
-    )
-    if not selected:
-        raise RunnerError("Cargo package selection contains no workspace packages")
-    return selected
+        return selected_ids
+    return set(metadata.get("workspace_default_members", workspace_ids))
+
+
+def _without_excluded(
+    packages: list[dict[str, typ.Any]],
+    selected_ids: set[str],
+    excludes: tuple[str, ...],
+) -> set[str]:
+    """Remove package identities matched by Cargo's workspace exclusions."""
+    return {
+        package_id
+        for package_id in selected_ids
+        if not any(
+            _package_spec_matches(package, spec)
+            for package in packages
+            if package.get("id") == package_id
+            for spec in excludes
+        )
+    }
 
 
 def select_targets(
