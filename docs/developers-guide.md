@@ -1635,18 +1635,20 @@ reusable-workflow call; every coverage step and its cache report; and every
 runner declaration, raw and parsed. A change that adds or removes an entry
 fails that module until its expected inventory is updated in the same commit.
 
-`coverage-upload`, main's only cache writer, runs on `ubicloud-standard-2`, and
-a pull request from a fork falls back to `ubuntu-latest`, because a fork cannot
-obtain an Ubicloud runner. Ubicloud's cache proxy is scoped by ref, so a pull
-request's Ubicloud `build-test` reads a warm main scope only when a main job on
-Ubicloud writes it. An Ubicloud runner is a self-hosted just-in-time runner, so
-GitHub's six-hour cap for hosted jobs does not apply to it. Every job whose
-`runs-on` can select Ubicloud therefore states its own `timeout-minutes`, and
-the same module asserts that inventory exactly: `coverage-upload` at a
-provisional 45 minutes, sized for its first cold run and held 15 minutes above
-its 1,800 s cargo watchdog so the watchdog, not the ceiling, ends a stalled
-run. It is tightened to twice a measured warm run once one exists, and never
-below the watchdog plus setup.
+`build-test` and `coverage-upload`, main's only cache writer, run on
+`ubicloud-standard-2`, and a pull request from a fork falls back to
+`ubuntu-latest`, because a fork cannot obtain an Ubicloud runner. Ubicloud's
+cache proxy is scoped by ref, so a pull request's Ubicloud `build-test` reads a
+warm main scope only when a main job on Ubicloud writes it; a fork's pull
+request restores a hosted cache that main no longer refreshes, which is
+accepted because fork pull requests are rare here. An Ubicloud runner is a
+self-hosted just-in-time runner, so GitHub's six-hour cap for hosted jobs does
+not apply to it. Every job whose `runs-on` can select Ubicloud therefore states
+its own `timeout-minutes`, and the same module asserts that inventory exactly:
+`coverage-upload` at a provisional 45 minutes, held 15 minutes above its 1,800 s
+cargo watchdog so the watchdog, not the ceiling, ends a stalled run, and
+`build-test` at a ceiling set from a measured warm run. Neither may sit below
+the watchdog plus setup.
 
 Both coverage lanes also check the compiler cache after reporting on it.
 `sccache --show-stats --stats-format json > sccache-stats.json` writes the

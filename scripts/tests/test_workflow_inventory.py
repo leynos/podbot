@@ -43,7 +43,12 @@ COVERAGE_JOBS: typ.Final[list[tuple[str, str]]] = [
 #: Every runner declaration, as workflow, job and value.
 RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
     ("audit.yml", "audit", "ubuntu-latest"),
-    ("ci.yml", "build-test", "ubuntu-latest"),
+    (
+        "ci.yml",
+        "build-test",
+        "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
+        "|| 'ubicloud-standard-2' }}",
+    ),
     (
         "coverage-main.yml",
         "coverage-upload",
@@ -55,6 +60,7 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
 #: Every job whose runner can be an Ubicloud one, with the ceiling it
 #: states in minutes.
 CEILINGS: typ.Final[list[tuple[str, str, object]]] = [
+    ("ci.yml", "build-test", 35),
     ("coverage-main.yml", "coverage-upload", 45),
 ]
 

@@ -16,7 +16,14 @@ concurrency:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    # Ubicloud, to avoid the hosted queue (the move's measured waits are in
+    # the pull request that made it). A pull request from a fork cannot
+    # obtain an Ubicloud runner, so it falls back to the hosted pool.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}
+    # An Ubicloud runner is a self-hosted just-in-time runner with no
+    # six-hour hosted cap, so the job states its own ceiling: twice the
+    # hosted p90 of 15.9 min over six runs to 2026-09-27 (jobs API).
+    timeout-minutes: 35
     permissions:
       contents: read
     env:
