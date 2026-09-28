@@ -68,11 +68,13 @@ class OwnedProcessTree:
         started_at: float,
         *,
         subreaper: bool,
+        preexisting_child_identities: frozenset[tuple[int, int]] = frozenset(),
     ) -> None:
         self.root_pid = root_pid
         self.root_command = root_command
         self.started_at = started_at
         self.subreaper = subreaper
+        self.preexisting_child_identities = preexisting_child_identities
         self.proc_available = pathlib.Path("/proc").is_dir()
         root_info = _read_process(root_pid)
         self.owned: dict[int, OwnedProcess] = {}
@@ -103,6 +105,8 @@ class OwnedProcessTree:
                     self.subreaper
                     and process.parent_pid == os.getpid()
                     and process.pid != self.root_pid
+                    and (process.pid, process.start_time)
+                    not in self.preexisting_child_identities
                 )
                 if inherited or adopted:
                     self.owned[process.pid] = OwnedProcess(process, time.monotonic())
@@ -221,6 +225,17 @@ def set_child_subreaper(enabled: bool) -> bool:
     if not sys_is_linux():
         return False
     return _prctl(_PR_SET_CHILD_SUBREAPER, int(enabled)) == 0
+
+
+def snapshot_direct_child_identities() -> frozenset[tuple[int, int]]:
+    """Capture existing direct children before launching an owned process."""
+    if not pathlib.Path("/proc").is_dir():
+        return frozenset()
+    return frozenset(
+        (process.pid, process.start_time)
+        for process in _read_process_table().values()
+        if process.parent_pid == os.getpid()
+    )
 
 
 def _prctl(option: int, argument: int = 0, *, read_integer: bool = False) -> int | None:
