@@ -37,6 +37,7 @@ from test_runner_commands import (
 )
 from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
+from test_runner_supervise import supervise_command
 from test_runner_supervisor import ProcessSupervisor
 
 
@@ -66,12 +67,24 @@ def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) 
         default=30.0,
         help="seconds between process and lock diagnostic snapshots",
     )
+    parser.add_argument(
+        "--supervise",
+        action="store_true",
+        help="run the command after `--` with bounded process supervision",
+    )
     parser.add_argument("cargo_arguments", nargs=argparse.REMAINDER)
     parsed = parser.parse_args(arguments)
     cargo_arguments = list(parsed.cargo_arguments)
     if cargo_arguments and cargo_arguments[0] == "--":
         cargo_arguments.pop(0)
     try:
+        if parsed.supervise:
+            return supervise_command(
+                cargo_arguments,
+                parsed.timeout,
+                parsed.watch_interval,
+                enable_subreaper=enable_subreaper,
+            )
         cargo_command = tuple(shlex.split(parsed.cargo))
         if not cargo_command:
             raise RunnerError("the Cargo command is empty")
