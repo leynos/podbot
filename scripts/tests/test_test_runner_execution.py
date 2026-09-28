@@ -227,6 +227,26 @@ def test_ordinary_failure_stops_nested_phase_by_default(
     )
 
 
+def test_doctest_failure_does_not_report_completed_ordinary_phase_as_skipped(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Fail-fast diagnostics list only phases that remain unstarted."""
+    environment = _fake_cargo_environment(tmp_path, monkeypatch, doctest_exit=29)
+
+    status = test_runner.main(["--cargo", environment["FAKE_CARGO"], "--"])
+
+    output = capsys.readouterr().out
+    assert status == 29, "the doctest failure must remain the runner status"
+    assert "remaining packages:" not in output, (
+        "completed ordinary package phases must not be reported as skipped"
+    )
+    assert "Skipping nested-Cargo tests" in output, (
+        "the not-yet-started nested phase must be reported"
+    )
+
+
 def test_fail_fast_reports_unstarted_workspace_package(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -280,6 +300,7 @@ def _fake_cargo_environment(
     build_exit: int = 0,
     test_exit: int = 0,
     ordinary_exit: int = 0,
+    doctest_exit: int = 0,
     metadata: dict[str, typ.Any] | None = None,
 ) -> dict[str, str]:
     """Write fake Cargo and a test executable controlled by environment."""
@@ -330,6 +351,8 @@ def _fake_cargo_environment(
                 print(json.dumps(message), flush=True)
                 time.sleep(0.05)
                 raise SystemExit(0)
+            if "--doc" in args:
+                raise SystemExit(int(os.environ["FAKE_DOCTEST_EXIT"]))
             if "--test" in args and "cli_feature_gating" in args:
                 raise SystemExit(int(os.environ["FAKE_ORDINARY_EXIT"]))
             raise SystemExit(0)
@@ -348,6 +371,7 @@ def _fake_cargo_environment(
         "FAKE_BUILD_EXIT": str(build_exit),
         "FAKE_TEST_EXIT": str(test_exit),
         "FAKE_ORDINARY_EXIT": str(ordinary_exit),
+        "FAKE_DOCTEST_EXIT": str(doctest_exit),
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)
