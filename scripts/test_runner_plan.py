@@ -134,10 +134,11 @@ def _should_run_doctests(
 def _resolve_target_directory(
     metadata: dict[str, typ.Any], options: CargoTestOptions
 ) -> pathlib.Path:
-    """Resolve an explicit target directory against the caller's directory."""
+    """Resolve target paths from the selected workspace root."""
     target_directory = options.target_dir or pathlib.Path(
         str(metadata["target_directory"])
     )
     if not target_directory.is_absolute():
-        target_directory = pathlib.Path.cwd() / target_directory
+        workspace_root = pathlib.Path(str(metadata["workspace_root"])).resolve()
+        target_directory = workspace_root / target_directory
     return target_directory

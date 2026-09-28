@@ -79,6 +79,22 @@ def test_all_targets_omits_benches_when_package_has_no_bench_harness(
     )
 
 
+def test_relative_target_directory_is_anchored_to_workspace_root(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A metadata-relative target directory is based at the workspace root."""
+    metadata = package_document(tmp_path)
+    workspace_root = tmp_path / "workspace"
+    metadata["workspace_root"] = str(workspace_root)
+    metadata["target_directory"] = "target-build"
+
+    plan = create_test_plan(metadata, parse_cargo_test_options([]))
+
+    assert plan.target_directory == workspace_root / "target-build", (
+        "metadata-relative target paths must not depend on the runner's cwd"
+    )
+
+
 def test_workspace_phases_scope_same_named_targets_by_package(
     tmp_path: pathlib.Path,
 ) -> None:
