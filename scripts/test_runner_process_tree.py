@@ -212,14 +212,8 @@ def get_child_subreaper() -> bool | None:
     """Read the current Linux child-subreaper flag when supported."""
     if not sys_is_linux():
         return None
-    try:
-        import ctypes
-
-        enabled = ctypes.c_int()
-        result = _prctl(_PR_GET_CHILD_SUBREAPER, ctypes.byref(enabled))
-        return bool(enabled.value) if result == 0 else None
-    except (AttributeError, OSError):
-        return None
+    enabled = _prctl(_PR_GET_CHILD_SUBREAPER, read_integer=True)
+    return bool(enabled) if enabled is not None else None
 
 
 def set_child_subreaper(enabled: bool) -> bool:
@@ -229,14 +223,21 @@ def set_child_subreaper(enabled: bool) -> bool:
     return _prctl(_PR_SET_CHILD_SUBREAPER, int(enabled)) == 0
 
 
-def _prctl(option: int, argument: typ.Any) -> int:
-    """Call Linux prctl, which has no equivalent operation in Python's stdlib."""
+def _prctl(option: int, argument: int = 0, *, read_integer: bool = False) -> int | None:
+    """Call prctl because Python's stdlib has no child-subreaper interface."""
     import ctypes
 
+    # FIXME(#188): Revisit this bridge if Python adds stdlib subreaper controls.
     try:
+        if read_integer:
+            value = ctypes.c_int()
+            result = ctypes.CDLL(None, use_errno=True).prctl(
+                option, ctypes.byref(value), 0, 0, 0
+            )
+            return value.value if result == 0 else None
         return ctypes.CDLL(None, use_errno=True).prctl(option, argument, 0, 0, 0)
-    except AttributeError:
-        return -1
+    except (AttributeError, OSError):
+        return None
 
 
 def sys_is_linux() -> bool:
