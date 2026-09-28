@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""Run Cargo tests while executing nested-Cargo contracts after Cargo exits."""
+"""Run Cargo tests while executing nested-Cargo contracts after Cargo exits.
+
+This runner separates compilation from execution for targets that invoke
+nested Cargo, so the parent Cargo process has exited before trybuild starts.
+All other selected Cargo tests and the default doctest phase remain available.
+
+Usage
+-----
+Pass Cargo test arguments after the runner's ``--`` separator, for example:
+
+    python scripts/test_runner.py -- --all-targets --all-features
+"""
 
 from __future__ import annotations
 

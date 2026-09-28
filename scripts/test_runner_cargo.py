@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import shutil
 import subprocess
 import sys
 import typing as typ
@@ -138,6 +137,8 @@ def create_test_runtime_environment(
     environment["CARGO_TARGET_DIR"] = str(target_directory)
     environment["CARGO_TARGET_TMPDIR"] = str(executable.parent.parent / "tmp")
     environment["CARGO"] = _resolve_cargo_executable(cargo_command)
+    if len(cargo_command) > 1 and cargo_command[1].startswith("+"):
+        environment["RUSTUP_TOOLCHAIN"] = cargo_command[1][1:]
     for message in messages:
         if message.get("reason") == "compiler-artifact":
             _record_binary_executable(environment, package, message)
@@ -250,5 +251,12 @@ def _unique_paths(paths: list[str]) -> list[str]:
 
 def _resolve_cargo_executable(command: tuple[str, ...]) -> str:
     """Resolve the command used by the runner for Cargo subprocesses."""
-    resolved = shutil.which(command[0])
-    return resolved or command[0]
+    executable = pathlib.Path(command[0])
+    has_path_separator = os.sep in command[0] or (
+        os.altsep is not None and os.altsep in command[0]
+    )
+    if executable.is_absolute():
+        return str(executable)
+    if has_path_separator:
+        return str(executable.resolve())
+    return command[0]
