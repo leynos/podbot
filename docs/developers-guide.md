@@ -62,10 +62,11 @@ feature or target selection. The Make target forwards `RUST_FLAGS` as
 The runner invokes Python through `uv run --no-project --python 3.14`.
 
 The runner executes ordinary Cargo test phases first. It separately builds
-registered compile-contract targets with Cargo's `--no-run` mode, waits for
-that Cargo process to exit, then executes the exact harness artefact. This
-keeps nested-Cargo trybuild work outside the lifetime of the parent build
-process. Doctests remain a separate phase, and empty phases are reported as
+registered trybuild targets (`cli_feature_gating` and `compile_contract`) with
+Cargo's `--no-run` mode, waits for that Cargo process to exit, then executes
+the exact harness artefact. This keeps nested-Cargo work outside the lifetime
+of the parent build process, including the no-default-features CLI boundary
+test. Doctests remain a separate phase, and empty phases are reported as
 skipped.
 
 The run has one bounded deadline. Set `TEST_TIMEOUT` as a Make variable, or

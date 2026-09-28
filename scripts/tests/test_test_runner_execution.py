@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import pathlib
-import textwrap
 import typing as typ
 
 import pytest
 import test_runner
 
-from test_runner_fixtures import package_document, workspace_with_sibling_package
+from test_runner_fixtures import (
+    fake_cargo_environment as _fake_cargo_environment,
+    workspace_with_sibling_package,
+)
 from test_runner_models import RunnerError
 
 
@@ -29,12 +31,25 @@ def cargo_command_reader(
     return read_commands
 
 
+@pytest.mark.parametrize(
+    ("selection", "target_name"),
+    [
+        (("--test", "compile_contract"), "compile_contract"),
+        (
+            ("--no-default-features", "--test", "cli_feature_gating"),
+            "cli_feature_gating",
+        ),
+    ],
+    ids=["compile-contract", "no-default-cli-boundary"],
+)
 def test_cargo_build_exits_before_nested_test_process_starts(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     cargo_command_reader: typ.Callable[[], list[list[str]]],
+    selection: tuple[str, ...],
+    target_name: str,
 ) -> None:
-    """The executable observes a completion marker written after Cargo wait."""
+    """Each trybuild executable starts after its current Cargo build exits."""
     environment = _fake_cargo_environment(tmp_path, monkeypatch)
     monkeypatch.setenv("FAKE_REQUIRE_BUILD_RETURNED", "true")
     real_build = test_runner._run_json_build
@@ -46,9 +61,7 @@ def test_cargo_build_exits_before_nested_test_process_starts(
 
     monkeypatch.setattr(test_runner, "_run_json_build", mark_build_complete)
 
-    status = test_runner.main(
-        ["--cargo", environment["FAKE_CARGO"], "--", "--test", "compile_contract"]
-    )
+    status = test_runner.main(["--cargo", environment["FAKE_CARGO"], "--", *selection])
 
     assert status == 0, "a successful no-run build and direct test should pass"
     invocation = json.loads(pathlib.Path(environment["FAKE_TEST_ARGS"]).read_text())
@@ -61,6 +74,15 @@ def test_cargo_build_exits_before_nested_test_process_starts(
     assert build[build.index("--package") + 1] == "podbot", (
         "the nested target build must be scoped to its owning package"
     )
+    assert build[build.index("--test") + 1] == target_name, (
+        "the isolated Cargo build must select the requested trybuild target"
+    )
+    assert not any(
+        "--test" in command
+        and command[command.index("--test") + 1] == target_name
+        and "--no-run" not in command
+        for command in commands
+    ), "no trybuild target may execute inside an outer Cargo test process"
 
 
 def test_filters_and_harness_arguments_reach_the_current_artifact(
@@ -291,88 +313,3 @@ def test_no_fail_fast_continues_after_ordinary_failure(
     assert any("--no-run" in command for command in commands), (
         "--no-fail-fast must continue to isolated nested-Cargo tests"
     )
-
-
-def _fake_cargo_environment(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    *,
-    build_exit: int = 0,
-    test_exit: int = 0,
-    ordinary_exit: int = 0,
-    doctest_exit: int = 0,
-    metadata: dict[str, typ.Any] | None = None,
-) -> dict[str, str]:
-    """Write fake Cargo and a test executable controlled by environment."""
-    metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(
-        json.dumps(metadata or package_document(tmp_path)), encoding="utf-8"
-    )
-    cargo_path = tmp_path / "fake-cargo.py"
-    cargo_path.write_text(
-        textwrap.dedent(
-            """\
-            #!/usr/bin/env python3
-            import json
-            import os
-            import pathlib
-            import sys
-            import time
-
-            args = sys.argv[1:]
-            if args[0] == "metadata":
-                print(pathlib.Path(os.environ["FAKE_METADATA"]).read_text())
-                raise SystemExit(0)
-            with pathlib.Path(os.environ["FAKE_COMMANDS"]).open("a") as commands:
-                commands.write(json.dumps(args) + "\\n")
-            if "--no-run" in args:
-                status = int(os.environ["FAKE_BUILD_EXIT"])
-                if status:
-                    raise SystemExit(status)
-                executable = pathlib.Path(os.environ["FAKE_EXECUTABLE"])
-                executable.parent.mkdir(parents=True, exist_ok=True)
-                executable.write_text(
-                    "#!/usr/bin/env python3\\n"
-                    "import json, os, pathlib, sys\\n"
-                    "if os.environ.get('FAKE_REQUIRE_BUILD_RETURNED') == 'true' and not pathlib.Path(os.environ['FAKE_BUILD_RETURNED']).exists():\\n"
-                    "    raise SystemExit(41)\\n"
-                    "pathlib.Path(os.environ['FAKE_TEST_ARGS']).write_text(json.dumps(sys.argv[1:]))\\n"
-                    "raise SystemExit(int(os.environ['FAKE_TEST_EXIT']))\\n"
-                )
-                executable.chmod(0o755)
-                message = {
-                    "reason": "compiler-artifact",
-                    "package_id": "path+file:///workspace/podbot#podbot@0.1.0",
-                    "target": {"name": "compile_contract", "kind": ["test"]},
-                    "profile": {"test": True, "debug_assertions": True},
-                    "executable": str(executable),
-                    "filenames": [str(executable)],
-                }
-                print(json.dumps(message), flush=True)
-                time.sleep(0.05)
-                raise SystemExit(0)
-            if "--doc" in args:
-                raise SystemExit(int(os.environ["FAKE_DOCTEST_EXIT"]))
-            if "--test" in args and "cli_feature_gating" in args:
-                raise SystemExit(int(os.environ["FAKE_ORDINARY_EXIT"]))
-            raise SystemExit(0)
-            """
-        ),
-        encoding="utf-8",
-    )
-    cargo_path.chmod(0o755)
-    values = {
-        "FAKE_METADATA": str(metadata_path),
-        "FAKE_CARGO": str(cargo_path),
-        "FAKE_COMMANDS": str(tmp_path / "commands.jsonl"),
-        "FAKE_EXECUTABLE": str(tmp_path / "target/debug/deps/compile_contract-current"),
-        "FAKE_BUILD_RETURNED": str(tmp_path / "build-returned"),
-        "FAKE_TEST_ARGS": str(tmp_path / "test-args.json"),
-        "FAKE_BUILD_EXIT": str(build_exit),
-        "FAKE_TEST_EXIT": str(test_exit),
-        "FAKE_ORDINARY_EXIT": str(ordinary_exit),
-        "FAKE_DOCTEST_EXIT": str(doctest_exit),
-    }
-    for name, value in values.items():
-        monkeypatch.setenv(name, value)
-    return values
