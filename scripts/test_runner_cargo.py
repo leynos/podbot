@@ -15,15 +15,19 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import subprocess
 import sys
 import typing as typ
 
 from test_runner_models import CargoTestOptions, RunnerError, Target
+from test_runner_supervisor import ProcessSupervisor
 
 
 def load_cargo_metadata(
-    cargo_command: tuple[str, ...], options: CargoTestOptions, cwd: pathlib.Path
+    cargo_command: tuple[str, ...],
+    options: CargoTestOptions,
+    cwd: pathlib.Path,
+    environment: dict[str, str],
+    supervisor: ProcessSupervisor,
 ) -> dict[str, typ.Any]:
     """Return workspace metadata without downloading dependency metadata.
 
@@ -38,25 +42,33 @@ def load_cargo_metadata(
     for flag in ("--offline", "--locked", "--frozen"):
         if flag in options.common and flag not in command:
             command.append(flag)
-    result = subprocess.run(
+    status, stdout, stderr = supervisor.run_capture(
         command,
-        cwd=cwd,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
+        cwd,
+        environment,
+        purpose="Cargo metadata",
     )
-    if result.returncode != 0:
-        if result.stderr:
-            sys.stderr.write(result.stderr)
-        raise RunnerError(f"cargo metadata exited with status {result.returncode}")
+    if status != 0:
+        if stderr:
+            sys.stderr.write(stderr)
+        if supervisor.terminal_status is not None:
+            raise RunnerCommandFailure(supervisor.terminal_status)
+        raise RunnerError(f"cargo metadata exited with status {status}")
     try:
-        metadata = json.loads(result.stdout)
+        metadata = json.loads(stdout)
     except json.JSONDecodeError as exc:
         raise RunnerError("cargo metadata returned invalid JSON") from exc
     if not isinstance(metadata, dict):
         raise RunnerError("cargo metadata returned a non-object document")
     return metadata
+
+
+class RunnerCommandFailure(RunnerError):
+    """Carry a timeout or interruption status through metadata discovery."""
+
+    def __init__(self, status: int) -> None:
+        super().__init__(f"test runner stopped with status {status}")
+        self.status = status
 
 
 def parse_cargo_json_message(line: str) -> dict[str, typ.Any] | None:
