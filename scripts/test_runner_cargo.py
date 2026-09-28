@@ -177,14 +177,8 @@ def _set_package_environment(
     """Restore Cargo's package metadata environment variables."""
     manifest_dir = pathlib.Path(str(package["manifest_path"])).parent
     environment["CARGO_MANIFEST_DIR"] = str(manifest_dir)
-    version_parts = str(package.get("version", "0.0.0")).split(".")
-    version_parts.extend(["0"] * (3 - len(version_parts)))
     values = {
         "CARGO_PKG_NAME": package.get("name", ""),
-        "CARGO_PKG_VERSION": package.get("version", ""),
-        "CARGO_PKG_VERSION_MAJOR": version_parts[0],
-        "CARGO_PKG_VERSION_MINOR": version_parts[1],
-        "CARGO_PKG_VERSION_PATCH": version_parts[2].split("-", 1)[0],
         "CARGO_PKG_AUTHORS": ":".join(package.get("authors", [])),
         "CARGO_PKG_DESCRIPTION": package.get("description") or "",
         "CARGO_PKG_REPOSITORY": package.get("repository") or "",
@@ -195,7 +189,23 @@ def _set_package_environment(
         "CARGO_PKG_CATEGORIES": ":".join(package.get("categories", [])),
         "CARGO_PKG_KEYWORDS": ":".join(package.get("keywords", [])),
     }
+    values.update(_package_version_environment(package))
     environment.update({name: str(value) for name, value in values.items()})
+
+
+def _package_version_environment(package: dict[str, typ.Any]) -> dict[str, str]:
+    """Split Cargo package version metadata into core and pre-release values."""
+    version = str(package.get("version") or "0.0.0")
+    without_build_metadata = version.partition("+")[0]
+    core_version, separator, pre_release = without_build_metadata.partition("-")
+    version_parts = (core_version.split(".") + ["0", "0", "0"])[:3]
+    return {
+        "CARGO_PKG_VERSION": version,
+        "CARGO_PKG_VERSION_MAJOR": version_parts[0],
+        "CARGO_PKG_VERSION_MINOR": version_parts[1],
+        "CARGO_PKG_VERSION_PATCH": version_parts[2],
+        "CARGO_PKG_VERSION_PRE": pre_release if separator else "",
+    }
 
 
 def _record_binary_executable(
