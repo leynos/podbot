@@ -1,7 +1,8 @@
 """Provide bounded supervision for one-off diagnostic commands.
 
-Use `python scripts/test_runner.py --supervise --timeout 180 -- cargo test`
-to run a legacy Cargo command with process-tree and lock diagnostics.
+Use `uv run --no-project --python 3.14 python scripts/test_runner.py
+--supervise --timeout 180 -- cargo test` to run a legacy Cargo command with
+process-tree and lock diagnostics.
 """
 
 from __future__ import annotations

@@ -9,15 +9,17 @@ import subprocess
 import sys
 import textwrap
 import time
+import types
 
 import pytest
 
 from test_runner_diagnostics import (
     classify_lock_waiter,
+    format_stall_report,
     lock_path_identities,
     parse_proc_locks,
 )
-from test_runner_process_tree import parse_proc_stat
+from test_runner_process_tree import OwnedProcess, ProcessInfo, parse_proc_stat
 
 
 @pytest.mark.parametrize("terminator", ["timeout", "signal"])
@@ -100,6 +102,47 @@ def test_proc_stat_parser_handles_parentheses_in_command_name() -> None:
     assert parsed.command == "cargo --offline build", (
         "the procfs command line must remain attached to its process snapshot"
     )
+
+
+def test_stall_report_truncates_long_process_commands(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Long compiler argv values keep useful identity without bloating reports."""
+    info = ProcessInfo(
+        pid=123,
+        parent_pid=100,
+        process_group=123,
+        start_time=456,
+        state="S",
+        command=(
+            "rustc --crate-name compile_contract " + "--extern crate=/path " * 200
+        ),
+    )
+    owned = OwnedProcess(info, time.monotonic())
+    tree = types.SimpleNamespace(
+        proc_available=False,
+        live_owned=lambda: (owned,),
+    )
+
+    report = format_stall_report(
+        tree,
+        command=("cargo", "test"),
+        cwd=tmp_path,
+        environment={},
+        target_directory=None,
+        elapsed_seconds=1.0,
+        timeout_seconds=30.0,
+        reason="controlled diagnostic test",
+    )
+    process_line = next(line for line in report.splitlines() if "pid=123" in line)
+
+    assert "rustc --crate-name compile_contract" in process_line, (
+        "the bounded process command must retain executable identity"
+    )
+    assert process_line.endswith("... [truncated]"), (
+        "the report must visibly mark a shortened compiler command"
+    )
+    assert len(process_line) < 400, "one process report line must remain bounded"
 
 
 def test_proc_locks_parser_classifies_parent_cycles_and_external_contention() -> None:
