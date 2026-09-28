@@ -80,6 +80,16 @@ class _CargoOptionState:
     target_dir: pathlib.Path | None = None
 
 
+@dataclasses.dataclass(frozen=True)
+class _CargoOptionToken:
+    """Keep one parsed option's source position and value together."""
+
+    arguments: list[str]
+    index: int
+    option: str
+    attached_value: str | None
+
+
 def parse_cargo_test_options(
     arguments: list[str], *, cwd: pathlib.Path | None = None
 ) -> CargoTestOptions:
@@ -125,15 +135,14 @@ def _consume_cargo_argument(
     if package_value is not None:
         option = "-p"
         attached_value = package_value
-    next_index = _consume_value_option(arguments, index, option, attached_value, state)
+    token = _CargoOptionToken(arguments, index, option, attached_value)
+    next_index = _consume_value_option(token, state)
     if next_index is not None:
         return next_index
     next_index = _consume_boolean_option(option, separator, index, state)
     if next_index is not None:
         return next_index
-    next_index = _consume_named_target_option(
-        arguments, index, option, attached_value, state
-    )
+    next_index = _consume_named_target_option(token, state)
     if next_index is not None:
         return next_index
     if argument.startswith("-"):
@@ -146,28 +155,21 @@ def _consume_cargo_argument(
 
 
 def _consume_value_option(
-    arguments: list[str],
-    index: int,
-    option: str,
-    attached: str | None,
+    token: _CargoOptionToken,
     state: _CargoOptionState,
 ) -> int | None:
     """Consume one Cargo option that requires a value."""
-    if option not in _VALUE_OPTIONS:
+    if token.option not in _VALUE_OPTIONS:
         return None
-    value, next_index = _take_value(arguments, index, option, attached)
-    if option in {"--manifest-path", "--target-dir"}:
-        value = str((state.working_directory / value).resolve())
-    _record_value_option(
-        option,
-        value,
-        state.common,
-        state.package_specs,
-        state.excludes,
+    value, next_index = _take_value(
+        token.arguments, token.index, token.option, token.attached_value
     )
-    if option == "--manifest-path":
+    if token.option in {"--manifest-path", "--target-dir"}:
+        value = str((state.working_directory / value).resolve())
+    _record_value_option(token.option, value, state)
+    if token.option == "--manifest-path":
         state.manifest_path = pathlib.Path(value)
-    if option == "--target-dir":
+    if token.option == "--target-dir":
         state.target_dir = pathlib.Path(value)
     return next_index
 
@@ -201,27 +203,41 @@ def _consume_boolean_option(
 
 
 def _consume_named_target_option(
-    arguments: list[str],
-    index: int,
-    option: str,
-    attached: str | None,
+    token: _CargoOptionToken,
     state: _CargoOptionState,
 ) -> int | None:
     """Consume one named Cargo target selector such as `--test NAME`."""
-    target_kind = _NAMED_TARGET_OPTIONS.get(option)
+    target_kind = _NAMED_TARGET_OPTIONS.get(token.option)
     if target_kind is None:
         return None
-    value, next_index = _take_value(arguments, index, option, attached)
+    value, next_index = _take_value(
+        token.arguments, token.index, token.option, token.attached_value
+    )
     state.selectors.append((target_kind, value))
     return next_index
 
 
 def _validate_options(state: _CargoOptionState) -> None:
     """Reject test filters and target combinations Cargo cannot map safely."""
+    _validate_single_test_filter(state)
+    _validate_document_selection(state)
+    _validate_workspace_exclusions(state)
+
+
+def _validate_single_test_filter(state: _CargoOptionState) -> None:
+    """Cargo accepts at most one positional test filter."""
     if len(state.positional) > 1:
         raise RunnerError("Cargo test accepts at most one positional test filter")
+
+
+def _validate_document_selection(state: _CargoOptionState) -> None:
+    """Cargo's doc-only mode cannot be mapped with other target selectors."""
     if "--doc" in state.flags and state.selectors:
         raise RunnerError("--doc cannot be combined with other target selectors")
+
+
+def _validate_workspace_exclusions(state: _CargoOptionState) -> None:
+    """Cargo applies package exclusions only when selecting a workspace."""
     if state.excludes and "--workspace" not in state.flags:
         raise RunnerError("--exclude requires --workspace")
 
@@ -260,16 +276,14 @@ def attached_package_value(argument: str) -> str | None:
 def _record_value_option(
     option: str,
     value: str,
-    common: list[str],
-    package_specs: list[str],
-    excludes: list[str],
+    state: _CargoOptionState,
 ) -> None:
     """Keep shared Cargo options and record package selection separately."""
     if option in {"--package", "-p"}:
-        package_specs.append(value)
-        common.extend([option, value])
+        state.package_specs.append(value)
+        state.common.extend([option, value])
     elif option == "--exclude":
-        excludes.append(value)
-        common.extend([option, value])
+        state.excludes.append(value)
+        state.common.extend([option, value])
     else:
-        common.extend([option, value])
+        state.common.extend([option, value])

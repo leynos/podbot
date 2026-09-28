@@ -16,9 +16,19 @@ from __future__ import annotations
 import fnmatch
 import pathlib
 import typing as typ
+from collections.abc import Callable
 
 from test_runner_models import CargoTestOptions, RunnerError, Target
 from test_runner_registry import NESTED_CARGO_TARGETS
+
+_TARGET_MATCHERS: dict[str, Callable[[Target], bool]] = {
+    "all-targets": lambda target: target.is_test or target.is_bench,
+    "lib": lambda target: "lib" in target.kinds,
+    "bins": lambda target: "bin" in target.kinds,
+    "examples": lambda target: "example" in target.kinds,
+    "tests": lambda target: _is_default_test_target(target),
+    "benches": lambda target: target.is_bench,
+}
 
 
 def select_packages(
@@ -90,23 +100,37 @@ def select_targets(
     if options.doc_only:
         return ()
     if not options.selectors:
-        return tuple(
-            target
-            for target in targets
-            if target.is_test
-            and bool(set(target.kinds) & {"lib", "bin", "test", "example"})
-        )
-    selected = [
+        return _default_test_targets(targets)
+    return _unique_selected_targets(targets, options.selectors)
+
+
+def _default_test_targets(targets: tuple[Target, ...]) -> tuple[Target, ...]:
+    """Select the integration and executable targets tested by Cargo by default."""
+    return tuple(target for target in targets if _is_default_test_target(target))
+
+
+def _unique_selected_targets(
+    targets: tuple[Target, ...], selectors: tuple[tuple[str, str | None], ...]
+) -> tuple[Target, ...]:
+    """Apply explicit selectors once each and reject an empty selection."""
+    selected = (
         target
-        for selector, pattern in options.selectors
+        for selector, pattern in selectors
         for target in targets_matching(targets, selector, pattern)
-    ]
-    unique: dict[tuple[str, str, tuple[str, ...]], Target] = {
+    )
+    unique = {
         (target.package_id, target.name, target.kinds): target for target in selected
     }
     if not unique:
         raise RunnerError("Cargo target selection contains no targets")
     return tuple(unique.values())
+
+
+def _is_default_test_target(target: Target) -> bool:
+    """Match Cargo's default test inventory for one metadata target."""
+    return target.is_test and bool(
+        set(target.kinds) & {"lib", "bin", "test", "example"}
+    )
 
 
 def targets_for_package(package: dict[str, typ.Any]) -> tuple[Target, ...]:
@@ -134,28 +158,10 @@ def targets_matching(
     targets: tuple[Target, ...], selector: str, pattern: str | None
 ) -> tuple[Target, ...]:
     """Return targets matching one singular or plural Cargo selector."""
-    match selector:
-        case "all-targets":
-            return tuple(
-                target for target in targets if target.is_test or target.is_bench
-            )
-        case "lib":
-            return tuple(target for target in targets if "lib" in target.kinds)
-        case "bins":
-            return tuple(target for target in targets if "bin" in target.kinds)
-        case "examples":
-            return tuple(target for target in targets if "example" in target.kinds)
-        case "tests":
-            return tuple(
-                target
-                for target in targets
-                if target.is_test
-                and bool(set(target.kinds) & {"lib", "bin", "test", "example"})
-            )
-        case "benches":
-            return tuple(target for target in targets if target.is_bench)
-        case _:
-            return _matching_named_targets(targets, selector, pattern)
+    matcher = _TARGET_MATCHERS.get(selector)
+    if matcher is None:
+        return _matching_named_targets(targets, selector, pattern)
+    return tuple(target for target in targets if matcher(target))
 
 
 def _matching_named_targets(
@@ -174,141 +180,18 @@ def _matching_named_targets(
     return matches
 
 
-def cargo_target_arguments(
-    all_targets: tuple[Target, ...],
-    selected: tuple[Target, ...],
-    options: CargoTestOptions,
-    *,
-    omit_nested: tuple[Target, ...],
-) -> tuple[str, ...]:
-    """Build Cargo selectors, expanding groups that include nested tests."""
-    if options.doc_only:
-        return ("--doc",)
-    omitted = set(omit_nested)
-    arguments: list[str] = []
-    selectors = options.selectors or (("default", None),)
-    for selector, pattern in selectors:
-        arguments.extend(
-            _arguments_for_selector(selector, pattern, all_targets, selected, omitted)
-        )
-    return tuple(_deduplicate_selectors(arguments))
-
-
-def _arguments_for_selector(
-    selector: str,
-    pattern: str | None,
-    all_targets: tuple[Target, ...],
-    selected: tuple[Target, ...],
-    omitted: set[Target],
-) -> tuple[str, ...]:
-    """Dispatch one Cargo target selector to its argument builder."""
-    match selector:
-        case "all-targets":
-            return _all_target_arguments(all_targets, omitted)
-        case "tests":
-            return _test_arguments(selected, omitted)
-        case "benches" | "bins" | "examples" | "lib":
-            return _group_arguments(selector, selected)
-        case "default":
-            return _default_arguments(selected, omitted)
-        case _:
-            return _named_target_arguments(pattern, selected, omitted)
-
-
-def _all_target_arguments(
-    targets: tuple[Target, ...], omitted: set[Target]
-) -> tuple[str, ...]:
-    """Expand Cargo's all-target selector while excluding nested tests."""
-    arguments: list[str] = []
-    for group, kind in (
-        ("--lib", "lib"),
-        ("--bins", "bin"),
-        ("--examples", "example"),
-        ("--benches", "bench"),
-    ):
-        if any(
-            kind in target.kinds or (group == "--benches" and target.is_bench)
-            for target in targets
-        ):
-            arguments.append(group)
-    arguments.extend(
-        part
-        for target in targets
-        if "test" in target.kinds and target not in omitted
-        for part in ("--test", target.name)
-    )
-    return tuple(arguments)
-
-
-def _test_arguments(
-    targets: tuple[Target, ...], omitted: set[Target]
-) -> tuple[str, ...]:
-    """Expand Cargo's tests selector into libraries, bins and test targets."""
-    arguments = [
-        group
-        for group, kind in (("--lib", "lib"), ("--bins", "bin"))
-        if any(kind in target.kinds for target in targets)
-    ]
-    candidates = tuple(
-        target
-        for target in targets
-        if bool(set(target.kinds) & {"test", "example"}) and target.is_test
-    )
-    arguments.extend(
-        part
-        for target in candidates
-        if target not in omitted
-        for part in target.cargo_selector()
-    )
-    return tuple(arguments)
-
-
-def _group_arguments(selector: str, targets: tuple[Target, ...]) -> tuple[str, ...]:
-    """Return a plural Cargo target selector when the package has that kind."""
-    kind = selector[:-1] if selector.endswith("s") else selector
-    has_selected_target = (
-        any(target.is_bench for target in targets)
-        if selector == "benches"
-        else any(kind in target.kinds for target in targets)
-    )
-    if has_selected_target:
-        return (f"--{selector}",)
-    return ()
-
-
-def _default_arguments(
-    targets: tuple[Target, ...], omitted: set[Target]
-) -> tuple[str, ...]:
-    """Select default test targets except those that invoke nested Cargo."""
-    return tuple(
-        part
-        for target in targets
-        if target not in omitted
-        for part in target.cargo_selector()
-    )
-
-
-def _named_target_arguments(
-    pattern: str | None,
-    targets: tuple[Target, ...],
-    omitted: set[Target],
-) -> tuple[str, ...]:
-    """Select explicitly named or globbed Cargo targets."""
-    candidates = tuple(
-        target
-        for target in targets
-        if target.name == pattern or fnmatch.fnmatchcase(target.name, pattern or "")
-    )
-    return tuple(
-        part
-        for target in candidates
-        if target not in omitted
-        for part in target.cargo_selector()
-    )
-
-
 def validate_nested_registry(metadata: dict[str, typ.Any]) -> None:
     """Ensure registered nested-Cargo targets exist as enabled test targets."""
+    known, workspace_package_names = _nested_registry_targets(metadata)
+    for registered in NESTED_CARGO_TARGETS:
+        if registered[0] in workspace_package_names:
+            _validate_registered_target(registered, known)
+
+
+def _nested_registry_targets(
+    metadata: dict[str, typ.Any],
+) -> tuple[dict[tuple[str, str], Target], set[str]]:
+    """Index workspace metadata for registered nested-Cargo targets."""
     workspace_member_ids = set(metadata.get("workspace_members", []))
     all_targets = tuple(
         target
@@ -318,20 +201,25 @@ def validate_nested_registry(metadata: dict[str, typ.Any]) -> None:
     )
     known = {(target.package_name, target.name): target for target in all_targets}
     workspace_package_names = {target.package_name for target in all_targets}
-    for registered in NESTED_CARGO_TARGETS:
-        if registered[0] not in workspace_package_names:
-            continue
-        target = known.get(registered)
-        if target is None:
-            raise RunnerError(
-                f"registered nested-Cargo target {registered[0]}:{registered[1]} "
-                "is missing from cargo metadata"
-            )
-        if "test" not in target.kinds or not target.is_test:
-            raise RunnerError(
-                f"registered nested-Cargo target {registered[0]}:{registered[1]} "
-                "is not an enabled integration test"
-            )
+    return known, workspace_package_names
+
+
+def _validate_registered_target(
+    registered: tuple[str, str], known: dict[tuple[str, str], Target]
+) -> None:
+    """Require one registered target to be an enabled integration test."""
+    target = known.get(registered)
+    if target is None:
+        raise RunnerError(
+            f"registered nested-Cargo target {registered[0]}:{registered[1]} "
+            "is missing from cargo metadata"
+        )
+    if "test" in target.kinds and target.is_test:
+        return
+    raise RunnerError(
+        f"registered nested-Cargo target {registered[0]}:{registered[1]} "
+        "is not an enabled integration test"
+    )
 
 
 def _package_spec_matches(package: dict[str, typ.Any], spec: str) -> bool:
@@ -343,24 +231,3 @@ def _package_spec_matches(package: dict[str, typ.Any], spec: str) -> bool:
         fnmatch.fnmatchcase(candidate, spec)
         for candidate in (name, package_id, versioned_name)
     )
-
-
-def _deduplicate_selectors(arguments: list[str]) -> list[str]:
-    """Remove repeated target selector pairs without changing their order."""
-    unique: list[str] = []
-    seen: set[tuple[str, str | None]] = set()
-    index = 0
-    while index < len(arguments):
-        option = arguments[index]
-        if option in {"--lib", "--bins", "--examples", "--tests", "--benches"}:
-            key = (option, None)
-            width = 1
-        else:
-            value = arguments[index + 1] if index + 1 < len(arguments) else None
-            key = (option, value)
-            width = 2
-        if key not in seen:
-            seen.add(key)
-            unique.extend(arguments[index : index + width])
-        index += width
-    return unique

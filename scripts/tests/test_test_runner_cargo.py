@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import pathlib
 import typing as typ
@@ -18,9 +19,72 @@ from test_runner_models import RunnerError
 from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
 from test_runner_context import TestRunnerContext
-from test_runner_supervisor import ProcessSupervisor
+from test_runner_supervisor import CommandRequest, ProcessSupervisor
 
 from test_runner_fixtures import package_document
+
+
+@dataclasses.dataclass(frozen=True)
+class RuntimeEnvironmentCase:
+    """Hold expected paths and environments for one direct-test fixture."""
+
+    environment: dict[str, str]
+    inherited_environment: dict[str, str]
+    package_directory: pathlib.Path
+    binary: pathlib.Path
+    linked_directory: pathlib.Path
+    target_directory: pathlib.Path
+
+
+@pytest.fixture
+def runtime_environment_case(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> RuntimeEnvironmentCase:
+    """Build one Cargo environment fixture with package and native outputs."""
+    monkeypatch.setattr(
+        test_runner_cargo, "_library_path_variable", lambda: "LD_LIBRARY_PATH"
+    )
+    metadata = package_document(tmp_path)
+    package = metadata["packages"][0]
+    executable = _executable(tmp_path / "target/debug/deps/compile_contract")
+    binary = tmp_path / "target/debug/podbot"
+    binary.touch()
+    linked = tmp_path / "native"
+    linked.mkdir()
+    (linked / "libsupport.so").touch()
+    inherited = {
+        "LD_LIBRARY_PATH": "/caller/native",
+        "CARGO_TARGET_DIR": str(tmp_path / "target"),
+    }
+    context = TestRunnerContext(
+        ("cargo", "+1.88.0"),
+        tmp_path,
+        inherited,
+        ProcessSupervisor(timeout_seconds=1800),
+    )
+    messages = [
+        _artifact(package["id"], "compile_contract", executable),
+        _artifact(package["id"], "podbot", binary, kind="bin"),
+        {"reason": "build-script-executed", "linked_paths": [f"native={linked}"]},
+        {
+            "reason": "compiler-artifact",
+            "package_id": package["id"],
+            "target": {"name": "support", "kind": ["lib"]},
+            "filenames": [str(linked / "libsupport.so")],
+            "profile": {"test": False},
+        },
+    ]
+    environment = create_test_runtime_environment(
+        context, package, executable, messages
+    )
+    return RuntimeEnvironmentCase(
+        environment,
+        inherited,
+        tmp_path,
+        binary,
+        linked,
+        tmp_path / "target",
+    )
 
 
 def test_artifact_selection_matches_package_target_and_test_profile(
@@ -61,104 +125,74 @@ def test_artifact_selection_rejects_missing_and_duplicate_current_outputs(
         select_test_executables([right, right], (target,))
 
 
-def test_runtime_environment_restores_cargo_values_and_library_paths(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+def test_runtime_environment_restores_cargo_package_metadata(
+    runtime_environment_case: RuntimeEnvironmentCase,
 ) -> None:
-    """Direct execution receives Cargo metadata, binaries, and link paths."""
-    monkeypatch.setattr(
-        test_runner_cargo, "_library_path_variable", lambda: "LD_LIBRARY_PATH"
+    """Direct execution receives the package values Cargo normally sets."""
+    case = runtime_environment_case
+    assert case.environment["CARGO_MANIFEST_DIR"] == str(case.package_directory), (
+        "direct tests must retain Cargo's package manifest directory"
     )
-    metadata = package_document(tmp_path)
-    package = metadata["packages"][0]
-    executable = _executable(tmp_path / "target/debug/deps/compile_contract")
-    binary = tmp_path / "target/debug/podbot"
-    binary.touch()
-    linked = tmp_path / "native"
-    linked.mkdir()
-    dylib = linked / "libsupport.so"
-    dylib.touch()
-    messages = [
-        _artifact(package["id"], "compile_contract", executable),
-        _artifact(package["id"], "podbot", binary, kind="bin", test=False),
-        {"reason": "build-script-executed", "linked_paths": [f"native={linked}"]},
-        {
-            "reason": "compiler-artifact",
-            "package_id": package["id"],
-            "target": {"name": "support", "kind": ["lib"]},
-            "filenames": [str(dylib)],
-            "profile": {"test": False},
-        },
-    ]
-    inherited = {
-        "LD_LIBRARY_PATH": "/caller/native",
-        "CARGO_TARGET_DIR": str(tmp_path / "target"),
-    }
-    context = TestRunnerContext(
-        ("cargo", "+1.88.0"),
-        tmp_path,
-        inherited,
-        ProcessSupervisor(timeout_seconds=1800),
-    )
-
-    environment = create_test_runtime_environment(
-        context,
-        package,
-        executable,
-        messages,
-    )
-
-    assert environment["CARGO_MANIFEST_DIR"] == str(tmp_path), (
-        "direct test execution must retain Cargo's package manifest directory"
-    )
-    assert environment["CARGO_PKG_NAME"] == "podbot", (
+    assert case.environment["CARGO_PKG_NAME"] == "podbot", (
         "direct test execution must retain Cargo's package name"
     )
-    assert environment["CARGO_PKG_VERSION_PATCH"] == "0", (
+    assert case.environment["CARGO_PKG_VERSION_PATCH"] == "0", (
         "Cargo's patch-version variable must be restored"
     )
-    assert environment["CARGO_BIN_EXE_podbot"] == str(binary), (
-        "Cargo's binary executable variable must point to the current build"
-    )
-    assert environment["CARGO_TARGET_DIR"] == str(tmp_path / "target"), (
+
+
+def test_runtime_environment_restores_target_and_toolchain(
+    runtime_environment_case: RuntimeEnvironmentCase,
+) -> None:
+    """Direct tests keep the outer target directory and selected toolchain."""
+    case = runtime_environment_case
+    assert case.environment["CARGO_TARGET_DIR"] == str(case.target_directory), (
         "nested Cargo must use the outer build's target directory"
     )
-    assert environment["CARGO_TARGET_TMPDIR"] == str(tmp_path / "target/tmp"), (
+    target_tmpdir = pathlib.Path(case.environment["CARGO_TARGET_TMPDIR"])
+    assert target_tmpdir == case.target_directory / "tmp", (
         "direct tests must receive Cargo's target temporary directory"
     )
-    assert pathlib.Path(environment["CARGO_TARGET_TMPDIR"]).is_dir(), (
-        "direct tests must receive Cargo's pre-created temporary directory"
-    )
-    assert environment["CARGO"] == "cargo", (
+    assert target_tmpdir.is_dir(), "Cargo's target temporary directory must exist"
+    assert case.environment["CARGO"] == "cargo", (
         "bare Cargo names must continue to resolve through PATH"
     )
-    assert environment["RUSTUP_TOOLCHAIN"] == "1.88.0", (
+    assert case.environment["RUSTUP_TOOLCHAIN"] == "1.88.0", (
         "nested Cargo must retain the runner's explicit toolchain selection"
     )
-    assert environment["LD_LIBRARY_PATH"].split(os.pathsep)[-1] == "/caller/native", (
-        "the inherited native-library path must remain available"
+
+
+def test_runtime_environment_preserves_binary_and_native_paths(
+    runtime_environment_case: RuntimeEnvironmentCase,
+) -> None:
+    """Direct tests retain Cargo binary paths and inherited native libraries."""
+    case = runtime_environment_case
+    library_path = case.environment["LD_LIBRARY_PATH"]
+    assert case.environment["CARGO_BIN_EXE_podbot"] == str(case.binary), (
+        "Cargo's binary executable variable must point to the current build"
     )
-    assert str(linked) in environment["LD_LIBRARY_PATH"], (
+    assert str(case.linked_directory) in library_path, (
         "native paths emitted by build scripts must be available"
     )
-    assert inherited["LD_LIBRARY_PATH"] == "/caller/native", (
+    assert library_path.split(os.pathsep)[-1] == "/caller/native", (
+        "the inherited native-library path must remain available"
+    )
+    assert case.inherited_environment["LD_LIBRARY_PATH"] == "/caller/native", (
         "runtime reconstruction must not mutate the caller's environment"
     )
 
 
 @pytest.mark.parametrize(
-    ("version", "major", "minor", "patch", "pre_release"),
+    ("version", "expected_components"),
     [
-        ("1.2.3-rc.1", "1", "2", "3", "rc.1"),
-        ("1.2-alpha", "1", "2", "0", "alpha"),
-        ("2.5.7+build.4", "2", "5", "7", ""),
+        ("1.2.3-rc.1", ("1", "2", "3", "rc.1")),
+        ("1.2-alpha", ("1", "2", "0", "alpha")),
+        ("2.5.7+build.4", ("2", "5", "7", "")),
     ],
 )
 def test_package_version_environment_splits_semver_components(
     version: str,
-    major: str,
-    minor: str,
-    patch: str,
-    pre_release: str,
+    expected_components: tuple[str, str, str, str],
 ) -> None:
     """Cargo version variables keep pre-release and build text out of patch."""
     values = _package_version_environment({"version": version})
@@ -166,17 +200,14 @@ def test_package_version_environment_splits_semver_components(
     assert values["CARGO_PKG_VERSION"] == version, (
         "the full package version must retain pre-release and build metadata"
     )
-    assert values["CARGO_PKG_VERSION_MAJOR"] == major, (
-        "the major component must come from the core version"
+    actual_components = (
+        values["CARGO_PKG_VERSION_MAJOR"],
+        values["CARGO_PKG_VERSION_MINOR"],
+        values["CARGO_PKG_VERSION_PATCH"],
+        values["CARGO_PKG_VERSION_PRE"],
     )
-    assert values["CARGO_PKG_VERSION_MINOR"] == minor, (
-        "the minor component must not contain pre-release text"
-    )
-    assert values["CARGO_PKG_VERSION_PATCH"] == patch, (
-        "the patch component must contain only its core numeric part"
-    )
-    assert values["CARGO_PKG_VERSION_PRE"] == pre_release, (
-        "the pre-release identifier must be exposed separately"
+    assert actual_components == expected_components, (
+        "Cargo's version variables must separate core and pre-release values"
     )
 
 
@@ -211,15 +242,11 @@ def test_relative_manifest_is_anchored_to_caller_directory(
     class FakeSupervisor:
         def run_capture(
             self,
-            command: list[str],
-            cwd: pathlib.Path,
-            _environment: dict[str, str],
-            *,
-            purpose: str,
+            request: CommandRequest,
         ) -> tuple[int, str, str]:
-            observed["command"] = command
-            observed["cwd"] = cwd
-            observed["purpose"] = purpose
+            observed["command"] = request.command
+            observed["cwd"] = request.cwd
+            observed["purpose"] = request.purpose
             return 0, "{}", ""
 
     options = parse_cargo_test_options(
@@ -253,14 +280,13 @@ def _artifact(
     executable: pathlib.Path,
     *,
     kind: str = "test",
-    test: bool = True,
 ) -> dict[str, typ.Any]:
     """Return a Cargo compiler-artifact message for one executable."""
     return {
         "reason": "compiler-artifact",
         "package_id": package_id,
         "target": {"name": name, "kind": [kind]},
-        "profile": {"test": test, "debug_assertions": True},
+        "profile": {"test": kind == "test", "debug_assertions": True},
         "executable": str(executable),
         "filenames": [str(executable)],
     }

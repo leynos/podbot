@@ -12,7 +12,7 @@ import pathlib
 import shlex
 
 from test_runner_models import RunnerError
-from test_runner_supervisor import ProcessSupervisor
+from test_runner_supervisor import CommandRequest, ProcessSupervisor
 
 
 def supervise_command(
@@ -38,8 +38,10 @@ def supervise_command(
         enable_subreaper=enable_subreaper,
     ) as supervisor:
         return supervisor.run_inherited(
-            command,
-            working_directory,
-            environment,
-            purpose="one-off supervised command",
+            CommandRequest(
+                command,
+                working_directory,
+                environment,
+                "one-off supervised command",
+            )
         )

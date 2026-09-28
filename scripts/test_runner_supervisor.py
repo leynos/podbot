@@ -11,9 +11,11 @@ import sys
 import threading
 import time
 import typing as typ
+from dataclasses import dataclass
 
-from test_runner_diagnostics import format_stall_report
+from test_runner_diagnostics import StallReportContext, format_stall_report
 from test_runner_process_io import (
+    StreamCapture,
     dispatch_event as _dispatch_event,
     drain_after_cleanup as _drain_after_cleanup,
     drain_events as _drain_events,
@@ -25,6 +27,7 @@ from test_runner_process_io import (
 )
 from test_runner_process_tree import (
     OwnedProcessTree,
+    ProcessTreeRoot,
     enable_child_subreaper,
     get_child_subreaper,
     snapshot_direct_child_identities,
@@ -33,6 +36,41 @@ from test_runner_process_tree import (
 
 _TIMEOUT_EXIT = 124
 _CLEANUP_EXIT = 125
+
+
+@dataclass(frozen=True)
+class CommandRequest:
+    """Describe one child command launched by the test-runner supervisor.
+
+    Keep argv, working directory, environment, and diagnostic purpose together
+    from the Cargo phase builder through process launch and stall reporting.
+    """
+
+    command: list[str]
+    cwd: pathlib.Path
+    environment: dict[str, str]
+    purpose: str
+
+
+@dataclass(frozen=True)
+class _OutputPolicy:
+    """Select the streams and callback used for one supervised child."""
+
+    capture_stdout: bool = False
+    capture_stderr: bool = False
+    stdout_handler: typ.Callable[[str], None] | None = None
+
+
+@dataclass
+class _ProcessRun:
+    """Hold the mutable I/O and ownership state for one running child."""
+
+    request: CommandRequest
+    process: subprocess.Popen[str]
+    tree: OwnedProcessTree
+    events: queue.Queue[tuple[str, str | object]]
+    readers: list[threading.Thread]
+    capture: StreamCapture
 
 
 class ProcessSupervisor:
@@ -56,27 +94,39 @@ class ProcessSupervisor:
         self.enable_subreaper = enable_subreaper
         self.subreaper_enabled = False
         self.terminal_status: int | None = None
+        self.terminal_reason: str | None = None
         self._received_signal: int | None = None
         self._saved_handlers: dict[int, typ.Any] = {}
         self._previous_subreaper: bool | None = None
 
     def __enter__(self) -> ProcessSupervisor:
         """Install temporary signal handling and enable Linux orphan adoption."""
-        if threading.current_thread() is threading.main_thread():
-            for signum in (signal.SIGINT, signal.SIGTERM):
-                self._saved_handlers[signum] = signal.getsignal(signum)
-                signal.signal(signum, self._record_signal)
-        if self.enable_subreaper:
-            self._previous_subreaper = get_child_subreaper()
-            self.subreaper_enabled = enable_child_subreaper()
-            if not self.subreaper_enabled and sys.platform != "win32":
-                print(
-                    "test runner: Linux child-subreaper support is unavailable; "
-                    "process-group cleanup remains enabled",
-                    file=sys.stderr,
-                    flush=True,
-                )
+        self._install_signal_handlers()
+        self._configure_subreaper()
         return self
+
+    def _install_signal_handlers(self) -> None:
+        """Temporarily handle interrupts on the runner's main thread."""
+        if threading.current_thread() is not threading.main_thread():
+            return
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            self._saved_handlers[signum] = signal.getsignal(signum)
+            signal.signal(signum, self._record_signal)
+
+    def _configure_subreaper(self) -> None:
+        """Enable orphan adoption when requested and supported by the host."""
+        if not self.enable_subreaper:
+            return
+        self._previous_subreaper = get_child_subreaper()
+        self.subreaper_enabled = enable_child_subreaper()
+        if self.subreaper_enabled or sys.platform == "win32":
+            return
+        print(
+            "test runner: Linux child-subreaper support is unavailable; "
+            "process-group cleanup remains enabled",
+            file=sys.stderr,
+            flush=True,
+        )
 
     def __exit__(self, *_: object) -> None:
         """Restore the caller's signal handlers after all children are reaped."""
@@ -87,69 +137,41 @@ class ProcessSupervisor:
 
     def run_inherited(
         self,
-        command: list[str],
-        cwd: pathlib.Path,
-        environment: dict[str, str],
-        *,
-        purpose: str,
+        request: CommandRequest,
     ) -> int:
         """Run one command with inherited standard streams."""
-        status, _, _ = self._run(command, cwd, environment, purpose=purpose)
+        status, _, _ = self._run(request)
         return status
 
     def run_capture(
         self,
-        command: list[str],
-        cwd: pathlib.Path,
-        environment: dict[str, str],
-        *,
-        purpose: str,
+        request: CommandRequest,
     ) -> tuple[int, str, str]:
         """Capture standard output and error while continuing to supervise."""
         return self._run(
-            command,
-            cwd,
-            environment,
-            purpose=purpose,
-            capture_stdout=True,
-            capture_stderr=True,
+            request, _OutputPolicy(capture_stdout=True, capture_stderr=True)
         )
 
     def run_lines(
         self,
-        command: list[str],
-        cwd: pathlib.Path,
-        environment: dict[str, str],
-        *,
-        purpose: str,
+        request: CommandRequest,
         on_line: typ.Callable[[str], None],
     ) -> int:
         """Stream one command's standard output through a line callback."""
-        status, _, _ = self._run(
-            command,
-            cwd,
-            environment,
-            purpose=purpose,
-            stdout_handler=on_line,
-        )
+        status, _, _ = self._run(request, _OutputPolicy(stdout_handler=on_line))
         return status
 
     def _run(
         self,
-        command: list[str],
-        cwd: pathlib.Path,
-        environment: dict[str, str],
-        *,
-        purpose: str,
-        capture_stdout: bool = False,
-        capture_stderr: bool = False,
-        stdout_handler: typ.Callable[[str], None] | None = None,
+        request: CommandRequest,
+        output_policy: _OutputPolicy | None = None,
     ) -> tuple[int, str, str]:
         """Launch, monitor, diagnose and reap one supervised command."""
         if self.terminal_status is not None:
             return self.terminal_status, "", ""
-        stdout_pipe = capture_stdout or stdout_handler is not None
-        stderr_pipe = capture_stderr
+        policy = output_policy if output_policy is not None else _OutputPolicy()
+        stdout_pipe = policy.capture_stdout or policy.stdout_handler is not None
+        stderr_pipe = policy.capture_stderr
         started_at = time.monotonic()
         preexisting_child_identities = (
             snapshot_direct_child_identities()
@@ -157,49 +179,46 @@ class ProcessSupervisor:
             else frozenset()
         )
         try:
-            process = self._start_process(
-                command, cwd, environment, stdout_pipe, stderr_pipe
-            )
+            process = self._start_process(request, stdout_pipe, stderr_pipe)
         except OSError as exc:
-            print(f"test runner: could not start {command[0]}: {exc}", file=sys.stderr)
+            print(
+                f"test runner: could not start {request.command[0]}: {exc}",
+                file=sys.stderr,
+            )
             return 127, "", ""
         tree = OwnedProcessTree(
-            process.pid,
-            shlex.join(command),
-            started_at,
-            subreaper=self.subreaper_enabled,
-            preexisting_child_identities=preexisting_child_identities,
+            ProcessTreeRoot(
+                process.pid,
+                shlex.join(request.command),
+                started_at,
+                self.subreaper_enabled,
+                preexisting_child_identities,
+            )
         )
-        events, readers, expected_streams = self._start_readers(
-            process, stdout_pipe, stderr_pipe
+        events, readers, capture = self._start_readers(
+            process, stdout_pipe, stderr_pipe, policy.stdout_handler
         )
-        return self._monitor_process(
+        run = _ProcessRun(
+            request,
             process,
             tree,
-            command,
-            cwd,
-            environment,
-            purpose,
-            started_at,
             events,
             readers,
-            expected_streams,
-            stdout_handler,
+            capture,
         )
+        return self._monitor_process(run)
 
     @staticmethod
     def _start_process(
-        command: list[str],
-        cwd: pathlib.Path,
-        environment: dict[str, str],
+        request: CommandRequest,
         stdout_pipe: bool,
         stderr_pipe: bool,
     ) -> subprocess.Popen[str]:
         """Start one command in a private process group with selected pipes."""
         return subprocess.Popen(
-            command,
-            cwd=cwd,
-            env=environment,
+            request.command,
+            cwd=request.cwd,
+            env=request.environment,
             stdin=None,
             stdout=subprocess.PIPE if stdout_pipe else None,
             stderr=subprocess.PIPE if stderr_pipe else None,
@@ -212,11 +231,14 @@ class ProcessSupervisor:
 
     @staticmethod
     def _start_readers(
-        process: subprocess.Popen[str], stdout_pipe: bool, stderr_pipe: bool
+        process: subprocess.Popen[str],
+        stdout_pipe: bool,
+        stderr_pipe: bool,
+        stdout_handler: typ.Callable[[str], None] | None,
     ) -> tuple[
         queue.Queue[tuple[str, str | object]],
         list[threading.Thread],
-        set[str],
+        StreamCapture,
     ]:
         """Read piped child streams concurrently so monitoring remains bounded."""
         events: queue.Queue[tuple[str, str | object]] = queue.Queue()
@@ -234,65 +256,51 @@ class ProcessSupervisor:
             )
             reader.start()
             readers.append(reader)
-        return events, readers, expected_streams
+        return events, readers, StreamCapture(expected_streams, stdout_handler)
 
-    def _monitor_process(
-        self,
-        process: subprocess.Popen[str],
-        tree: OwnedProcessTree,
-        command: list[str],
-        cwd: pathlib.Path,
-        environment: dict[str, str],
-        purpose: str,
-        started_at: float,
-        events: queue.Queue[tuple[str, str | object]],
-        readers: list[threading.Thread],
-        expected_streams: set[str],
-        stdout_handler: typ.Callable[[str], None] | None,
-    ) -> tuple[int, str, str]:
+    def _monitor_process(self, run: _ProcessRun) -> tuple[int, str, str]:
         """Coordinate output, deadline checks, diagnostics, and final status."""
-        output: dict[str, list[str]] = {"stdout": [], "stderr": []}
-        ended_streams: set[str] = set()
         next_watch = time.monotonic() + self.watch_interval_seconds
         exit_status: int | None = None
         while True:
-            _drain_events(events, output, ended_streams, stdout_handler)
-            tree.refresh()
-            tree.reap_adopted()
-            return_status = process.poll()
-            terminal_reason = self._terminal_reason(tree, process, return_status)
+            _drain_events(run.events, run.capture)
+            run.tree.refresh()
+            run.tree.reap_adopted()
+            return_status = run.process.poll()
+            terminal_reason = self._terminal_reason(
+                run.tree, run.process, return_status
+            )
             if terminal_reason is not None:
-                self._emit_diagnostics(
-                    tree, command, cwd, environment, started_at, terminal_reason
-                )
-                self._terminate_tree(tree, process)
+                self._emit_diagnostics(run.tree, run.request, terminal_reason)
+                self._terminate_tree(run.tree, run.process)
                 _drain_after_cleanup(
-                    events, output, ended_streams, expected_streams, stdout_handler
+                    run.events,
+                    run.capture,
                 )
                 exit_status = self.terminal_status
                 break
-            if return_status is not None and ended_streams >= expected_streams:
+            if (
+                return_status is not None
+                and run.capture.ended_streams >= run.capture.expected_streams
+            ):
                 exit_status = _normal_exit_status(return_status)
                 break
             now = time.monotonic()
             if now >= next_watch:
                 self._emit_diagnostics(
-                    tree,
-                    command,
-                    cwd,
-                    environment,
-                    started_at,
-                    f"still running ({purpose})",
+                    run.tree,
+                    run.request,
+                    f"still running ({run.request.purpose})",
                 )
                 next_watch = now + self.watch_interval_seconds
-            event = self._wait_for_event(events, now, next_watch)
+            event = self._wait_for_event(run.events, now, next_watch)
             if event is not None:
-                _dispatch_event(event, output, ended_streams, stdout_handler)
-        _join_readers(readers)
+                _dispatch_event(event, run.capture)
+        _join_readers(run.readers)
         return (
             exit_status if exit_status is not None else _CLEANUP_EXIT,
-            "".join(output["stdout"]),
-            "".join(output["stderr"]),
+            "".join(run.capture.output["stdout"]),
+            "".join(run.capture.output["stderr"]),
         )
 
     def _terminal_reason(
@@ -303,17 +311,20 @@ class ProcessSupervisor:
     ) -> str | None:
         """Set the terminal status for signals, deadline, or leaked descendants."""
         if self.terminal_status is not None:
-            return "supervision already stopped"
+            return self.terminal_reason or "supervision already stopped"
         if self._received_signal is not None:
             signum = self._received_signal
             self.terminal_status = 128 + signum
-            return f"interrupted by {signal.Signals(signum).name}"
+            self.terminal_reason = f"interrupted by {signal.Signals(signum).name}"
+            return self.terminal_reason
         if time.monotonic() >= self.deadline:
             self.terminal_status = _TIMEOUT_EXIT
-            return "timed out"
+            self.terminal_reason = "timed out"
+            return self.terminal_reason
         if return_status is not None and tree.descendants():
             self.terminal_status = _CLEANUP_EXIT
-            return "command exited while owned descendants remained"
+            self.terminal_reason = "command exited while owned descendants remained"
+            return self.terminal_reason
         return None
 
     def _wait_for_event(
@@ -333,28 +344,26 @@ class ProcessSupervisor:
     def _emit_diagnostics(
         self,
         tree: OwnedProcessTree,
-        command: list[str],
-        cwd: pathlib.Path,
-        environment: dict[str, str],
-        started_at: float,
+        request: CommandRequest,
         reason: str,
     ) -> None:
         """Write the process and known-lock report before cleanup begins."""
         try:
-            report = format_stall_report(
-                tree,
-                command=tuple(command),
-                cwd=cwd,
-                environment=environment,
+            report_context = StallReportContext(
+                tree=tree,
+                command=tuple(request.command),
+                cwd=request.cwd,
+                environment=request.environment,
                 target_directory=(
-                    pathlib.Path(environment["CARGO_TARGET_DIR"])
-                    if environment.get("CARGO_TARGET_DIR")
+                    pathlib.Path(request.environment["CARGO_TARGET_DIR"])
+                    if request.environment.get("CARGO_TARGET_DIR")
                     else None
                 ),
                 elapsed_seconds=time.monotonic() - self.started_at,
                 timeout_seconds=self.timeout_seconds,
                 reason=reason,
             )
+            report = format_stall_report(report_context)
         except Exception as exc:
             report = f"test runner: {reason}; diagnostics unavailable: {exc}"
         try:

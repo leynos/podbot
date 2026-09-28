@@ -14,12 +14,14 @@ import types
 import pytest
 
 from test_runner_diagnostics import (
+    StallReportContext,
     classify_lock_waiter,
     format_stall_report,
     lock_path_identities,
     parse_proc_locks,
 )
 from test_runner_process_tree import OwnedProcess, ProcessInfo, parse_proc_stat
+from test_runner_supervisor import ProcessSupervisor
 
 
 @pytest.mark.parametrize("terminator", ["timeout", "signal"])
@@ -104,6 +106,22 @@ def test_proc_stat_parser_handles_parentheses_in_command_name() -> None:
     )
 
 
+def test_supervisor_retains_first_terminal_reason() -> None:
+    """Later checks preserve the timeout reason used in the first report."""
+    supervisor = ProcessSupervisor(timeout_seconds=1)
+    supervisor.deadline = time.monotonic() - 1
+    tree = types.SimpleNamespace(descendants=lambda: ())
+    process = types.SimpleNamespace()
+
+    first_reason = supervisor._terminal_reason(tree, process, None)
+    later_reason = supervisor._terminal_reason(tree, process, None)
+
+    assert first_reason == "timed out", "the initial report must identify timeout"
+    assert later_reason == first_reason, (
+        "later reports must retain the first terminal cause"
+    )
+
+
 def test_stall_report_truncates_long_process_commands(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -125,14 +143,16 @@ def test_stall_report_truncates_long_process_commands(
     )
 
     report = format_stall_report(
-        tree,
-        command=("cargo", "test"),
-        cwd=tmp_path,
-        environment={},
-        target_directory=None,
-        elapsed_seconds=1.0,
-        timeout_seconds=30.0,
-        reason="controlled diagnostic test",
+        StallReportContext(
+            tree=tree,
+            command=("cargo", "test"),
+            cwd=tmp_path,
+            environment={},
+            target_directory=None,
+            elapsed_seconds=1.0,
+            timeout_seconds=30.0,
+            reason="controlled diagnostic test",
+        )
     )
     process_line = next(line for line in report.splitlines() if "pid=123" in line)
 
@@ -256,7 +276,7 @@ def _supervisor_helper(terminator: str) -> str:
         import pathlib
         import subprocess
         import sys
-        from test_runner_supervisor import ProcessSupervisor
+        from test_runner_supervisor import CommandRequest, ProcessSupervisor
 
         marker = pathlib.Path(os.environ["DESCENDANT_PID_FILE"])
         child = (
@@ -270,10 +290,12 @@ def _supervisor_helper(terminator: str) -> str:
         )
         with ProcessSupervisor({timeout}, 0.1, enable_subreaper=True) as supervisor:
             status = supervisor.run_inherited(
-                [sys.executable, "-c", child],
-                pathlib.Path.cwd(),
-                os.environ.copy(),
-                purpose="controlled cleanup test",
+                CommandRequest(
+                    [sys.executable, "-c", child],
+                    pathlib.Path.cwd(),
+                    os.environ.copy(),
+                    "controlled cleanup test",
+                )
             )
         print(f"STATUS={{status}}")
         """
@@ -317,16 +339,18 @@ def _lock_supervisor_helper(holder_location: str) -> str:
         import os
         import pathlib
         import sys
-        from test_runner_supervisor import ProcessSupervisor
+        from test_runner_supervisor import CommandRequest, ProcessSupervisor
 
         command_body = {command_body!r}
         cache_lock = pathlib.Path(os.environ["CARGO_HOME"]) / ".package-cache-mutate"
         with ProcessSupervisor(1.2, 2, enable_subreaper=True) as supervisor:
             status = supervisor.run_inherited(
-                [sys.executable, "-c", command_body, str(cache_lock)],
-                pathlib.Path.cwd(),
-                os.environ.copy(),
-                purpose="Cargo package-cache lock test",
+                CommandRequest(
+                    [sys.executable, "-c", command_body, str(cache_lock)],
+                    pathlib.Path.cwd(),
+                    os.environ.copy(),
+                    "Cargo package-cache lock test",
+                )
             )
         print(f"STATUS={{status}}")
         """

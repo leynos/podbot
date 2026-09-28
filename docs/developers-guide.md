@@ -59,6 +59,19 @@ and supervisor for one runner invocation. Use it only between
 target and feature selection. Do not retain the context between invocations or
 expose it to application code.
 
+`CommandRequest` carries one child command from a runner phase to the
+supervisor. `StreamCapture` and `ProcessTreeRoot` stay within process I/O and
+cleanup; `StallReportContext` represents one diagnostic snapshot.
+`TargetArgumentContext` is local to `test_runner_target_arguments.py`, which
+expands Cargo selectors after target selection. `_CargoOptionToken` is local to
+Cargo option parsing. `test_runner_phases.py` sequences ordinary tests,
+doctests, and nested targets; its fail-fast loop serves only ordinary package
+and registered nested-target phases, while filter helpers serve the ordinary
+and compile-only Cargo commands. `test_runner_nested.py` owns the JSON build
+and direct launch for registered nested-Cargo targets. Its `run_nested_target`
+entry point is called only by the phase orchestrator. These records and module
+interfaces have no application call sites.
+
 ### 2.3. Supported test orchestration
 
 Use `make test` for the supported test path. Its default `TEST_FLAGS` are

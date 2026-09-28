@@ -44,8 +44,8 @@ import pathlib
 import typing as typ
 
 from test_runner_models import CargoTestOptions, CargoTestPlan, Target
+from test_runner_target_arguments import cargo_target_arguments
 from test_runner_selection import (
-    cargo_target_arguments,
     select_packages,
     select_targets,
     targets_for_package,

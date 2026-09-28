@@ -33,11 +33,13 @@ def test_subreaper_adopts_owned_orphan_but_not_preexisting_child(
     monkeypatch.setattr(process_tree, "_read_process_table", lambda: dict(current))
 
     tree = process_tree.OwnedProcessTree(
-        root_pid,
-        "controlled test child",
-        0.0,
-        subreaper=True,
-        preexisting_child_identities=frozenset({(unrelated_pid, 104)}),
+        process_tree.ProcessTreeRoot(
+            root_pid,
+            "controlled test child",
+            0.0,
+            True,
+            frozenset({(unrelated_pid, 104)}),
+        )
     )
 
     tree.refresh()
@@ -74,21 +76,90 @@ def test_subreaper_snapshot_precedes_runner_child_launch(
         raise OSError("controlled spawn failure")
 
     monkeypatch.setattr(supervisor_module, "snapshot_direct_child_identities", snapshot)
-    monkeypatch.setattr(supervisor_module.ProcessSupervisor, "_start_process", fail_to_start)
+    monkeypatch.setattr(
+        supervisor_module.ProcessSupervisor, "_start_process", fail_to_start
+    )
     supervisor = supervisor_module.ProcessSupervisor(1)
     supervisor.subreaper_enabled = True
 
     status = supervisor._run(
-        ["controlled-child"],
-        tmp_path,
-        {},
-        purpose="ownership ordering test",
+        supervisor_module.CommandRequest(
+            ["controlled-child"],
+            tmp_path,
+            {},
+            "ownership ordering test",
+        )
     )[0]
 
     assert status == 127, "a failed spawn must keep the normal launch error status"
     assert order == ["snapshot", "start"], (
         "the host-child baseline must be taken before starting the root process"
     )
+
+
+def test_pidfd_signal_failure_falls_back_to_identity_checked_kill(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed pidfd signal must still attempt the checked PID fallback."""
+    process = _process(70005, os.getpid(), 105)
+    signalled: list[tuple[int, int]] = []
+    closed: list[int] = []
+
+    def fail_pidfd_signal(_descriptor: int, _signum: int) -> None:
+        raise OSError("controlled pidfd signal failure")
+
+    monkeypatch.setattr(process_tree, "_read_process", lambda _pid: process)
+    monkeypatch.setattr(process_tree.os, "pidfd_open", lambda _pid: 123, raising=False)
+    monkeypatch.setattr(
+        process_tree.signal,
+        "pidfd_send_signal",
+        fail_pidfd_signal,
+        raising=False,
+    )
+    monkeypatch.setattr(process_tree.os, "close", closed.append)
+    monkeypatch.setattr(
+        process_tree.os,
+        "kill",
+        lambda pid, sig: signalled.append((pid, sig)),
+    )
+
+    process_tree._signal_identity(process, 15)
+
+    assert signalled == [(process.pid, 15)], (
+        "failed pidfd signalling must retry after checking process identity"
+    )
+    assert closed == [123], "the pidfd must close after a failed signal"
+
+
+def test_pidfd_identity_mismatch_suppresses_pid_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reused PID must not be signalled through the numeric-PID fallback."""
+    process = _process(70006, os.getpid(), 106)
+    reused = _process(process.pid, os.getpid(), 999)
+    sent: list[tuple[int, int]] = []
+    killed: list[tuple[int, int]] = []
+    identities = iter((process, reused))
+
+    monkeypatch.setattr(process_tree, "_read_process", lambda _pid: next(identities))
+    monkeypatch.setattr(process_tree.os, "pidfd_open", lambda _pid: 124, raising=False)
+    monkeypatch.setattr(
+        process_tree.signal,
+        "pidfd_send_signal",
+        lambda descriptor, signum: sent.append((descriptor, signum)),
+        raising=False,
+    )
+    monkeypatch.setattr(process_tree.os, "close", lambda _descriptor: None)
+    monkeypatch.setattr(
+        process_tree.os,
+        "kill",
+        lambda pid, sig: killed.append((pid, sig)),
+    )
+
+    process_tree._signal_identity(process, 15)
+
+    assert sent == [], "PID reuse must prevent signalling the stale process"
+    assert killed == [], "PID reuse must suppress the numeric-PID fallback"
 
 
 def _process(pid: int, parent_pid: int, start_time: int) -> process_tree.ProcessInfo:

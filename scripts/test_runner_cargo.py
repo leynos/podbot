@@ -20,6 +20,7 @@ import typing as typ
 
 from test_runner_models import CargoTestOptions, RunnerError, Target
 from test_runner_context import TestRunnerContext
+from test_runner_supervisor import CommandRequest
 
 
 def load_cargo_metadata(
@@ -33,30 +34,41 @@ def load_cargo_metadata(
     The runner passes a versioned JSON request so package and target selection
     does not depend on Cargo's human-readable output.
     """
-    command = [
-        *context.cargo_command,
-        "metadata",
-        "--no-deps",
-        "--format-version",
-        "1",
-    ]
+    request = _metadata_request(context, options)
+    status, stdout, stderr = context.supervisor.run_capture(request)
+    if status != 0:
+        _raise_metadata_failure(status, stderr, context.supervisor.terminal_status)
+    return _decode_metadata(stdout)
+
+
+def _metadata_request(
+    context: TestRunnerContext, options: CargoTestOptions
+) -> CommandRequest:
+    """Build a metadata request with the workspace and offline selectors."""
+    command = [*context.cargo_command, "metadata", "--no-deps", "--format-version", "1"]
     if options.manifest_path is not None:
         command.extend(["--manifest-path", str(options.manifest_path)])
-    for flag in ("--offline", "--locked", "--frozen"):
-        if flag in options.common and flag not in command:
-            command.append(flag)
-    status, stdout, stderr = context.supervisor.run_capture(
-        command,
-        context.cwd,
-        context.environment,
-        purpose="Cargo metadata",
+    command.extend(
+        flag
+        for flag in ("--offline", "--locked", "--frozen")
+        if flag in options.common and flag not in command
     )
-    if status != 0:
-        if stderr:
-            sys.stderr.write(stderr)
-        if context.supervisor.terminal_status is not None:
-            raise RunnerCommandFailure(context.supervisor.terminal_status)
-        raise RunnerError(f"cargo metadata exited with status {status}")
+    return CommandRequest(command, context.cwd, context.environment, "Cargo metadata")
+
+
+def _raise_metadata_failure(
+    status: int, stderr: str, terminal_status: int | None
+) -> typ.NoReturn:
+    """Preserve supervisor interruption or Cargo's ordinary failure status."""
+    if stderr:
+        sys.stderr.write(stderr)
+    if terminal_status is not None:
+        raise RunnerCommandFailure(terminal_status)
+    raise RunnerError(f"cargo metadata exited with status {status}")
+
+
+def _decode_metadata(stdout: str) -> dict[str, typ.Any]:
+    """Decode Cargo's versioned workspace metadata document."""
     try:
         metadata = json.loads(stdout)
     except json.JSONDecodeError as exc:
@@ -104,31 +116,45 @@ def select_test_executables(
     selected: dict[tuple[str, str], pathlib.Path] = {}
     for expected in expected_targets:
         key = (expected.package_id, expected.name)
-        candidates = [
-            message
-            for message in messages
-            if message.get("reason") == "compiler-artifact"
-            and message.get("package_id") == expected.package_id
-            and message.get("target", {}).get("name") == expected.name
-            and "test" in message.get("target", {}).get("kind", [])
-            and message.get("profile", {}).get("test") is True
-            and isinstance(message.get("executable"), str)
-        ]
-        if len(candidates) != 1:
-            raise RunnerError(
-                f"expected one current compiler-artifact for "
-                f"{expected.package_name}:{expected.name}, found {len(candidates)}"
-            )
-        executable = pathlib.Path(candidates[0]["executable"])
-        if not executable.is_file():
-            raise RunnerError(
-                f"Cargo reported a missing test executable for "
-                f"{expected.package_name}:{expected.name}: {executable}"
-            )
-        if os.name != "nt" and not os.access(executable, os.X_OK):
-            raise RunnerError(f"Cargo test executable is not executable: {executable}")
-        selected[key] = executable
+        candidates = tuple(
+            message for message in messages if _is_test_artifact(message, expected)
+        )
+        selected[key] = _current_executable(expected, candidates)
     return selected
+
+
+def _is_test_artifact(message: dict[str, typ.Any], expected: Target) -> bool:
+    """Match one JSON message to the requested package's test executable."""
+    target = message.get("target", {})
+    profile = message.get("profile", {})
+    return (
+        message.get("reason") == "compiler-artifact"
+        and message.get("package_id") == expected.package_id
+        and target.get("name") == expected.name
+        and "test" in target.get("kind", [])
+        and profile.get("test") is True
+        and isinstance(message.get("executable"), str)
+    )
+
+
+def _current_executable(
+    expected: Target, candidates: tuple[dict[str, typ.Any], ...]
+) -> pathlib.Path:
+    """Require one executable from this build and verify it can run."""
+    if len(candidates) != 1:
+        raise RunnerError(
+            f"expected one current compiler-artifact for "
+            f"{expected.package_name}:{expected.name}, found {len(candidates)}"
+        )
+    executable = pathlib.Path(candidates[0]["executable"])
+    if not executable.is_file():
+        raise RunnerError(
+            f"Cargo reported a missing test executable for "
+            f"{expected.package_name}:{expected.name}: {executable}"
+        )
+    if os.name != "nt" and not os.access(executable, os.X_OK):
+        raise RunnerError(f"Cargo test executable is not executable: {executable}")
+    return executable
 
 
 def create_test_runtime_environment(
@@ -215,13 +241,15 @@ def _record_binary_executable(
 ) -> None:
     """Restore a Cargo binary path for its owning package when available."""
     target = message.get("target", {})
-    if (
-        message.get("package_id") == package.get("id")
-        and "bin" in target.get("kind", [])
-        and message.get("profile", {}).get("test") is False
-        and isinstance(message.get("executable"), str)
-    ):
-        environment[f"CARGO_BIN_EXE_{target['name']}"] = message["executable"]
+    if message.get("package_id") != package.get("id"):
+        return
+    if "bin" not in target.get("kind", []):
+        return
+    if message.get("profile", {}).get("test") is not False:
+        return
+    executable = message.get("executable")
+    if isinstance(executable, str):
+        environment[f"CARGO_BIN_EXE_{target['name']}"] = executable
 
 
 def _set_dynamic_library_environment(
@@ -230,27 +258,56 @@ def _set_dynamic_library_environment(
     messages: list[dict[str, typ.Any]],
 ) -> None:
     """Reconstruct Cargo's runtime library search paths for the host platform."""
-    profile_directory = executable.parent.parent
-    search_paths = [profile_directory / "deps", profile_directory]
-    for message in messages:
-        if message.get("reason") == "build-script-executed":
-            for linked_path in message.get("linked_paths", []):
-                _, separator, path = str(linked_path).partition("=")
-                candidate = pathlib.Path(path if separator else linked_path)
-                if candidate.is_dir():
-                    search_paths.append(candidate)
-        if message.get("reason") == "compiler-artifact":
-            filenames = message.get("filenames", [])
-            for filename in filenames:
-                path = pathlib.Path(str(filename))
-                if path.suffix.lower() in {".so", ".dylib", ".dll"}:
-                    search_paths.append(path.parent)
-
     variable = _library_path_variable()
     inherited_paths = environment.get(variable, "").split(os.pathsep)
+    search_paths = [
+        *_profile_library_paths(executable),
+        *_build_script_library_paths(messages),
+        *_artifact_library_paths(messages),
+    ]
     combined = _unique_paths([*map(str, search_paths), *inherited_paths])
     if combined:
         environment[variable] = os.pathsep.join(combined)
+
+
+def _profile_library_paths(executable: pathlib.Path) -> tuple[pathlib.Path, ...]:
+    """Return the Cargo profile and dependency directories for one artifact."""
+    profile_directory = executable.parent.parent
+    return profile_directory / "deps", profile_directory
+
+
+def _build_script_library_paths(
+    messages: list[dict[str, typ.Any]],
+) -> tuple[pathlib.Path, ...]:
+    """Collect existing native-library paths emitted by build scripts."""
+    return tuple(
+        path
+        for message in messages
+        if message.get("reason") == "build-script-executed"
+        for raw_path in message.get("linked_paths", [])
+        if (path := _existing_linked_path(raw_path)) is not None
+    )
+
+
+def _existing_linked_path(raw_path: typ.Any) -> pathlib.Path | None:
+    """Resolve Cargo's `native=` metadata and retain directories only."""
+    _, separator, path_text = str(raw_path).partition("=")
+    candidate = pathlib.Path(path_text if separator else str(raw_path))
+    return candidate if candidate.is_dir() else None
+
+
+def _artifact_library_paths(
+    messages: list[dict[str, typ.Any]],
+) -> tuple[pathlib.Path, ...]:
+    """Collect parent directories for dynamic libraries in Cargo artifacts."""
+    return tuple(
+        path.parent
+        for message in messages
+        if message.get("reason") == "compiler-artifact"
+        for filename in message.get("filenames", [])
+        if (path := pathlib.Path(str(filename))).suffix.lower()
+        in {".so", ".dylib", ".dll"}
+    )
 
 
 def _library_path_variable() -> str:

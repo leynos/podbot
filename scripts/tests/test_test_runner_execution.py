@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 import pathlib
 import typing as typ
+from dataclasses import dataclass
 
 import pytest
 import test_runner
+import test_runner_nested
 
 from test_runner_fixtures import (
+    FakeCargoConfiguration,
     fake_cargo_environment as _fake_cargo_environment,
     workspace_with_sibling_package,
 )
@@ -31,6 +34,37 @@ def cargo_command_reader(
     return read_commands
 
 
+@dataclass
+class RunnerExecutionHarness:
+    """Bundle filesystem, patch, and process-log fixtures for runner tests."""
+
+    tmp_path: pathlib.Path
+    monkeypatch: pytest.MonkeyPatch
+    read_commands: typ.Callable[[], list[list[str]]]
+
+    def fake_environment(
+        self, configuration: FakeCargoConfiguration = FakeCargoConfiguration()
+    ) -> dict[str, str]:
+        """Create the configured fake Cargo process for this test."""
+        return _fake_cargo_environment(self.tmp_path, self.monkeypatch, configuration)
+
+    def run(self, environment: dict[str, str], cargo_arguments: tuple[str, ...]) -> int:
+        """Run the test runner against the harness's fake Cargo executable."""
+        return test_runner.main(
+            ["--cargo", environment["FAKE_CARGO"], "--", *cargo_arguments]
+        )
+
+
+@pytest.fixture
+def runner_harness(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cargo_command_reader: typ.Callable[[], list[list[str]]],
+) -> RunnerExecutionHarness:
+    """Group resources shared by process-order and phase-failure tests."""
+    return RunnerExecutionHarness(tmp_path, monkeypatch, cargo_command_reader)
+
+
 @pytest.mark.parametrize(
     ("selection", "target_name"),
     [
@@ -43,30 +77,30 @@ def cargo_command_reader(
     ids=["compile-contract", "no-default-cli-boundary"],
 )
 def test_cargo_build_exits_before_nested_test_process_starts(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    cargo_command_reader: typ.Callable[[], list[list[str]]],
+    runner_harness: RunnerExecutionHarness,
     selection: tuple[str, ...],
     target_name: str,
 ) -> None:
     """Each trybuild executable starts after its current Cargo build exits."""
-    environment = _fake_cargo_environment(tmp_path, monkeypatch)
-    monkeypatch.setenv("FAKE_REQUIRE_BUILD_RETURNED", "true")
-    real_build = test_runner._run_json_build
+    environment = runner_harness.fake_environment()
+    runner_harness.monkeypatch.setenv("FAKE_REQUIRE_BUILD_RETURNED", "true")
+    real_build = test_runner_nested._run_json_build
 
     def mark_build_complete(*args: typ.Any, **kwargs: typ.Any) -> int:
         status = real_build(*args, **kwargs)
         pathlib.Path(environment["FAKE_BUILD_RETURNED"]).touch()
         return status
 
-    monkeypatch.setattr(test_runner, "_run_json_build", mark_build_complete)
+    runner_harness.monkeypatch.setattr(
+        test_runner_nested, "_run_json_build", mark_build_complete
+    )
 
     status = test_runner.main(["--cargo", environment["FAKE_CARGO"], "--", *selection])
 
     assert status == 0, "a successful no-run build and direct test should pass"
     invocation = json.loads(pathlib.Path(environment["FAKE_TEST_ARGS"]).read_text())
     assert invocation == [], "the test binary should receive no unexpected arguments"
-    commands = cargo_command_reader()
+    commands = runner_harness.read_commands()
     build = next(command for command in commands if "--no-run" in command)
     assert build.index("--test") < build.index(
         "--message-format=json-render-diagnostics"
@@ -156,7 +190,9 @@ def test_excluded_workspace_packages_are_removed_from_phase_commands(
 ) -> None:
     """Expanded workspace excludes do not leak into per-package commands."""
     metadata = workspace_with_sibling_package(tmp_path)
-    environment = _fake_cargo_environment(tmp_path, monkeypatch, metadata=metadata)
+    environment = _fake_cargo_environment(
+        tmp_path, monkeypatch, FakeCargoConfiguration(metadata=metadata)
+    )
 
     status = test_runner.main(
         [
@@ -186,20 +222,17 @@ def test_excluded_workspace_packages_are_removed_from_phase_commands(
     ids=["build-failure", "test-failure"],
 )
 def test_build_and_direct_test_failures_propagate(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
+    runner_harness: RunnerExecutionHarness,
     build_exit: int,
     test_exit: int,
     expected: int,
 ) -> None:
     """Neither a Cargo build error nor the direct harness failure is hidden."""
-    environment = _fake_cargo_environment(
-        tmp_path, monkeypatch, build_exit=build_exit, test_exit=test_exit
+    environment = runner_harness.fake_environment(
+        FakeCargoConfiguration(build_exit=build_exit, test_exit=test_exit),
     )
 
-    status = test_runner.main(
-        ["--cargo", environment["FAKE_CARGO"], "--", "--test", "compile_contract"]
-    )
+    status = runner_harness.run(environment, ("--test", "compile_contract"))
 
     assert status == expected, "build and test failures must preserve their exit code"
     test_args = pathlib.Path(environment["FAKE_TEST_ARGS"])
@@ -219,7 +252,7 @@ def test_artifact_selection_error_returns_runner_failure(
     def reject_artifacts(*args: typ.Any, **kwargs: typ.Any) -> typ.NoReturn:
         raise RunnerError("no current test artifact")
 
-    monkeypatch.setattr(test_runner, "select_test_executables", reject_artifacts)
+    monkeypatch.setattr(test_runner_nested, "select_test_executables", reject_artifacts)
     status = test_runner.main(
         ["--cargo", environment["FAKE_CARGO"], "--", "--test", "compile_contract"]
     )
@@ -230,22 +263,30 @@ def test_artifact_selection_error_returns_runner_failure(
     )
 
 
-def test_ordinary_failure_stops_nested_phase_by_default(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    cargo_command_reader: typ.Callable[[], list[list[str]]],
+@pytest.mark.parametrize(
+    ("no_fail_fast", "nested_phase_runs"),
+    [(False, False), (True, True)],
+    ids=["fail-fast", "no-fail-fast"],
+)
+def test_ordinary_failure_obeys_fail_fast_policy(
+    runner_harness: RunnerExecutionHarness,
+    no_fail_fast: bool,
+    nested_phase_runs: bool,
 ) -> None:
-    """Default fail-fast behaviour stops after ordinary tests fail."""
-    environment = _fake_cargo_environment(tmp_path, monkeypatch, ordinary_exit=23)
-
-    status = test_runner.main(
-        ["--cargo", environment["FAKE_CARGO"], "--", "--all-targets"]
+    """Ordinary failures follow the selected Cargo fail-fast policy."""
+    environment = runner_harness.fake_environment(
+        FakeCargoConfiguration(ordinary_exit=23)
+    )
+    arguments = (
+        ("--all-targets", "--no-fail-fast") if no_fail_fast else ("--all-targets",)
     )
 
-    commands = cargo_command_reader()
-    assert status == 23, "the ordinary test failure must be returned"
-    assert not any("--no-run" in command for command in commands), (
-        "fail-fast must stop before building nested-Cargo tests"
+    status = test_runner.main(["--cargo", environment["FAKE_CARGO"], "--", *arguments])
+
+    commands = runner_harness.read_commands()
+    assert status == 23, "the ordinary test failure must remain the final status"
+    assert any("--no-run" in command for command in commands) is nested_phase_runs, (
+        "fail-fast policy must control whether nested-Cargo tests are built"
     )
 
 
@@ -255,7 +296,9 @@ def test_doctest_failure_does_not_report_completed_ordinary_phase_as_skipped(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Fail-fast diagnostics list only phases that remain unstarted."""
-    environment = _fake_cargo_environment(tmp_path, monkeypatch, doctest_exit=29)
+    environment = _fake_cargo_environment(
+        tmp_path, monkeypatch, FakeCargoConfiguration(doctest_exit=29)
+    )
 
     status = test_runner.main(["--cargo", environment["FAKE_CARGO"], "--"])
 
@@ -278,7 +321,9 @@ def test_fail_fast_reports_unstarted_workspace_package(
     """A failure names ordinary package phases that fail-fast skips."""
     metadata = workspace_with_sibling_package(tmp_path)
     environment = _fake_cargo_environment(
-        tmp_path, monkeypatch, ordinary_exit=23, metadata=metadata
+        tmp_path,
+        monkeypatch,
+        FakeCargoConfiguration(ordinary_exit=23, metadata=metadata),
     )
 
     status = test_runner.main(
@@ -293,23 +338,4 @@ def test_fail_fast_reports_unstarted_workspace_package(
     )
     assert not any("sibling" in command for command in commands), (
         "fail-fast must not start later package phases"
-    )
-
-
-def test_no_fail_fast_continues_after_ordinary_failure(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    cargo_command_reader: typ.Callable[[], list[list[str]]],
-) -> None:
-    """`--no-fail-fast` still runs the isolated compile-contract target."""
-    environment = _fake_cargo_environment(tmp_path, monkeypatch, ordinary_exit=23)
-
-    status = test_runner.main(
-        ["--cargo", environment["FAKE_CARGO"], "--", "--all-targets", "--no-fail-fast"]
-    )
-
-    commands = cargo_command_reader()
-    assert status == 23, "the ordinary test failure must remain the final status"
-    assert any("--no-run" in command for command in commands), (
-        "--no-fail-fast must continue to isolated nested-Cargo tests"
     )

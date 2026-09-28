@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 import pathlib
 import textwrap
@@ -11,16 +12,43 @@ import typing as typ
 import pytest
 
 
+@dataclasses.dataclass(frozen=True)
+class TargetProperties:
+    """Describe Cargo target flags used by workspace metadata fixtures."""
+
+    test: bool = False
+    bench: bool = False
+    doctest: bool = False
+    features: tuple[str, ...] = ()
+
+
+@dataclasses.dataclass(frozen=True)
+class FakeCargoConfiguration:
+    """Set exit outcomes and workspace metadata for one fake Cargo run."""
+
+    build_exit: int = 0
+    test_exit: int = 0
+    ordinary_exit: int = 0
+    doctest_exit: int = 0
+    metadata: dict[str, typ.Any] | None = None
+
+
 def package_document(root: pathlib.Path) -> dict[str, typ.Any]:
     """Return a workspace metadata document with each Cargo target kind."""
     package_id = "path+file:///workspace/podbot#podbot@0.1.0"
     targets = [
-        _target("podbot", ["lib"], test=True, bench=True, doctest=True),
-        _target("podbot", ["bin"], test=True, bench=True, features=["cli"]),
-        _target("compile_contract", ["test"], test=True),
-        _target("cli_feature_gating", ["test"], test=True),
-        _target("example_check", ["example"], test=True),
-        _target("benchmarks", ["bench"], bench=True),
+        _target(
+            "podbot", ["lib"], TargetProperties(test=True, bench=True, doctest=True)
+        ),
+        _target(
+            "podbot",
+            ["bin"],
+            TargetProperties(test=True, bench=True, features=("cli",)),
+        ),
+        _target("compile_contract", ["test"], TargetProperties(test=True)),
+        _target("cli_feature_gating", ["test"], TargetProperties(test=True)),
+        _target("example_check", ["example"], TargetProperties(test=True)),
+        _target("benchmarks", ["bench"], TargetProperties(bench=True)),
     ]
     return {
         "workspace_root": str(root),
@@ -51,19 +79,35 @@ def package_document(root: pathlib.Path) -> dict[str, typ.Any]:
 def fake_cargo_environment(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
-    *,
-    build_exit: int = 0,
-    test_exit: int = 0,
-    ordinary_exit: int = 0,
-    doctest_exit: int = 0,
-    metadata: dict[str, typ.Any] | None = None,
+    configuration: FakeCargoConfiguration = FakeCargoConfiguration(),
 ) -> dict[str, str]:
     """Write fake Cargo and current-build test executables for runner tests."""
     metadata_path = tmp_path / "metadata.json"
     metadata_path.write_text(
-        json.dumps(metadata or package_document(tmp_path)), encoding="utf-8"
+        json.dumps(configuration.metadata or package_document(tmp_path)),
+        encoding="utf-8",
     )
     cargo_path = tmp_path / "fake-cargo.py"
+    _write_fake_cargo_program(cargo_path)
+    values = {
+        "FAKE_METADATA": str(metadata_path),
+        "FAKE_CARGO": str(cargo_path),
+        "FAKE_COMMANDS": str(tmp_path / "commands.jsonl"),
+        "FAKE_EXECUTABLE": str(tmp_path / "target/debug/deps/compile_contract-current"),
+        "FAKE_BUILD_RETURNED": str(tmp_path / "build-returned"),
+        "FAKE_TEST_ARGS": str(tmp_path / "test-args.json"),
+        "FAKE_BUILD_EXIT": str(configuration.build_exit),
+        "FAKE_TEST_EXIT": str(configuration.test_exit),
+        "FAKE_ORDINARY_EXIT": str(configuration.ordinary_exit),
+        "FAKE_DOCTEST_EXIT": str(configuration.doctest_exit),
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    return values
+
+
+def _write_fake_cargo_program(cargo_path: pathlib.Path) -> None:
+    """Write the subprocess protocol used by test-runner execution tests."""
     cargo_path.write_text(
         textwrap.dedent(
             """\
@@ -121,21 +165,6 @@ def fake_cargo_environment(
         encoding="utf-8",
     )
     cargo_path.chmod(0o755)
-    values = {
-        "FAKE_METADATA": str(metadata_path),
-        "FAKE_CARGO": str(cargo_path),
-        "FAKE_COMMANDS": str(tmp_path / "commands.jsonl"),
-        "FAKE_EXECUTABLE": str(tmp_path / "target/debug/deps/compile_contract-current"),
-        "FAKE_BUILD_RETURNED": str(tmp_path / "build-returned"),
-        "FAKE_TEST_ARGS": str(tmp_path / "test-args.json"),
-        "FAKE_BUILD_EXIT": str(build_exit),
-        "FAKE_TEST_EXIT": str(test_exit),
-        "FAKE_ORDINARY_EXIT": str(ordinary_exit),
-        "FAKE_DOCTEST_EXIT": str(doctest_exit),
-    }
-    for name, value in values.items():
-        monkeypatch.setenv(name, value)
-    return values
 
 
 def workspace_with_sibling_package(root: pathlib.Path) -> dict[str, typ.Any]:
@@ -154,18 +183,14 @@ def workspace_with_sibling_package(root: pathlib.Path) -> dict[str, typ.Any]:
 def _target(
     name: str,
     kinds: list[str],
-    *,
-    test: bool = False,
-    bench: bool = False,
-    doctest: bool = False,
-    features: list[str] | None = None,
+    properties: TargetProperties = TargetProperties(),
 ) -> dict[str, typ.Any]:
     """Build a Cargo metadata target row."""
     return {
         "name": name,
         "kind": kinds,
-        "test": test,
-        "bench": bench,
-        "doctest": doctest,
-        "required-features": features or [],
+        "test": properties.test,
+        "bench": properties.bench,
+        "doctest": properties.doctest,
+        "required-features": list(properties.features),
     }

@@ -26,6 +26,24 @@ class LockRecord:
     device_inode: str
 
 
+@dataclasses.dataclass(frozen=True)
+class StallReportContext:
+    """Capture one process state for the runner's bounded-failure report.
+
+    The supervisor is the only producer. Keep the report inputs together so
+    diagnostics reflect one command and its environment at the same instant.
+    """
+
+    tree: OwnedProcessTree
+    command: tuple[str, ...]
+    cwd: pathlib.Path
+    environment: dict[str, str]
+    target_directory: pathlib.Path | None
+    elapsed_seconds: float
+    timeout_seconds: float
+    reason: str
+
+
 def parse_proc_locks(contents: str) -> tuple[LockRecord, ...]:
     """Parse holder and waiter records from ``/proc/locks`` text."""
     records: list[LockRecord] = []
@@ -62,80 +80,123 @@ def lock_path_identities(
     environment: dict[str, str], target_directory: pathlib.Path | None
 ) -> dict[str, str]:
     """Map known Cargo lock-file device/inode pairs to readable paths."""
-    configured_cargo_home = environment.get("CARGO_HOME")
-    cargo_home = (
-        pathlib.Path(configured_cargo_home).expanduser()
-        if configured_cargo_home
+    candidates = _known_lock_candidates(environment, target_directory)
+    return {
+        identity: f"{label} ({path})"
+        for label, path in candidates.items()
+        if (identity := _path_identity(path)) is not None
+    }
+
+
+def _known_lock_candidates(
+    environment: dict[str, str], target_directory: pathlib.Path | None
+) -> dict[str, pathlib.Path]:
+    """Collect package-cache and selected target-directory lock paths."""
+    cargo_home = _cargo_home(environment)
+    candidates = _cargo_home_lock_candidates(cargo_home)
+    return {
+        **candidates,
+        **(
+            _target_lock_candidates(target_directory)
+            if target_directory is not None
+            else {}
+        ),
+    }
+
+
+def _cargo_home(environment: dict[str, str]) -> pathlib.Path:
+    """Resolve Cargo's configured home without changing the process environment."""
+    configured = environment.get("CARGO_HOME")
+    return (
+        pathlib.Path(configured).expanduser()
+        if configured
         else pathlib.Path.home() / ".cargo"
     )
-    candidates: dict[str, pathlib.Path] = {
+
+
+def _path_identity(path: pathlib.Path) -> str | None:
+    """Return a stable device/inode key for a visible Cargo lock file."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    major, minor = os.major(stat.st_dev), os.minor(stat.st_dev)
+    return _normalize_device_inode(f"{major:x}:{minor:x}:{stat.st_ino}")
+
+
+def _cargo_home_lock_candidates(cargo_home: pathlib.Path) -> dict[str, pathlib.Path]:
+    """Map Cargo-home package-cache locks to their configured paths."""
+    return {
         "Cargo package cache": cargo_home / ".package-cache",
         "Cargo package cache mutation lock": cargo_home / ".package-cache-mutate",
     }
-    if target_directory is not None:
-        candidates["Cargo target directory"] = target_directory / ".cargo-lock"
-        for profile in ("debug", "release"):
-            candidates[f"Cargo {profile} target lock"] = (
-                target_directory / profile / ".cargo-lock"
-            )
-    identities: dict[str, str] = {}
-    for label, path in candidates.items():
-        try:
-            stat = path.stat()
-        except OSError:
-            continue
-        major, minor = os.major(stat.st_dev), os.minor(stat.st_dev)
-        identities[_normalize_device_inode(f"{major:x}:{minor:x}:{stat.st_ino}")] = (
-            f"{label} ({path})"
+
+
+def _target_lock_candidates(
+    target_directory: pathlib.Path,
+) -> dict[str, pathlib.Path]:
+    """Map Cargo target-directory locks for common build profiles."""
+    return {
+        label: target_directory / relative
+        for label, relative in (
+            ("Cargo target directory", pathlib.Path(".cargo-lock")),
+            ("Cargo debug target lock", pathlib.Path("debug/.cargo-lock")),
+            ("Cargo release target lock", pathlib.Path("release/.cargo-lock")),
         )
-    return identities
+    }
 
 
-def format_stall_report(
-    tree: OwnedProcessTree,
-    *,
-    command: tuple[str, ...],
-    cwd: pathlib.Path,
-    environment: dict[str, str],
-    target_directory: pathlib.Path | None,
-    elapsed_seconds: float,
-    timeout_seconds: float,
-    reason: str,
-) -> str:
+def format_stall_report(context: StallReportContext) -> str:
     """Render process, toolchain, and known Cargo lock diagnostics."""
     lines = [
-        f"test runner: {reason} after {elapsed_seconds:.1f}s "
-        f"(deadline {timeout_seconds:.1f}s)",
-        f"  command: {shlex.join(command)}",
-        f"  working directory: {cwd}",
+        f"test runner: {context.reason} after {context.elapsed_seconds:.1f}s "
+        f"(deadline {context.timeout_seconds:.1f}s)",
+        f"  command: {shlex.join(context.command)}",
+        f"  working directory: {context.cwd}",
     ]
-    lines.extend(_toolchain_lines(cwd, environment))
-    lines.extend(_process_lines(tree))
-    lines.extend(_lock_lines(tree, environment, target_directory))
+    lines.extend(_toolchain_lines(context.cwd, context.environment))
+    lines.extend(_process_lines(context.tree))
+    lines.extend(
+        _lock_lines(context.tree, context.environment, context.target_directory)
+    )
     return "\n".join(lines)
 
 
 def _toolchain_lines(cwd: pathlib.Path, environment: dict[str, str]) -> list[str]:
     """Describe the selected toolchain and environment used by Cargo."""
-    lines = ["  toolchain/environment:"]
-    for name in (
+    return [
+        "  toolchain/environment:",
+        *_configured_toolchain_lines(environment),
+        *_toolchain_file_lines(cwd),
+    ]
+
+
+def _configured_toolchain_lines(environment: dict[str, str]) -> list[str]:
+    """List the environment values that can affect Cargo or rustc."""
+    names = (
         "RUSTUP_TOOLCHAIN",
         "RUSTC",
         "RUSTC_WRAPPER",
         "CARGO",
         "CARGO_HOME",
         "CARGO_TARGET_DIR",
-    ):
-        if value := environment.get(name):
-            lines.append(f"    {name}={value}")
+    )
+    return [f"    {name}={value}" for name in names if (value := environment.get(name))]
+
+
+def _toolchain_file_lines(cwd: pathlib.Path) -> list[str]:
+    """Summarize the nearest repository toolchain file when present."""
     toolchain = _find_toolchain_file(cwd)
-    if toolchain is not None:
-        try:
-            contents = toolchain.read_text(encoding="utf-8").strip().replace("\n", "; ")
-        except OSError:
-            contents = "unavailable"
-        lines.append(f"    toolchain file: {toolchain} ({contents[:512]})")
-    return lines
+    return [_toolchain_file_line(toolchain)] if toolchain is not None else []
+
+
+def _toolchain_file_line(toolchain: pathlib.Path) -> str:
+    """Read a bounded toolchain-file summary for stall diagnostics."""
+    try:
+        contents = toolchain.read_text(encoding="utf-8").strip().replace("\n", "; ")
+    except OSError:
+        contents = "unavailable"
+    return f"    toolchain file: {toolchain} ({contents[:512]})"
 
 
 def _process_lines(tree: OwnedProcessTree) -> list[str]:
@@ -173,32 +234,77 @@ def _lock_lines(
     """Map known Cargo lock inodes and classify runner-owned waiters."""
     if not tree.proc_available:
         return ["  lock diagnostics: unsupported; Linux /proc is unavailable"]
+    records_or_error = _read_lock_records()
+    if isinstance(records_or_error, str):
+        return [records_or_error]
+    return _format_lock_records(tree, records_or_error, environment, target_directory)
+
+
+def _read_lock_records() -> tuple[LockRecord, ...] | str:
+    """Read and parse the current lock table or return its diagnostic."""
     try:
         lock_text = pathlib.Path("/proc/locks").read_text(encoding="utf-8")
     except OSError as exc:
-        return [f"  lock diagnostics: could not read /proc/locks: {exc}"]
+        return f"  lock diagnostics: could not read /proc/locks: {exc}"
+    return parse_proc_locks(lock_text)
+
+
+def _format_lock_records(
+    tree: OwnedProcessTree,
+    records: tuple[LockRecord, ...],
+    environment: dict[str, str],
+    target_directory: pathlib.Path | None,
+) -> list[str]:
+    """Map parsed lock records to known paths and classify owned waiters."""
     identities = lock_path_identities(environment, target_directory)
-    locks = parse_proc_locks(lock_text)
     owned_pids = {owned.info.pid for owned in tree.live_owned()}
-    relevant = [record for record in locks if record.device_inode in identities]
-    lines = ["  known Cargo lock ownership and waiters:"]
+    relevant = tuple(record for record in records if record.device_inode in identities)
     if not relevant:
-        lines.append("    no locks on mapped Cargo package-cache or target files")
-        return lines
-    for record in relevant:
-        path = identities[record.device_inode]
-        role = "waiter" if record.waiter else "holder"
-        owner = "owned" if record.pid in owned_pids else "external"
-        lines.append(
-            f"    {path}: {role} pid={record.pid} owner={owner} "
-            f"{record.lock_type} {record.mode}"
-        )
-    for waiter in (record for record in relevant if record.waiter):
-        if waiter.pid not in owned_pids:
+        return [
+            "  known Cargo lock ownership and waiters:",
+            "    no locks on mapped Cargo package-cache or target files",
+        ]
+    return [
+        "  known Cargo lock ownership and waiters:",
+        *_visible_lock_lines(relevant, identities, owned_pids),
+        *_waiter_diagnosis_lines(tree, relevant, identities, owned_pids),
+    ]
+
+
+def _visible_lock_lines(
+    records: tuple[LockRecord, ...], identities: dict[str, str], owned_pids: set[int]
+) -> list[str]:
+    """Describe visible holders and waiters with their lock ownership."""
+    return [_format_lock_record(record, identities, owned_pids) for record in records]
+
+
+def _format_lock_record(
+    record: LockRecord, identities: dict[str, str], owned_pids: set[int]
+) -> str:
+    """Format one visible Cargo-related lock record."""
+    path = identities[record.device_inode]
+    role = "waiter" if record.waiter else "holder"
+    owner = "owned" if record.pid in owned_pids else "external"
+    return (
+        f"    {path}: {role} pid={record.pid} owner={owner} "
+        f"{record.lock_type} {record.mode}"
+    )
+
+
+def _waiter_diagnosis_lines(
+    tree: OwnedProcessTree,
+    records: tuple[LockRecord, ...],
+    identities: dict[str, str],
+    owned_pids: set[int],
+) -> list[str]:
+    """Classify each lock request made by a live owned process."""
+    lines: list[str] = []
+    for waiter in records:
+        if not waiter.waiter or waiter.pid not in owned_pids:
             continue
         holders = tuple(
             record
-            for record in relevant
+            for record in records
             if not record.waiter and record.device_inode == waiter.device_inode
         )
         classification = classify_lock_waiter(
