@@ -11,6 +11,8 @@ from collections.abc import Iterable
 
 from test_runner_process_tree import OwnedProcessTree
 
+_PROCESS_COMMAND_LIMIT = 256
+
 
 @dataclasses.dataclass(frozen=True)
 class LockRecord:
@@ -147,11 +149,20 @@ def _process_lines(tree: OwnedProcessTree) -> list[str]:
             lines.append(
                 f"    pid={info.pid} ppid={info.parent_pid} "
                 f"elapsed={max(0.0, now - owned.first_seen):.1f}s "
-                f"state={info.state} command={info.command or '[unavailable]'}"
+                f"state={info.state} "
+                f"command={_display_process_command(info.command)}"
             )
     else:
         lines.append("    no live owned process entries are visible")
     return lines
+
+
+def _display_process_command(command: str) -> str:
+    """Keep diagnostic command lines readable while retaining their prefix."""
+    if len(command) <= _PROCESS_COMMAND_LIMIT:
+        return command or "[unavailable]"
+    visible_length = _PROCESS_COMMAND_LIMIT - len("... [truncated]")
+    return f"{command[:visible_length]}... [truncated]"
 
 
 def _lock_lines(
