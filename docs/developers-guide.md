@@ -81,6 +81,13 @@ retrying. Do not delete Cargo lock files, use a separate `CARGO_HOME`, or
 terminate unrelated processes. These diagnostics describe the observed process
 and lock state; they do not establish a Cargo-internal cause.
 
+Use `uv run --no-project --python 3.14 python scripts/test_runner.py
+--supervise --timeout 180 -- <command>` for a bounded investigation of a legacy
+command that needs the same process-tree cleanup and lock diagnostics. This
+mode runs the supplied command directly; it does not split Cargo test phases.
+See [the issue 188 investigation](cargo-package-cache-investigation.md) for
+the bounded Rust 1.88 attempt and its limitations.
+
 ### 2.4. Coverage action boundary
 
 The pull-request coverage step pins shared-actions
