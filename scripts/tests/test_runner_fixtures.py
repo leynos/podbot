@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import pathlib
 import typing as typ
 
@@ -41,6 +42,19 @@ def package_document(root: pathlib.Path) -> dict[str, typ.Any]:
             }
         ],
     }
+
+
+def workspace_with_sibling_package(root: pathlib.Path) -> dict[str, typ.Any]:
+    """Add a sibling package with a same-named nested Cargo target."""
+    metadata = package_document(root)
+    sibling = copy.deepcopy(metadata["packages"][0])
+    sibling["id"] = "path+file:///workspace/sibling#sibling@0.1.0"
+    sibling["name"] = "sibling"
+    sibling["manifest_path"] = str(root / "sibling" / "Cargo.toml")
+    metadata["workspace_members"].append(sibling["id"])
+    metadata["workspace_default_members"].append(sibling["id"])
+    metadata["packages"].append(sibling)
+    return metadata
 
 
 def _target(

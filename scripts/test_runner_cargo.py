@@ -1,4 +1,14 @@
-"""Read Cargo metadata and rebuild the runtime environment for test binaries."""
+"""Load Cargo metadata and restore the environment for direct test execution.
+
+This module selects test executables from the current Cargo JSON build and
+recreates the package and dynamic-library variables Cargo normally supplies.
+The JSON parser provides a small, stable entry point for consuming that stream.
+
+Examples
+--------
+>>> parse_cargo_json_message('{"reason":"build-finished","success":true}')
+{'reason': 'build-finished', 'success': True}
+"""
 
 from __future__ import annotations
 

@@ -106,6 +106,10 @@ def _consume_cargo_argument(
     argument = arguments[index]
     option, separator, attached = argument.partition("=")
     attached_value = attached if separator else None
+    if argument.startswith("-p") and not argument.startswith("--"):
+        if len(argument) > 2 and not separator:
+            option = "-p"
+            attached_value = argument[2:]
     next_index = _consume_value_option(arguments, index, option, attached_value, state)
     if next_index is not None:
         return next_index
