@@ -87,7 +87,8 @@ clean: ## Remove build artefacts
 test: ## Run tests with warnings treated as errors
 	RUSTFLAGS="$(RUST_FLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		python scripts/test_runner.py --cargo "$(CARGO)" \
-		--timeout "$(TEST_TIMEOUT)" -- $(TEST_FLAGS) $(BUILD_JOBS)
+		--timeout "$(TEST_TIMEOUT)" -- \
+		$(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(TEST_FLAGS)
 
 target/%/$(TARGET): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(TARGET)
