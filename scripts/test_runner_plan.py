@@ -23,6 +23,13 @@ phase:
 ...             "bench": False,
 ...             "doctest": False,
 ...             "required-features": [],
+...         }, {
+...             "name": "cli_feature_gating",
+...             "kind": ["test"],
+...             "test": True,
+...             "bench": False,
+...             "doctest": False,
+...             "required-features": [],
 ...         }],
 ...     }],
 ... }

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import copy
+import json
 import pathlib
+import textwrap
 import typing as typ
+
+import pytest
 
 
 def package_document(root: pathlib.Path) -> dict[str, typ.Any]:
@@ -42,6 +46,96 @@ def package_document(root: pathlib.Path) -> dict[str, typ.Any]:
             }
         ],
     }
+
+
+def fake_cargo_environment(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    build_exit: int = 0,
+    test_exit: int = 0,
+    ordinary_exit: int = 0,
+    doctest_exit: int = 0,
+    metadata: dict[str, typ.Any] | None = None,
+) -> dict[str, str]:
+    """Write fake Cargo and current-build test executables for runner tests."""
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text(
+        json.dumps(metadata or package_document(tmp_path)), encoding="utf-8"
+    )
+    cargo_path = tmp_path / "fake-cargo.py"
+    cargo_path.write_text(
+        textwrap.dedent(
+            """\
+            #!/usr/bin/env python3
+            import json
+            import os
+            import pathlib
+            import sys
+            import time
+
+            args = sys.argv[1:]
+            if args[0] == "metadata":
+                print(pathlib.Path(os.environ["FAKE_METADATA"]).read_text())
+                raise SystemExit(0)
+            with pathlib.Path(os.environ["FAKE_COMMANDS"]).open("a") as commands:
+                commands.write(json.dumps(args) + "\\n")
+            if "--no-run" in args:
+                status = int(os.environ["FAKE_BUILD_EXIT"])
+                if status:
+                    raise SystemExit(status)
+                test_targets = [
+                    args[index + 1]
+                    for index, argument in enumerate(args[:-1])
+                    if argument == "--test"
+                ]
+                for target_name in test_targets:
+                    executable = pathlib.Path(os.environ["FAKE_EXECUTABLE"])
+                    executable = executable.with_name(f"{target_name}-current")
+                    executable.parent.mkdir(parents=True, exist_ok=True)
+                    executable.write_text(
+                        "#!/usr/bin/env python3\\n"
+                        "import json, os, pathlib, sys\\n"
+                        "if os.environ.get('FAKE_REQUIRE_BUILD_RETURNED') == 'true' and not pathlib.Path(os.environ['FAKE_BUILD_RETURNED']).exists():\\n"
+                        "    raise SystemExit(41)\\n"
+                        "pathlib.Path(os.environ['FAKE_TEST_ARGS']).write_text(json.dumps(sys.argv[1:]))\\n"
+                        "raise SystemExit(int(os.environ['FAKE_TEST_EXIT']))\\n"
+                    )
+                    executable.chmod(0o755)
+                    message = {
+                        "reason": "compiler-artifact",
+                        "package_id": "path+file:///workspace/podbot#podbot@0.1.0",
+                        "target": {"name": target_name, "kind": ["test"]},
+                        "profile": {"test": True, "debug_assertions": True},
+                        "executable": str(executable),
+                        "filenames": [str(executable)],
+                    }
+                    print(json.dumps(message), flush=True)
+                time.sleep(0.05)
+                raise SystemExit(0)
+            if "--doc" in args:
+                raise SystemExit(int(os.environ["FAKE_DOCTEST_EXIT"]))
+            raise SystemExit(int(os.environ["FAKE_ORDINARY_EXIT"]))
+            """
+        ),
+        encoding="utf-8",
+    )
+    cargo_path.chmod(0o755)
+    values = {
+        "FAKE_METADATA": str(metadata_path),
+        "FAKE_CARGO": str(cargo_path),
+        "FAKE_COMMANDS": str(tmp_path / "commands.jsonl"),
+        "FAKE_EXECUTABLE": str(tmp_path / "target/debug/deps/compile_contract-current"),
+        "FAKE_BUILD_RETURNED": str(tmp_path / "build-returned"),
+        "FAKE_TEST_ARGS": str(tmp_path / "test-args.json"),
+        "FAKE_BUILD_EXIT": str(build_exit),
+        "FAKE_TEST_EXIT": str(test_exit),
+        "FAKE_ORDINARY_EXIT": str(ordinary_exit),
+        "FAKE_DOCTEST_EXIT": str(doctest_exit),
+    }
+    for name, value in values.items():
+        monkeypatch.setenv(name, value)
+    return values
 
 
 def workspace_with_sibling_package(root: pathlib.Path) -> dict[str, typ.Any]:
