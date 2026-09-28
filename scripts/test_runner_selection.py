@@ -104,23 +104,34 @@ def targets_matching(
     targets: tuple[Target, ...], selector: str, pattern: str | None
 ) -> tuple[Target, ...]:
     """Return targets matching one singular or plural Cargo selector."""
-    if selector == "all-targets":
-        return tuple(target for target in targets if target.is_test or target.is_bench)
-    if selector == "lib":
-        return tuple(target for target in targets if "lib" in target.kinds)
-    if selector == "bins":
-        return tuple(target for target in targets if "bin" in target.kinds)
-    if selector == "examples":
-        return tuple(target for target in targets if "example" in target.kinds)
-    if selector == "tests":
-        return tuple(
-            target
-            for target in targets
-            if target.is_test
-            and bool(set(target.kinds) & {"lib", "bin", "test", "example"})
-        )
-    if selector == "benches":
-        return tuple(target for target in targets if target.is_bench)
+    match selector:
+        case "all-targets":
+            return tuple(
+                target for target in targets if target.is_test or target.is_bench
+            )
+        case "lib":
+            return tuple(target for target in targets if "lib" in target.kinds)
+        case "bins":
+            return tuple(target for target in targets if "bin" in target.kinds)
+        case "examples":
+            return tuple(target for target in targets if "example" in target.kinds)
+        case "tests":
+            return tuple(
+                target
+                for target in targets
+                if target.is_test
+                and bool(set(target.kinds) & {"lib", "bin", "test", "example"})
+            )
+        case "benches":
+            return tuple(target for target in targets if target.is_bench)
+        case _:
+            return _matching_named_targets(targets, selector, pattern)
+
+
+def _matching_named_targets(
+    targets: tuple[Target, ...], selector: str, pattern: str | None
+) -> tuple[Target, ...]:
+    """Match singular Cargo target kinds and fail clearly when none exist."""
     matches = tuple(
         target
         for target in targets
