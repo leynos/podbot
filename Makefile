@@ -120,6 +120,10 @@ workflow-contracts: ## Assert what the workflow files must say
 	@$(WORKFLOW_PYTEST) $(WORKFLOW_PY_TESTS) \
 		scripts/workflow_contracts.py scripts/workflow_commands.py \
 		scripts/workflow_condition.py scripts/workflow_coverage.py scripts/workflow_placement.py \
+		scripts/test_runner.py scripts/test_runner_cargo.py \
+		scripts/test_runner_models.py scripts/test_runner_options.py \
+		scripts/test_runner_plan.py scripts/test_runner_registry.py \
+		scripts/test_runner_selection.py \
 		scripts/check_sccache_health.py \
 		--doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider

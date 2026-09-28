@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import pathlib
 import textwrap
@@ -13,8 +14,25 @@ import test_runner
 from test_runner_fixtures import package_document
 
 
+@pytest.fixture
+def cargo_command_reader(
+    tmp_path: pathlib.Path,
+) -> typ.Callable[[], list[list[str]]]:
+    """Read fake Cargo invocations after each runner execution."""
+    command_file = tmp_path / "commands.jsonl"
+
+    def read_commands() -> list[list[str]]:
+        if not command_file.exists():
+            return []
+        return [json.loads(line) for line in command_file.read_text().splitlines()]
+
+    return read_commands
+
+
 def test_cargo_build_exits_before_nested_test_process_starts(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cargo_command_reader: typ.Callable[[], list[list[str]]],
 ) -> None:
     """The executable observes a completion marker written after Cargo wait."""
     environment = _fake_cargo_environment(tmp_path, monkeypatch)
@@ -35,10 +53,7 @@ def test_cargo_build_exits_before_nested_test_process_starts(
     assert status == 0
     invocation = json.loads(pathlib.Path(environment["FAKE_TEST_ARGS"]).read_text())
     assert invocation == []
-    commands = [
-        json.loads(line)
-        for line in pathlib.Path(environment["FAKE_COMMANDS"]).read_text().splitlines()
-    ]
+    commands = cargo_command_reader()
     build = next(command for command in commands if "--no-run" in command)
     assert build.index("--test") < build.index("--message-format=json")
     assert build[build.index("--package") + 1] == "podbot"
@@ -100,7 +115,9 @@ def test_build_and_direct_test_failures_propagate(
 
 
 def test_ordinary_failure_stops_nested_phase_by_default(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cargo_command_reader: typ.Callable[[], list[list[str]]],
 ) -> None:
     """Default fail-fast behaviour stops after ordinary tests fail."""
     environment = _fake_cargo_environment(tmp_path, monkeypatch, ordinary_exit=23)
@@ -109,16 +126,45 @@ def test_ordinary_failure_stops_nested_phase_by_default(
         ["--cargo", environment["FAKE_CARGO"], "--", "--all-targets"]
     )
 
-    commands = [
-        json.loads(line)
-        for line in pathlib.Path(environment["FAKE_COMMANDS"]).read_text().splitlines()
-    ]
+    commands = cargo_command_reader()
     assert status == 23
     assert not any("--no-run" in command for command in commands)
 
 
+def test_fail_fast_reports_unstarted_workspace_package(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cargo_command_reader: typ.Callable[[], list[list[str]]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A failure names ordinary package phases that fail-fast skips."""
+    metadata = package_document(tmp_path)
+    sibling = copy.deepcopy(metadata["packages"][0])
+    sibling["id"] = "path+file:///workspace/sibling#sibling@0.1.0"
+    sibling["name"] = "sibling"
+    sibling["manifest_path"] = str(tmp_path / "sibling" / "Cargo.toml")
+    metadata["workspace_members"].append(sibling["id"])
+    metadata["workspace_default_members"].append(sibling["id"])
+    metadata["packages"].append(sibling)
+    environment = _fake_cargo_environment(
+        tmp_path, monkeypatch, ordinary_exit=23, metadata=metadata
+    )
+
+    status = test_runner.main(
+        ["--cargo", environment["FAKE_CARGO"], "--", "--workspace", "--all-targets"]
+    )
+
+    commands = cargo_command_reader()
+    output = capsys.readouterr().out
+    assert status == 23
+    assert "remaining packages: sibling" in output
+    assert not any("sibling" in command for command in commands)
+
+
 def test_no_fail_fast_continues_after_ordinary_failure(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cargo_command_reader: typ.Callable[[], list[list[str]]],
 ) -> None:
     """`--no-fail-fast` still runs the isolated compile-contract target."""
     environment = _fake_cargo_environment(tmp_path, monkeypatch, ordinary_exit=23)
@@ -127,10 +173,7 @@ def test_no_fail_fast_continues_after_ordinary_failure(
         ["--cargo", environment["FAKE_CARGO"], "--", "--all-targets", "--no-fail-fast"]
     )
 
-    commands = [
-        json.loads(line)
-        for line in pathlib.Path(environment["FAKE_COMMANDS"]).read_text().splitlines()
-    ]
+    commands = cargo_command_reader()
     assert status == 23
     assert any("--no-run" in command for command in commands)
 
@@ -142,10 +185,13 @@ def _fake_cargo_environment(
     build_exit: int = 0,
     test_exit: int = 0,
     ordinary_exit: int = 0,
+    metadata: dict[str, typ.Any] | None = None,
 ) -> dict[str, str]:
     """Write fake Cargo and a test executable controlled by environment."""
     metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text(json.dumps(package_document(tmp_path)), encoding="utf-8")
+    metadata_path.write_text(
+        json.dumps(metadata or package_document(tmp_path)), encoding="utf-8"
+    )
     cargo_path = tmp_path / "fake-cargo.py"
     cargo_path.write_text(
         textwrap.dedent(

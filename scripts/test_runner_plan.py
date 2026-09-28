@@ -5,7 +5,7 @@ from __future__ import annotations
 import pathlib
 import typing as typ
 
-from test_runner_models import CargoTestOptions, TestPlan
+from test_runner_models import CargoTestOptions, CargoTestPlan
 from test_runner_selection import (
     cargo_target_arguments,
     select_packages,
@@ -18,7 +18,7 @@ from test_runner_registry import NESTED_CARGO_TARGETS
 
 def create_test_plan(
     metadata: dict[str, typ.Any], options: CargoTestOptions
-) -> TestPlan:
+) -> CargoTestPlan:
     """Expand metadata and options into ordinary, doc, and nested phases.
 
     Examples
@@ -72,7 +72,7 @@ def create_test_plan(
     )
     if not target_directory.is_absolute():
         target_directory = pathlib.Path.cwd() / target_directory
-    return TestPlan(
+    return CargoTestPlan(
         options=options,
         selected_packages=packages,
         selected_targets=selected,

@@ -147,64 +147,118 @@ def cargo_target_arguments(
     arguments: list[str] = []
     selectors = options.selectors or (("default", None),)
     for selector, pattern in selectors:
-        if selector == "all-targets":
-            for group, kind in (
-                ("--lib", "lib"),
-                ("--bins", "bin"),
-                ("--examples", "example"),
-                ("--benches", "bench"),
-            ):
-                if any(
-                    kind in target.kinds or (group == "--benches" and target.is_bench)
-                    for target in all_targets
-                ):
-                    arguments.append(group)
-            candidates = tuple(
-                target for target in all_targets if "test" in target.kinds
-            )
-            arguments.extend(
-                part
-                for target in candidates
-                if target not in omitted
-                for part in ("--test", target.name)
-            )
-        elif selector == "tests":
-            for group, kind in (("--lib", "lib"), ("--bins", "bin")):
-                if any(kind in target.kinds for target in selected):
-                    arguments.append(group)
-            candidates = tuple(
-                target
-                for target in selected
-                if bool(set(target.kinds) & {"test", "example"}) and target.is_test
-            )
-            arguments.extend(
-                part
-                for target in candidates
-                if target not in omitted
-                for part in target.cargo_selector()
-            )
-        elif selector in {"benches", "bins", "examples", "lib"}:
-            group = f"--{selector}"
-            kind = selector[:-1] if selector.endswith("s") else selector
-            if selector == "benches" or any(
-                kind in target.kinds for target in selected
-            ):
-                arguments.append(group)
-        elif selector == "default":
-            for target in selected:
-                if target not in omitted:
-                    arguments.extend(target.cargo_selector())
-        else:
-            candidates = tuple(
-                target
-                for target in selected
-                if target.name == pattern
-                or fnmatch.fnmatchcase(target.name, pattern or "")
-            )
-            for target in candidates:
-                if target not in omitted:
-                    arguments.extend(target.cargo_selector())
+        arguments.extend(
+            _arguments_for_selector(selector, pattern, all_targets, selected, omitted)
+        )
     return tuple(_deduplicate_selectors(arguments))
+
+
+def _arguments_for_selector(
+    selector: str,
+    pattern: str | None,
+    all_targets: tuple[Target, ...],
+    selected: tuple[Target, ...],
+    omitted: set[Target],
+) -> tuple[str, ...]:
+    """Dispatch one Cargo target selector to its argument builder."""
+    match selector:
+        case "all-targets":
+            return _all_target_arguments(all_targets, omitted)
+        case "tests":
+            return _test_arguments(selected, omitted)
+        case "benches" | "bins" | "examples" | "lib":
+            return _group_arguments(selector, selected)
+        case "default":
+            return _default_arguments(selected, omitted)
+        case _:
+            return _named_target_arguments(pattern, selected, omitted)
+
+
+def _all_target_arguments(
+    targets: tuple[Target, ...], omitted: set[Target]
+) -> tuple[str, ...]:
+    """Expand Cargo's all-target selector while excluding nested tests."""
+    arguments: list[str] = []
+    for group, kind in (
+        ("--lib", "lib"),
+        ("--bins", "bin"),
+        ("--examples", "example"),
+        ("--benches", "bench"),
+    ):
+        if any(
+            kind in target.kinds or (group == "--benches" and target.is_bench)
+            for target in targets
+        ):
+            arguments.append(group)
+    arguments.extend(
+        part
+        for target in targets
+        if "test" in target.kinds and target not in omitted
+        for part in ("--test", target.name)
+    )
+    return tuple(arguments)
+
+
+def _test_arguments(
+    targets: tuple[Target, ...], omitted: set[Target]
+) -> tuple[str, ...]:
+    """Expand Cargo's tests selector into libraries, bins and test targets."""
+    arguments = [
+        group
+        for group, kind in (("--lib", "lib"), ("--bins", "bin"))
+        if any(kind in target.kinds for target in targets)
+    ]
+    candidates = tuple(
+        target
+        for target in targets
+        if bool(set(target.kinds) & {"test", "example"}) and target.is_test
+    )
+    arguments.extend(
+        part
+        for target in candidates
+        if target not in omitted
+        for part in target.cargo_selector()
+    )
+    return tuple(arguments)
+
+
+def _group_arguments(selector: str, targets: tuple[Target, ...]) -> tuple[str, ...]:
+    """Return a plural Cargo target selector when the package has that kind."""
+    kind = selector[:-1] if selector.endswith("s") else selector
+    if selector == "benches" or any(kind in target.kinds for target in targets):
+        return (f"--{selector}",)
+    return ()
+
+
+def _default_arguments(
+    targets: tuple[Target, ...], omitted: set[Target]
+) -> tuple[str, ...]:
+    """Select default test targets except those that invoke nested Cargo."""
+    return tuple(
+        part
+        for target in targets
+        if target not in omitted
+        for part in target.cargo_selector()
+    )
+
+
+def _named_target_arguments(
+    pattern: str | None,
+    targets: tuple[Target, ...],
+    omitted: set[Target],
+) -> tuple[str, ...]:
+    """Select explicitly named or globbed Cargo targets."""
+    candidates = tuple(
+        target
+        for target in targets
+        if target.name == pattern or fnmatch.fnmatchcase(target.name, pattern or "")
+    )
+    return tuple(
+        part
+        for target in candidates
+        if target not in omitted
+        for part in target.cargo_selector()
+    )
 
 
 def validate_nested_registry(metadata: dict[str, typ.Any]) -> None:
