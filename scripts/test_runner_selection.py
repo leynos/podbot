@@ -1,4 +1,15 @@
-"""Expand Cargo metadata package and target selection for test execution."""
+"""Select workspace packages and targets from Cargo metadata.
+
+These selectors apply explicit package and target filters while retaining the
+metadata identity required by later build and artifact phases. For example:
+
+>>> target = Target(
+...     "podbot", "id", pathlib.Path("."), "api", ("test",),
+...     True, False, False, ()
+... )
+>>> targets_matching((target,), "tests", None)[0].name
+'api'
+"""
 
 from __future__ import annotations
 
