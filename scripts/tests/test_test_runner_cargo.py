@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import pathlib
 import typing as typ
-from types import SimpleNamespace
 
 import pytest
 import test_runner_cargo
@@ -153,7 +152,7 @@ def test_relative_cargo_executable_path_is_anchored_before_chdir(
 
 
 def test_relative_manifest_is_anchored_to_caller_directory(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path,
 ) -> None:
     """Metadata commands retain caller-relative manifest and target paths."""
     caller_directory = tmp_path / "caller"
@@ -164,25 +163,34 @@ def test_relative_manifest_is_anchored_to_caller_directory(
     expected_target_directory = caller_directory / "build"
     observed: dict[str, typ.Any] = {}
 
-    def fake_run(command: list[str], *, cwd: pathlib.Path, **_: typ.Any) -> typ.Any:
-        observed["command"] = command
-        observed["cwd"] = cwd
-        observed["encoding"] = _.get("encoding")
-        return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+    class FakeSupervisor:
+        def run_capture(
+            self,
+            command: list[str],
+            cwd: pathlib.Path,
+            _environment: dict[str, str],
+            *,
+            purpose: str,
+        ) -> tuple[int, str, str]:
+            observed["command"] = command
+            observed["cwd"] = cwd
+            observed["purpose"] = purpose
+            return 0, "{}", ""
 
-    monkeypatch.setattr(test_runner_cargo.subprocess, "run", fake_run)
     options = parse_cargo_test_options(
         ["--manifest-path", "../workspace/Cargo.toml", "--target-dir", "build"],
         cwd=caller_directory,
     )
 
-    test_runner_cargo.load_cargo_metadata(("cargo",), options, workspace_directory)
+    test_runner_cargo.load_cargo_metadata(
+        ("cargo",), options, workspace_directory, {}, FakeSupervisor()
+    )
 
     assert observed["cwd"] == workspace_directory, (
         "metadata may run from the selected workspace root"
     )
-    assert observed["encoding"] == "utf-8", (
-        "Cargo metadata must decode consistently across host locales"
+    assert observed["purpose"] == "Cargo metadata", (
+        "metadata subprocesses must be identified to the shared supervisor"
     )
     assert str(expected_manifest) in observed["command"], (
         "relative manifest paths must be anchored before changing directories"
