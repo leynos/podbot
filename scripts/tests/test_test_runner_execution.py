@@ -92,14 +92,22 @@ def test_filters_and_harness_arguments_reach_the_current_artifact(
     ], "Cargo filters and harness arguments must reach the direct test binary"
 
 
-@pytest.mark.parametrize("selector", ["--package=podbot", "-ppodbot"])
+@pytest.mark.parametrize(
+    "selector",
+    [
+        ("--package=podbot",),
+        ("--package", "podbot"),
+        ("-ppodbot",),
+        ("-p", "podbot"),
+    ],
+)
 def test_attached_package_selectors_are_removed_before_per_package_commands(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     cargo_command_reader: typ.Callable[[], list[list[str]]],
-    selector: str,
+    selector: tuple[str, ...],
 ) -> None:
-    """Attached package filters do not duplicate package-scoped phases."""
+    """Package filter spellings do not duplicate package-scoped phases."""
     environment = _fake_cargo_environment(tmp_path, monkeypatch)
 
     status = test_runner.main(
@@ -108,7 +116,7 @@ def test_attached_package_selectors_are_removed_before_per_package_commands(
             environment["FAKE_CARGO"],
             "--",
             "--all-targets",
-            selector,
+            *selector,
         ]
     )
 
@@ -116,6 +124,37 @@ def test_attached_package_selectors_are_removed_before_per_package_commands(
     assert status == 0, "a valid attached package selector must preserve test success"
     assert all(command.count("--package") == 1 for command in commands), (
         "each per-package Cargo phase must receive exactly one package selector"
+    )
+
+
+def test_excluded_workspace_packages_are_removed_from_phase_commands(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cargo_command_reader: typ.Callable[[], list[list[str]]],
+) -> None:
+    """Expanded workspace excludes do not leak into per-package commands."""
+    metadata = workspace_with_sibling_package(tmp_path)
+    environment = _fake_cargo_environment(tmp_path, monkeypatch, metadata=metadata)
+
+    status = test_runner.main(
+        [
+            "--cargo",
+            environment["FAKE_CARGO"],
+            "--",
+            "--workspace",
+            "--exclude",
+            "sibling",
+            "--all-targets",
+        ]
+    )
+
+    commands = cargo_command_reader()
+    assert status == 0, "a valid workspace exclude must preserve test success"
+    assert all("--exclude" not in command for command in commands), (
+        "metadata-expanded workspace excludes must be removed from each phase"
+    )
+    assert all("sibling" not in command for command in commands), (
+        "excluded workspace packages must not get their own test phase"
     )
 
 

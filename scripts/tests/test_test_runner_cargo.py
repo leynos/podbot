@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 import pathlib
 import typing as typ
+from types import SimpleNamespace
 
 import pytest
+import test_runner_cargo
 from test_runner_cargo import create_test_runtime_environment, select_test_executables
 from test_runner_models import RunnerError
 from test_runner_options import parse_cargo_test_options
@@ -54,9 +56,12 @@ def test_artifact_selection_rejects_missing_and_duplicate_current_outputs(
 
 
 def test_runtime_environment_restores_cargo_values_and_library_paths(
-    tmp_path: pathlib.Path,
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Direct execution receives Cargo metadata, binaries, and link paths."""
+    monkeypatch.setattr(
+        test_runner_cargo, "_library_path_variable", lambda: "LD_LIBRARY_PATH"
+    )
     metadata = package_document(tmp_path)
     package = metadata["packages"][0]
     executable = _executable(tmp_path / "target/debug/deps/compile_contract")
@@ -115,6 +120,45 @@ def test_runtime_environment_restores_cargo_values_and_library_paths(
     )
     assert inherited["LD_LIBRARY_PATH"] == "/caller/native", (
         "runtime reconstruction must not mutate the caller's environment"
+    )
+
+
+def test_relative_manifest_is_anchored_to_caller_directory(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Metadata commands retain caller-relative manifest and target paths."""
+    caller_directory = tmp_path / "caller"
+    workspace_directory = tmp_path / "workspace"
+    caller_directory.mkdir()
+    workspace_directory.mkdir()
+    expected_manifest = workspace_directory / "Cargo.toml"
+    expected_target_directory = caller_directory / "build"
+    observed: dict[str, typ.Any] = {}
+
+    def fake_run(command: list[str], *, cwd: pathlib.Path, **_: typ.Any) -> typ.Any:
+        observed["command"] = command
+        observed["cwd"] = cwd
+        return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+
+    monkeypatch.setattr(test_runner_cargo.subprocess, "run", fake_run)
+    options = parse_cargo_test_options(
+        ["--manifest-path", "../workspace/Cargo.toml", "--target-dir", "build"],
+        cwd=caller_directory,
+    )
+
+    test_runner_cargo.load_cargo_metadata(("cargo",), options, workspace_directory)
+
+    assert observed["cwd"] == workspace_directory, (
+        "metadata may run from the selected workspace root"
+    )
+    assert str(expected_manifest) in observed["command"], (
+        "relative manifest paths must be anchored before changing directories"
+    )
+    assert options.manifest_path == expected_manifest, (
+        "metadata package discovery must use the same absolute manifest"
+    )
+    assert str(expected_target_directory) in options.common, (
+        "relative target paths must preserve their caller-relative meaning"
     )
 
 
