@@ -62,6 +62,8 @@ expose it to application code.
 `CommandRequest` carries one child command from a runner phase to the
 supervisor. `StreamCapture` and `ProcessTreeRoot` stay within process I/O and
 cleanup; `StallReportContext` represents one diagnostic snapshot.
+`test_runner_subreaper.py` owns the Linux process-wide child-subreaper controls;
+use them only to scope orphan adoption to supervised test cleanup.
 `TargetArgumentContext` is local to `test_runner_target_arguments.py`, which
 expands Cargo selectors after target selection. `_CargoOptionToken` is local to
 Cargo option parsing. `test_runner_phases.py` sequences ordinary tests,

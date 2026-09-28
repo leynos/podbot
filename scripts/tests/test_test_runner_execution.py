@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import pathlib
+import types
 import typing as typ
 from dataclasses import dataclass
 
 import pytest
 import test_runner
 import test_runner_nested
+import test_runner_phases
 
 from test_runner_fixtures import (
     FakeCargoConfiguration,
@@ -17,6 +19,7 @@ from test_runner_fixtures import (
     workspace_with_sibling_package,
 )
 from test_runner_models import RunnerError
+from test_runner_options import parse_cargo_test_options
 
 
 @pytest.fixture
@@ -63,6 +66,37 @@ def runner_harness(
 ) -> RunnerExecutionHarness:
     """Group resources shared by process-order and phase-failure tests."""
     return RunnerExecutionHarness(tmp_path, monkeypatch, cargo_command_reader)
+
+
+def test_ordinary_cargo_phase_uses_the_planned_workspace_root(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Ordinary Cargo phases stay rooted even if their context cwd differs."""
+    caller_directory = tmp_path / "caller"
+    workspace_root = tmp_path / "workspace"
+    captured_requests = []
+    supervisor = types.SimpleNamespace(
+        run_inherited=lambda request: captured_requests.append(request) or 0
+    )
+    context = types.SimpleNamespace(
+        cargo_command=("cargo",),
+        cwd=caller_directory,
+        environment={},
+        supervisor=supervisor,
+    )
+    options = parse_cargo_test_options([], cwd=caller_directory)
+
+    status = test_runner_phases._run_cargo_test(
+        context,
+        options,
+        ("--lib",),
+        workspace_root=workspace_root,
+    )
+
+    assert status == 0, "the planned ordinary Cargo phase must complete"
+    assert captured_requests[0].cwd == workspace_root, (
+        "ordinary Cargo tests must run from the metadata workspace root"
+    )
 
 
 @pytest.mark.parametrize(

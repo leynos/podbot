@@ -6,13 +6,15 @@ import dataclasses
 import os
 import pathlib
 import signal
-import sys
 import subprocess
 import time
 import typing as typ
 
-_PR_GET_CHILD_SUBREAPER = 37
-_PR_SET_CHILD_SUBREAPER = 36
+from test_runner_subreaper import (
+    enable_child_subreaper as enable_child_subreaper,
+    get_child_subreaper as get_child_subreaper,
+    set_child_subreaper as set_child_subreaper,
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -279,26 +281,6 @@ class OwnedProcessTree:
                 return
 
 
-def enable_child_subreaper() -> bool:
-    """Make this Linux process adopt orphaned descendants when supported."""
-    return set_child_subreaper(True)
-
-
-def get_child_subreaper() -> bool | None:
-    """Read the current Linux child-subreaper flag when supported."""
-    if not sys_is_linux():
-        return None
-    enabled = _prctl(_PR_GET_CHILD_SUBREAPER, read_integer=True)
-    return bool(enabled) if enabled is not None else None
-
-
-def set_child_subreaper(enabled: bool) -> bool:
-    """Set Linux child-subreaper behaviour without affecting other platforms."""
-    if not sys_is_linux():
-        return False
-    return _prctl(_PR_SET_CHILD_SUBREAPER, int(enabled)) == 0
-
-
 def snapshot_direct_child_identities() -> frozenset[tuple[int, int]]:
     """Capture existing direct children before launching an owned process."""
     if not pathlib.Path("/proc").is_dir():
@@ -308,33 +290,6 @@ def snapshot_direct_child_identities() -> frozenset[tuple[int, int]]:
         for process in _read_process_table().values()
         if process.parent_pid == os.getpid()
     )
-
-
-def _prctl(option: int, argument: int = 0, *, read_integer: bool = False) -> int | None:
-    """Call prctl because Python's stdlib has no child-subreaper interface."""
-    import ctypes
-
-    # FIXME(#188): Revisit this bridge if Python adds stdlib subreaper controls.
-    try:
-        if read_integer:
-            value = ctypes.c_int()
-            result = ctypes.CDLL(None, use_errno=True).prctl(
-                option, ctypes.byref(value), 0, 0, 0
-            )
-            return value.value if result == 0 else None
-        return ctypes.CDLL(None, use_errno=True).prctl(option, argument, 0, 0, 0)
-    except (AttributeError, OSError):
-        return None
-
-
-def sys_is_linux() -> bool:
-    """Return whether this host provides Linux procfs and prctl semantics."""
-    return sys_platform().startswith("linux")
-
-
-def sys_platform() -> str:
-    """Return the interpreter's platform identifier."""
-    return sys.platform
 
 
 def _read_process_table() -> dict[int, ProcessInfo]:

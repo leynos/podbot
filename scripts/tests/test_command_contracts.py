@@ -90,16 +90,28 @@ def test_make_test_uses_runner_and_preserves_overrides() -> None:
     default_command = " ".join(default_command.replace("\\\n\t", " ").split())
     override_command = " ".join(override_command.replace("\\\n\t", " ").split())
 
-    assert "uv run --no-project --python 3.14" in default_command
-    assert "python scripts/test_runner.py" in default_command
-    assert '--timeout "1800" -- --all-targets --all-features' in default_command
-    assert 'RUSTFLAGS="-D warnings"' in default_command
+    assert "uv run --no-project --python 3.14" in default_command, (
+        "the test recipe must use the configured Python runtime"
+    )
+    assert "python scripts/test_runner.py" in default_command, (
+        "the test recipe must invoke the bounded test runner"
+    )
+    assert '--timeout "1800" -- --all-targets --all-features' in default_command, (
+        "the default recipe must preserve the full target and feature selection"
+    )
+    assert 'RUSTFLAGS="-D warnings"' in default_command, (
+        "the default recipe must deny compiler warnings"
+    )
     assert (
         '--timeout "42" -- -j 2 --no-default-features --test cli_feature_gating'
         in override_command
+    ), "the test recipe must preserve timeout, job, and test-flag overrides"
+    assert "-- --nocapture" in override_command, (
+        "the test recipe must forward harness arguments"
     )
-    assert "-- --nocapture" in override_command
-    assert 'RUSTFLAGS="-D warnings -W unused"' in override_command
+    assert 'RUSTFLAGS="-D warnings -W unused"' in override_command, (
+        "the test recipe must preserve the caller's Rust flags"
+    )
 
 
 def test_make_workflow_gate_formats_lints_and_documents_runner_modules() -> None:
@@ -123,7 +135,7 @@ def test_make_workflow_gate_formats_lints_and_documents_runner_modules() -> None
         for path in sorted((repository_root / "scripts").glob("test_runner*.py"))
     )
 
-    assert runner_modules
+    assert runner_modules, "the Python test runner must have modules to validate"
     for module in runner_modules:
         assert module in format_command, f"{module} is missing from Ruff formatting"
         assert module in lint_command, f"{module} is missing from Ruff linting"
