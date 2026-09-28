@@ -26,14 +26,13 @@ def test_default_targets_keep_doctests_and_remove_nested_target(
     assert not any(target.name == "benchmarks" for target in plan.selected_targets), (
         "default Cargo tests must not select benchmark targets"
     )
-    assert [target.name for target in plan.nested_targets] == ["compile_contract"], (
-        "the registered nested-Cargo target must have its own phase"
-    )
-    assert "--test" not in plan.ordinary_target_args or all(
-        plan.ordinary_target_args[index + 1] != "compile_contract"
-        for index, value in enumerate(plan.ordinary_target_args[:-1])
-        if value == "--test"
-    ), "ordinary Cargo phases must exclude the registered nested test"
+    assert {target.name for target in plan.nested_targets} == {
+        "cli_feature_gating",
+        "compile_contract",
+    }, "every registered trybuild target must have its own phase"
+    assert not {"cli_feature_gating", "compile_contract"} & set(
+        plan.ordinary_target_args
+    ), "ordinary Cargo phases must exclude every registered trybuild target"
     assert "--doc" not in plan.ordinary_target_args, (
         "doctests must remain in their dedicated Cargo phase"
     )
@@ -49,12 +48,16 @@ def test_all_targets_expands_categories_and_excludes_registered_test(
     assert {"--lib", "--bins", "--examples", "--benches"}.issubset(
         set(plan.ordinary_target_args)
     ), "--all-targets must retain each ordinary target category"
-    assert "compile_contract" not in plan.ordinary_target_args, (
-        "--all-targets must not pass the nested test to an outer Cargo process"
-    )
-    assert "cli_feature_gating" in plan.ordinary_target_args, (
-        "ordinary integration tests must remain selected"
-    )
+    assert not {"cli_feature_gating", "compile_contract"} & set(
+        plan.ordinary_target_args
+    ), "--all-targets must not pass trybuild targets to outer Cargo"
+    assert {target.name for target in plan.selected_targets}.issuperset(
+        {"cli_feature_gating", "compile_contract"}
+    ), "--all-targets must retain registered trybuild targets for their own phase"
+    assert not {target.name for target in plan.ordinary_targets} & {
+        "cli_feature_gating",
+        "compile_contract",
+    }, "registered trybuild targets must not remain in the ordinary inventory"
     assert "--all-features" in options.common, "feature selection must be preserved"
     assert not plan.run_doctests, "--all-targets must not add default doctests"
 
@@ -119,11 +122,30 @@ def test_workspace_phases_scope_same_named_targets_by_package(
     plan = create_test_plan(metadata, options)
     phases = dict(plan.ordinary_package_args)
 
-    assert "compile_contract" not in phases["podbot"], (
-        "Podbot's registered nested target must be excluded from its Cargo phase"
+    for nested_target in ("cli_feature_gating", "compile_contract"):
+        assert nested_target not in phases["podbot"], (
+            "Podbot's registered nested targets must be excluded from its Cargo phase"
+        )
+        assert nested_target in phases["sibling"], (
+            "same-named sibling targets must remain in their owning package phase"
+        )
+
+
+def test_no_default_cli_trybuild_selection_has_no_outer_cargo_phase(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The no-default CLI boundary harness runs after its parent Cargo exits."""
+    options = parse_cargo_test_options(
+        ["--no-default-features", "--test", "cli_feature_gating"]
     )
-    assert "compile_contract" in phases["sibling"], (
-        "a same-named sibling target must remain in its owning package phase"
+
+    plan = create_test_plan(package_document(tmp_path), options)
+
+    assert plan.ordinary_package_args == (), (
+        "the no-default CLI trybuild target must not run under outer Cargo"
+    )
+    assert [target.name for target in plan.nested_targets] == ["cli_feature_gating"], (
+        "the no-default CLI boundary target must use isolated execution"
     )
 
 
@@ -202,13 +224,16 @@ def test_option_values_may_start_with_a_hyphen() -> None:
     )
 
 
-def test_registry_rejects_a_removed_target(tmp_path: pathlib.Path) -> None:
+@pytest.mark.parametrize("target_name", ["cli_feature_gating", "compile_contract"])
+def test_registry_rejects_a_removed_target(
+    tmp_path: pathlib.Path, target_name: str
+) -> None:
     """The registry cannot silently outlive a renamed or removed test target."""
     metadata = package_document(tmp_path)
     metadata["packages"][0]["targets"] = [
         target
         for target in metadata["packages"][0]["targets"]
-        if target["name"] != "compile_contract"
+        if target["name"] != target_name
     ]
 
     with pytest.raises(RunnerError, match="registered nested-Cargo target"):

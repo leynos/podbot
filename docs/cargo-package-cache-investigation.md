@@ -81,19 +81,42 @@ demonstrate process-tree cleanup. The current coverage selection therefore does
 not invoke trybuild. Reassess it if target selection changes; this work does
 not modify the shared action.
 
-The review of shared-action behavior used the pinned
+The review of shared-action behaviour used the pinned
 [`action.yml`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/action.yml),
 [`run_rust.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/run_rust.py),
 and
 [`_cargo_runner.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/_cargo_runner.py).
 
+## Real runner verification
+
+The CI test commands completed sequentially through the runner with the shared
+default Cargo home. In each run Cargo exited before a registered trybuild
+executable started. The observed default run's lock snapshot showed the nested
+Cargo process holding a shared package-cache read lock and no parent Cargo
+process holding the lock.
+
+| Command                                                                                          | Result | Isolated trybuild coverage                               |
+| ------------------------------------------------------------------------------------------------ | ------ | -------------------------------------------------------- |
+| `make test`                                                                                      | Passed | CLI boundary: 1; compile contracts: 4                    |
+| `make test TEST_FLAGS='--no-default-features --test cli_feature_gating --test compile_contract'` | Passed | No-CLI boundary: 1; compile contracts: 4                 |
+| `make test TEST_FLAGS='--features internal'`                                                     | Passed | Compile contracts: 3                                     |
+| `make test TEST_FLAGS='--features internal,experimental'`                                        | Passed | Compile contracts: 4, including the experimental fixture |
+
+An additional `--features experimental` run stopped during the ordinary Cargo
+build before running tests. With the required `-D warnings`, it reports
+`dead_code` for GitHub installation-token methods in `src/github/mod.rs` and
+`src/github/installation_token.rs`. Those source files and the warning policy
+were unchanged by this work. This feature-only selection is not a CI lane;
+experimental compile-contract coverage passed with `--all-features` and with
+`internal,experimental` enabled together.
+
 ## Mitigation and recovery
 
-The supported `make test` path builds registered compile-contract targets with
-`cargo test --no-run`, waits for Cargo to exit, and then launches the exact
-current-build executable. This removes the outer Cargo process from the
-nested-Cargo execution phase while retaining the shared default Cargo cache and
-all registered trybuild fixtures.
+The supported `make test` path builds the registered trybuild targets
+`cli_feature_gating` and `compile_contract` with `cargo test --no-run`, waits
+for Cargo to exit, and then launches each exact current-build executable. This
+removes the outer Cargo process from the nested-Cargo execution phase while
+retaining the shared default Cargo cache and all registered trybuild fixtures.
 
 For the timeout and interruption procedure, read the report emitted by the
 runner and confirm that its owned process tree exited. Allow unrelated Cargo

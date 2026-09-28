@@ -8,5 +8,8 @@ The runner checks every entry against `cargo metadata` before scheduling it.
 from __future__ import annotations
 
 NESTED_CARGO_TARGETS: frozenset[tuple[str, str]] = frozenset(
-    {("podbot", "compile_contract")}
+    {
+        ("podbot", "cli_feature_gating"),
+        ("podbot", "compile_contract"),
+    }
 )
