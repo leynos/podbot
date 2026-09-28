@@ -65,7 +65,7 @@ mockable = { version = "0.1.4", default-features = false, features = ["clock", "
 mockall = "0.15.0"
 proptest = "1.9.0"
 snafu = "0.9.1"
-rstest = "0.26.1"
+rstest = "0.27.0"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["compile-time-validation"] }
 serde_json = "1.0.149"
