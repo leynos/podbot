@@ -77,22 +77,28 @@ def test_make_test_uses_runner_and_preserves_overrides() -> None:
             "--no-print-directory",
             "--dry-run",
             "test",
-            "TEST_FLAGS=--no-default-features --test cli_feature_gating",
+            "TEST_FLAGS=--no-default-features --test cli_feature_gating -- --nocapture",
             "TEST_TIMEOUT=42",
             "RUST_FLAGS=-D warnings -W unused",
+            "BUILD_JOBS=-j 2",
         ],
         cwd=repository_root,
         capture_output=True,
         check=True,
         text=True,
     ).stdout
+    default_command = " ".join(default_command.replace("\\\n\t", " ").split())
+    override_command = " ".join(override_command.replace("\\\n\t", " ").split())
 
     assert "uv run --no-project --python 3.14" in default_command
     assert "python scripts/test_runner.py" in default_command
     assert '--timeout "1800" -- --all-targets --all-features' in default_command
     assert 'RUSTFLAGS="-D warnings"' in default_command
-    assert "--test cli_feature_gating" in override_command
-    assert '--timeout "42"' in override_command
+    assert (
+        '--timeout "42" -- -j 2 --no-default-features --test cli_feature_gating'
+        in override_command
+    )
+    assert "-- --nocapture" in override_command
     assert 'RUSTFLAGS="-D warnings -W unused"' in override_command
 
 
