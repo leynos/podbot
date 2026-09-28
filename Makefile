@@ -48,12 +48,20 @@ WORKFLOW_CONTRACTS_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
 WORKFLOW_PY_SRCS := \
 	scripts/workflow_contracts.py scripts/workflow_commands.py \
 	scripts/workflow_coverage.py scripts/workflow_placement.py \
+	scripts/test_runner.py scripts/test_runner_cargo.py \
+	scripts/test_runner_models.py scripts/test_runner_options.py \
+	scripts/test_runner_plan.py scripts/test_runner_registry.py \
+	scripts/test_runner_selection.py \
 	scripts/check_sccache_health.py scripts/tests/test_check_sccache_health.py \
 	scripts/tests/conftest.py scripts/tests/test_workflow_contracts.py \
 	scripts/tests/test_command_contracts.py \
 	scripts/tests/test_coverage_contracts.py \
 	scripts/tests/test_workflow_inventory.py \
 	scripts/tests/test_runner_placement_rule.py \
+	scripts/tests/test_runner_fixtures.py \
+	scripts/tests/test_test_runner_plan.py \
+	scripts/tests/test_test_runner_cargo.py \
+	scripts/tests/test_test_runner_execution.py \
 	scripts/tests/test_sccache_fallback_contract.py
 WORKFLOW_PY_TESTS := $(filter scripts/tests/test_%,$(WORKFLOW_PY_SRCS))
 WORKFLOW_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
