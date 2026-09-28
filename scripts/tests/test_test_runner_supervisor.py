@@ -9,11 +9,14 @@ import subprocess
 import sys
 import textwrap
 import time
-import fcntl
 
 import pytest
 
-from test_runner_diagnostics import classify_lock_waiter, parse_proc_locks
+from test_runner_diagnostics import (
+    classify_lock_waiter,
+    lock_path_identities,
+    parse_proc_locks,
+)
 from test_runner_process_tree import parse_proc_stat
 
 
@@ -124,6 +127,23 @@ def test_proc_locks_parser_classifies_parent_cycles_and_external_contention() ->
     ), "a non-owned holder must be classified as ordinary external contention"
 
 
+def test_configured_cargo_home_does_not_resolve_user_home(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lock diagnostics use configured Cargo home without querying Path.home."""
+    cache_lock = tmp_path / ".package-cache-mutate"
+    cache_lock.touch()
+
+    def reject_home_lookup(_path_type: type[pathlib.Path]) -> pathlib.Path:
+        raise AssertionError("configured Cargo home should bypass Path.home")
+
+    monkeypatch.setattr(pathlib.Path, "home", reject_home_lookup)
+
+    identities = lock_path_identities({"CARGO_HOME": str(tmp_path)}, None)
+
+    assert identities, "the configured Cargo cache lock should be mapped directly"
+
+
 @pytest.mark.parametrize(
     ("holder_location", "diagnostic"),
     [
@@ -138,6 +158,8 @@ def test_real_flock_wait_is_classified_from_proc_locks(
     tmp_path: pathlib.Path, holder_location: str, diagnostic: str
 ) -> None:
     """Real FLOCK waits distinguish internal cycles from external contention."""
+    import fcntl
+
     cargo_home = tmp_path / "cargo-home"
     cargo_home.mkdir()
     cache_lock = cargo_home / ".package-cache-mutate"

@@ -121,7 +121,7 @@ def _consume_cargo_argument(
     argument = arguments[index]
     option, separator, attached = argument.partition("=")
     attached_value = attached if separator else None
-    package_value = _attached_package_value(argument)
+    package_value = attached_package_value(argument)
     if package_value is not None:
         option = "-p"
         attached_value = package_value
@@ -247,7 +247,7 @@ def _take_value(
     return arguments[index + 1], index + 2
 
 
-def _attached_package_value(argument: str) -> str | None:
+def attached_package_value(argument: str) -> str | None:
     """Return a short `-pVALUE` selector's value, including empty values."""
     if not argument.startswith("-p") or argument.startswith("--"):
         return None

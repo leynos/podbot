@@ -10,6 +10,7 @@ import pytest
 import test_runner_cargo
 from test_runner_cargo import (
     _resolve_cargo_executable,
+    _package_version_environment,
     create_test_runtime_environment,
     select_test_executables,
 )
@@ -132,6 +133,41 @@ def test_runtime_environment_restores_cargo_values_and_library_paths(
     )
     assert inherited["LD_LIBRARY_PATH"] == "/caller/native", (
         "runtime reconstruction must not mutate the caller's environment"
+    )
+
+
+@pytest.mark.parametrize(
+    ("version", "major", "minor", "patch", "pre_release"),
+    [
+        ("1.2.3-rc.1", "1", "2", "3", "rc.1"),
+        ("1.2-alpha", "1", "2", "0", "alpha"),
+        ("2.5.7+build.4", "2", "5", "7", ""),
+    ],
+)
+def test_package_version_environment_splits_semver_components(
+    version: str,
+    major: str,
+    minor: str,
+    patch: str,
+    pre_release: str,
+) -> None:
+    """Cargo version variables keep pre-release and build text out of patch."""
+    values = _package_version_environment({"version": version})
+
+    assert values["CARGO_PKG_VERSION"] == version, (
+        "the full package version must retain pre-release and build metadata"
+    )
+    assert values["CARGO_PKG_VERSION_MAJOR"] == major, (
+        "the major component must come from the core version"
+    )
+    assert values["CARGO_PKG_VERSION_MINOR"] == minor, (
+        "the minor component must not contain pre-release text"
+    )
+    assert values["CARGO_PKG_VERSION_PATCH"] == patch, (
+        "the patch component must contain only its core numeric part"
+    )
+    assert values["CARGO_PKG_VERSION_PRE"] == pre_release, (
+        "the pre-release identifier must be exposed separately"
     )
 
 

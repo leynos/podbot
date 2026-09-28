@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import pathlib
 import queue
 import shlex
@@ -14,6 +13,16 @@ import time
 import typing as typ
 
 from test_runner_diagnostics import format_stall_report
+from test_runner_process_io import (
+    dispatch_event as _dispatch_event,
+    drain_after_cleanup as _drain_after_cleanup,
+    drain_events as _drain_events,
+    join_readers as _join_readers,
+    normal_exit_status as _normal_exit_status,
+    piped_stream_names as _piped_stream_names,
+    process_group_arguments as _process_group_arguments,
+    read_stream as _read_stream,
+)
 from test_runner_process_tree import (
     OwnedProcessTree,
     enable_child_subreaper,
@@ -23,7 +32,6 @@ from test_runner_process_tree import (
 
 _TIMEOUT_EXIT = 124
 _CLEANUP_EXIT = 125
-_READ_END = object()
 
 
 class ProcessSupervisor:
@@ -241,7 +249,7 @@ class ProcessSupervisor:
         next_watch = time.monotonic() + self.watch_interval_seconds
         exit_status: int | None = None
         while True:
-            self._drain_events(events, output, ended_streams, stdout_handler)
+            _drain_events(events, output, ended_streams, stdout_handler)
             tree.refresh()
             tree.reap_adopted()
             return_status = process.poll()
@@ -251,7 +259,7 @@ class ProcessSupervisor:
                     tree, command, cwd, environment, started_at, terminal_reason
                 )
                 self._terminate_tree(tree, process)
-                self._drain_after_cleanup(
+                _drain_after_cleanup(
                     events, output, ended_streams, expected_streams, stdout_handler
                 )
                 exit_status = self.terminal_status
@@ -272,7 +280,7 @@ class ProcessSupervisor:
                 next_watch = now + self.watch_interval_seconds
             event = self._wait_for_event(events, now, next_watch)
             if event is not None:
-                self._dispatch_event(event, output, ended_streams, stdout_handler)
+                _dispatch_event(event, output, ended_streams, stdout_handler)
         _join_readers(readers)
         return (
             exit_status if exit_status is not None else _CLEANUP_EXIT,
@@ -360,92 +368,3 @@ class ProcessSupervisor:
     def _record_signal(self, signum: int, _frame: typ.Any) -> None:
         """Defer signal cleanup to the process-monitoring loop."""
         self._received_signal = signum
-
-    def _drain_events(
-        self,
-        events: queue.Queue[tuple[str, str | object]],
-        output: dict[str, list[str]],
-        ended_streams: set[str],
-        stdout_handler: typ.Callable[[str], None] | None,
-    ) -> None:
-        """Dispatch all output already queued by pipe-reader threads."""
-        while True:
-            try:
-                event = events.get_nowait()
-            except queue.Empty:
-                return
-            self._dispatch_event(event, output, ended_streams, stdout_handler)
-
-    @staticmethod
-    def _dispatch_event(
-        event: tuple[str, str | object],
-        output: dict[str, list[str]],
-        ended_streams: set[str],
-        stdout_handler: typ.Callable[[str], None] | None,
-    ) -> None:
-        """Forward captured chunks and record pipe EOF notifications."""
-        stream_name, chunk = event
-        if chunk is _READ_END:
-            ended_streams.add(stream_name)
-        elif isinstance(chunk, str):
-            if stream_name == "stdout" and stdout_handler is not None:
-                stdout_handler(chunk)
-            else:
-                output[stream_name].append(chunk)
-
-    def _drain_after_cleanup(
-        self,
-        events: queue.Queue[tuple[str, str | object]],
-        output: dict[str, list[str]],
-        ended_streams: set[str],
-        expected_streams: set[str],
-        stdout_handler: typ.Callable[[str], None] | None,
-    ) -> None:
-        """Keep pipe readers unblocked after the owned tree is terminated."""
-        drain_deadline = time.monotonic() + 2.0
-        while ended_streams < expected_streams and time.monotonic() < drain_deadline:
-            try:
-                event = events.get(timeout=0.05)
-            except queue.Empty:
-                continue
-            self._dispatch_event(event, output, ended_streams, stdout_handler)
-
-
-def _piped_stream_names(stdout_pipe: bool, stderr_pipe: bool) -> tuple[str, ...]:
-    """Return the standard streams that need reader threads."""
-    return tuple(
-        name
-        for name, enabled in (("stdout", stdout_pipe), ("stderr", stderr_pipe))
-        if enabled
-    )
-
-
-def _read_stream(
-    stream_name: str,
-    stream: typ.TextIO,
-    events: queue.Queue[tuple[str, str | object]],
-) -> None:
-    """Move child output to the supervising thread without blocking its timer."""
-    try:
-        for line in stream:
-            events.put((stream_name, line))
-    finally:
-        events.put((stream_name, _READ_END))
-
-
-def _join_readers(readers: list[threading.Thread]) -> None:
-    """Give each drained output reader a bounded opportunity to finish."""
-    for reader in readers:
-        reader.join(timeout=1.0)
-
-
-def _process_group_arguments() -> dict[str, int | bool]:
-    """Create a private process group for descendants launched by this runner."""
-    if os.name == "posix":
-        return {"start_new_session": True}
-    return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
-
-
-def _normal_exit_status(return_code: int) -> int:
-    """Convert subprocess signal exits to the conventional shell status."""
-    return return_code if return_code >= 0 else 128 - return_code

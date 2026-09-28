@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing as typ
 
 from test_runner_models import CargoTestPlan
-from test_runner_options import _attached_package_value
+from test_runner_options import attached_package_value
 
 
 def without_message_format(arguments: tuple[str, ...]) -> tuple[str, ...]:
@@ -69,7 +69,7 @@ def _package_selection_width(argument: str) -> int:
     """Return how many arguments one expanded package selector occupies."""
     if argument == "--workspace":
         return 1
-    if _attached_package_value(argument) is not None:
+    if attached_package_value(argument) is not None:
         return 1
     option, separator, _ = argument.partition("=")
     if option in {"--package", "-p", "--exclude"}:
