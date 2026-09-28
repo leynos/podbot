@@ -31,7 +31,9 @@ def test_artifact_selection_matches_package_target_and_test_profile(
 
     selected = select_test_executables([other_package, wrong_kind, right], (target,))
 
-    assert selected[(target.package_id, "compile_contract")] == executable
+    assert selected[(target.package_id, "compile_contract")] == executable, (
+        "artifact selection must match the package, target, and test profile"
+    )
 
 
 def test_artifact_selection_rejects_missing_and_duplicate_current_outputs(

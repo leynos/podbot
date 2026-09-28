@@ -12,6 +12,7 @@ import pytest
 import test_runner
 
 from test_runner_fixtures import package_document
+from test_runner_models import RunnerError
 
 
 @pytest.fixture
@@ -50,13 +51,17 @@ def test_cargo_build_exits_before_nested_test_process_starts(
         ["--cargo", environment["FAKE_CARGO"], "--", "--test", "compile_contract"]
     )
 
-    assert status == 0
+    assert status == 0, "a successful no-run build and direct test should pass"
     invocation = json.loads(pathlib.Path(environment["FAKE_TEST_ARGS"]).read_text())
-    assert invocation == []
+    assert invocation == [], "the test binary should receive no unexpected arguments"
     commands = cargo_command_reader()
     build = next(command for command in commands if "--no-run" in command)
-    assert build.index("--test") < build.index("--message-format=json")
-    assert build[build.index("--package") + 1] == "podbot"
+    assert build.index("--test") < build.index("--message-format=json"), (
+        "the nested target selector must precede Cargo's JSON output option"
+    )
+    assert build[build.index("--package") + 1] == "podbot", (
+        "the nested target build must be scoped to its owning package"
+    )
 
 
 def test_filters_and_harness_arguments_reach_the_current_artifact(
@@ -79,13 +84,13 @@ def test_filters_and_harness_arguments_reach_the_current_artifact(
         ]
     )
 
-    assert status == 0
+    assert status == 0, "the direct compile-contract test should succeed"
     invocation = json.loads(pathlib.Path(environment["FAKE_TEST_ARGS"]).read_text())
     assert invocation == [
         "stable_exec_context_signatures_compile",
         "--exact",
         "--nocapture",
-    ]
+    ], "Cargo filters and harness arguments must reach the direct test binary"
 
 
 @pytest.mark.parametrize(
@@ -109,9 +114,33 @@ def test_build_and_direct_test_failures_propagate(
         ["--cargo", environment["FAKE_CARGO"], "--", "--test", "compile_contract"]
     )
 
-    assert status == expected
+    assert status == expected, "build and test failures must preserve their exit code"
     test_args = pathlib.Path(environment["FAKE_TEST_ARGS"])
-    assert test_args.exists() is (build_exit == 0)
+    assert test_args.exists() is (build_exit == 0), (
+        "the test binary must only run after a successful build"
+    )
+
+
+def test_artifact_selection_error_returns_runner_failure(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A malformed current-build artifact fails through the runner contract."""
+    environment = _fake_cargo_environment(tmp_path, monkeypatch)
+
+    def reject_artifacts(*args: typ.Any, **kwargs: typ.Any) -> typ.NoReturn:
+        raise RunnerError("no current test artifact")
+
+    monkeypatch.setattr(test_runner, "select_test_executables", reject_artifacts)
+    status = test_runner.main(
+        ["--cargo", environment["FAKE_CARGO"], "--", "--test", "compile_contract"]
+    )
+
+    assert status == 2, "artifact selection errors must return the runner error status"
+    assert "no current test artifact" in capsys.readouterr().err, (
+        "artifact selection failures must be visible on stderr"
+    )
 
 
 def test_ordinary_failure_stops_nested_phase_by_default(
@@ -127,8 +156,10 @@ def test_ordinary_failure_stops_nested_phase_by_default(
     )
 
     commands = cargo_command_reader()
-    assert status == 23
-    assert not any("--no-run" in command for command in commands)
+    assert status == 23, "the ordinary test failure must be returned"
+    assert not any("--no-run" in command for command in commands), (
+        "fail-fast must stop before building nested-Cargo tests"
+    )
 
 
 def test_fail_fast_reports_unstarted_workspace_package(
@@ -156,9 +187,13 @@ def test_fail_fast_reports_unstarted_workspace_package(
 
     commands = cargo_command_reader()
     output = capsys.readouterr().out
-    assert status == 23
-    assert "remaining packages: sibling" in output
-    assert not any("sibling" in command for command in commands)
+    assert status == 23, "the first ordinary failure must be returned"
+    assert "remaining packages: sibling" in output, (
+        "fail-fast diagnostics must identify the skipped sibling package"
+    )
+    assert not any("sibling" in command for command in commands), (
+        "fail-fast must not start later package phases"
+    )
 
 
 def test_no_fail_fast_continues_after_ordinary_failure(
@@ -174,8 +209,10 @@ def test_no_fail_fast_continues_after_ordinary_failure(
     )
 
     commands = cargo_command_reader()
-    assert status == 23
-    assert any("--no-run" in command for command in commands)
+    assert status == 23, "the ordinary test failure must remain the final status"
+    assert any("--no-run" in command for command in commands), (
+        "--no-fail-fast must continue to isolated nested-Cargo tests"
+    )
 
 
 def _fake_cargo_environment(
