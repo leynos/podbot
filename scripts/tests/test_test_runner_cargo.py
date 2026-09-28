@@ -113,8 +113,11 @@ def test_runtime_environment_restores_cargo_values_and_library_paths(
     assert environment["CARGO_TARGET_DIR"] == str(tmp_path / "target"), (
         "nested Cargo must use the outer build's target directory"
     )
-    assert environment["CARGO_TARGET_TMPDIR"] == str(tmp_path / "target/debug/tmp"), (
+    assert environment["CARGO_TARGET_TMPDIR"] == str(tmp_path / "target/tmp"), (
         "direct tests must receive Cargo's target temporary directory"
+    )
+    assert pathlib.Path(environment["CARGO_TARGET_TMPDIR"]).is_dir(), (
+        "direct tests must receive Cargo's pre-created temporary directory"
     )
     assert environment["CARGO"] == "cargo", (
         "bare Cargo names must continue to resolve through PATH"

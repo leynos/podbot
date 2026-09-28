@@ -171,7 +171,11 @@ def _run_nested_phase(
 def _run_no_run(
     cargo_command: tuple[str, ...], plan: CargoTestPlan, environment: dict[str, str]
 ) -> int:
-    """Preserve Cargo's compile-only mode without launching any test process."""
+    """Preserve Cargo's compile-only mode without launching test harnesses.
+
+    Selected nested-Cargo targets are included in the build, but their test
+    executables remain unlaunched because `--no-run` applies to every target.
+    """
     print("== Compiling selected tests without execution ==", flush=True)
     command = [*cargo_command, "test", *plan.options.common]
     command.extend(plan.selected_target_args)
