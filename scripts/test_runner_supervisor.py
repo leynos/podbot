@@ -27,6 +27,7 @@ from test_runner_process_tree import (
     OwnedProcessTree,
     enable_child_subreaper,
     get_child_subreaper,
+    snapshot_direct_child_identities,
     set_child_subreaper,
 )
 
@@ -150,6 +151,11 @@ class ProcessSupervisor:
         stdout_pipe = capture_stdout or stdout_handler is not None
         stderr_pipe = capture_stderr
         started_at = time.monotonic()
+        preexisting_child_identities = (
+            snapshot_direct_child_identities()
+            if self.subreaper_enabled
+            else frozenset()
+        )
         try:
             process = self._start_process(
                 command, cwd, environment, stdout_pipe, stderr_pipe
@@ -162,6 +168,7 @@ class ProcessSupervisor:
             shlex.join(command),
             started_at,
             subreaper=self.subreaper_enabled,
+            preexisting_child_identities=preexisting_child_identities,
         )
         events, readers, expected_streams = self._start_readers(
             process, stdout_pipe, stderr_pipe
@@ -212,7 +219,7 @@ class ProcessSupervisor:
         set[str],
     ]:
         """Read piped child streams concurrently so monitoring remains bounded."""
-        events: queue.Queue[tuple[str, str | object]] = queue.Queue(maxsize=256)
+        events: queue.Queue[tuple[str, str | object]] = queue.Queue()
         readers: list[threading.Thread] = []
         expected_streams = set(_piped_stream_names(stdout_pipe, stderr_pipe))
         for stream_name in expected_streams:
