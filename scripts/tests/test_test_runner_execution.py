@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import pathlib
 import textwrap
@@ -11,7 +10,7 @@ import typing as typ
 import pytest
 import test_runner
 
-from test_runner_fixtures import package_document
+from test_runner_fixtures import package_document, workspace_with_sibling_package
 from test_runner_models import RunnerError
 
 
@@ -93,6 +92,33 @@ def test_filters_and_harness_arguments_reach_the_current_artifact(
     ], "Cargo filters and harness arguments must reach the direct test binary"
 
 
+@pytest.mark.parametrize("selector", ["--package=podbot", "-ppodbot"])
+def test_attached_package_selectors_are_removed_before_per_package_commands(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cargo_command_reader: typ.Callable[[], list[list[str]]],
+    selector: str,
+) -> None:
+    """Attached package filters do not duplicate package-scoped phases."""
+    environment = _fake_cargo_environment(tmp_path, monkeypatch)
+
+    status = test_runner.main(
+        [
+            "--cargo",
+            environment["FAKE_CARGO"],
+            "--",
+            "--all-targets",
+            selector,
+        ]
+    )
+
+    commands = cargo_command_reader()
+    assert status == 0, "a valid attached package selector must preserve test success"
+    assert all(command.count("--package") == 1 for command in commands), (
+        "each per-package Cargo phase must receive exactly one package selector"
+    )
+
+
 @pytest.mark.parametrize(
     ("build_exit", "test_exit", "expected"),
     [(19, 0, 19), (0, 17, 17)],
@@ -169,14 +195,7 @@ def test_fail_fast_reports_unstarted_workspace_package(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A failure names ordinary package phases that fail-fast skips."""
-    metadata = package_document(tmp_path)
-    sibling = copy.deepcopy(metadata["packages"][0])
-    sibling["id"] = "path+file:///workspace/sibling#sibling@0.1.0"
-    sibling["name"] = "sibling"
-    sibling["manifest_path"] = str(tmp_path / "sibling" / "Cargo.toml")
-    metadata["workspace_members"].append(sibling["id"])
-    metadata["workspace_default_members"].append(sibling["id"])
-    metadata["packages"].append(sibling)
+    metadata = workspace_with_sibling_package(tmp_path)
     environment = _fake_cargo_environment(
         tmp_path, monkeypatch, ordinary_exit=23, metadata=metadata
     )

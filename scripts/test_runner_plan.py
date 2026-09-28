@@ -5,7 +5,7 @@ from __future__ import annotations
 import pathlib
 import typing as typ
 
-from test_runner_models import CargoTestOptions, CargoTestPlan
+from test_runner_models import CargoTestOptions, CargoTestPlan, Target
 from test_runner_selection import (
     cargo_target_arguments,
     select_packages,
@@ -39,7 +39,38 @@ def create_test_plan(
     )
     ordinary = tuple(target for target in selected if target not in nested)
     selected_args = cargo_target_arguments(targets, selected, options, omit_nested=())
-    ordinary_package_phases: list[tuple[str, tuple[str, ...]]] = []
+    ordinary_package_args = _ordinary_package_phases(
+        packages, selected, nested, options
+    )
+    ordinary_args = tuple(
+        argument
+        for _, package_arguments in ordinary_package_args
+        for argument in package_arguments
+    )
+    workspace_root = pathlib.Path(str(metadata["workspace_root"]))
+    return CargoTestPlan(
+        options=options,
+        selected_packages=packages,
+        selected_targets=selected,
+        selected_target_args=selected_args,
+        ordinary_targets=ordinary,
+        ordinary_target_args=ordinary_args,
+        ordinary_package_args=ordinary_package_args,
+        nested_targets=nested,
+        run_doctests=_should_run_doctests(targets, options),
+        workspace_root=workspace_root,
+        target_directory=_resolve_target_directory(metadata, options),
+    )
+
+
+def _ordinary_package_phases(
+    packages: tuple[dict[str, typ.Any], ...],
+    selected: tuple[Target, ...],
+    nested: tuple[Target, ...],
+    options: CargoTestOptions,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Build ordinary Cargo target arguments independently for each package."""
+    phases: list[tuple[str, tuple[str, ...]]] = []
     for package in packages:
         package_id = str(package["id"])
         package_selected = tuple(
@@ -55,33 +86,27 @@ def create_test_plan(
             omit_nested=package_nested,
         )
         if package_arguments:
-            ordinary_package_phases.append((str(package["name"]), package_arguments))
-    ordinary_package_args = tuple(ordinary_package_phases)
-    ordinary_args = tuple(
-        argument
-        for _, package_arguments in ordinary_package_args
-        for argument in package_arguments
-    )
-    run_doctests = options.doc_only or (
+            phases.append((str(package["name"]), package_arguments))
+    return tuple(phases)
+
+
+def _should_run_doctests(
+    targets: tuple[Target, ...], options: CargoTestOptions
+) -> bool:
+    """Select default documentation tests or an explicit doc-only request."""
+    return options.doc_only or (
         not options.has_explicit_selection
         and any(target.is_doctest for target in targets if "lib" in target.kinds)
     )
-    workspace_root = pathlib.Path(str(metadata["workspace_root"]))
+
+
+def _resolve_target_directory(
+    metadata: dict[str, typ.Any], options: CargoTestOptions
+) -> pathlib.Path:
+    """Resolve an explicit target directory against the caller's directory."""
     target_directory = options.target_dir or pathlib.Path(
         str(metadata["target_directory"])
     )
     if not target_directory.is_absolute():
         target_directory = pathlib.Path.cwd() / target_directory
-    return CargoTestPlan(
-        options=options,
-        selected_packages=packages,
-        selected_targets=selected,
-        selected_target_args=selected_args,
-        ordinary_targets=ordinary,
-        ordinary_target_args=ordinary_args,
-        ordinary_package_args=ordinary_package_args,
-        nested_targets=nested,
-        run_doctests=run_doctests,
-        workspace_root=workspace_root,
-        target_directory=target_directory,
-    )
+    return target_directory

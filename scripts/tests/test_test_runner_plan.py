@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import pathlib
 
 import pytest
@@ -11,7 +10,7 @@ from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
 from test_runner_selection import validate_nested_registry
 
-from test_runner_fixtures import package_document
+from test_runner_fixtures import package_document, workspace_with_sibling_package
 
 
 def test_default_targets_keep_doctests_and_remove_nested_target(
@@ -64,14 +63,7 @@ def test_workspace_phases_scope_same_named_targets_by_package(
     tmp_path: pathlib.Path,
 ) -> None:
     """A sibling target cannot reselect Podbot's registered nested target."""
-    metadata = package_document(tmp_path)
-    sibling = copy.deepcopy(metadata["packages"][0])
-    sibling["id"] = "path+file:///workspace/sibling#sibling@0.1.0"
-    sibling["name"] = "sibling"
-    sibling["manifest_path"] = str(tmp_path / "sibling" / "Cargo.toml")
-    metadata["workspace_members"].append(sibling["id"])
-    metadata["workspace_default_members"].append(sibling["id"])
-    metadata["packages"].append(sibling)
+    metadata = workspace_with_sibling_package(tmp_path)
     options = parse_cargo_test_options(["--workspace", "--all-targets"])
 
     plan = create_test_plan(metadata, options)

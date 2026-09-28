@@ -233,9 +233,12 @@ def _run_nested_target(
         None,
     )
     if package is None:
-        raise RunnerError(
-            f"selected package {target.package_name} is missing from the test plan"
+        print(
+            "test runner: selected package "
+            f"{target.package_name} is missing from the test plan",
+            file=sys.stderr,
         )
+        return 2
     test_environment = create_test_runtime_environment(
         environment,
         package,
@@ -323,8 +326,15 @@ def _without_package_selection(arguments: tuple[str, ...]) -> tuple[str, ...]:
     index = 0
     while index < len(arguments):
         argument = arguments[index]
-        if argument in {"--package", "-p", "--exclude"}:
-            index += 2
+        option, separator, _ = argument.partition("=")
+        if (
+            argument.startswith("-p")
+            and not argument.startswith("--")
+            and option != "-p"
+        ):
+            index += 1
+        elif option in {"--package", "-p", "--exclude"}:
+            index += 1 if separator else 2
         elif argument == "--workspace":
             index += 1
         else:
