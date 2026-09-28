@@ -84,7 +84,11 @@ def run_test_plan(
 
     doctest_results, should_stop = _run_doctest_phase(cargo_command, plan, environment)
     if should_stop:
-        _print_skipped_phases(plan, include_nested=True)
+        _print_skipped_phases(
+            plan,
+            ordinary_offset=len(plan.ordinary_package_args),
+            include_nested=True,
+        )
         return _first_failure((*ordinary_results, *doctest_results))
 
     nested_results, _ = _run_nested_phase(cargo_command, plan, environment)
@@ -280,11 +284,8 @@ def _run_json_build(
         print(f"test runner: could not start Cargo: {exc}", file=sys.stderr)
         return 127
     with process_context as process:
-        if process.stdout is None:
-            raise RunnerError(
-                "Cargo stdout was not available for JSON artifact parsing"
-            )
-        for line in process.stdout:
+        output = typ.cast(typ.TextIO, process.stdout)
+        for line in output:
             sys.stdout.write(line)
             sys.stdout.flush()
             message = parse_cargo_json_message(line)
