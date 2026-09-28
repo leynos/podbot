@@ -77,7 +77,7 @@ class CargoTestOptions:
 
 
 @dataclasses.dataclass(frozen=True)
-class TestPlan:
+class CargoTestPlan:
     """The ordinary, doctest, and nested-Cargo phases for one invocation."""
 
     options: CargoTestOptions

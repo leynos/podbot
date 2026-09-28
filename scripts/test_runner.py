@@ -17,7 +17,7 @@ from test_runner_cargo import (
     parse_cargo_json_message,
     select_test_executables,
 )
-from test_runner_models import CargoTestOptions, RunnerError, Target, TestPlan
+from test_runner_models import CargoTestOptions, CargoTestPlan, RunnerError, Target
 from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
 
@@ -49,7 +49,7 @@ def main(arguments: list[str] | None = None) -> int:
         cwd = pathlib.Path.cwd().resolve()
         metadata = load_cargo_metadata(cargo_command, options, cwd)
         plan = create_test_plan(metadata, options)
-        return run_test_plan(cargo_command, plan, metadata, os.environ.copy())
+        return run_test_plan(cargo_command, plan, os.environ.copy())
     except (OSError, RunnerError) as exc:
         print(f"test runner: {exc}", file=sys.stderr)
         return 2
@@ -57,8 +57,7 @@ def main(arguments: list[str] | None = None) -> int:
 
 def run_test_plan(
     cargo_command: tuple[str, ...],
-    plan: TestPlan,
-    metadata: dict[str, typ.Any],
+    plan: CargoTestPlan,
     environment: dict[str, str],
 ) -> int:
     """Run ordinary tests, doctests, and isolated nested-Cargo tests.
@@ -71,60 +70,91 @@ def run_test_plan(
     if plan.options.no_run:
         return _run_no_run(cargo_command, plan, environment)
 
-    results: list[int] = []
-    if plan.ordinary_package_args:
-        for package_name, target_arguments in plan.ordinary_package_args:
-            print(
-                f"== Running ordinary Cargo test targets for {package_name} ==",
-                flush=True,
-            )
-            status = _run_cargo_test(
-                cargo_command,
-                plan.options,
-                target_arguments,
-                plan.workspace_root,
-                environment,
-                package_name=package_name,
-            )
-            results.append(status)
-            if status and not plan.options.no_fail_fast:
-                _print_skipped_phases(plan, ordinary_done=True, doctests_done=False)
-                return status
-    else:
-        print("== No ordinary test targets selected; skipping phase ==", flush=True)
+    ordinary_results, should_stop = _run_ordinary_phase(
+        cargo_command, plan, environment
+    )
+    if should_stop:
+        _print_skipped_phases(
+            plan,
+            ordinary_offset=len(ordinary_results),
+            include_doctests=True,
+            include_nested=True,
+        )
+        return _first_failure(ordinary_results)
 
-    if plan.run_doctests:
-        print("== Running Cargo documentation tests ==", flush=True)
+    doctest_results, should_stop = _run_doctest_phase(cargo_command, plan, environment)
+    if should_stop:
+        _print_skipped_phases(plan, include_nested=True)
+        return _first_failure((*ordinary_results, *doctest_results))
+
+    nested_results, _ = _run_nested_phase(cargo_command, plan, environment)
+    return _first_failure((*ordinary_results, *doctest_results, *nested_results))
+
+
+def _run_ordinary_phase(
+    cargo_command: tuple[str, ...], plan: CargoTestPlan, environment: dict[str, str]
+) -> tuple[tuple[int, ...], bool]:
+    """Run ordinary package tests and report whether fail-fast stopped work."""
+    if not plan.ordinary_package_args:
+        print("== No ordinary test targets selected; skipping phase ==", flush=True)
+        return (), False
+    statuses: list[int] = []
+    for package_name, target_arguments in plan.ordinary_package_args:
+        print(
+            f"== Running ordinary Cargo test targets for {package_name} ==",
+            flush=True,
+        )
         status = _run_cargo_test(
             cargo_command,
             plan.options,
-            ("--doc",),
+            target_arguments,
             plan.workspace_root,
             environment,
+            package_name=package_name,
         )
-        results.append(status)
+        statuses.append(status)
         if status and not plan.options.no_fail_fast:
-            _print_skipped_phases(plan, ordinary_done=True, doctests_done=True)
-            return status
-    else:
+            return tuple(statuses), True
+    return tuple(statuses), False
+
+
+def _run_doctest_phase(
+    cargo_command: tuple[str, ...], plan: CargoTestPlan, environment: dict[str, str]
+) -> tuple[tuple[int, ...], bool]:
+    """Run documentation tests and report whether fail-fast stopped work."""
+    if not plan.run_doctests:
         print("== No documentation tests selected; skipping phase ==", flush=True)
+        return (), False
+    print("== Running Cargo documentation tests ==", flush=True)
+    status = _run_cargo_test(
+        cargo_command,
+        plan.options,
+        ("--doc",),
+        plan.workspace_root,
+        environment,
+    )
+    should_stop = bool(status and not plan.options.no_fail_fast)
+    return (status,), should_stop
 
-    if plan.nested_targets:
-        for target in plan.nested_targets:
-            status = _run_nested_target(
-                cargo_command, plan, metadata, target, environment
-            )
-            results.append(status)
-            if status and not plan.options.no_fail_fast:
-                break
-    else:
+
+def _run_nested_phase(
+    cargo_command: tuple[str, ...], plan: CargoTestPlan, environment: dict[str, str]
+) -> tuple[tuple[int, ...], bool]:
+    """Run nested-Cargo tests and report whether fail-fast stopped work."""
+    if not plan.nested_targets:
         print("== No nested-Cargo targets selected; skipping phase ==", flush=True)
-
-    return next((status for status in results if status != 0), 0)
+        return (), False
+    statuses: list[int] = []
+    for target in plan.nested_targets:
+        status = _run_nested_target(cargo_command, plan, target, environment)
+        statuses.append(status)
+        if status and not plan.options.no_fail_fast:
+            return tuple(statuses), True
+    return tuple(statuses), False
 
 
 def _run_no_run(
-    cargo_command: tuple[str, ...], plan: TestPlan, environment: dict[str, str]
+    cargo_command: tuple[str, ...], plan: CargoTestPlan, environment: dict[str, str]
 ) -> int:
     """Preserve Cargo's compile-only mode without launching any test process."""
     print("== Compiling selected tests without execution ==", flush=True)
@@ -164,8 +194,7 @@ def _run_cargo_test(
 
 def _run_nested_target(
     cargo_command: tuple[str, ...],
-    plan: TestPlan,
-    metadata: dict[str, typ.Any],
+    plan: CargoTestPlan,
     target: Target,
     environment: dict[str, str],
 ) -> int:
@@ -192,10 +221,17 @@ def _run_nested_target(
         return status
     executable = select_test_executables(messages, (target,))[key]
     package = next(
-        package
-        for package in metadata.get("packages", [])
-        if package.get("id") == target.package_id
+        (
+            package
+            for package in plan.selected_packages
+            if package.get("id") == target.package_id
+        ),
+        None,
     )
+    if package is None:
+        raise RunnerError(
+            f"selected package {target.package_name} is missing from the test plan"
+        )
     test_environment = create_test_runtime_environment(
         environment,
         package,
@@ -291,17 +327,29 @@ def _without_package_selection(arguments: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _print_skipped_phases(
-    plan: TestPlan, *, ordinary_done: bool, doctests_done: bool
+    plan: CargoTestPlan,
+    *,
+    ordinary_offset: int = 0,
+    include_doctests: bool = False,
+    include_nested: bool = False,
 ) -> None:
     """Name later test phases that default fail-fast semantics skip."""
-    if not ordinary_done and plan.ordinary_target_args:
+    remaining_packages = plan.ordinary_package_args[ordinary_offset:]
+    if remaining_packages:
+        package_names = ", ".join(name for name, _ in remaining_packages)
         print(
-            "== Skipping ordinary test targets after an earlier failure ==", flush=True
+            f"== Skipping ordinary tests for remaining packages: {package_names} ==",
+            flush=True,
         )
-    if plan.run_doctests and not doctests_done:
+    if include_doctests and plan.run_doctests:
         print("== Skipping documentation tests after an earlier failure ==", flush=True)
-    if plan.nested_targets:
+    if include_nested and plan.nested_targets:
         print("== Skipping nested-Cargo tests after an earlier failure ==", flush=True)
+
+
+def _first_failure(statuses: typ.Iterable[int]) -> int:
+    """Return the first non-zero phase status, or success when all pass."""
+    return next((status for status in statuses if status != 0), 0)
 
 
 if __name__ == "__main__":

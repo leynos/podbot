@@ -87,15 +87,33 @@ def test_runtime_environment_restores_cargo_values_and_library_paths(
         cargo_command=("cargo",),
     )
 
-    assert environment["CARGO_MANIFEST_DIR"] == str(tmp_path)
-    assert environment["CARGO_PKG_NAME"] == "podbot"
-    assert environment["CARGO_PKG_VERSION_PATCH"] == "0"
-    assert environment["CARGO_BIN_EXE_podbot"] == str(binary)
-    assert environment["CARGO_TARGET_DIR"] == str(tmp_path / "target")
-    assert environment["CARGO_TARGET_TMPDIR"] == str(tmp_path / "target/debug/tmp")
-    assert environment["LD_LIBRARY_PATH"].split(os.pathsep)[-1] == "/caller/native"
-    assert str(linked) in environment["LD_LIBRARY_PATH"]
-    assert inherited["LD_LIBRARY_PATH"] == "/caller/native"
+    assert environment["CARGO_MANIFEST_DIR"] == str(tmp_path), (
+        "direct test execution must retain Cargo's package manifest directory"
+    )
+    assert environment["CARGO_PKG_NAME"] == "podbot", (
+        "direct test execution must retain Cargo's package name"
+    )
+    assert environment["CARGO_PKG_VERSION_PATCH"] == "0", (
+        "Cargo's patch-version variable must be restored"
+    )
+    assert environment["CARGO_BIN_EXE_podbot"] == str(binary), (
+        "Cargo's binary executable variable must point to the current build"
+    )
+    assert environment["CARGO_TARGET_DIR"] == str(tmp_path / "target"), (
+        "nested Cargo must use the outer build's target directory"
+    )
+    assert environment["CARGO_TARGET_TMPDIR"] == str(tmp_path / "target/debug/tmp"), (
+        "direct tests must receive Cargo's target temporary directory"
+    )
+    assert environment["LD_LIBRARY_PATH"].split(os.pathsep)[-1] == "/caller/native", (
+        "the inherited native-library path must remain available"
+    )
+    assert str(linked) in environment["LD_LIBRARY_PATH"], (
+        "native paths emitted by build scripts must be available"
+    )
+    assert inherited["LD_LIBRARY_PATH"] == "/caller/native", (
+        "runtime reconstruction must not mutate the caller's environment"
+    )
 
 
 def _artifact(
