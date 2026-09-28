@@ -9,7 +9,11 @@ from types import SimpleNamespace
 
 import pytest
 import test_runner_cargo
-from test_runner_cargo import create_test_runtime_environment, select_test_executables
+from test_runner_cargo import (
+    _resolve_cargo_executable,
+    create_test_runtime_environment,
+    select_test_executables,
+)
 from test_runner_models import RunnerError
 from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
@@ -91,7 +95,7 @@ def test_runtime_environment_restores_cargo_values_and_library_paths(
         executable,
         messages,
         target_directory=tmp_path / "target",
-        cargo_command=("cargo",),
+        cargo_command=("cargo", "+1.88.0"),
     )
 
     assert environment["CARGO_MANIFEST_DIR"] == str(tmp_path), (
@@ -112,6 +116,12 @@ def test_runtime_environment_restores_cargo_values_and_library_paths(
     assert environment["CARGO_TARGET_TMPDIR"] == str(tmp_path / "target/debug/tmp"), (
         "direct tests must receive Cargo's target temporary directory"
     )
+    assert environment["CARGO"] == "cargo", (
+        "bare Cargo names must continue to resolve through PATH"
+    )
+    assert environment["RUSTUP_TOOLCHAIN"] == "1.88.0", (
+        "nested Cargo must retain the runner's explicit toolchain selection"
+    )
     assert environment["LD_LIBRARY_PATH"].split(os.pathsep)[-1] == "/caller/native", (
         "the inherited native-library path must remain available"
     )
@@ -120,6 +130,22 @@ def test_runtime_environment_restores_cargo_values_and_library_paths(
     )
     assert inherited["LD_LIBRARY_PATH"] == "/caller/native", (
         "runtime reconstruction must not mutate the caller's environment"
+    )
+
+
+def test_relative_cargo_executable_path_is_anchored_before_chdir(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit relative Cargo paths remain valid from the workspace root."""
+    monkeypatch.chdir(tmp_path)
+    cargo = tmp_path / "tools" / "cargo"
+    cargo.parent.mkdir()
+    cargo.write_text("cargo wrapper", encoding="utf-8")
+
+    resolved = _resolve_cargo_executable(("./tools/cargo",))
+
+    assert resolved == str(cargo), (
+        "relative executable paths must become absolute before runtime cwd changes"
     )
 
 
