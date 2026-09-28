@@ -18,7 +18,7 @@ from test_runner_cargo import (
     select_test_executables,
 )
 from test_runner_models import CargoTestOptions, CargoTestPlan, RunnerError, Target
-from test_runner_options import parse_cargo_test_options
+from test_runner_options import _attached_package_value, parse_cargo_test_options
 from test_runner_plan import create_test_plan
 
 
@@ -339,9 +339,9 @@ def _package_selection_width(argument: str) -> int:
     """Return how many arguments one expanded package selector occupies."""
     if argument == "--workspace":
         return 1
+    if _attached_package_value(argument) is not None:
+        return 1
     option, separator, _ = argument.partition("=")
-    if argument.startswith("-p") and not argument.startswith("--"):
-        return 1 if len(argument) > 2 else 2
     if option in {"--package", "-p", "--exclude"}:
         return 1 if separator else 2
     return 0

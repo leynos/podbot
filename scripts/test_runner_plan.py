@@ -1,4 +1,35 @@
-"""Plan Cargo test phases from workspace package and target metadata."""
+"""Plan Cargo test phases from workspace package and target metadata.
+
+`create_test_plan` separates ordinary targets from registered tests that run
+nested Cargo, preserving a concrete target inventory for each phase. For
+example, selecting Podbot's compile-contract test records it in the isolated
+phase:
+
+>>> from test_runner_options import parse_cargo_test_options
+>>> package_id = "podbot 0.1.0"
+>>> metadata = {
+...     "workspace_root": ".",
+...     "target_directory": "target",
+...     "workspace_members": [package_id],
+...     "workspace_default_members": [package_id],
+...     "packages": [{
+...         "id": package_id,
+...         "name": "podbot",
+...         "manifest_path": "Cargo.toml",
+...         "targets": [{
+...             "name": "compile_contract",
+...             "kind": ["test"],
+...             "test": True,
+...             "bench": False,
+...             "doctest": False,
+...             "required-features": [],
+...         }],
+...     }],
+... }
+>>> options = parse_cargo_test_options(["--test", "compile_contract"])
+>>> [target.name for target in create_test_plan(metadata, options).nested_targets]
+['compile_contract']
+"""
 
 from __future__ import annotations
 

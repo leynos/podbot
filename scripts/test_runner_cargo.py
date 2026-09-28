@@ -40,7 +40,12 @@ def load_cargo_metadata(
         if flag in options.common and flag not in command:
             command.append(flag)
     result = subprocess.run(
-        command, cwd=cwd, check=False, capture_output=True, text=True
+        command,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         if result.stderr:

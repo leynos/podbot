@@ -138,6 +138,7 @@ def test_relative_manifest_is_anchored_to_caller_directory(
     def fake_run(command: list[str], *, cwd: pathlib.Path, **_: typ.Any) -> typ.Any:
         observed["command"] = command
         observed["cwd"] = cwd
+        observed["encoding"] = _.get("encoding")
         return SimpleNamespace(returncode=0, stdout="{}", stderr="")
 
     monkeypatch.setattr(test_runner_cargo.subprocess, "run", fake_run)
@@ -150,6 +151,9 @@ def test_relative_manifest_is_anchored_to_caller_directory(
 
     assert observed["cwd"] == workspace_directory, (
         "metadata may run from the selected workspace root"
+    )
+    assert observed["encoding"] == "utf-8", (
+        "Cargo metadata must decode consistently across host locales"
     )
     assert str(expected_manifest) in observed["command"], (
         "relative manifest paths must be anchored before changing directories"
