@@ -55,9 +55,9 @@ def test_cargo_build_exits_before_nested_test_process_starts(
     assert invocation == [], "the test binary should receive no unexpected arguments"
     commands = cargo_command_reader()
     build = next(command for command in commands if "--no-run" in command)
-    assert build.index("--test") < build.index("--message-format=json"), (
-        "the nested target selector must precede Cargo's JSON output option"
-    )
+    assert build.index("--test") < build.index(
+        "--message-format=json-render-diagnostics"
+    ), "the nested target selector must precede Cargo's JSON output option"
     assert build[build.index("--package") + 1] == "podbot", (
         "the nested target build must be scoped to its owning package"
     )

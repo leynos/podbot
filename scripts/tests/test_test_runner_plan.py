@@ -59,6 +59,20 @@ def test_all_targets_expands_categories_and_excludes_registered_test(
     assert not plan.run_doctests, "--all-targets must not add default doctests"
 
 
+def test_doc_only_selection_has_one_documentation_phase(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A doc-only request does not duplicate doctests in ordinary phases."""
+    plan = create_test_plan(
+        package_document(tmp_path), parse_cargo_test_options(["--doc"])
+    )
+
+    assert plan.ordinary_package_args == (), (
+        "--doc must not schedule an ordinary Cargo test phase"
+    )
+    assert plan.run_doctests, "--doc must retain its dedicated documentation phase"
+
+
 def test_all_targets_omits_benches_when_package_has_no_bench_harness(
     tmp_path: pathlib.Path,
 ) -> None:

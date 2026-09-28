@@ -296,7 +296,7 @@ def _run_nested_target(
         target.package_name,
         *target.cargo_selector(),
         "--no-run",
-        "--message-format=json",
+        "--message-format=json-render-diagnostics",
     ]
     messages: list[dict[str, typ.Any]] = []
     status = _run_json_build(

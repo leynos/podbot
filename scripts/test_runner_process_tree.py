@@ -7,8 +7,12 @@ import os
 import pathlib
 import signal
 import sys
+import subprocess
 import time
 import typing as typ
+
+_PR_GET_CHILD_SUBREAPER = 37
+_PR_SET_CHILD_SUBREAPER = 36
 
 
 @dataclasses.dataclass(frozen=True)
@@ -188,12 +192,12 @@ class OwnedProcessTree:
             time.sleep(0.05)
         try:
             process.wait(timeout=grace_seconds)
-        except TimeoutError:
+        except subprocess.TimeoutExpired:
             if process.poll() is None:
                 process.kill()
             try:
                 process.wait(timeout=grace_seconds)
-            except TimeoutError:
+            except subprocess.TimeoutExpired:
                 return False
         self.reap_adopted()
         return process.poll() is not None and not self.live_owned()
@@ -212,9 +216,7 @@ def get_child_subreaper() -> bool | None:
         import ctypes
 
         enabled = ctypes.c_int()
-        result = ctypes.CDLL(None, use_errno=True).prctl(
-            37, ctypes.byref(enabled), 0, 0, 0
-        )
+        result = _prctl(_PR_GET_CHILD_SUBREAPER, ctypes.byref(enabled))
         return bool(enabled.value) if result == 0 else None
     except (AttributeError, OSError):
         return None
@@ -224,12 +226,17 @@ def set_child_subreaper(enabled: bool) -> bool:
     """Set Linux child-subreaper behaviour without affecting other platforms."""
     if not sys_is_linux():
         return False
-    try:
-        import ctypes
+    return _prctl(_PR_SET_CHILD_SUBREAPER, int(enabled)) == 0
 
-        return ctypes.CDLL(None, use_errno=True).prctl(36, int(enabled), 0, 0, 0) == 0
-    except (AttributeError, OSError):
-        return False
+
+def _prctl(option: int, argument: typ.Any) -> int:
+    """Call Linux prctl, which has no equivalent operation in Python's stdlib."""
+    import ctypes
+
+    try:
+        return ctypes.CDLL(None, use_errno=True).prctl(option, argument, 0, 0, 0)
+    except AttributeError:
+        return -1
 
 
 def sys_is_linux() -> bool:
