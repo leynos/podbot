@@ -236,7 +236,12 @@ def _test_arguments(
 def _group_arguments(selector: str, targets: tuple[Target, ...]) -> tuple[str, ...]:
     """Return a plural Cargo target selector when the package has that kind."""
     kind = selector[:-1] if selector.endswith("s") else selector
-    if selector == "benches" or any(kind in target.kinds for target in targets):
+    has_selected_target = (
+        any(target.is_bench for target in targets)
+        if selector == "benches"
+        else any(kind in target.kinds for target in targets)
+    )
+    if has_selected_target:
         return (f"--{selector}",)
     return ()
 

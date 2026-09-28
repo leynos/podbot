@@ -1,4 +1,17 @@
-"""Shared data structures for the repository's Cargo test runner."""
+"""Represent Cargo test options, target metadata, and planned test phases.
+
+These immutable records keep option parsing, workspace discovery, and process
+execution independent while carrying the package identity needed to select
+the exact artifacts from one Cargo build. For example, a target record maps a
+registered integration test to Cargo's ``--test`` selector:
+
+>>> target = Target(
+...     "podbot", "id", pathlib.Path("."), "api", ("test",),
+...     True, False, False, ()
+... )
+>>> target.cargo_selector()
+('--test', 'api')
+"""
 
 from __future__ import annotations
 

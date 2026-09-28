@@ -45,8 +45,8 @@ def main(arguments: list[str] | None = None) -> int:
         cargo_command = tuple(shlex.split(parsed.cargo))
         if not cargo_command:
             raise RunnerError("the Cargo command is empty")
-        options = parse_cargo_test_options(cargo_arguments)
         cwd = pathlib.Path.cwd().resolve()
+        options = parse_cargo_test_options(cargo_arguments, cwd=cwd)
         metadata = load_cargo_metadata(cargo_command, options, cwd)
         plan = create_test_plan(metadata, options)
         return run_test_plan(cargo_command, plan, os.environ.copy())
@@ -326,21 +326,25 @@ def _without_package_selection(arguments: tuple[str, ...]) -> tuple[str, ...]:
     index = 0
     while index < len(arguments):
         argument = arguments[index]
-        option, separator, _ = argument.partition("=")
-        if (
-            argument.startswith("-p")
-            and not argument.startswith("--")
-            and option != "-p"
-        ):
-            index += 1
-        elif option in {"--package", "-p", "--exclude"}:
-            index += 1 if separator else 2
-        elif argument == "--workspace":
-            index += 1
+        skip_count = _package_selection_width(argument)
+        if skip_count:
+            index += skip_count
         else:
             result.append(argument)
             index += 1
     return tuple(result)
+
+
+def _package_selection_width(argument: str) -> int:
+    """Return how many arguments one expanded package selector occupies."""
+    if argument == "--workspace":
+        return 1
+    option, separator, _ = argument.partition("=")
+    if argument.startswith("-p") and not argument.startswith("--"):
+        return 1 if len(argument) > 2 else 2
+    if option in {"--package", "-p", "--exclude"}:
+        return 1 if separator else 2
+    return 0
 
 
 def _print_skipped_phases(

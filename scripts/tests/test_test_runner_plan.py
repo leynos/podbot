@@ -59,6 +59,26 @@ def test_all_targets_expands_categories_and_excludes_registered_test(
     assert not plan.run_doctests, "--all-targets must not add default doctests"
 
 
+def test_all_targets_omits_benches_when_package_has_no_bench_harness(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The bench selector is emitted only when metadata enables a bench harness."""
+    metadata = package_document(tmp_path)
+    metadata["packages"][0]["targets"] = [
+        target
+        for target in metadata["packages"][0]["targets"]
+        if "bench" not in target["kind"]
+    ]
+    for target in metadata["packages"][0]["targets"]:
+        target["bench"] = False
+
+    plan = create_test_plan(metadata, parse_cargo_test_options(["--all-targets"]))
+
+    assert "--benches" not in plan.ordinary_target_args, (
+        "Cargo selectors must not request a bench target absent from metadata"
+    )
+
+
 def test_workspace_phases_scope_same_named_targets_by_package(
     tmp_path: pathlib.Path,
 ) -> None:

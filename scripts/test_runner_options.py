@@ -57,6 +57,9 @@ _NAMED_TARGET_OPTIONS = {
 class _CargoOptionState:
     """Mutable parse state private to one Cargo test argument list."""
 
+    working_directory: pathlib.Path = dataclasses.field(
+        default_factory=lambda: pathlib.Path.cwd().resolve()
+    )
     common: list[str] = dataclasses.field(default_factory=list)
     selectors: list[tuple[str, str | None]] = dataclasses.field(default_factory=list)
     package_specs: list[str] = dataclasses.field(default_factory=list)
@@ -67,7 +70,9 @@ class _CargoOptionState:
     target_dir: pathlib.Path | None = None
 
 
-def parse_cargo_test_options(arguments: list[str]) -> CargoTestOptions:
+def parse_cargo_test_options(
+    arguments: list[str], *, cwd: pathlib.Path | None = None
+) -> CargoTestOptions:
     """Parse shared build options, selectors, filters, and harness arguments.
 
     Examples
@@ -77,7 +82,7 @@ def parse_cargo_test_options(arguments: list[str]) -> CargoTestOptions:
     ('api', ('--exact',))
     """
     cargo_arguments, harness_arguments = _split_harness_arguments(arguments)
-    state = _CargoOptionState()
+    state = _CargoOptionState(working_directory=(cwd or pathlib.Path.cwd()).resolve())
     index = 0
     while index < len(cargo_arguments):
         index = _consume_cargo_argument(cargo_arguments, index, state)
@@ -141,13 +146,14 @@ def _consume_value_option(
     if option not in _VALUE_OPTIONS:
         return None
     value, next_index = _take_value(arguments, index, option, attached)
+    if option in {"--manifest-path", "--target-dir"}:
+        value = str((state.working_directory / value).resolve())
     _record_value_option(
         option,
         value,
         state.common,
         state.package_specs,
         state.excludes,
-        state.selectors,
     )
     if option == "--manifest-path":
         state.manifest_path = pathlib.Path(value)
@@ -237,16 +243,13 @@ def _record_value_option(
     common: list[str],
     package_specs: list[str],
     excludes: list[str],
-    selectors: list[tuple[str, str | None]],
 ) -> None:
-    """Keep shared Cargo options and extract package and target selectors."""
+    """Keep shared Cargo options and record package selection separately."""
     if option in {"--package", "-p"}:
         package_specs.append(value)
         common.extend([option, value])
     elif option == "--exclude":
         excludes.append(value)
         common.extend([option, value])
-    elif option in _NAMED_TARGET_OPTIONS:
-        selectors.append((_NAMED_TARGET_OPTIONS[option], value))
     else:
         common.extend([option, value])
