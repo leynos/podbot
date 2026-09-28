@@ -1,4 +1,14 @@
-"""Parse Cargo test options supported by the separated test runner."""
+"""Parse Cargo test options consistently across separated execution phases.
+
+The parser keeps build-wide flags, target selectors, and libtest arguments
+distinct so each phase receives only the options that apply to it. For example:
+
+>>> parsed = parse_cargo_test_options(
+...     ["--features", "internal", "--test", "compile_contract"]
+... )
+>>> parsed.common, parsed.selectors
+(('--features', 'internal'), (('test', 'compile_contract'),))
+"""
 
 from __future__ import annotations
 
@@ -111,10 +121,10 @@ def _consume_cargo_argument(
     argument = arguments[index]
     option, separator, attached = argument.partition("=")
     attached_value = attached if separator else None
-    if argument.startswith("-p") and not argument.startswith("--"):
-        if len(argument) > 2 and not separator:
-            option = "-p"
-            attached_value = argument[2:]
+    package_value = _attached_package_value(argument)
+    if package_value is not None:
+        option = "-p"
+        attached_value = package_value
     next_index = _consume_value_option(arguments, index, option, attached_value, state)
     if next_index is not None:
         return next_index
@@ -232,9 +242,19 @@ def _take_value(
         if not attached:
             raise RunnerError(f"{option} requires a value")
         return attached, index + 1
-    if index + 1 >= len(arguments) or arguments[index + 1].startswith("-"):
+    if index + 1 >= len(arguments):
         raise RunnerError(f"{option} requires a value")
     return arguments[index + 1], index + 2
+
+
+def _attached_package_value(argument: str) -> str | None:
+    """Return a short `-pVALUE` selector's value, including empty values."""
+    if not argument.startswith("-p") or argument.startswith("--"):
+        return None
+    if len(argument) == 2:
+        return None
+    value = argument[2:]
+    return value[1:] if value.startswith("=") else value
 
 
 def _record_value_option(

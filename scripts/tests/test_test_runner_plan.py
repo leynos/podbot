@@ -146,14 +146,30 @@ def test_specific_compile_contract_selection_preserves_features_and_filters(
         ["--config", "build.target=x86_64-unknown-linux-gnu"],
         ["--doc", "--test", "compile_contract"],
         ["--exclude", "podbot"],
+        ["--target-dir"],
         ["one", "two"],
     ],
-    ids=["unsafe-config", "doc-and-test", "exclude-needs-workspace", "two-filters"],
+    ids=[
+        "unsafe-config",
+        "doc-and-test",
+        "exclude-needs-workspace",
+        "missing-option-value",
+        "two-filters",
+    ],
 )
 def test_unsupported_mappings_fail_before_running_cargo(arguments: list[str]) -> None:
     """Options the runner cannot map consistently fail at the CLI boundary."""
     with pytest.raises(RunnerError):
         parse_cargo_test_options(arguments)
+
+
+def test_option_values_may_start_with_a_hyphen() -> None:
+    """Required values are consumed even when they resemble options."""
+    options = parse_cargo_test_options(["--target-dir", "-build"])
+
+    assert options.target_dir == pathlib.Path.cwd().resolve() / "-build", (
+        "a leading hyphen in a value must not be mistaken for a missing value"
+    )
 
 
 def test_registry_rejects_a_removed_target(tmp_path: pathlib.Path) -> None:
