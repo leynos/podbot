@@ -219,7 +219,11 @@ def _run_nested_target(
     print(f"Cargo no-run build exited with status {status}.", flush=True)
     if status != 0:
         return status
-    executable = select_test_executables(messages, (target,))[key]
+    try:
+        executable = select_test_executables(messages, (target,))[key]
+    except RunnerError as exc:
+        print(f"test runner: {exc}", file=sys.stderr)
+        return 2
     package = next(
         (
             package
@@ -259,7 +263,7 @@ def _run_json_build(
 ) -> int:
     """Stream a JSON-mode Cargo build and retain its current artifacts."""
     try:
-        process = subprocess.Popen(
+        process_context = subprocess.Popen(
             command,
             cwd=cwd,
             env=environment,
@@ -272,15 +276,18 @@ def _run_json_build(
     except OSError as exc:
         print(f"test runner: could not start Cargo: {exc}", file=sys.stderr)
         return 127
-    if process.stdout is None:
-        raise RunnerError("Cargo stdout was not available for JSON artifact parsing")
-    for line in process.stdout:
-        sys.stdout.write(line)
-        sys.stdout.flush()
-        message = parse_cargo_json_message(line)
-        if message is not None:
-            messages.append(message)
-    return process.wait()
+    with process_context as process:
+        if process.stdout is None:
+            raise RunnerError(
+                "Cargo stdout was not available for JSON artifact parsing"
+            )
+        for line in process.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            message = parse_cargo_json_message(line)
+            if message is not None:
+                messages.append(message)
+        return process.wait()
 
 
 def _run_inherited(

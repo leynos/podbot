@@ -23,15 +23,21 @@ def test_default_targets_keep_doctests_and_remove_nested_target(
 
     plan = create_test_plan(metadata, options)
 
-    assert plan.run_doctests
-    assert not any(target.name == "benchmarks" for target in plan.selected_targets)
-    assert [target.name for target in plan.nested_targets] == ["compile_contract"]
+    assert plan.run_doctests, "default Cargo tests must retain library doctests"
+    assert not any(target.name == "benchmarks" for target in plan.selected_targets), (
+        "default Cargo tests must not select benchmark targets"
+    )
+    assert [target.name for target in plan.nested_targets] == ["compile_contract"], (
+        "the registered nested-Cargo target must have its own phase"
+    )
     assert "--test" not in plan.ordinary_target_args or all(
         plan.ordinary_target_args[index + 1] != "compile_contract"
         for index, value in enumerate(plan.ordinary_target_args[:-1])
         if value == "--test"
+    ), "ordinary Cargo phases must exclude the registered nested test"
+    assert "--doc" not in plan.ordinary_target_args, (
+        "doctests must remain in their dedicated Cargo phase"
     )
-    assert "--doc" not in plan.ordinary_target_args
 
 
 def test_all_targets_expands_categories_and_excludes_registered_test(
@@ -43,11 +49,15 @@ def test_all_targets_expands_categories_and_excludes_registered_test(
 
     assert {"--lib", "--bins", "--examples", "--benches"}.issubset(
         set(plan.ordinary_target_args)
+    ), "--all-targets must retain each ordinary target category"
+    assert "compile_contract" not in plan.ordinary_target_args, (
+        "--all-targets must not pass the nested test to an outer Cargo process"
     )
-    assert "compile_contract" not in plan.ordinary_target_args
-    assert "cli_feature_gating" in plan.ordinary_target_args
-    assert "--all-features" in options.common
-    assert not plan.run_doctests
+    assert "cli_feature_gating" in plan.ordinary_target_args, (
+        "ordinary integration tests must remain selected"
+    )
+    assert "--all-features" in options.common, "feature selection must be preserved"
+    assert not plan.run_doctests, "--all-targets must not add default doctests"
 
 
 def test_workspace_phases_scope_same_named_targets_by_package(
@@ -67,8 +77,12 @@ def test_workspace_phases_scope_same_named_targets_by_package(
     plan = create_test_plan(metadata, options)
     phases = dict(plan.ordinary_package_args)
 
-    assert "compile_contract" not in phases["podbot"]
-    assert "compile_contract" in phases["sibling"]
+    assert "compile_contract" not in phases["podbot"], (
+        "Podbot's registered nested target must be excluded from its Cargo phase"
+    )
+    assert "compile_contract" in phases["sibling"], (
+        "a same-named sibling target must remain in its owning package phase"
+    )
 
 
 def test_specific_compile_contract_selection_preserves_features_and_filters(
@@ -92,18 +106,26 @@ def test_specific_compile_contract_selection_preserves_features_and_filters(
     )
     plan = create_test_plan(package_document(tmp_path), options)
 
-    assert plan.ordinary_target_args == ()
-    assert [target.name for target in plan.nested_targets] == ["compile_contract"]
+    assert plan.ordinary_target_args == (), (
+        "selecting only the nested target must leave no ordinary test phase"
+    )
+    assert [target.name for target in plan.nested_targets] == ["compile_contract"], (
+        "the explicit target selection must reach the nested phase"
+    )
     assert options.common == (
         "--no-default-features",
         "--features",
         "internal",
         "--jobs",
         "3",
+    ), "feature and job options must remain common to all Cargo phases"
+    assert options.test_filter == "stable_exec_context_signatures_compile", (
+        "the positional test filter must be preserved"
     )
-    assert options.test_filter == "stable_exec_context_signatures_compile"
-    assert options.harness_args == ("--exact", "--nocapture")
-    assert not plan.run_doctests
+    assert options.harness_args == ("--exact", "--nocapture"), (
+        "libtest arguments must remain after the Cargo separator"
+    )
+    assert not plan.run_doctests, "explicit integration-test selection omits doctests"
 
 
 @pytest.mark.parametrize(
@@ -133,3 +155,13 @@ def test_registry_rejects_a_removed_target(tmp_path: pathlib.Path) -> None:
 
     with pytest.raises(RunnerError, match="registered nested-Cargo target"):
         validate_nested_registry(metadata)
+
+
+def test_registry_ignores_packages_outside_the_workspace(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A repository-specific registry does not constrain another workspace."""
+    metadata = package_document(tmp_path)
+    metadata["workspace_members"] = []
+
+    validate_nested_registry(metadata)
