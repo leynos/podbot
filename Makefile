@@ -52,6 +52,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/test_runner.py scripts/test_runner_cargo.py \
 	scripts/test_runner_context.py \
 	scripts/test_runner_nested.py scripts/test_runner_phases.py \
+	scripts/test_runner_subreaper.py \
 	scripts/test_runner_target_arguments.py \
 	scripts/test_runner_supervise.py \
 	scripts/test_runner_commands.py \
@@ -138,6 +139,7 @@ workflow-contracts: ## Assert what the workflow files must say
 		scripts/test_runner.py scripts/test_runner_cargo.py \
 		scripts/test_runner_context.py \
 		scripts/test_runner_nested.py scripts/test_runner_phases.py \
+		scripts/test_runner_subreaper.py \
 		scripts/test_runner_target_arguments.py \
 		scripts/test_runner_supervise.py \
 		scripts/test_runner_commands.py \
