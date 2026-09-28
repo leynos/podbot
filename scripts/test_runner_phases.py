@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pathlib
 import typing as typ
 
 from test_runner_commands import (
@@ -80,6 +81,7 @@ def _run_ordinary_phase(
             context,
             plan.options,
             target_arguments,
+            workspace_root=plan.workspace_root,
             package_name=package_name,
         )
 
@@ -95,7 +97,12 @@ def _run_doctest_phase(
         print("== No documentation tests selected; skipping phase ==", flush=True)
         return (), False
     print("== Running Cargo documentation tests ==", flush=True)
-    status = _run_cargo_test(context, plan.options, ("--doc",))
+    status = _run_cargo_test(
+        context,
+        plan.options,
+        ("--doc",),
+        workspace_root=plan.workspace_root,
+    )
     should_stop = bool(status and not plan.options.no_fail_fast)
     return (status,), should_stop
 
@@ -158,6 +165,7 @@ def _run_cargo_test(
     options: CargoTestOptions,
     target_arguments: tuple[str, ...],
     *,
+    workspace_root: pathlib.Path,
     package_name: str | None = None,
 ) -> int:
     """Run one ordinary Cargo test phase with caller filters and flags."""
@@ -178,7 +186,7 @@ def _run_cargo_test(
     _append_harness_flags(command, options)
     return context.supervisor.run_inherited(
         CommandRequest(
-            command, context.cwd, context.environment, "ordinary Cargo tests"
+            command, workspace_root, context.environment, "ordinary Cargo tests"
         )
     )
 

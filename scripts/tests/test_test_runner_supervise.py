@@ -56,4 +56,6 @@ def test_supervise_mode_requires_a_command(capsys: pytest.CaptureFixture[str]) -
     status = test_runner.main(["--supervise", "--"])
 
     assert status == 2, "an absent child command must be rejected"
-    assert "requires a command after `--`" in capsys.readouterr().err
+    assert "requires a command after `--`" in capsys.readouterr().err, (
+        "an empty supervised command must explain the required child arguments"
+    )
