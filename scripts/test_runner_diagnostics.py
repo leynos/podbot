@@ -221,9 +221,9 @@ def classify_lock_waiter(
         return "parent/descendant lock cycle"
     if any(holder.pid not in owned_pids for holder in holders):
         return "ordinary contention with an external lock holder"
-    if any(not holder.waiter for holder in holders):
-        return "contention between owned sibling processes"
-    return "waiter has no visible holder for this lock"
+    if not holders:
+        return "waiter has no visible holder for this lock"
+    return "contention between owned sibling processes"
 
 
 def _find_toolchain_file(directory: pathlib.Path) -> pathlib.Path | None:
