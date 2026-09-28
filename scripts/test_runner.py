@@ -1,0 +1,308 @@
+#!/usr/bin/env python3
+"""Run Cargo tests while executing nested-Cargo contracts after Cargo exits."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import pathlib
+import shlex
+import subprocess
+import sys
+import typing as typ
+
+from test_runner_cargo import (
+    create_test_runtime_environment,
+    load_cargo_metadata,
+    parse_cargo_json_message,
+    select_test_executables,
+)
+from test_runner_models import CargoTestOptions, RunnerError, Target, TestPlan
+from test_runner_options import parse_cargo_test_options
+from test_runner_plan import create_test_plan
+
+
+def main(arguments: list[str] | None = None) -> int:
+    """Run Cargo tests using the repository's nested-target registry.
+
+    Examples
+    --------
+    >>> main(["--cargo", "false", "--", "--bad-option"]) != 0
+    True
+    """
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--cargo",
+        default=os.environ.get("CARGO", "cargo"),
+        help="Cargo command used for metadata and build phases",
+    )
+    parser.add_argument("cargo_arguments", nargs=argparse.REMAINDER)
+    parsed = parser.parse_args(arguments)
+    cargo_arguments = list(parsed.cargo_arguments)
+    if cargo_arguments and cargo_arguments[0] == "--":
+        cargo_arguments.pop(0)
+    try:
+        cargo_command = tuple(shlex.split(parsed.cargo))
+        if not cargo_command:
+            raise RunnerError("the Cargo command is empty")
+        options = parse_cargo_test_options(cargo_arguments)
+        cwd = pathlib.Path.cwd().resolve()
+        metadata = load_cargo_metadata(cargo_command, options, cwd)
+        plan = create_test_plan(metadata, options)
+        return run_test_plan(cargo_command, plan, metadata, os.environ.copy())
+    except (OSError, RunnerError) as exc:
+        print(f"test runner: {exc}", file=sys.stderr)
+        return 2
+
+
+def run_test_plan(
+    cargo_command: tuple[str, ...],
+    plan: TestPlan,
+    metadata: dict[str, typ.Any],
+    environment: dict[str, str],
+) -> int:
+    """Run ordinary tests, doctests, and isolated nested-Cargo tests.
+
+    Examples
+    --------
+    A compile-contract executable is started only after its `--no-run` Cargo
+    process has returned successfully.
+    """
+    if plan.options.no_run:
+        return _run_no_run(cargo_command, plan, environment)
+
+    results: list[int] = []
+    if plan.ordinary_package_args:
+        for package_name, target_arguments in plan.ordinary_package_args:
+            print(
+                f"== Running ordinary Cargo test targets for {package_name} ==",
+                flush=True,
+            )
+            status = _run_cargo_test(
+                cargo_command,
+                plan.options,
+                target_arguments,
+                plan.workspace_root,
+                environment,
+                package_name=package_name,
+            )
+            results.append(status)
+            if status and not plan.options.no_fail_fast:
+                _print_skipped_phases(plan, ordinary_done=True, doctests_done=False)
+                return status
+    else:
+        print("== No ordinary test targets selected; skipping phase ==", flush=True)
+
+    if plan.run_doctests:
+        print("== Running Cargo documentation tests ==", flush=True)
+        status = _run_cargo_test(
+            cargo_command,
+            plan.options,
+            ("--doc",),
+            plan.workspace_root,
+            environment,
+        )
+        results.append(status)
+        if status and not plan.options.no_fail_fast:
+            _print_skipped_phases(plan, ordinary_done=True, doctests_done=True)
+            return status
+    else:
+        print("== No documentation tests selected; skipping phase ==", flush=True)
+
+    if plan.nested_targets:
+        for target in plan.nested_targets:
+            status = _run_nested_target(
+                cargo_command, plan, metadata, target, environment
+            )
+            results.append(status)
+            if status and not plan.options.no_fail_fast:
+                break
+    else:
+        print("== No nested-Cargo targets selected; skipping phase ==", flush=True)
+
+    return next((status for status in results if status != 0), 0)
+
+
+def _run_no_run(
+    cargo_command: tuple[str, ...], plan: TestPlan, environment: dict[str, str]
+) -> int:
+    """Preserve Cargo's compile-only mode without launching any test process."""
+    print("== Compiling selected tests without execution ==", flush=True)
+    command = [*cargo_command, "test", *plan.options.common]
+    command.extend(plan.selected_target_args)
+    if plan.options.test_filter:
+        command.append(plan.options.test_filter)
+    command.append("--no-run")
+    if plan.options.harness_args:
+        command.extend(["--", *plan.options.harness_args])
+    return _run_inherited(command, plan.workspace_root, environment)
+
+
+def _run_cargo_test(
+    cargo_command: tuple[str, ...],
+    options: CargoTestOptions,
+    target_arguments: tuple[str, ...],
+    cwd: pathlib.Path,
+    environment: dict[str, str],
+    *,
+    package_name: str | None = None,
+) -> int:
+    """Run one ordinary Cargo test phase with caller filters and flags."""
+    common = (
+        _without_package_selection(options.common)
+        if package_name is not None
+        else options.common
+    )
+    package_arguments = ["--package", package_name] if package_name else []
+    command = [*cargo_command, "test", *common, *package_arguments, *target_arguments]
+    if options.test_filter:
+        command.append(options.test_filter)
+    if options.harness_args:
+        command.extend(["--", *options.harness_args])
+    return _run_inherited(command, cwd, environment)
+
+
+def _run_nested_target(
+    cargo_command: tuple[str, ...],
+    plan: TestPlan,
+    metadata: dict[str, typ.Any],
+    target: Target,
+    environment: dict[str, str],
+) -> int:
+    """Build one registered test target, then invoke its current artifact."""
+    key = (target.package_id, target.name)
+    print(
+        f"== Building nested-Cargo target {target.package_name}:{target.name} ==",
+        flush=True,
+    )
+    command = [
+        *cargo_command,
+        "test",
+        *_without_message_format(_without_package_selection(plan.options.common)),
+        "--package",
+        target.package_name,
+        *target.cargo_selector(),
+        "--no-run",
+        "--message-format=json",
+    ]
+    messages: list[dict[str, typ.Any]] = []
+    status = _run_json_build(command, plan.workspace_root, environment, messages)
+    print(f"Cargo no-run build exited with status {status}.", flush=True)
+    if status != 0:
+        return status
+    executable = select_test_executables(messages, (target,))[key]
+    package = next(
+        package
+        for package in metadata.get("packages", [])
+        if package.get("id") == target.package_id
+    )
+    test_environment = create_test_runtime_environment(
+        environment,
+        package,
+        executable,
+        messages,
+        target_directory=plan.target_directory,
+        cargo_command=cargo_command,
+    )
+    test_arguments = [plan.options.test_filter] if plan.options.test_filter else []
+    test_arguments.extend(plan.options.harness_args)
+    print(
+        f"== Running {target.package_name}:{target.name} after Cargo exited ==",
+        flush=True,
+    )
+    return _run_inherited(
+        [str(executable), *test_arguments], target.manifest_dir, test_environment
+    )
+
+
+def _run_json_build(
+    command: list[str],
+    cwd: pathlib.Path,
+    environment: dict[str, str],
+    messages: list[dict[str, typ.Any]],
+) -> int:
+    """Stream a JSON-mode Cargo build and retain its current artifacts."""
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=None,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as exc:
+        print(f"test runner: could not start Cargo: {exc}", file=sys.stderr)
+        return 127
+    if process.stdout is None:
+        raise RunnerError("Cargo stdout was not available for JSON artifact parsing")
+    for line in process.stdout:
+        sys.stdout.write(line)
+        sys.stdout.flush()
+        message = parse_cargo_json_message(line)
+        if message is not None:
+            messages.append(message)
+    return process.wait()
+
+
+def _run_inherited(
+    command: list[str], cwd: pathlib.Path, environment: dict[str, str]
+) -> int:
+    """Run a command with inherited output and return its exit status."""
+    try:
+        return subprocess.run(command, cwd=cwd, env=environment, check=False).returncode
+    except OSError as exc:
+        print(f"test runner: could not start {command[0]}: {exc}", file=sys.stderr)
+        return 127
+
+
+def _without_message_format(arguments: tuple[str, ...]) -> tuple[str, ...]:
+    """Remove an output mode so the artifact phase can force JSON messages."""
+    result: list[str] = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--message-format":
+            index += 2
+        elif argument.startswith("--message-format="):
+            index += 1
+        else:
+            result.append(argument)
+            index += 1
+    return tuple(result)
+
+
+def _without_package_selection(arguments: tuple[str, ...]) -> tuple[str, ...]:
+    """Remove package filters already expanded from Cargo metadata."""
+    result: list[str] = []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in {"--package", "-p", "--exclude"}:
+            index += 2
+        elif argument == "--workspace":
+            index += 1
+        else:
+            result.append(argument)
+            index += 1
+    return tuple(result)
+
+
+def _print_skipped_phases(
+    plan: TestPlan, *, ordinary_done: bool, doctests_done: bool
+) -> None:
+    """Name later test phases that default fail-fast semantics skip."""
+    if not ordinary_done and plan.ordinary_target_args:
+        print(
+            "== Skipping ordinary test targets after an earlier failure ==", flush=True
+        )
+    if plan.run_doctests and not doctests_done:
+        print("== Skipping documentation tests after an earlier failure ==", flush=True)
+    if plan.nested_targets:
+        print("== Skipping nested-Cargo tests after an earlier failure ==", flush=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
