@@ -60,9 +60,12 @@ def lock_path_identities(
     environment: dict[str, str], target_directory: pathlib.Path | None
 ) -> dict[str, str]:
     """Map known Cargo lock-file device/inode pairs to readable paths."""
-    cargo_home = pathlib.Path(
-        environment.get("CARGO_HOME", str(pathlib.Path.home() / ".cargo"))
-    ).expanduser()
+    configured_cargo_home = environment.get("CARGO_HOME")
+    cargo_home = (
+        pathlib.Path(configured_cargo_home).expanduser()
+        if configured_cargo_home
+        else pathlib.Path.home() / ".cargo"
+    )
     candidates: dict[str, pathlib.Path] = {
         "Cargo package cache": cargo_home / ".package-cache",
         "Cargo package cache mutation lock": cargo_home / ".package-cache-mutate",
@@ -103,8 +106,16 @@ def format_stall_report(
         f"(deadline {timeout_seconds:.1f}s)",
         f"  command: {shlex.join(command)}",
         f"  working directory: {cwd}",
-        "  toolchain/environment:",
     ]
+    lines.extend(_toolchain_lines(cwd, environment))
+    lines.extend(_process_lines(tree))
+    lines.extend(_lock_lines(tree, environment, target_directory))
+    return "\n".join(lines)
+
+
+def _toolchain_lines(cwd: pathlib.Path, environment: dict[str, str]) -> list[str]:
+    """Describe the selected toolchain and environment used by Cargo."""
+    lines = ["  toolchain/environment:"]
     for name in (
         "RUSTUP_TOOLCHAIN",
         "RUSTC",
@@ -122,9 +133,13 @@ def format_stall_report(
         except OSError:
             contents = "unavailable"
         lines.append(f"    toolchain file: {toolchain} ({contents[:512]})")
+    return lines
 
+
+def _process_lines(tree: OwnedProcessTree) -> list[str]:
+    """Describe commands, ancestry, and observed elapsed time for owned PIDs."""
     processes = tree.live_owned()
-    lines.append("  owned process tree:")
+    lines = ["  owned process tree:"]
     if processes:
         now = time.monotonic()
         for owned in sorted(processes, key=lambda item: item.info.pid):
@@ -136,23 +151,29 @@ def format_stall_report(
             )
     else:
         lines.append("    no live owned process entries are visible")
+    return lines
 
+
+def _lock_lines(
+    tree: OwnedProcessTree,
+    environment: dict[str, str],
+    target_directory: pathlib.Path | None,
+) -> list[str]:
+    """Map known Cargo lock inodes and classify runner-owned waiters."""
     if not tree.proc_available:
-        lines.append("  lock diagnostics: unsupported; Linux /proc is unavailable")
-        return "\n".join(lines)
+        return ["  lock diagnostics: unsupported; Linux /proc is unavailable"]
     try:
         lock_text = pathlib.Path("/proc/locks").read_text(encoding="utf-8")
     except OSError as exc:
-        lines.append(f"  lock diagnostics: could not read /proc/locks: {exc}")
-        return "\n".join(lines)
+        return [f"  lock diagnostics: could not read /proc/locks: {exc}"]
     identities = lock_path_identities(environment, target_directory)
     locks = parse_proc_locks(lock_text)
-    owned_pids = {owned.info.pid for owned in tree.owned.values()}
+    owned_pids = {owned.info.pid for owned in tree.live_owned()}
     relevant = [record for record in locks if record.device_inode in identities]
-    lines.append("  known Cargo lock ownership and waiters:")
+    lines = ["  known Cargo lock ownership and waiters:"]
     if not relevant:
         lines.append("    no locks on mapped Cargo package-cache or target files")
-        return "\n".join(lines)
+        return lines
     for record in relevant:
         path = identities[record.device_inode]
         role = "waiter" if record.waiter else "holder"
@@ -176,7 +197,7 @@ def format_stall_report(
             f"    diagnosis: {classification} "
             f"({identities.get(waiter.device_inode, waiter.device_inode)})"
         )
-    return "\n".join(lines)
+    return lines
 
 
 def classify_lock_waiter(
