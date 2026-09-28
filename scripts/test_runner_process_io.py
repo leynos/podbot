@@ -8,8 +8,21 @@ import subprocess
 import threading
 import time
 import typing as typ
+from dataclasses import dataclass, field
 
 READ_END = object()
+
+
+@dataclass
+class StreamCapture:
+    """Collect one command's selected output streams until they reach EOF."""
+
+    expected_streams: set[str]
+    stdout_handler: typ.Callable[[str], None] | None = None
+    output: dict[str, list[str]] = field(
+        default_factory=lambda: {"stdout": [], "stderr": []}
+    )
+    ended_streams: set[str] = field(default_factory=set)
 
 
 def piped_stream_names(stdout_pipe: bool, stderr_pipe: bool) -> tuple[str, ...]:
@@ -36,9 +49,7 @@ def read_stream(
 
 def drain_events(
     events: queue.Queue[tuple[str, str | object]],
-    output: dict[str, list[str]],
-    ended_streams: set[str],
-    stdout_handler: typ.Callable[[str], None] | None,
+    capture: StreamCapture,
 ) -> None:
     """Dispatch all output already queued by pipe-reader threads."""
     while True:
@@ -46,41 +57,39 @@ def drain_events(
             event = events.get_nowait()
         except queue.Empty:
             return
-        dispatch_event(event, output, ended_streams, stdout_handler)
+        dispatch_event(event, capture)
 
 
 def dispatch_event(
     event: tuple[str, str | object],
-    output: dict[str, list[str]],
-    ended_streams: set[str],
-    stdout_handler: typ.Callable[[str], None] | None,
+    capture: StreamCapture,
 ) -> None:
     """Forward captured chunks and record pipe EOF notifications."""
     stream_name, chunk = event
     if chunk is READ_END:
-        ended_streams.add(stream_name)
+        capture.ended_streams.add(stream_name)
     elif isinstance(chunk, str):
-        if stream_name == "stdout" and stdout_handler is not None:
-            stdout_handler(chunk)
+        if stream_name == "stdout" and capture.stdout_handler is not None:
+            capture.stdout_handler(chunk)
         else:
-            output[stream_name].append(chunk)
+            capture.output[stream_name].append(chunk)
 
 
 def drain_after_cleanup(
     events: queue.Queue[tuple[str, str | object]],
-    output: dict[str, list[str]],
-    ended_streams: set[str],
-    expected_streams: set[str],
-    stdout_handler: typ.Callable[[str], None] | None,
+    capture: StreamCapture,
 ) -> None:
     """Keep pipe readers unblocked after the owned tree is terminated."""
     drain_deadline = time.monotonic() + 2.0
-    while ended_streams < expected_streams and time.monotonic() < drain_deadline:
+    while (
+        capture.ended_streams < capture.expected_streams
+        and time.monotonic() < drain_deadline
+    ):
         try:
             event = events.get(timeout=0.05)
         except queue.Empty:
             continue
-        dispatch_event(event, output, ended_streams, stdout_handler)
+        dispatch_event(event, capture)
 
 
 def join_readers(readers: list[threading.Thread]) -> None:

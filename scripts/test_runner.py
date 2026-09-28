@@ -19,25 +19,13 @@ import os
 import pathlib
 import shlex
 import sys
-import typing as typ
 
-from test_runner_cargo import (
-    RunnerCommandFailure,
-    create_test_runtime_environment,
-    load_cargo_metadata,
-    parse_cargo_json_message,
-    select_test_executables,
-)
-from test_runner_models import CargoTestOptions, CargoTestPlan, RunnerError, Target
-from test_runner_commands import (
-    first_failure,
-    print_skipped_phases,
-    without_message_format,
-    without_package_selection,
-)
+from test_runner_cargo import RunnerCommandFailure, load_cargo_metadata
+from test_runner_models import RunnerError
 from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
 from test_runner_context import TestRunnerContext
+from test_runner_phases import run_test_plan
 from test_runner_supervise import supervise_command
 from test_runner_supervisor import ProcessSupervisor
 
@@ -50,6 +38,18 @@ def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) 
     >>> main(["--cargo", "false", "--", "--bad-option"]) != 0
     True
     """
+    parsed = _parse_arguments(arguments)
+    try:
+        return _run_parsed_arguments(parsed, enable_subreaper)
+    except RunnerCommandFailure as exc:
+        return exc.status
+    except (OSError, RunnerError) as exc:
+        print(f"test runner: {exc}", file=sys.stderr)
+        return 2
+
+
+def _parse_arguments(arguments: list[str] | None) -> argparse.Namespace:
+    """Parse runner controls separately from Cargo's test arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--cargo",
@@ -74,292 +74,58 @@ def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) 
         help="run the command after `--` with bounded process supervision",
     )
     parser.add_argument("cargo_arguments", nargs=argparse.REMAINDER)
-    parsed = parser.parse_args(arguments)
-    cargo_arguments = list(parsed.cargo_arguments)
-    if cargo_arguments and cargo_arguments[0] == "--":
-        cargo_arguments.pop(0)
-    try:
-        if parsed.supervise:
-            return supervise_command(
-                cargo_arguments,
-                parsed.timeout,
-                parsed.watch_interval,
-                enable_subreaper=enable_subreaper,
-            )
-        cargo_command = tuple(shlex.split(parsed.cargo))
-        if not cargo_command:
-            raise RunnerError("the Cargo command is empty")
-        cwd = pathlib.Path.cwd().resolve()
-        options = parse_cargo_test_options(cargo_arguments, cwd=cwd)
-        environment = os.environ.copy()
-        with ProcessSupervisor(
+    return parser.parse_args(arguments)
+
+
+def _cargo_arguments(parsed: argparse.Namespace) -> list[str]:
+    """Remove the separator consumed by the runner from Cargo's arguments."""
+    arguments = list(parsed.cargo_arguments)
+    if arguments and arguments[0] == "--":
+        arguments.pop(0)
+    return arguments
+
+
+def _run_parsed_arguments(
+    parsed: argparse.Namespace,
+    enable_subreaper: bool,
+) -> int:
+    """Dispatch supervised commands or the phased Cargo test workflow."""
+    cargo_arguments = _cargo_arguments(parsed)
+    if parsed.supervise:
+        return supervise_command(
+            cargo_arguments,
             parsed.timeout,
             parsed.watch_interval,
             enable_subreaper=enable_subreaper,
-        ) as supervisor:
-            context = TestRunnerContext(cargo_command, cwd, environment, supervisor)
-            metadata = load_cargo_metadata(context, options)
-            plan = create_test_plan(metadata, options)
-            environment["CARGO_TARGET_DIR"] = str(plan.target_directory)
-            context = TestRunnerContext(
-                cargo_command, plan.workspace_root, environment, supervisor
-            )
-            return run_test_plan(context, plan)
-    except RunnerCommandFailure as exc:
-        return exc.status
-    except (OSError, RunnerError) as exc:
-        print(f"test runner: {exc}", file=sys.stderr)
-        return 2
-
-
-def run_test_plan(
-    context: TestRunnerContext,
-    plan: CargoTestPlan,
-) -> int:
-    """Run ordinary tests, doctests, and isolated nested-Cargo tests.
-
-    Examples
-    --------
-    A compile-contract executable is started only after its `--no-run` Cargo
-    process has returned successfully.
-    """
-    if plan.options.no_run:
-        return _run_no_run(context, plan)
-
-    ordinary_results, should_stop = _run_ordinary_phase(context, plan)
-    supervisor = context.supervisor
-    if supervisor.terminal_status is not None:
-        return supervisor.terminal_status
-    if should_stop:
-        print_skipped_phases(
-            plan,
-            ordinary_offset=len(ordinary_results),
-            include_doctests=True,
-            include_nested=True,
         )
-        return first_failure(ordinary_results)
-
-    doctest_results, should_stop = _run_doctest_phase(context, plan)
-    if supervisor.terminal_status is not None:
-        return supervisor.terminal_status
-    if should_stop:
-        print_skipped_phases(
-            plan,
-            ordinary_offset=len(plan.ordinary_package_args),
-            include_nested=True,
-        )
-        return first_failure((*ordinary_results, *doctest_results))
-
-    nested_results, _ = _run_nested_phase(context, plan)
-    if supervisor.terminal_status is not None:
-        return supervisor.terminal_status
-    return first_failure((*ordinary_results, *doctest_results, *nested_results))
+    return _run_cargo_tests(parsed, cargo_arguments, enable_subreaper)
 
 
-def _run_ordinary_phase(
-    context: TestRunnerContext,
-    plan: CargoTestPlan,
-) -> tuple[tuple[int, ...], bool]:
-    """Run ordinary package tests and report whether fail-fast stopped work."""
-    if not plan.ordinary_package_args:
-        print("== No ordinary test targets selected; skipping phase ==", flush=True)
-        return (), False
-    statuses: list[int] = []
-    for package_name, target_arguments in plan.ordinary_package_args:
-        print(
-            f"== Running ordinary Cargo test targets for {package_name} ==",
-            flush=True,
-        )
-        status = _run_cargo_test(
-            context,
-            plan.options,
-            target_arguments,
-            package_name=package_name,
-        )
-        statuses.append(status)
-        if context.supervisor.terminal_status is not None:
-            return tuple(statuses), True
-        if status and not plan.options.no_fail_fast:
-            return tuple(statuses), True
-    return tuple(statuses), False
-
-
-def _run_doctest_phase(
-    context: TestRunnerContext,
-    plan: CargoTestPlan,
-) -> tuple[tuple[int, ...], bool]:
-    """Run documentation tests and report whether fail-fast stopped work."""
-    if not plan.run_doctests:
-        print("== No documentation tests selected; skipping phase ==", flush=True)
-        return (), False
-    print("== Running Cargo documentation tests ==", flush=True)
-    status = _run_cargo_test(
-        context,
-        plan.options,
-        ("--doc",),
-    )
-    should_stop = bool(status and not plan.options.no_fail_fast)
-    return (status,), should_stop
-
-
-def _run_nested_phase(
-    context: TestRunnerContext,
-    plan: CargoTestPlan,
-) -> tuple[tuple[int, ...], bool]:
-    """Run nested-Cargo tests and report whether fail-fast stopped work."""
-    if not plan.nested_targets:
-        print("== No nested-Cargo targets selected; skipping phase ==", flush=True)
-        return (), False
-    statuses: list[int] = []
-    for target in plan.nested_targets:
-        status = _run_nested_target(context, plan, target)
-        statuses.append(status)
-        if context.supervisor.terminal_status is not None:
-            return tuple(statuses), True
-        if status and not plan.options.no_fail_fast:
-            return tuple(statuses), True
-    return tuple(statuses), False
-
-
-def _run_no_run(
-    context: TestRunnerContext,
-    plan: CargoTestPlan,
+def _run_cargo_tests(
+    parsed: argparse.Namespace,
+    cargo_arguments: list[str],
+    enable_subreaper: bool,
 ) -> int:
-    """Preserve Cargo's compile-only mode without launching test harnesses.
-
-    Selected nested-Cargo targets are included in the build, but their test
-    executables remain unlaunched because `--no-run` applies to every target.
-    """
-    print("== Compiling selected tests without execution ==", flush=True)
-    command = [*context.cargo_command, "test", *plan.options.common]
-    command.extend(plan.selected_target_args)
-    if plan.options.test_filter:
-        command.append(plan.options.test_filter)
-    command.append("--no-run")
-    if plan.options.harness_args:
-        command.extend(["--", *plan.options.harness_args])
-    return context.supervisor.run_inherited(
-        command, plan.workspace_root, context.environment, purpose="Cargo test --no-run"
-    )
-
-
-def _run_cargo_test(
-    context: TestRunnerContext,
-    options: CargoTestOptions,
-    target_arguments: tuple[str, ...],
-    *,
-    package_name: str | None = None,
-) -> int:
-    """Run one ordinary Cargo test phase with caller filters and flags."""
-    common = (
-        without_package_selection(options.common)
-        if package_name is not None
-        else options.common
-    )
-    package_arguments = ["--package", package_name] if package_name else []
-    command = [
-        *context.cargo_command,
-        "test",
-        *common,
-        *package_arguments,
-        *target_arguments,
-    ]
-    if options.test_filter:
-        command.append(options.test_filter)
-    if options.harness_args:
-        command.extend(["--", *options.harness_args])
-    return context.supervisor.run_inherited(
-        command, context.cwd, context.environment, purpose="ordinary Cargo tests"
-    )
-
-
-def _run_nested_target(
-    context: TestRunnerContext,
-    plan: CargoTestPlan,
-    target: Target,
-) -> int:
-    """Build one registered test target, then invoke its current artifact."""
-    key = (target.package_id, target.name)
-    print(
-        f"== Building nested-Cargo target {target.package_name}:{target.name} ==",
-        flush=True,
-    )
-    command = [
-        *context.cargo_command,
-        "test",
-        *without_message_format(without_package_selection(plan.options.common)),
-        "--package",
-        target.package_name,
-        *target.cargo_selector(),
-        "--no-run",
-        "--message-format=json-render-diagnostics",
-    ]
-    messages: list[dict[str, typ.Any]] = []
-    status = _run_json_build(context, command, messages)
-    print(f"Cargo no-run build exited with status {status}.", flush=True)
-    if status != 0:
-        return status
-    try:
-        executable = select_test_executables(messages, (target,))[key]
-    except RunnerError as exc:
-        print(f"test runner: {exc}", file=sys.stderr)
-        return 2
-    package = next(
-        (
-            package
-            for package in plan.selected_packages
-            if package.get("id") == target.package_id
-        ),
-        None,
-    )
-    if package is None:
-        print(
-            "test runner: selected package "
-            f"{target.package_name} is missing from the test plan",
-            file=sys.stderr,
+    """Load Cargo metadata, build the phase plan, and run its test phases."""
+    cargo_command = tuple(shlex.split(parsed.cargo))
+    if not cargo_command:
+        raise RunnerError("the Cargo command is empty")
+    cwd = pathlib.Path.cwd().resolve()
+    options = parse_cargo_test_options(cargo_arguments, cwd=cwd)
+    environment = os.environ.copy()
+    with ProcessSupervisor(
+        parsed.timeout,
+        parsed.watch_interval,
+        enable_subreaper=enable_subreaper,
+    ) as supervisor:
+        context = TestRunnerContext(cargo_command, cwd, environment, supervisor)
+        metadata = load_cargo_metadata(context, options)
+        plan = create_test_plan(metadata, options)
+        environment["CARGO_TARGET_DIR"] = str(plan.target_directory)
+        context = TestRunnerContext(
+            cargo_command, plan.workspace_root, environment, supervisor
         )
-        return 2
-    test_environment = create_test_runtime_environment(
-        context,
-        package,
-        executable,
-        messages,
-    )
-    test_arguments = [plan.options.test_filter] if plan.options.test_filter else []
-    test_arguments.extend(plan.options.harness_args)
-    print(
-        f"== Running {target.package_name}:{target.name} after Cargo exited ==",
-        flush=True,
-    )
-    return context.supervisor.run_inherited(
-        [str(executable), *test_arguments],
-        target.manifest_dir,
-        test_environment,
-        purpose=f"{target.package_name}:{target.name} test harness",
-    )
-
-
-def _run_json_build(
-    context: TestRunnerContext,
-    command: list[str],
-    messages: list[dict[str, typ.Any]],
-) -> int:
-    """Stream a JSON-mode Cargo build and retain its current artifacts."""
-
-    def emit_line(line: str) -> None:
-        sys.stdout.write(line)
-        sys.stdout.flush()
-        message = parse_cargo_json_message(line)
-        if message is not None:
-            messages.append(message)
-
-    return context.supervisor.run_lines(
-        command,
-        context.cwd,
-        context.environment,
-        purpose="Cargo nested-target build",
-        on_line=emit_line,
-    )
+        return run_test_plan(context, plan)
 
 
 def _positive_float(value: str) -> float:
