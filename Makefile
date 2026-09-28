@@ -50,6 +50,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/workflow_contracts.py scripts/workflow_commands.py \
 	scripts/workflow_condition.py scripts/workflow_coverage.py scripts/workflow_placement.py \
 	scripts/test_runner.py scripts/test_runner_cargo.py \
+	scripts/test_runner_supervise.py \
 	scripts/test_runner_commands.py \
 	scripts/test_runner_diagnostics.py scripts/test_runner_process_io.py \
 	scripts/test_runner_process_tree.py \
@@ -67,6 +68,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_test_runner_plan.py \
 	scripts/tests/test_test_runner_cargo.py \
 	scripts/tests/test_test_runner_execution.py \
+	scripts/tests/test_test_runner_supervise.py \
 	scripts/tests/test_test_runner_supervisor.py \
 	scripts/tests/test_sccache_fallback_contract.py \
 	scripts/tests/test_workflow_condition_properties.py
@@ -130,6 +132,7 @@ workflow-contracts: ## Assert what the workflow files must say
 		scripts/workflow_contracts.py scripts/workflow_commands.py \
 		scripts/workflow_condition.py scripts/workflow_coverage.py scripts/workflow_placement.py \
 		scripts/test_runner.py scripts/test_runner_cargo.py \
+		scripts/test_runner_supervise.py \
 		scripts/test_runner_commands.py \
 		scripts/test_runner_diagnostics.py scripts/test_runner_process_io.py \
 		scripts/test_runner_process_tree.py \
