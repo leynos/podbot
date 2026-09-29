@@ -167,6 +167,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
     if not isinstance(document, Mapping):
         print(f"::error::{options.statistics} is not a statistics object")
         return 1
+    stats = document.get("stats", {})
+    stats = stats if isinstance(stats, Mapping) else {}
+    print(f"sccache cache_writes={_counted(stats.get('cache_writes'))}")
     assessment = assess(document, options.expect_location)
     for warning in assessment.warnings:
         print(f"::warning::sccache {warning}")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
 import report_sccache_errors
 from report_sccache_errors import MAX_DIAGNOSTIC_LINES
 from report_sccache_errors import sanitize_error_log
@@ -19,10 +20,10 @@ HEALTH_CHECK_COMMAND = (
 )
 
 
-def test_setup_enables_logging_before_coverage_and_reports_on_failure(
+def test_setup_enables_logging_and_collects_sanitized_diagnostics(
     workflow_texts: dict[str, str],
 ) -> None:
-    """Both coverage workflows log before setup-rust starts the server."""
+    """Both cache workflows collect bounded diagnostics after health checks."""
     for workflow in ("ci.yml", "coverage-main.yml"):
         (report,) = cache_reports({workflow: workflow_texts[workflow]})
         document = parse_workflow(workflow, workflow_texts[workflow])
@@ -56,8 +57,8 @@ def test_setup_enables_logging_before_coverage_and_reports_on_failure(
         assert diagnostic_index > health_index, (
             f"{workflow}: diagnostics must follow the cache health check"
         )
-        assert diagnostic.get("if") == "failure()", (
-            f"{workflow}: diagnostics must run after an earlier failure"
+        assert diagnostic.get("if") == "always()", (
+            f"{workflow}: partial write errors must be reported on green jobs too"
         )
         assert diagnostic.get("continue-on-error") is True, (
             f"{workflow}: diagnostic failure must not replace the original result"
@@ -116,3 +117,12 @@ def test_diagnostic_reads_only_the_bounded_log_prefix(
     assert lines == (
         "no write-related error found in the inspected log prefix (truncated)",
     ), "do not inspect or report log entries beyond the configured byte limit"
+
+
+def test_empty_error_log_environment_is_treated_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty optional path reaches the helper's unavailable-file message."""
+    monkeypatch.setenv("SCCACHE_ERROR_LOG", "")
+
+    assert report_sccache_errors.parse_arguments([]).log_file is None
