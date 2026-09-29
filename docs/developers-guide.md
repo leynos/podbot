@@ -90,6 +90,12 @@ of the parent build process, including the no-default-features CLI boundary
 test. Doctests remain a separate phase, and empty phases are reported as
 skipped.
 
+Default and plural target selection respects each target's
+`required-features` against the package defaults and requested feature flags.
+Explicitly named targets retain Cargo's own missing-feature error. Feature
+resolution is private to the runner's target-selection module and does not
+change dependency feature resolution.
+
 The run has one bounded deadline. Set `TEST_TIMEOUT` as a Make variable, or
 `PODBOT_TEST_TIMEOUT` in the environment; the default is 1800 seconds. A
 timeout exits with status 124. An interrupt exits with 128 plus the signal

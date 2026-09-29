@@ -119,11 +119,13 @@ def _run_json_build(
     """Stream a JSON-mode Cargo build and retain its current artifacts."""
 
     def emit_line(line: str) -> None:
-        sys.stdout.write(line)
-        sys.stdout.flush()
         message = parse_cargo_json_message(line)
-        if message is not None:
-            messages.append(message)
+        if message is None:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            return
+        messages.append(message)
+        _write_rendered_diagnostic(message)
 
     return context.supervisor.run_lines(
         CommandRequest(
@@ -134,3 +136,14 @@ def _run_json_build(
         ),
         emit_line,
     )
+
+
+def _write_rendered_diagnostic(message: dict[str, typ.Any]) -> None:
+    """Write Cargo's human-readable diagnostic without echoing its JSON."""
+    diagnostic = message.get("message")
+    if not isinstance(diagnostic, dict):
+        return
+    rendered = diagnostic.get("rendered")
+    if isinstance(rendered, str):
+        sys.stderr.write(rendered)
+        sys.stderr.flush()

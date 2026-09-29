@@ -66,7 +66,9 @@ def create_test_plan(
     """
     packages = select_packages(metadata, options)
     targets = tuple(
-        target for package in packages for target in targets_for_package(package)
+        target
+        for package in packages
+        for target in targets_for_package(package, options)
     )
     selected = select_targets(targets, options)
     validate_nested_registry(metadata)
@@ -120,7 +122,7 @@ def _ordinary_package_phases(
             target for target in nested if target.package_id == package_id
         )
         package_arguments = cargo_target_arguments(
-            targets_for_package(package),
+            targets_for_package(package, options),
             package_selected,
             options,
             omit_nested=package_nested,

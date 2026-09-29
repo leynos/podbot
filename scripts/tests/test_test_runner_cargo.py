@@ -133,6 +133,9 @@ def test_runtime_environment_restores_cargo_package_metadata(
     assert case.environment["CARGO_MANIFEST_DIR"] == str(case.package_directory), (
         "direct tests must retain Cargo's package manifest directory"
     )
+    assert case.environment["CARGO_MANIFEST_PATH"] == str(
+        case.package_directory / "Cargo.toml"
+    ), "direct tests must retain Cargo's package manifest path"
     assert case.environment["CARGO_PKG_NAME"] == "podbot", (
         "direct test execution must retain Cargo's package name"
     )
@@ -209,6 +212,26 @@ def test_package_version_environment_splits_semver_components(
     assert actual_components == expected_components, (
         "Cargo's version variables must separate core and pre-release values"
     )
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [
+        ("win32", "PATH"),
+        ("darwin", "DYLD_FALLBACK_LIBRARY_PATH"),
+        ("aix", "LIBPATH"),
+        ("linux", "LD_LIBRARY_PATH"),
+    ],
+)
+def test_library_path_variable_matches_cargo_platform_name(
+    monkeypatch: pytest.MonkeyPatch, platform: str, expected: str
+) -> None:
+    """Direct harnesses use Cargo's platform-specific dynamic-library path."""
+    monkeypatch.setattr(test_runner_cargo.sys, "platform", platform)
+
+    actual = test_runner_cargo._library_path_variable()
+
+    assert actual == expected, "the loader path variable must match Cargo"
 
 
 def test_relative_cargo_executable_path_is_anchored_before_chdir(

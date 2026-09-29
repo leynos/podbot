@@ -15,6 +15,7 @@ Pass Cargo test arguments after the runner's ``--`` separator, for example:
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import pathlib
 import shlex
@@ -134,6 +135,8 @@ def _positive_float(value: str) -> float:
         seconds = float(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError("must be a number of seconds") from exc
+    if not math.isfinite(seconds):
+        raise argparse.ArgumentTypeError("must be a finite number of seconds")
     if seconds <= 0:
         raise argparse.ArgumentTypeError("must be greater than zero")
     return seconds

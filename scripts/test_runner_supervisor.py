@@ -36,6 +36,7 @@ from test_runner_process_tree import (
 
 _TIMEOUT_EXIT = 124
 _CLEANUP_EXIT = 125
+_PROCESS_TREE_REFRESH_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -261,12 +262,16 @@ class ProcessSupervisor:
     def _monitor_process(self, run: _ProcessRun) -> tuple[int, str, str]:
         """Coordinate output, deadline checks, diagnostics, and final status."""
         next_watch = time.monotonic() + self.watch_interval_seconds
+        next_tree_refresh = time.monotonic() + _PROCESS_TREE_REFRESH_SECONDS
         exit_status: int | None = None
         while True:
             _drain_events(run.events, run.capture)
-            run.tree.refresh()
-            run.tree.reap_adopted()
             return_status = run.process.poll()
+            now = time.monotonic()
+            if return_status is not None or now >= next_tree_refresh:
+                run.tree.refresh()
+                next_tree_refresh = now + _PROCESS_TREE_REFRESH_SECONDS
+            run.tree.reap_adopted()
             terminal_reason = self._terminal_reason(
                 run.tree, run.process, return_status
             )
@@ -285,7 +290,6 @@ class ProcessSupervisor:
             ):
                 exit_status = _normal_exit_status(return_status)
                 break
-            now = time.monotonic()
             if now >= next_watch:
                 self._emit_diagnostics(
                     run.tree,
@@ -321,7 +325,7 @@ class ProcessSupervisor:
             self.terminal_status = _TIMEOUT_EXIT
             self.terminal_reason = "timed out"
             return self.terminal_reason
-        if return_status is not None and tree.descendants():
+        if return_status is not None and tree.descendants(refresh=False):
             self.terminal_status = _CLEANUP_EXIT
             self.terminal_reason = "command exited while owned descendants remained"
             return self.terminal_reason

@@ -6,6 +6,7 @@ running a command is recognized, and which guards disqualify it.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -61,12 +62,35 @@ def test_ci_does_not_run_cargo_test_directly(
     )
 
 
-def test_make_test_uses_runner_and_preserves_overrides() -> None:
+def test_make_test_uses_runner_and_preserves_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The recipe keeps Cargo flags, warning policy, and timeout overridable."""
+    inherited_make_variables = {
+        "MAKEFLAGS": "-j 11",
+        "MFLAGS": "-j 13",
+        "MAKEOVERRIDES": "TEST_FLAGS=--doc",
+        "BUILD_JOBS": "-j 7",
+        "RUST_FLAGS": "-W unused",
+        "CARGO_FLAGS": "--doc",
+        "TEST_FLAGS": "--doc",
+        "TEST_TIMEOUT": "9",
+        "PODBOT_TEST_TIMEOUT": "11",
+        "CARGO": "cargo-from-environment",
+        "UV": "uv-from-environment",
+    }
+    for name, value in inherited_make_variables.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("UNRELATED_TEST_ENV", "preserve-me")
+    make_environment = os.environ.copy()
+    for name in inherited_make_variables:
+        make_environment.pop(name, None)
+
     repository_root = Path(__file__).resolve().parents[2]
     default_command = subprocess.run(
         ["make", "--no-print-directory", "--dry-run", "test"],
         cwd=repository_root,
+        env=make_environment,
         capture_output=True,
         check=True,
         text=True,
@@ -83,6 +107,7 @@ def test_make_test_uses_runner_and_preserves_overrides() -> None:
             "BUILD_JOBS=-j 2",
         ],
         cwd=repository_root,
+        env=make_environment,
         capture_output=True,
         check=True,
         text=True,
@@ -111,6 +136,9 @@ def test_make_test_uses_runner_and_preserves_overrides() -> None:
     )
     assert 'RUSTFLAGS="-D warnings -W unused"' in override_command, (
         "the test recipe must preserve the caller's Rust flags"
+    )
+    assert make_environment["UNRELATED_TEST_ENV"] == "preserve-me", (
+        "dry-run isolation must preserve unrelated caller environment values"
     )
 
 
