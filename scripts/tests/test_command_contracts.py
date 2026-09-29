@@ -168,6 +168,11 @@ def test_make_workflow_gate_formats_lints_and_documents_runner_modules() -> None
         assert module in format_command, f"{module} is missing from Ruff formatting"
         assert module in lint_command, f"{module} is missing from Ruff linting"
         assert module in pytest_command, f"{module} is missing from doctests"
+    for module in (
+        "scripts/check_sccache_health.py",
+        "scripts/report_sccache_errors.py",
+    ):
+        assert module in pytest_command, f"{module} is missing from doctests"
 
 
 def test_the_contracts_are_run_by_ci(workflow_texts: dict[str, str]) -> None:

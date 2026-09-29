@@ -153,9 +153,9 @@ jobs:
         if: always() && steps.setup-rust.outputs.sccache-status == 'fallback'
         run: echo "::notice title=sccache fallback::compiler cache health check skipped because setup-rust fell back to no cache for this job"
       - name: Diagnose compiler-cache write errors
-        # Best-effort and failure-only: keep the original failing step as the
-        # job result, and send only the helper's sanitized output to the log.
-        if: failure()
+        # Partial write failures are warnings, so collect the sanitized report
+        # even when the health check leaves the job green.
+        if: always()
         continue-on-error: true
         env:
           SCCACHE_ERROR_LOG: ${{ runner.temp }}/sccache-error.log

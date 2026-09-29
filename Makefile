@@ -151,6 +151,7 @@ workflow-contracts: ## Assert what the workflow files must say
 		scripts/test_runner_plan.py scripts/test_runner_registry.py \
 		scripts/test_runner_selection.py \
 		scripts/check_sccache_health.py \
+		scripts/report_sccache_errors.py \
 		--doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 
