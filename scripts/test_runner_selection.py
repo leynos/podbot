@@ -122,20 +122,23 @@ def _unique_selected_targets(
     for selector, pattern in selectors:
         matches = targets_matching(targets, selector, pattern)
         matched_targets.extend(matches)
-        if selector not in {"bin", "test", "example", "bench"}:
-            matches = tuple(
-                target for target in matches if target.has_required_features_enabled
-            )
-        selected_targets.extend(matches)
+        selected_targets.extend(_targets_for_selector(selector, matches))
     unique = {
         (target.package_id, target.name, target.kinds): target
         for target in selected_targets
     }
-    if not unique:
-        if matched_targets:
-            return ()
+    if not unique and not matched_targets:
         raise RunnerError("Cargo target selection contains no targets")
     return tuple(unique.values())
+
+
+def _targets_for_selector(
+    selector: str, matches: tuple[Target, ...]
+) -> tuple[Target, ...]:
+    """Keep explicitly named targets; feature-filter all category matches."""
+    if selector in {"bin", "test", "example", "bench"}:
+        return matches
+    return tuple(target for target in matches if target.has_required_features_enabled)
 
 
 def _is_default_test_target(target: Target) -> bool:

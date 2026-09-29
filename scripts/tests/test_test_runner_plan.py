@@ -134,6 +134,64 @@ def test_plural_test_selection_skips_feature_gated_binary(
     )
 
 
+def test_plural_bin_selection_returns_empty_when_every_match_is_feature_gated(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Plural selectors retain no targets when every match fails its gate."""
+    plan = create_test_plan(
+        package_document(tmp_path),
+        parse_cargo_test_options(["--no-default-features", "--bins"]),
+    )
+
+    assert plan.selected_targets == (), (
+        "a plural selector with only feature-gated matches must return no targets"
+    )
+
+
+def test_plural_selector_without_matches_raises_runner_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A plural category with no metadata matches is an invalid selection."""
+    metadata = package_document(tmp_path)
+    package = metadata["packages"][0]
+    package["targets"] = [
+        target for target in package["targets"] if "bench" not in target["kind"]
+    ]
+    for target in package["targets"]:
+        target["bench"] = False
+
+    with pytest.raises(RunnerError, match="Cargo target selection contains no targets"):
+        create_test_plan(metadata, parse_cargo_test_options(["--benches"]))
+
+
+def test_repeated_and_mixed_selectors_preserve_target_order_and_deduplicate(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Repeated selectors preserve first-match order and target identity."""
+    plan = create_test_plan(
+        package_document(tmp_path),
+        parse_cargo_test_options(
+            [
+                "--test",
+                "compile_contract",
+                "--example",
+                "example_check",
+                "--tests",
+                "--example",
+                "example_check",
+            ]
+        ),
+    )
+
+    assert [(target.name, target.kinds) for target in plan.selected_targets] == [
+        ("compile_contract", ("test",)),
+        ("example_check", ("example",)),
+        ("podbot", ("lib",)),
+        ("podbot", ("bin",)),
+        ("cli_feature_gating", ("test",)),
+    ], "selection must retain first occurrence order and deduplicate by target identity"
+
+
 def test_transitive_package_features_enable_required_target(
     tmp_path: pathlib.Path,
 ) -> None:
