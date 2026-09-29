@@ -203,6 +203,7 @@ def _set_package_environment(
     """Restore Cargo's package metadata environment variables."""
     manifest_dir = pathlib.Path(str(package["manifest_path"])).parent
     environment["CARGO_MANIFEST_DIR"] = str(manifest_dir)
+    environment["CARGO_MANIFEST_PATH"] = str(package["manifest_path"])
     values = {
         "CARGO_PKG_NAME": package.get("name", ""),
         "CARGO_PKG_AUTHORS": ":".join(package.get("authors", [])),
@@ -316,6 +317,8 @@ def _library_path_variable() -> str:
         return "PATH"
     if sys.platform == "darwin":
         return "DYLD_FALLBACK_LIBRARY_PATH"
+    if sys.platform == "aix":
+        return "LIBPATH"
     return "LD_LIBRARY_PATH"
 
 

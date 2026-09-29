@@ -74,12 +74,19 @@ def _all_target_arguments(
     groups = tuple(
         group
         for group, matches in _ALL_TARGET_GROUPS
-        if any(matches(target) for target in targets)
+        if any(
+            matches(target) and target.has_required_features_enabled
+            for target in targets
+        )
     )
     test_arguments = tuple(
         part
         for target in targets
-        if "test" in target.kinds and target not in omitted
+        if (
+            "test" in target.kinds
+            and target.has_required_features_enabled
+            and target not in omitted
+        )
         for part in ("--test", target.name)
     )
     return (*groups, *test_arguments)
@@ -102,7 +109,7 @@ def _test_arguments(
     arguments.extend(
         part
         for target in candidates
-        if target not in omitted
+        if target not in omitted and target.has_required_features_enabled
         for part in target.cargo_selector()
     )
     return tuple(arguments)
@@ -128,7 +135,7 @@ def _default_arguments(
     return tuple(
         part
         for target in targets
-        if target not in omitted
+        if target not in omitted and target.has_required_features_enabled
         for part in target.cargo_selector()
     )
 

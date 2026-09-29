@@ -131,10 +131,9 @@ def _consume_cargo_argument(
     argument = arguments[index]
     option, separator, attached = argument.partition("=")
     attached_value = attached if separator else None
-    package_value = attached_package_value(argument)
-    if package_value is not None:
-        option = "-p"
-        attached_value = package_value
+    short_option = _attached_short_value_option(argument)
+    if short_option is not None:
+        option, attached_value = short_option
     token = _CargoOptionToken(arguments, index, option, attached_value)
     next_index = _consume_value_option(token, state)
     if next_index is not None:
@@ -263,14 +262,23 @@ def _take_value(
     return arguments[index + 1], index + 2
 
 
+def _attached_short_value_option(argument: str) -> tuple[str, str] | None:
+    """Split attached values for the supported single-letter options."""
+    if argument.startswith("--"):
+        return None
+    for option in ("-F", "-j", "-p"):
+        if argument.startswith(option) and len(argument) > len(option):
+            value = argument[len(option) :]
+            if value.startswith("="):
+                value = value[1:]
+            return option, value
+    return None
+
+
 def attached_package_value(argument: str) -> str | None:
-    """Return a short `-pVALUE` selector's value, including empty values."""
-    if not argument.startswith("-p") or argument.startswith("--"):
-        return None
-    if len(argument) == 2:
-        return None
-    value = argument[2:]
-    return value[1:] if value.startswith("=") else value
+    """Return an attached package value for package-filter removal."""
+    parsed = _attached_short_value_option(argument)
+    return parsed[1] if parsed is not None and parsed[0] == "-p" else None
 
 
 def _record_value_option(

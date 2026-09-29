@@ -180,13 +180,25 @@ class OwnedProcessTree:
             and current.state not in {"Z", "X"}
         )
 
-    def descendants(self) -> tuple[OwnedProcess, ...]:
-        """Return all currently live tracked processes except the root child."""
-        return tuple(
-            process
-            for process in self.live_owned()
-            if process.info.pid != self.root_pid
-        )
+    def descendants(self, *, refresh: bool = True) -> tuple[OwnedProcess, ...]:
+        """Return all live tracked processes except the root child.
+
+        Set ``refresh`` to false only immediately after refreshing this tree.
+        """
+        processes = self.refresh() if refresh else None
+        if not self.proc_available:
+            return ()
+        descendants: list[OwnedProcess] = []
+        for pid, owned in self.owned.items():
+            current = processes.get(pid) if processes is not None else owned.info
+            if (
+                pid != self.root_pid
+                and current is not None
+                and current.start_time == owned.info.start_time
+                and current.state not in {"Z", "X"}
+            ):
+                descendants.append(owned)
+        return tuple(descendants)
 
     def ancestors_of(self, pid: int) -> set[int]:
         """Return owned ancestors of a process from the latest parent links."""
@@ -312,7 +324,7 @@ def _read_process(pid: int) -> ProcessInfo | None:
     """Read one process stat and command line when it remains available."""
     try:
         process_path = pathlib.Path("/proc") / str(pid)
-        stat = (process_path / "stat").read_text(encoding="utf-8")
+        stat = (process_path / "stat").read_bytes().decode("utf-8", errors="replace")
         command_line = (process_path / "cmdline").read_bytes()
     except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
         return None

@@ -162,6 +162,41 @@ def test_pidfd_identity_mismatch_suppresses_pid_fallback(
     assert killed == [], "PID reuse must suppress the numeric-PID fallback"
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
+def test_read_process_replaces_invalid_utf8_in_stat_command_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Opaque procfs command bytes must not abort process-tree inspection."""
+    pid = 70007
+    stat_path = pathlib.Path("/proc") / str(pid) / "stat"
+    command_path = pathlib.Path("/proc") / str(pid) / "cmdline"
+    stat = (
+        f"{pid} (worker ".encode()
+        + b"\xff) S 1 "
+        + b" ".join(str(value).encode() for value in range(2, 23))
+    )
+    real_read_bytes = pathlib.Path.read_bytes
+
+    def read_bytes(path: pathlib.Path) -> bytes:
+        if path == stat_path:
+            return stat
+        if path == command_path:
+            return b"/usr/bin/worker\0argument\0"
+        return real_read_bytes(path)
+
+    monkeypatch.setattr(pathlib.Path, "read_bytes", read_bytes)
+
+    process = process_tree._read_process(pid)
+
+    assert process is not None, (
+        "invalid UTF-8 in the process command name must not discard its record"
+    )
+    assert process.parent_pid == 1, "the stat parent PID must remain parseable"
+    assert process.command == "/usr/bin/worker argument", (
+        "the process command line must retain its replacement-safe decoding"
+    )
+
+
 def _process(pid: int, parent_pid: int, start_time: int) -> process_tree.ProcessInfo:
     """Build a stable fake process identity for procfs ownership tests."""
     return process_tree.ProcessInfo(

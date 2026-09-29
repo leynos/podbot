@@ -61,6 +61,13 @@ def package_document(root: pathlib.Path) -> dict[str, typ.Any]:
                 "name": "podbot",
                 "version": "0.1.0",
                 "manifest_path": str(root / "Cargo.toml"),
+                "features": {
+                    "default": ["default-cli"],
+                    "default-cli": ["cli"],
+                    "cli": ["dep:clap"],
+                    "internal": [],
+                    "experimental": [],
+                },
                 "authors": ["Podbot Authors"],
                 "description": "A test package",
                 "repository": "https://example.invalid/podbot",
