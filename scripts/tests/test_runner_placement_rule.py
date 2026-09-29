@@ -211,7 +211,7 @@ def test_a_break_nested_in_a_shape_is_found(runs_on: str, expected: bool) -> Non
 def test_the_runner_expression_is_evaluated_for_each_kind_of_run(
     value: object, is_fork: bool, expected: str | None
 ) -> None:
-    """The estate expression places a fork on hosted and every other run on Ubicloud.
+    """The runner-selection expression places a fork on hosted and every other run on Ubicloud.
 
     Each departure from the shape is refused with None, and the inverted
     arms are read as written, so a swap is visible to the inventory below.
