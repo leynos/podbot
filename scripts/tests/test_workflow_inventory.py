@@ -18,7 +18,11 @@ import typing as typ
 
 from workflow_contracts import parse, shared_actions_references
 from workflow_coverage import cache_reports, coverage_jobs
-from workflow_placement import line_break_fault, runs_on_declarations
+from workflow_placement import (
+    line_break_fault,
+    runs_on_declarations,
+    selected_runner,
+)
 
 #: Every shared-actions reference, as workflow and action or workflow name.
 #: The last is a job-level reusable-workflow call, which a reader of steps
@@ -175,3 +179,29 @@ def test_every_ubicloud_job_states_its_own_ceiling(
         if isinstance(job, dict) and "ubicloud" in str(job.get("runs-on", ""))
     ]
     assert found == CEILINGS
+
+
+#: The Ubicloud runner class each placed lane names.
+CLASSES: typ.Final[dict[tuple[str, str], str]] = {
+    ("ci.yml", "build-test"): "ubicloud-standard-4",
+    ("coverage-main.yml", "coverage-upload"): "ubicloud-standard-2",
+}
+
+
+def test_every_ubicloud_lane_places_each_kind_of_run_on_its_class(
+    workflow_texts: dict[str, str],
+) -> None:
+    """A fork's pull request is hosted; every other run is on the lane's class.
+
+    Read from the real files, so a lane moved to another class, a literal
+    label or an inverted expression fails here until the class is updated.
+    """
+    placed = {
+        (d.workflow, d.job): d.value
+        for d in runs_on_declarations(workflow_texts)
+        if "ubicloud" in str(d.value)
+    }
+    assert set(placed) == set(CLASSES)
+    for lane, value in placed.items():
+        assert selected_runner(value, is_fork=False) == CLASSES[lane], lane
+        assert selected_runner(value, is_fork=True) == "ubuntu-latest", lane

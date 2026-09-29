@@ -1684,7 +1684,8 @@ both supplied by `uv` at the pinned versions named in the Makefile.
 ### 20.2. `of_type`, and why it is shared
 
 `of_type(value, kind)` returns `value` when it has the expected shape and an
-empty instance of `kind` otherwise. Both reader modules use it.
+empty instance of `kind` otherwise. The four reader modules listed in section
+20 use it.
 
 **Scope.** Walking a parsed workflow document, and nothing else. A workflow is
 a tree of `object`, and every step of a walk down it has to say what it
@@ -1692,11 +1693,11 @@ expected and what to do when the file says something else. Returning "an empty
 one of those" keeps the walks flat and keeps a malformed file from raising out
 of what reads like a query.
 
-**Permitted call sites.** The two reader modules only. It is deliberately not
-exported for use in production code under `src/`: swallowing an unexpected
-shape is the right behaviour when surveying a configuration file and the wrong
-behaviour almost everywhere else, where the unexpected shape is a defect that
-must remain visible.
+**Permitted production call sites.** The four reader modules listed in section
+20 only. It is deliberately not exported for use in production code under
+`src/`: swallowing an unexpected shape is the right behaviour when surveying a
+configuration file and the wrong behaviour almost everywhere else, where the
+unexpected shape is a defect that must remain visible.
 
 **Composition.** It is a narrowing step inside a walk, never the last word. A
 contract that cares whether a value was absent or malformed must check that
@@ -1732,16 +1733,18 @@ Three things matter, and each fails in a way nothing else would notice.
   and cancels nothing while reading exactly like a concurrency control. A
   constant group is the opposite failure: every open pull request shares one
   queue, and the first push anywhere cancels the gates running everywhere else.
-  `github.run_id` appears only as the fallback after the pull-request number,
-  which only non-pull-request events reach. Each of those runs therefore has a
-  group of its own. GitHub keeps at most one pending run per group, so a shared
-  group for dispatches would let a third dispatch replace a queued second one.
+  In workflows that use this fallback, `github.run_id` appears after the
+  pull-request number, which only non-pull-request events reach. Each
+  non-pull-request run in those workflows therefore has a group of its own.
+  GitHub keeps at most one pending run per group, so a shared group for
+  dispatches would let a third dispatch replace a queued second one.
 - **Cancellation is conditioned on the event.** A literal
   `cancel-in-progress: true` reads as the stricter setting and is a regression.
-  A push to `main`, a schedule, and a dispatch have no successor waiting, and
-  the run on `main` writes the warm cache and records the coverage that no
-  later run repeats. With its own group, such a run is neither cancelled nor
-  replaced.
+  In a workflow that uses this fallback, a push to `main`, a schedule, and a
+  dispatch have no successor waiting. With its own group, such a run is neither
+  cancelled nor replaced. `coverage-main.yml` is an exception: its
+  `workflow_dispatch` runs share a group by `github.ref`, so a later pending
+  run for the same ref can replace an earlier pending run.
 - **The key is evaluated.** The group must read the pull request inside
   `${{ }}`. `group: github.ref`, or a quoted name inside an expression, is a
   constant that only looks like the context.
