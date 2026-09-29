@@ -20,16 +20,16 @@ For user-facing behaviour and configuration reference, see
 
 All quality gates must pass before committing. The canonical targets are:
 
-| Target              | Command                                                                | Purpose                                                            |
-| ------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `make check-fmt`    | `cargo fmt --workspace -- --check`                                     | Verify formatting                                                  |
-| `make fmt`          | `cargo fmt --workspace`                                                | Apply formatting fixes                                             |
-| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Lint with all warnings denied                                      |
-| `make test`         | `cargo test --workspace`                                               | Run full test suite                                                |
-| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                 | Type-check the workspace                                           |
-| `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`        | Derive workspace root with `python3`; run `cargo audit` once there |
-| `make markdownlint` | markdownlint-cli                                                       | Validate Markdown files                                            |
-| `make nixie`        | Mermaid diagram validator                                              | Validate diagrams in Markdown                                      |
+| Target              | Command                                                                     | Purpose                                                            |
+| ------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `make check-fmt`    | `cargo fmt --workspace -- --check`, then `mdtablefix --check`               | Verify Rust and Markdown formatting                                |
+| `make fmt`          | `cargo fmt --workspace`, `mdtablefix --in-place`, `markdownlint-cli2 --fix` | Apply Rust and Markdown formatting fixes                           |
+| `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings`      | Lint with all warnings denied                                      |
+| `make test`         | `cargo test --workspace`                                                    | Run full test suite                                                |
+| `make typecheck`    | `cargo check --workspace --all-targets --all-features`                      | Type-check the workspace                                           |
+| `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`             | Derive workspace root with `python3`; run `cargo audit` once there |
+| `make markdownlint` | markdownlint-cli                                                            | Validate Markdown files                                            |
+| `make nixie`        | Mermaid diagram validator                                                   | Validate diagrams in Markdown                                      |
 
 _Table 1: Quality gates and corresponding commands._
 
