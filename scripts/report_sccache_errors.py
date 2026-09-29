@@ -1,5 +1,27 @@
 #!/usr/bin/env python3
-"""Print a bounded, sanitized view of sccache's error log."""
+"""Print a bounded, sanitized view of sccache's server error log.
+
+The cache setup action starts sccache with ``SCCACHE_ERROR_LOG`` pointed at a
+per-job file. Workflow steps call this script after recording cache health;
+the path can be passed explicitly or read from ``SCCACHE_ERROR_LOG``. Only a
+small number of sanitized error lines are printed, and an unavailable log
+never changes the job result.
+
+Examples
+--------
+Keep an HTTP status and endpoint host while removing URL credentials and path:
+
+    >>> sanitize_error_log(
+    ...     "ERROR failed to write cache: HTTP 429 from "
+    ...     "https://user:secret@cache.example/item"
+    ... )
+    ('ERROR failed to write cache: HTTP 429 from <URL https://cache.example>',)
+
+Choose a per-job log path explicitly when invoking the helper:
+
+    >>> parse_arguments(["/tmp/sccache-error.log"]).log_file.name
+    'sccache-error.log'
+"""
 
 from __future__ import annotations
 
@@ -147,7 +169,7 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
         "log_file",
         nargs="?",
         type=Path,
-        default=os.environ.get("SCCACHE_ERROR_LOG"),
+        default=os.environ.get("SCCACHE_ERROR_LOG") or None,
         help="per-job sccache error log (defaults to SCCACHE_ERROR_LOG)",
     )
     return parser.parse_args(arguments)

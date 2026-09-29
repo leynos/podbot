@@ -149,6 +149,17 @@ def test_the_exit_status_follows_the_assessment(
     assert ("::error::" in output) is (status == 1)
 
 
+def test_the_cache_write_count_is_reported(
+    checker: typ.Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The lane log exposes successful stores without weakening the gate."""
+    statistics = tmp_path / "sccache-stats.json"
+    statistics.write_text(json.dumps(_document(cache_writes=7)), encoding="utf-8")
+
+    assert checker.main(["--expect-location", "ghac", str(statistics)]) == 0
+    assert capsys.readouterr().out == "sccache cache_writes=7\n"
+
+
 def test_a_missing_file_fails(checker: typ.Any, tmp_path: Path) -> None:
     """No statistics is a broken lane, not a pass."""
     assert (
