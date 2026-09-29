@@ -994,8 +994,7 @@ tracked UTF-8 text. Commit the regenerated `typos.toml`; never edit it by hand.
 Bump the pin by changing `TYPOS_CONFIG_BUILDER_VERSION` in the `Makefile`.
 
 Repository exceptions belong in the local overlay as narrow exact or full-line
-patterns; do not add bare accepted words for machine interfaces or formal
-names.
+patterns; do not add bare accepted words for machine interfaces or formal names.
 
 ## 16. Behavioural test infrastructure
 
@@ -1635,18 +1634,24 @@ reusable-workflow call; every coverage step and its cache report; and every
 runner declaration, raw and parsed. A change that adds or removes an entry
 fails that module until its expected inventory is updated in the same commit.
 
-`coverage-upload`, main's only cache writer, runs on `ubicloud-standard-2`, and
-a pull request from a fork falls back to `ubuntu-latest`, because a fork cannot
-obtain an Ubicloud runner. Ubicloud's cache proxy is scoped by ref, so a pull
-request's Ubicloud `build-test` reads a warm main scope only when a main job on
-Ubicloud writes it. An Ubicloud runner is a self-hosted just-in-time runner, so
-GitHub's six-hour cap for hosted jobs does not apply to it. Every job whose
-`runs-on` can select Ubicloud therefore states its own `timeout-minutes`, and
-the same module asserts that inventory exactly: `coverage-upload` at a
-provisional 45 minutes, sized for its first cold run and held 15 minutes above
-its 1,800 s cargo watchdog so the watchdog, not the ceiling, ends a stalled
-run. It is tightened to twice a measured warm run once one exists, and never
-below the watchdog plus setup.
+`build-test`, on `ubicloud-standard-4`, and `coverage-upload`, main's only
+cache writer, on `ubicloud-standard-2`, run on Ubicloud, and a pull request
+from a fork falls back to `ubuntu-latest`, because a fork cannot obtain an
+Ubicloud runner. Ubicloud's cache proxy is scoped by ref, so a pull request's
+Ubicloud `build-test` reads a warm main scope only when a main job on Ubicloud
+writes it; a fork's pull request restores a hosted cache that main no longer
+refreshes, which is accepted because fork pull requests are rare here. An
+Ubicloud runner is a self-hosted just-in-time runner, so GitHub's six-hour cap
+for hosted jobs does not apply to it. Every job whose `runs-on` can select
+Ubicloud therefore states its own `timeout-minutes`, and the same module
+asserts that inventory exactly: `coverage-upload` at a provisional 45 minutes,
+held 15 minutes above its 1,800 s cargo watchdog so the watchdog, not the
+ceiling, ends a stalled run, and `build-test` at 55 minutes, twice its warm
+`standard-4` run of 27 minutes (run 36563787701). Neither may sit below the
+watchdog plus setup. `build-test` is `standard-4` on a measured shortfall: its
+first warm run on `standard-2` spent 19 minutes in lint and reached its
+35-minute ceiling mid-test (run 36559052173), against a hosted median of 14.8
+minutes.
 
 Both coverage lanes also check the compiler cache after reporting on it.
 `sccache --show-stats --stats-format json > sccache-stats.json` writes the
@@ -1678,7 +1683,8 @@ both supplied by `uv` at the pinned versions named in the Makefile.
 ### 20.2. `of_type`, and why it is shared
 
 `of_type(value, kind)` returns `value` when it has the expected shape and an
-empty instance of `kind` otherwise. Both reader modules use it.
+empty instance of `kind` otherwise. The four reader modules listed in section
+20 use it.
 
 **Scope.** Walking a parsed workflow document, and nothing else. A workflow is
 a tree of `object`, and every step of a walk down it has to say what it
@@ -1686,11 +1692,11 @@ expected and what to do when the file says something else. Returning "an empty
 one of those" keeps the walks flat and keeps a malformed file from raising out
 of what reads like a query.
 
-**Permitted call sites.** The two reader modules only. It is deliberately not
-exported for use in production code under `src/`: swallowing an unexpected
-shape is the right behaviour when surveying a configuration file and the wrong
-behaviour almost everywhere else, where the unexpected shape is a defect that
-must remain visible.
+**Permitted production call sites.** The four reader modules listed in section
+20 only. It is deliberately not exported for use in production code under
+`src/`: swallowing an unexpected shape is the right behaviour when surveying a
+configuration file and the wrong behaviour almost everywhere else, where the
+unexpected shape is a defect that must remain visible.
 
 **Composition.** It is a narrowing step inside a walk, never the last word. A
 contract that cares whether a value was absent or malformed must check that
@@ -1700,10 +1706,10 @@ cannot be read, the reader raises `WorkflowReadError` rather than returning an
 empty value, so that a refusal is distinguishable from an absence.
 
 **Why not two copies.** The sweep before writing it found no equivalent in this
-repository. Both modules walk the same document shape, and two copies would
-drift: the failure mode is one module tolerating a shape the other refuses,
-which makes a contract's verdict depend on which module happened to read the
-file.
+repository. The reader modules walk the same document shape, and two copies
+would drift: the failure mode is one module tolerating a shape the other
+refuses, which makes a contract's verdict depend on which module happened to
+read the file.
 
 ## 21. Cancelling superseded pull-request runs
 
@@ -1726,16 +1732,18 @@ Three things matter, and each fails in a way nothing else would notice.
   and cancels nothing while reading exactly like a concurrency control. A
   constant group is the opposite failure: every open pull request shares one
   queue, and the first push anywhere cancels the gates running everywhere else.
-  `github.run_id` appears only as the fallback after the pull-request number,
-  which only non-pull-request events reach. Each of those runs therefore has a
-  group of its own. GitHub keeps at most one pending run per group, so a shared
-  group for dispatches would let a third dispatch replace a queued second one.
+  In workflows that use this fallback, `github.run_id` appears after the
+  pull-request number, which only non-pull-request events reach. Each
+  non-pull-request run in those workflows therefore has a group of its own.
+  GitHub keeps at most one pending run per group, so a shared group for
+  dispatches would let a third dispatch replace a queued second one.
 - **Cancellation is conditioned on the event.** A literal
   `cancel-in-progress: true` reads as the stricter setting and is a regression.
-  A push to `main`, a schedule, and a dispatch have no successor waiting, and
-  the run on `main` writes the warm cache and records the coverage that no
-  later run repeats. With its own group, such a run is neither cancelled nor
-  replaced.
+  In a workflow that uses this fallback, a push to `main`, a schedule, and a
+  dispatch have no successor waiting. With its own group, such a run is neither
+  cancelled nor replaced. `coverage-main.yml` is an exception: its
+  `workflow_dispatch` runs share a group by `github.ref`, so a later pending
+  run for the same ref can replace an earlier pending run.
 - **The key is evaluated.** The group must read the pull request inside
   `${{ }}`. `group: github.ref`, or a quoted name inside an expression, is a
   constant that only looks like the context.

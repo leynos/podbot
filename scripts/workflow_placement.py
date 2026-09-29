@@ -16,6 +16,7 @@ regardless, so a green run is not evidence the defect is absent.
 from __future__ import annotations
 
 import collections.abc as cabc
+import re
 import typing as typ
 
 import yaml
@@ -198,3 +199,54 @@ def line_break_fault(value: object) -> str | None:
     else:
         return None
     return next((fault for fault in faults if fault is not None), None)
+
+
+#: The context value that is true only for a pull request from a fork.
+FORK_CONDITION: typ.Final[str] = "github.event.pull_request.head.repo.fork"
+
+#: The estate shape: a condition, a quoted hosted arm and a quoted other arm.
+_ESTATE_SHAPE: typ.Final[re.Pattern[str]] = re.compile(
+    r"\$\{\{\s*(?P<condition>[^&|]+?)\s*&&\s*'(?P<hosted>[^']*)'"
+    r"\s*\|\|\s*'(?P<other>[^']*)'\s*\}\}"
+)
+
+
+def selected_runner(value: object, is_fork: bool) -> str | None:
+    """Return the label a `runs-on` value selects for a run.
+
+    Returns None when the value is not the estate's
+    `<fork> && '<hosted>' || '<label>'` shape. A literal label is not the
+    shape: a lane that never falls back cannot serve a fork, and a lane
+    that never leaves the hosted pool is not placed at all.
+
+    Parameters
+    ----------
+    value : object
+        The job's parsed `runs-on` value.
+    is_fork : bool
+        True for a pull request from a fork; False for a push, a dispatch
+        or a pull request from this repository, where the fork value is
+        null or false.
+
+    Returns
+    -------
+    str or None
+        The selected label, or None when the value is not the estate shape.
+
+    Examples
+    --------
+    >>> value = (
+    ...     "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
+    ...     "|| 'ubicloud-standard-2' }}"
+    ... )
+    >>> selected_runner(value, is_fork=True)
+    'ubuntu-latest'
+    >>> selected_runner(value, is_fork=False)
+    'ubicloud-standard-2'
+    >>> selected_runner("ubuntu-latest", is_fork=False) is None
+    True
+    """
+    shape = _ESTATE_SHAPE.fullmatch(value.strip()) if isinstance(value, str) else None
+    if shape is None or shape["condition"] != FORK_CONDITION:
+        return None
+    return shape["hosted" if is_fork else "other"]

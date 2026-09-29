@@ -26,6 +26,7 @@ import pytest
 from workflow_placement import (
     line_break_fault,
     runs_on_declarations,
+    selected_runner,
 )
 
 #: The fork-fallback expression, as the estate writes it.
@@ -174,3 +175,45 @@ def test_a_break_nested_in_a_shape_is_found(runs_on: str, expected: bool) -> Non
     assert (line_break_fault(_value(_document(runs_on))) is not None) is expected, (
         "a line break nested inside the value must be found"
     )
+
+
+@pytest.mark.parametrize(
+    ("value", "is_fork", "expected"),
+    [
+        (EXPRESSION, False, "ubicloud-standard-2"),
+        (EXPRESSION, True, "ubuntu-latest"),
+        ("ubuntu-latest", False, None),
+        ("ubicloud-standard-2", True, None),
+        (
+            "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-2' "
+            "|| 'ubuntu-latest' }}",
+            True,
+            "ubicloud-standard-2",
+        ),
+        (
+            "${{ github.event_name == 'pull_request' && 'ubuntu-latest' "
+            "|| 'ubicloud-standard-2' }}",
+            False,
+            None,
+        ),
+        (["ubicloud-standard-2"], False, None),
+    ],
+    ids=[
+        "estate-non-fork",
+        "estate-fork",
+        "literal-hosted",
+        "literal-ubicloud",
+        "inverted-arms-fork",
+        "another-condition",
+        "sequence",
+    ],
+)
+def test_the_runner_expression_is_evaluated_for_each_kind_of_run(
+    value: object, is_fork: bool, expected: str | None
+) -> None:
+    """The runner-selection expression places a fork on hosted and every other run on Ubicloud.
+
+    Each departure from the shape is refused with None, and the inverted
+    arms are read as written, so a swap is visible to the inventory below.
+    """
+    assert selected_runner(value, is_fork) == expected

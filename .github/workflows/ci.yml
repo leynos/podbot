@@ -16,7 +16,18 @@ concurrency:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    # Ubicloud, to avoid the hosted queue (the move's measured waits are in
+    # the pull request that made it). A pull request from a fork cannot
+    # obtain an Ubicloud runner, so it falls back to the hosted pool.
+    # standard-4, not standard-2: on two vCPUs the first warm run spent 19 min
+    # in lint alone and reached the 35-minute ceiling mid-test (run
+    # 36559052173); the hosted median is 14.8 min.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-4' }}
+    # An Ubicloud runner is a self-hosted just-in-time runner with no
+    # six-hour hosted cap, so the job states its own ceiling: twice the warm
+    # standard-4 run of 27 min (run 36563787701), rounded up to 55. It sits
+    # 25 minutes above the 1,800 s cargo watchdog.
+    timeout-minutes: 55
     permissions:
       contents: read
     env:
