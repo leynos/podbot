@@ -38,7 +38,7 @@ octocrab = { version = "0.54.0", default-features = false, features = [
     "rustls-ring",
     "jwt-aws-lc-rs",
 ] }
-jsonwebtoken = { version = "10.4.0", default-features = false, features = ["use_pem", "aws_lc_rs"] }
+jsonwebtoken = { version = "11.0.0", default-features = false, features = ["use_pem", "aws_lc_rs"] }
 
 # Error handling
 thiserror = "2.0.17"
