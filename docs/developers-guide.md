@@ -102,6 +102,11 @@ Within that traversal, the private package-local activation filter is scoped to
 activations. Defaults and explicitly requested package features enter the
 enabled set through their existing paths.
 
+Explicit singular target selectors retain feature-gated matches so Cargo can
+report its normal error. A private selector helper applies that exception only
+within `_unique_selected_targets`; plural category selectors continue to filter
+against enabled features.
+
 The run has one bounded deadline. Set `TEST_TIMEOUT` as a Make variable, or
 `PODBOT_TEST_TIMEOUT` in the environment; the default is 1800 seconds. A
 timeout exits with status 124. An interrupt exits with 128 plus the signal
