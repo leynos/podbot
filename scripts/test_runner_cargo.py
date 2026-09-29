@@ -125,13 +125,17 @@ def select_test_executables(
 
 def _is_test_artifact(message: dict[str, typ.Any], expected: Target) -> bool:
     """Match one JSON message to the requested package's test executable."""
-    target = message.get("target", {})
-    profile = message.get("profile", {})
+    target = message.get("target")
+    profile = message.get("profile")
+    if not isinstance(target, dict) or not isinstance(profile, dict):
+        return False
+    kinds = target.get("kind")
     return (
         message.get("reason") == "compiler-artifact"
         and message.get("package_id") == expected.package_id
         and target.get("name") == expected.name
-        and "test" in target.get("kind", [])
+        and isinstance(kinds, list)
+        and "test" in kinds
         and profile.get("test") is True
         and isinstance(message.get("executable"), str)
     )
@@ -182,15 +186,18 @@ def create_test_runtime_environment(
     for message in messages:
         if message.get("reason") == "compiler-artifact":
             _record_binary_executable(environment, package, message)
-    profile = next(
+    profile_message = next(
         (
-            message.get("profile", {})
+            message
             for message in messages
             if message.get("reason") == "compiler-artifact"
             and message.get("executable") == str(executable)
         ),
         {},
     )
+    profile = profile_message.get("profile")
+    if not isinstance(profile, dict):
+        profile = {}
     if "debug_assertions" in profile:
         environment["CARGO_DEBUG_ASSERTIONS"] = str(profile["debug_assertions"]).lower()
     _set_dynamic_library_environment(environment, executable, messages)
@@ -241,16 +248,21 @@ def _record_binary_executable(
     message: dict[str, typ.Any],
 ) -> None:
     """Restore a Cargo binary path for its owning package when available."""
-    target = message.get("target", {})
+    target = message.get("target")
+    profile = message.get("profile")
+    if not isinstance(target, dict) or not isinstance(profile, dict):
+        return
+    kinds = target.get("kind")
     if message.get("package_id") != package.get("id"):
         return
-    if "bin" not in target.get("kind", []):
+    if not isinstance(kinds, list) or "bin" not in kinds:
         return
-    if message.get("profile", {}).get("test") is not False:
+    if profile.get("test") is not False:
         return
     executable = message.get("executable")
-    if isinstance(executable, str):
-        environment[f"CARGO_BIN_EXE_{target['name']}"] = executable
+    name = target.get("name")
+    if isinstance(executable, str) and isinstance(name, str):
+        environment[f"CARGO_BIN_EXE_{name}"] = executable
 
 
 def _set_dynamic_library_environment(
