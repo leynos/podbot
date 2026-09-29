@@ -52,6 +52,9 @@ jobs:
       - name: Setup Rust
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        env:
+          SCCACHE_LOG: debug
+          SCCACHE_ERROR_LOG: ${{ runner.temp }}/sccache-error.log
       - name: Setup uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       # The contracts read `.github/workflows` and need no Rust build, so
@@ -130,6 +133,14 @@ jobs:
         uses: ./.github/actions/sccache-readers
         with:
           sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
+      - name: Diagnose compiler-cache write errors
+        # Best-effort and failure-only: keep the original failing step as the
+        # job result, and send only the helper's sanitized output to the log.
+        if: failure()
+        continue-on-error: true
+        env:
+          SCCACHE_ERROR_LOG: ${{ runner.temp }}/sccache-error.log
+        run: python3 scripts/report_sccache_errors.py "$SCCACHE_ERROR_LOG"
       - name: Set up Rust for Merman
         uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:

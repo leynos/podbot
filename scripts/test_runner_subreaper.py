@@ -32,7 +32,10 @@ def _prctl(option: int, argument: int = 0, *, read_integer: bool = False) -> int
     """Call prctl because Python's stdlib has no child-subreaper interface."""
     import ctypes
 
-    # FIXME(#188): Revisit this bridge if Python adds stdlib subreaper controls.
+    # Python has no PR_SET_CHILD_SUBREAPER API. Without it, the runner cannot
+    # adopt and reap orphaned descendants from nested Cargo processes.
+    # FIXME https://github.com/leynos/podbot/issues/188: Revisit if Python adds
+    # standard-library support.
     try:
         if read_integer:
             value = ctypes.c_int()
