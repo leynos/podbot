@@ -104,6 +104,26 @@ def test_write_error_output_redacts_credentials_and_caps_lines() -> None:
     )
 
 
+def test_startup_probe_already_exists_does_not_hide_store_failure() -> None:
+    """The cache capability probe tolerates an existing sentinel entry."""
+    log = "\n".join(
+        (
+            "WARN opendal::services: path=.sccache_check: write failed "
+            "AlreadyExists (permanent), response status: 409",
+            "DEBUG opendal::services: path=.sccache_check: write failed",
+            "ERROR failed to write cache object: HTTP 429 from "
+            "https://cache.example/item?token=secret",
+        )
+    )
+
+    lines = sanitize_error_log(log, ("secret",))
+
+    assert len(lines) == 1, "skip both probe lines and report the store failure"
+    assert "HTTP 429" in lines[0], "retain the actual store's backend status"
+    assert ".sccache_check" not in lines[0], "do not promote the probe warning"
+    assert "secret" not in lines[0], "keep the real backend URL sanitized"
+
+
 def test_diagnostic_reads_only_the_bounded_log_prefix(
     tmp_path: pathlib.Path, monkeypatch
 ) -> None:

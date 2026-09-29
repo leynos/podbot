@@ -57,6 +57,7 @@ _WRITE = re.compile(
     r"\b(?:write|writes|writing|written|store|storing|stored|upload|uploaded|put|persist)\b",
     re.IGNORECASE,
 )
+_STARTUP_PROBE = re.compile(r"\.sccache_check\b")
 
 
 def _environment_secrets(environment: Mapping[str, str]) -> tuple[str, ...]:
@@ -113,7 +114,11 @@ def sanitize_error_log(
     """
     secrets = tuple(value for value in secret_values if value)
     lines = log_text.splitlines()
-    error_indices = [index for index, line in enumerate(lines) if _ERROR.search(line)]
+    error_indices = [
+        index
+        for index, line in enumerate(lines)
+        if _ERROR.search(line) and not _STARTUP_PROBE.search(line)
+    ]
     write_indices = [index for index in error_indices if _WRITE.search(lines[index])]
     if not error_indices:
         return ()
