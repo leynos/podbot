@@ -106,22 +106,34 @@ def select_targets(
 
 def _default_test_targets(targets: tuple[Target, ...]) -> tuple[Target, ...]:
     """Select the integration and executable targets tested by Cargo by default."""
-    return tuple(target for target in targets if _is_default_test_target(target))
+    return tuple(
+        target
+        for target in targets
+        if _is_default_test_target(target) and target.has_required_features_enabled
+    )
 
 
 def _unique_selected_targets(
     targets: tuple[Target, ...], selectors: tuple[tuple[str, str | None], ...]
 ) -> tuple[Target, ...]:
-    """Apply explicit selectors once each and reject an empty selection."""
-    selected = (
-        target
-        for selector, pattern in selectors
-        for target in targets_matching(targets, selector, pattern)
-    )
+    """Apply selectors once, retaining Cargo's explicit target handling."""
+    matched_targets: list[Target] = []
+    selected_targets: list[Target] = []
+    for selector, pattern in selectors:
+        matches = targets_matching(targets, selector, pattern)
+        matched_targets.extend(matches)
+        if selector not in {"bin", "test", "example", "bench"}:
+            matches = tuple(
+                target for target in matches if target.has_required_features_enabled
+            )
+        selected_targets.extend(matches)
     unique = {
-        (target.package_id, target.name, target.kinds): target for target in selected
+        (target.package_id, target.name, target.kinds): target
+        for target in selected_targets
     }
     if not unique:
+        if matched_targets:
+            return ()
         raise RunnerError("Cargo target selection contains no targets")
     return tuple(unique.values())
 
@@ -133,9 +145,12 @@ def _is_default_test_target(target: Target) -> bool:
     )
 
 
-def targets_for_package(package: dict[str, typ.Any]) -> tuple[Target, ...]:
+def targets_for_package(
+    package: dict[str, typ.Any], options: CargoTestOptions | None = None
+) -> tuple[Target, ...]:
     """Convert one Cargo metadata package into target records."""
     manifest_dir = pathlib.Path(str(package["manifest_path"])).parent
+    enabled_features = tuple(sorted(_enabled_features(package, options)))
     return tuple(
         Target(
             package_name=str(package["name"]),
@@ -149,9 +164,88 @@ def targets_for_package(package: dict[str, typ.Any]) -> tuple[Target, ...]:
             required_features=tuple(
                 str(feature) for feature in target.get("required-features", [])
             ),
+            enabled_features=enabled_features,
         )
         for target in package.get("targets", [])
     )
+
+
+def _enabled_features(
+    package: dict[str, typ.Any], options: CargoTestOptions | None
+) -> frozenset[str]:
+    """Resolve package feature defaults and requested features for selection.
+
+    Dependency features do not satisfy a target's package-level
+    ``required-features`` declaration.
+    """
+    feature_map = package.get("features", {})
+    if not isinstance(feature_map, dict) or options is None:
+        return frozenset()
+    if "--all-features" in options.common:
+        return frozenset(str(feature) for feature in feature_map)
+
+    pending: list[str] = []
+    if "--no-default-features" not in options.common:
+        pending.extend(_feature_values(feature_map.get("default", [])))
+    pending.extend(_requested_package_features(package, options.common))
+
+    enabled: set[str] = set()
+    while pending:
+        feature = pending.pop()
+        if feature in enabled:
+            continue
+        enabled.add(feature)
+        for activated in _feature_values(feature_map.get(feature, [])):
+            if activated.startswith("dep:") or "/" in activated:
+                continue
+            if activated in feature_map:
+                pending.append(activated)
+    return frozenset(enabled)
+
+
+def _requested_package_features(
+    package: dict[str, typ.Any], common: tuple[str, ...]
+) -> list[str]:
+    """Read feature flags that apply to the current Cargo package."""
+    requested: list[str] = []
+    index = 0
+    while index < len(common):
+        if common[index] in {"--features", "-F"} and index + 1 < len(common):
+            requested.extend(_feature_values_for_package(package, common[index + 1]))
+            index += 2
+        else:
+            index += 1
+    return requested
+
+
+def _feature_values_for_package(package: dict[str, typ.Any], value: str) -> list[str]:
+    """Extract bare and package-qualified features from one Cargo value."""
+    package_names = {
+        str(package.get("name", "")),
+        str(package.get("id", "")),
+        f"{package.get('name', '')}@{package.get('version', '')}",
+    }
+    selected: list[str] = []
+    for feature in _feature_values(value):
+        if "/" in feature:
+            package_name, feature_name = feature.split("/", maxsplit=1)
+            if package_name not in package_names:
+                continue
+            feature = feature_name
+        selected.append(feature)
+    return selected
+
+
+def _feature_values(value: typ.Any) -> list[str]:
+    """Return comma-separated Cargo feature names from metadata or arguments."""
+    if not isinstance(value, (list, tuple)):
+        value = [value]
+    return [
+        feature.strip()
+        for item in value
+        for feature in str(item).split(",")
+        if feature.strip()
+    ]
 
 
 def targets_matching(

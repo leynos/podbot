@@ -37,6 +37,22 @@ class Target:
     is_bench: bool
     is_doctest: bool
     required_features: tuple[str, ...]
+    enabled_features: tuple[str, ...] = ()
+
+    @property
+    def has_required_features_enabled(self) -> bool:
+        """Whether every Cargo feature required by this target is active.
+
+        Examples
+        --------
+        >>> target = Target(
+        ...     "podbot", "id", pathlib.Path("."), "cli", ("bin",),
+        ...     True, False, False, ("cli",), ("cli",)
+        ... )
+        >>> target.has_required_features_enabled
+        True
+        """
+        return set(self.required_features).issubset(self.enabled_features)
 
     def cargo_selector(self) -> tuple[str, ...]:
         """Return Cargo's exact selector for this target.
