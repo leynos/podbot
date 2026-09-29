@@ -619,14 +619,12 @@ All tasks completed successfully:
 ## Lessons learned
 
 1. **Bollard IOError struct syntax**: Bollard v0.20.0 uses `IOError { err }`
-   struct
-   syntax rather than tuple `IOError(io_err)`. Must match directly on this
-   variant rather than relying on error source chain inspection.
+   struct syntax rather than tuple `IOError(io_err)`. Must match directly on
+   this variant rather than relying on error source chain inspection.
 
 2. **thiserror concat!() limitation**: The `#[error(...)]` attribute doesn't
-   support
-   `concat!()` macro. Use multi-line string literals with `\n\` continuation
-   instead.
+   support `concat!()` macro. Use multi-line string literals with `\n\`
+   continuation instead.
 
 3. **rstest-bdd Slot requires Clone**: Can't store `Result<Docker, PodbotError>`
    in `Slot` because it doesn't implement `Clone`. Created `ConnectionOutcome`

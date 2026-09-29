@@ -1447,8 +1447,8 @@ including the artefact and cache steps. The workflow also answers
 `workflow_dispatch`, which can name any branch, so the ref test confines the
 upload where the trigger filter cannot.
 
-A skipped upload looks the same whatever skipped it, so a final step, guarded
-on `if: always()`, writes one line to the job summary whenever it runs, for
+A skipped upload looks the same whatever skipped it, so a final step, guarded on
+`if: always()`, writes one line to the job summary whenever it runs, for
 example:
 
 ```text
@@ -1473,8 +1473,8 @@ inject. An operator reads the cause from it:
 - `upload_outcome=success`: the action exited successfully. That does not
   show that CodeScene accepted the report, which only CodeScene shows.
 
-A run cancelled before the final step starts writes no record at all; the
-jobs API then shows how far it got. The jobs API also gives the upload step's
+A run cancelled before the final step starts writes no record at all; the jobs
+API then shows how far it got. The jobs API also gives the upload step's
 conclusion for counting runs; this repository's CI has no metrics recorder.
 
 The check step is deliberately not confined to `main`. Its shell never holds
@@ -1482,10 +1482,9 @@ the secret, so there is nothing for a branch to read. The residual risk is a
 dispatcher who edits the workflow file itself on their branch, and only a
 protected environment, not a condition in the file, stops that.
 
-The check step is asserted positively, not only the absence of the old
-binding. GitHub reads a missing step output as `''`, so with the check deleted
-the guard stays well formed and the upload skips on every run, with nothing
-failing.
+The check step is asserted positively, not only the absence of the old binding.
+GitHub reads a missing step output as `''`, so with the check deleted the guard
+stays well formed and the upload skips on every run, with nothing failing.
 
 A Dependabot pull request merged by automerge with `GITHUB_TOKEN` fires no
 `push` event, so that merge does not run this publisher. This is a known
@@ -1510,18 +1509,18 @@ reason: coverage built from one commit must not be recorded against another.
 with Ruff format and lint checks first, and CI runs it as an unguarded step of
 its own early in `build-test`. The modules are:
 
-| Module                        | Subject                                                                 |
-| ----------------------------- | ----------------------------------------------------------------------- |
-| `workflow_reading.py`         | Strict parsing, trigger forms, push filters, and the workflow files     |
-| `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps         |
-| `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host            |
-| `publisher_rules.py`          | The upload guard and the publisher's cancellation                       |
-| `token_check.py`              | The token check, the upload's input, the decision record, stray reads   |
-| `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command             |
-| `codescene_coverage_test.py`  | The rule over this repository's workflows                               |
-| `codescene_publisher_test.py` | The publisher's upload step                                             |
-| `codescene_uploader_test.py`  | The uploader's approved pin and its retired checksum input              |
-| `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain       |
+| Module                        | Subject                                                               |
+| ----------------------------- | --------------------------------------------------------------------- |
+| `workflow_reading.py`         | Strict parsing, trigger forms, push filters, and the workflow files   |
+| `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps       |
+| `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host          |
+| `publisher_rules.py`          | The upload guard and the publisher's cancellation                     |
+| `token_check.py`              | The token check, the upload's input, the decision record, stray reads |
+| `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command           |
+| `codescene_coverage_test.py`  | The rule over this repository's workflows                             |
+| `codescene_publisher_test.py` | The publisher's upload step                                           |
+| `codescene_uploader_test.py`  | The uploader's approved pin and its retired checksum input            |
+| `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain     |
 
 _Table 2: Workflow contract modules._
 
@@ -1536,8 +1535,7 @@ nothing:
   `$/` is stripped, and the remainder must name a file directly under
   `.github/workflows/`. A call to this repository at a ref
   (`leynos/podbot/.github/workflows/x.yml@main`, or a local prefix with `@`)
-  runs a version the closure cannot read, so it is refused rather than
-  followed.
+  runs a version the closure cannot read, so it is refused rather than followed.
 - **The secret and the host are read over the whole document.** Every key and
   scalar is visited, case-folded, so a workflow-level `env`, a
   `defaults.run.shell` wrapper, a reusable call's `with`, or a callee's
@@ -1554,11 +1552,10 @@ nothing:
 - **Triggers are read as a mapping, a sequence, or a string**, under both the
   `on` key and the boolean `True` that YAML 1.1 resolves an unquoted `on:` to.
   Push filters are read as globs with `!` negation, so `'**'` counts as naming
-  `main`. A workflow that declares triggers under
-  both keys is refused with a `WorkflowReadingError`: a resolving loader turns
-  an unquoted `on:` into `True` and leaves a quoted `'on':` as a string,
-  GitHub merges the two, and a reader that picked one key would miss the
-  other's triggers.
+  `main`. A workflow that declares triggers under both keys is refused with a
+  `WorkflowReadingError`: a resolving loader turns an unquoted `on:` into
+  `True` and leaves a quoted `'on':` as a string, GitHub merges the two, and a
+  reader that picked one key would miss the other's triggers.
 - **A required command is read as a step's sole command.** `false && X`,
   `echo X` and a step guarded by `if:` all contain `X` and run nothing, so the
   contract step and the ratcheting coverage step must each be unguarded, and
@@ -1580,8 +1577,8 @@ variable must not return. `archive-checksum` is not a renamed
 `installer-checksum`: it could only repeat the manifest's digest, so it is not
 passed either.
 
-`codescene_uploader_test.py` asserts all four points over the parsed
-workflows, so a commented-out `uses:` line cannot stand in for an upload step:
+`codescene_uploader_test.py` asserts all four points over the parsed workflows,
+so a commented-out `uses:` line cannot stand in for an upload step:
 
 - at least one uploader step exists, and every one runs at the approved pin;
 - no document passes `installer-checksum`;
@@ -1604,8 +1601,8 @@ one commit, so the other references move with it.
 
 ## 20. Pin, budget and placement contract readers
 
-Four reader modules turn the files in `.github/workflows/` into values that
-the contracts in `scripts/tests/` assert against:
+Four reader modules turn the files in `.github/workflows/` into values that the
+contracts in `scripts/tests/` assert against:
 
 - `workflow_contracts.py` reads and parses the files and finds the
   shared-actions references.
@@ -1615,10 +1612,9 @@ the contracts in `scripts/tests/` assert against:
   cache reports.
 - `workflow_placement.py` covers runner placement.
 
- This suite runs under `make workflow-contracts`, beside the
-CodeScene coverage suite that section 19 describes, and CI runs each as its own
-unguarded step. The readers are kept apart from their contracts for two
-reasons.
+ This suite runs under `make workflow-contracts`, beside the CodeScene coverage
+ suite that section 19 describes, and CI runs each as its own unguarded step.
+ The readers are kept apart from their contracts for two reasons.
 
 A reader can be wrong while no workflow is wrong, and a reader exercised only
 against this repository's own files cannot show that: parametrized over four
@@ -1628,17 +1624,17 @@ test, including shapes this repository does not contain and should never
 contain.
 
 The raw text also matters as much as the parsed value. A folded scalar whose
-continuation is indented more deeply than its first line keeps the line
-break, and the resulting `runs-on` carries a newline inside an expression
-GitHub evaluates anyway. The parse tolerates it, so a reader returning only
-the parsed value cannot refuse it.
+continuation is indented more deeply than its first line keeps the line break,
+and the resulting `runs-on` carries a newline inside an expression GitHub
+evaluates anyway. The parse tolerates it, so a reader returning only the parsed
+value cannot refuse it.
 
 Parsing refuses a mapping that declares a key twice, because PyYAML would
 otherwise keep only the second of two `runs-on` lines. Workflow file suffixes
-are compared case-folded, because GitHub runs `CI.YML` too. Every contract
-over the real files also checks that its reader found something. That alone
-cannot show that nothing was dropped, so `test_workflow_inventory.py` asserts
-the exact inventory: every shared-actions reference, including the job-level
+are compared case-folded, because GitHub runs `CI.YML` too. Every contract over
+the real files also checks that its reader found something. That alone cannot
+show that nothing was dropped, so `test_workflow_inventory.py` asserts the
+exact inventory: every shared-actions reference, including the job-level
 reusable-workflow call; every coverage step and its cache report; and every
 runner declaration, raw and parsed. A change that adds or removes an entry
 fails that module until its expected inventory is updated in the same commit.
@@ -1648,12 +1644,11 @@ Both coverage lanes also check the compiler cache after reporting on it.
 statistics, and `scripts/check_sccache_health.py --expect-location ghac`,
 ported from Whitaker, fails the job only when the integration is structurally
 broken. That means one of: the cache location is not the GitHub Actions
-backend; sccache handled no compile requests; every store failed; or every
-read failed. Isolated read errors, write errors and timeouts only produce a
-warning: one failed store costs one compile, and failing on it would make the
-lane as flaky as the cache service. Both steps run under `always()`, so a red
-lane is still judged, and the coverage contracts assert them after every cache
-report.
+backend; sccache handled no compile requests; every store failed; or every read
+failed. Isolated read errors, write errors and timeouts only produce a warning:
+one failed store costs one compile, and failing on it would make the lane as
+flaky as the cache service. Both steps run under `always()`, so a red lane is
+still judged, and the coverage contracts assert them after every cache report.
 
 ### 20.1. Running the contracts
 
@@ -1667,48 +1662,47 @@ doctests, which `--doctest-modules` collects so a documented example is
 executed rather than merely read. It is part of `make all`, and CI runs it as
 an unguarded step whose `run:` is asserted to be exactly this command.
 
-Ruff runs `--isolated` at a pinned version, so these files are checked the
-same way wherever the target is invoked. The target needs Python 3.14 and
-`pytest`, both supplied by `uv` at the pinned versions named in the Makefile.
+Ruff runs `--isolated` at a pinned version, so these files are checked the same
+way wherever the target is invoked. The target needs Python 3.14 and `pytest`,
+both supplied by `uv` at the pinned versions named in the Makefile.
 
 ### 20.2. `of_type`, and why it is shared
 
 `of_type(value, kind)` returns `value` when it has the expected shape and an
 empty instance of `kind` otherwise. Both reader modules use it.
 
-**Scope.** Walking a parsed workflow document, and nothing else. A workflow
-is a tree of `object`, and every step of a walk down it has to say what it
-expected and what to do when the file says something else. Returning "an
-empty one of those" keeps the walks flat and keeps a malformed file from
-raising out of what reads like a query.
+**Scope.** Walking a parsed workflow document, and nothing else. A workflow is
+a tree of `object`, and every step of a walk down it has to say what it
+expected and what to do when the file says something else. Returning "an empty
+one of those" keeps the walks flat and keeps a malformed file from raising out
+of what reads like a query.
 
-**Permitted call sites.** The two reader modules only. It is deliberately
-not exported for use in production code under `src/`: swallowing an
-unexpected shape is the right behaviour when surveying a configuration file
-and the wrong behaviour almost everywhere else, where the unexpected shape
-is a defect that must remain visible.
+**Permitted call sites.** The two reader modules only. It is deliberately not
+exported for use in production code under `src/`: swallowing an unexpected
+shape is the right behaviour when surveying a configuration file and the wrong
+behaviour almost everywhere else, where the unexpected shape is a defect that
+must remain visible.
 
-**Composition.** It is a narrowing step inside a walk, never the last word.
-A contract that cares whether a value was absent or malformed must check
-that itself before or after the walk; `of_type` cannot tell those apart by
-design, and a caller relying on it to do so has misread it. Where a shape
-genuinely cannot be read, the reader raises `WorkflowReadError` rather than
-returning an empty value, so that a refusal is distinguishable from an
-absence.
+**Composition.** It is a narrowing step inside a walk, never the last word. A
+contract that cares whether a value was absent or malformed must check that
+itself before or after the walk; `of_type` cannot tell those apart by design,
+and a caller relying on it to do so has misread it. Where a shape genuinely
+cannot be read, the reader raises `WorkflowReadError` rather than returning an
+empty value, so that a refusal is distinguishable from an absence.
 
-**Why not two copies.** The sweep before writing it found no equivalent in
-this repository. Both modules walk the same document shape, and two copies
-would drift: the failure mode is one module tolerating a shape the other
-refuses, which makes a contract's verdict depend on which module happened
-to read the file.
+**Why not two copies.** The sweep before writing it found no equivalent in this
+repository. Both modules walk the same document shape, and two copies would
+drift: the failure mode is one module tolerating a shape the other refuses,
+which makes a contract's verdict depend on which module happened to read the
+file.
 
 ## 21. Cancelling superseded pull-request runs
 
-Every push to a pull request starts a fresh run of each gate. The run
-already in flight is answering a question about a commit nobody will merge,
-and left alone it holds a runner until it finishes, so the branch pays twice
-for one answer. Every workflow a pull request can start therefore carries a
-concurrency block:
+Every push to a pull request starts a fresh run of each gate. The run already
+in flight is answering a question about a commit nobody will merge, and left
+alone it holds a runner until it finishes, so the branch pays twice for one
+answer. Every workflow a pull request can start therefore carries a concurrency
+block:
 
 ```yaml
 concurrency:
@@ -1719,29 +1713,28 @@ concurrency:
 Three things matter, and each fails in a way nothing else would notice.
 
 - **The group keys on the pull request.** For a pull request, a group
-  built from `github.run_id` is unique to one run, so it matches no
-  predecessor and cancels nothing while reading exactly like a concurrency
-  control. A constant group is the opposite failure: every open pull request
-  shares one queue, and the first push anywhere cancels the gates running
-  everywhere else. `github.run_id` appears only as the fallback after the
-  pull-request number, which only non-pull-request events reach. Each of
-  those runs therefore has a group of its own. GitHub keeps at most one
-  pending run per group, so a shared group for dispatches would let a third
-  dispatch replace a queued second one.
+  built from `github.run_id` is unique to one run, so it matches no predecessor
+  and cancels nothing while reading exactly like a concurrency control. A
+  constant group is the opposite failure: every open pull request shares one
+  queue, and the first push anywhere cancels the gates running everywhere else.
+  `github.run_id` appears only as the fallback after the pull-request number,
+  which only non-pull-request events reach. Each of those runs therefore has a
+  group of its own. GitHub keeps at most one pending run per group, so a shared
+  group for dispatches would let a third dispatch replace a queued second one.
 - **Cancellation is conditioned on the event.** A literal
-  `cancel-in-progress: true` reads as the stricter setting and is a
-  regression. A push to `main`, a schedule, and a dispatch have no successor
-  waiting, and the run on `main` writes the warm cache and records the
-  coverage that no later run repeats. With its own group, such a run is
-  neither cancelled nor replaced.
+  `cancel-in-progress: true` reads as the stricter setting and is a regression.
+  A push to `main`, a schedule, and a dispatch have no successor waiting, and
+  the run on `main` writes the warm cache and records the coverage that no
+  later run repeats. With its own group, such a run is neither cancelled nor
+  replaced.
 - **The key is evaluated.** The group must read the pull request inside
   `${{ }}`. `group: github.ref`, or a quoted name inside an expression, is a
   constant that only looks like the context.
 
 A superseded run ends with the conclusion `cancelled`. The Actions runs API
-(`gh run list --workflow ci.yml --json conclusion,event`) shows how often
-that happens on pull requests, which is the minutes this saves. A cancelled
-run on any other event would mean the grouping has regressed.
+(`gh run list --workflow ci.yml --json conclusion,event`) shows how often that
+happens on pull requests, which is the minutes this saves. A cancelled run on
+any other event would mean the grouping has regressed.
 
 `pull_request_target` workflows are out of scope. They run against the base
 repository to carry a token, and the ones here automate pull-request
@@ -1752,9 +1745,35 @@ with no minutes to win.
 
 `tests/workflow_contracts/concurrency_test.py` reads `.github/workflows` and
 asserts, for every workflow declaring a `pull_request` trigger, that it
-declares a concurrency group, that the group names no per-run expression,
-that the group names something that varies per pull request, and that
+declares a concurrency group, that the group names no per-run expression, that
+the group names something that varies per pull request, and that
 `cancel-in-progress` is exactly the expression above. A further test asserts
 that discovery still finds the workflows it is expected to, so a broken read
 cannot empty the list and turn the rest into a vacuous pass. Run it with
 `make test-workflow-contracts`.
+
+## Markdown formatting
+
+Markdown follows the estate's `markdown-formatting-baseline` rule.
+
+- `make fmt` rewrites Markdown with
+  `mdtablefix --in-place --git --include-untracked --wrap --renumber --breaks
+  --ellipsis --fences`,
+  then runs `markdownlint-cli2 --fix "**/*.md"`.
+- `make check-fmt` runs the same mdtablefix command with `--check` in place of
+  `--in-place`, and fails when any file would change.
+- `--git --include-untracked` selects the Markdown files Git tracks plus the
+  untracked files Git does not ignore, so a new document is checked before it
+  is staged.
+- `.markdownlint-cli2.jsonc` carries the canonical markdownlint configuration.
+  Keep its `config` entries and `ignores` globs; add repository-specific rules
+  or globs beside them.
+- CI installs mdtablefix 0.6.0 with the shared `install-mdtablefix` action
+  before `make check-fmt`, and lints Markdown with
+  `DavidAnson/markdownlint-cli2-action` over `**/*.md`.
+
+Install mdtablefix 0.6.0 or later locally with
+`cargo binstall --no-confirm mdtablefix@0.6.0`, or
+`cargo install --locked mdtablefix@0.6.0`. Install markdownlint-cli2 with
+`bun add --global markdownlint-cli2` or
+`npm install --global markdownlint-cli2`.
