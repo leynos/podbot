@@ -1651,8 +1651,10 @@ Ubicloud writes it. An Ubicloud runner is a self-hosted just-in-time runner, so
 GitHub's six-hour cap for hosted jobs does not apply to it. Every job whose
 `runs-on` can select Ubicloud therefore states its own `timeout-minutes`, and
 the same module asserts that inventory exactly: `coverage-upload` at a
-provisional 30 minutes, sized for its first cold run and tightened to twice a
-measured warm run once one exists.
+provisional 45 minutes, sized for its first cold run and held 15 minutes above
+its 1,800 s cargo watchdog so the watchdog, not the ceiling, ends a stalled
+run. It is tightened to twice a measured warm run once one exists, and never
+below the watchdog plus setup.
 
 Both coverage lanes also check the compiler cache after reporting on it.
 `sccache --show-stats --stats-format json > sccache-stats.json` writes the

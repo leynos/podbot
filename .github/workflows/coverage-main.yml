@@ -30,9 +30,11 @@ jobs:
     runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}
     # An Ubicloud runner is a self-hosted just-in-time runner with no
     # six-hour hosted cap. Provisional: sized for the first, cold run on
-    # Ubicloud; tightened to twice a measured warm Ubicloud run once one
-    # exists.
-    timeout-minutes: 30
+    # Ubicloud, and held 15 minutes above the 1,800 s cargo watchdog below so
+    # the watchdog, not this ceiling, ends a stalled run and the diagnostics
+    # after the coverage step still run. Tightened to twice a measured warm
+    # Ubicloud run once one exists, and never below the watchdog plus setup.
+    timeout-minutes: 45
     # The CodeScene token lives in this environment, whose deployment policy
     # admits `main` alone; the codescene environment contract holds it to
     # this job.
