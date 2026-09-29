@@ -60,7 +60,7 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
 #: Every job whose runner can be an Ubicloud one, with the ceiling it
 #: states in minutes.
 CEILINGS: typ.Final[list[tuple[str, str, object]]] = [
-    ("ci.yml", "build-test", 45),
+    ("ci.yml", "build-test", 55),
     ("coverage-main.yml", "coverage-upload", 45),
 ]
 

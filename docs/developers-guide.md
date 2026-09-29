@@ -1647,11 +1647,12 @@ for hosted jobs does not apply to it. Every job whose `runs-on` can select
 Ubicloud therefore states its own `timeout-minutes`, and the same module
 asserts that inventory exactly: `coverage-upload` at a provisional 45 minutes,
 held 15 minutes above its 1,800 s cargo watchdog so the watchdog, not the
-ceiling, ends a stalled run, and `build-test` at 45 minutes, provisional until
-a warm `standard-4` run sizes it. Neither may sit below the watchdog plus setup.
-`build-test` is `standard-4` on a measured shortfall: its first warm run on
-`standard-2` spent 19 minutes in lint and reached its 35-minute ceiling
-mid-test (run 36559052173), against a hosted median of 14.8 minutes.
+ceiling, ends a stalled run, and `build-test` at 55 minutes, twice its warm
+`standard-4` run of 27 minutes (run 36563787701). Neither may sit below the
+watchdog plus setup. `build-test` is `standard-4` on a measured shortfall: its
+first warm run on `standard-2` spent 19 minutes in lint and reached its
+35-minute ceiling mid-test (run 36559052173), against a hosted median of 14.8
+minutes.
 
 Both coverage lanes also check the compiler cache after reporting on it.
 `sccache --show-stats --stats-format json > sccache-stats.json` writes the
