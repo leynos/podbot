@@ -1707,10 +1707,10 @@ cannot be read, the reader raises `WorkflowReadError` rather than returning an
 empty value, so that a refusal is distinguishable from an absence.
 
 **Why not two copies.** The sweep before writing it found no equivalent in this
-repository. Both modules walk the same document shape, and two copies would
-drift: the failure mode is one module tolerating a shape the other refuses,
-which makes a contract's verdict depend on which module happened to read the
-file.
+repository. The reader modules walk the same document shape, and two copies
+would drift: the failure mode is one module tolerating a shape the other
+refuses, which makes a contract's verdict depend on which module happened to
+read the file.
 
 ## 21. Cancelling superseded pull-request runs
 
