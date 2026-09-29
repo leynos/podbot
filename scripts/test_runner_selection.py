@@ -195,12 +195,25 @@ def _enabled_features(
         if feature in enabled:
             continue
         enabled.add(feature)
-        for activated in _feature_values(feature_map.get(feature, [])):
-            if activated.startswith("dep:") or "/" in activated:
-                continue
-            if activated in feature_map:
-                pending.append(activated)
+        pending.extend(_package_local_feature_activations(feature_map, feature))
     return frozenset(enabled)
+
+
+def _package_local_feature_activations(
+    feature_map: dict[str, typ.Any], feature: str
+) -> list[str]:
+    """Filter one traversal step to package-local feature references.
+
+    This is an implementation detail of `_enabled_features`, not a general
+    Cargo feature parser.
+    """
+    return [
+        activated
+        for activated in _feature_values(feature_map.get(feature, []))
+        if not activated.startswith("dep:")
+        and "/" not in activated
+        and activated in feature_map
+    ]
 
 
 def _requested_package_features(

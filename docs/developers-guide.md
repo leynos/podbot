@@ -97,6 +97,11 @@ targets retain Cargo's own missing-feature error. Feature resolution is private
 to the runner's target-selection module and does not change dependency feature
 resolution.
 
+Within that traversal, the private package-local activation filter is scoped to
+`_enabled_features`; it ignores `dep:` and slash-qualified dependency
+activations. Defaults and explicitly requested package features enter the
+enabled set through their existing paths.
+
 The run has one bounded deadline. Set `TEST_TIMEOUT` as a Make variable, or
 `PODBOT_TEST_TIMEOUT` in the environment; the default is 1800 seconds. A
 timeout exits with status 124. An interrupt exits with 128 plus the signal

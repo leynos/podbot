@@ -5,12 +5,28 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from test_runner_models import RunnerError
+from test_runner_models import CargoTestPlan, RunnerError
 from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
 from test_runner_selection import validate_nested_registry
 
 from test_runner_fixtures import package_document, workspace_with_sibling_package
+
+
+def _plan_with_package_feature_gate(
+    tmp_path: pathlib.Path,
+    features: dict[str, list[str]],
+    arguments: tuple[str, ...] = (),
+) -> CargoTestPlan:
+    """Plan a compile-contract target gated by one package feature."""
+    metadata = package_document(tmp_path)
+    package = metadata["packages"][0]
+    package["features"] = features
+    compile_contract = next(
+        target for target in package["targets"] if target["name"] == "compile_contract"
+    )
+    compile_contract["required-features"] = ["gate"]
+    return create_test_plan(metadata, parse_cargo_test_options(list(arguments)))
 
 
 def test_default_targets_keep_doctests_and_remove_nested_target(
@@ -115,6 +131,98 @@ def test_plural_test_selection_skips_feature_gated_binary(
     )
     assert "--bins" not in plan.ordinary_target_args, (
         "the ordinary Cargo phase must not select a disabled binary group"
+    )
+
+
+def test_transitive_package_features_enable_required_target(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A package-local feature chain enables its final target gate."""
+    plan = _plan_with_package_feature_gate(
+        tmp_path,
+        {
+            "default": ["first"],
+            "first": ["second"],
+            "second": ["gate"],
+            "gate": [],
+        },
+    )
+
+    contract = next(
+        target for target in plan.selected_targets if target.name == "compile_contract"
+    )
+
+    assert "gate" in contract.enabled_features, (
+        "transitive package feature activation must reach target metadata"
+    )
+
+
+def test_package_feature_cycle_terminates_and_enables_target(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A feature cycle stops at visited features while preserving reachability."""
+    plan = _plan_with_package_feature_gate(
+        tmp_path,
+        {
+            "default": ["first"],
+            "first": ["second"],
+            "second": ["first", "gate"],
+            "gate": [],
+        },
+    )
+
+    contract = next(
+        target for target in plan.selected_targets if target.name == "compile_contract"
+    )
+
+    assert "gate" in contract.enabled_features, (
+        "the cycle guard must not prevent other activated features"
+    )
+
+
+def test_dependency_activation_does_not_enable_package_feature(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A dep: activation is not a package-local target feature."""
+    plan = _plan_with_package_feature_gate(
+        tmp_path,
+        {"default": ["first"], "first": ["dep:gate"], "gate": []},
+    )
+
+    assert not any(
+        target.name == "compile_contract" for target in plan.selected_targets
+    ), "dep: activation must not satisfy a package target's required feature"
+
+
+def test_dependency_feature_activation_does_not_enable_package_feature(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A slash-qualified dependency activation is not package-local."""
+    plan = _plan_with_package_feature_gate(
+        tmp_path,
+        {"default": ["first"], "first": ["dependency/gate"], "gate": []},
+    )
+
+    assert not any(
+        target.name == "compile_contract" for target in plan.selected_targets
+    ), "dependency feature activation must not satisfy a package target gate"
+
+
+def test_requested_package_feature_enables_required_target(
+    tmp_path: pathlib.Path,
+) -> None:
+    """An explicitly requested package-qualified feature remains enabled."""
+    plan = _plan_with_package_feature_gate(
+        tmp_path,
+        {"default": [], "gate": []},
+        ("--no-default-features", "--features", "podbot/gate"),
+    )
+    contract = next(
+        target for target in plan.selected_targets if target.name == "compile_contract"
+    )
+
+    assert "gate" in contract.enabled_features, (
+        "an explicitly requested package feature must satisfy the target gate"
     )
 
 
