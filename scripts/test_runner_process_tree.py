@@ -190,10 +190,11 @@ class OwnedProcessTree:
             return ()
         descendants: list[OwnedProcess] = []
         for pid, owned in self.owned.items():
+            if pid == self.root_pid:
+                continue
             current = processes.get(pid) if processes is not None else owned.info
             if (
-                pid != self.root_pid
-                and current is not None
+                current is not None
                 and current.start_time == owned.info.start_time
                 and current.state not in {"Z", "X"}
             ):

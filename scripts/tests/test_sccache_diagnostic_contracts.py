@@ -8,6 +8,7 @@ import time
 import pytest
 import report_sccache_errors
 from report_sccache_errors import MAX_DIAGNOSTIC_LINES
+from report_sccache_errors import _line_window
 from report_sccache_errors import sanitize_error_log
 from workflow_contracts import of_type
 from workflow_contracts import parse as parse_workflow
@@ -35,11 +36,25 @@ def test_setup_enables_logging_and_collects_sanitized_diagnostics(
             for index, step in enumerate(steps)
             if str(step.get("uses", "")).partition("@")[0] == SETUP_RUST_ACTION
         )
-        setup_env = of_type(steps[setup_index].get("env"), dict)
-        assert setup_env == {
-            "SCCACHE_LOG": "debug",
+        configure_index = next(
+            index
+            for index, step in enumerate(steps)
+            if step.get("name") == "Configure sccache diagnostics"
+        )
+        configure = steps[configure_index]
+        assert configure_index < setup_index, (
+            f"{workflow}: diagnostic logging must be configured before server startup"
+        )
+        assert of_type(configure.get("env"), dict) == {
             "SCCACHE_ERROR_LOG": ERROR_LOG_PATH,
-        }, f"{workflow}: setup-rust must receive the diagnostic settings"
+        }, f"{workflow}: use this job's runner temporary directory"
+        assert str(configure.get("run", "")).splitlines() == [
+            "printf 'SCCACHE_LOG=debug\\n' >> \"$GITHUB_ENV\"",
+            'printf \'SCCACHE_ERROR_LOG=%s\\n\' "$SCCACHE_ERROR_LOG" >> "$GITHUB_ENV"',
+        ], f"{workflow}: both diagnostics must persist for later server restarts"
+        assert not steps[setup_index].get("env"), (
+            f"{workflow}: setup-rust must inherit job-persisted diagnostic settings"
+        )
         assert setup_index < report.coverage_index, (
             f"{workflow}: setup-rust must precede coverage compilation"
         )
@@ -123,6 +138,15 @@ def test_startup_probe_already_exists_does_not_hide_store_failure() -> None:
     assert "HTTP 429" in lines[0], "retain the actual store's backend status"
     assert ".sccache_check" not in lines[0], "do not promote the probe warning"
     assert "secret" not in lines[0], "keep the real backend URL sanitized"
+
+
+def test_line_window_includes_all_requested_preceding_lines() -> None:
+    """Context windows begin at the first requested full line."""
+    log = "first context\nsecond context\nERROR write request failed\nafter\n"
+
+    start, end = _line_window(log, log.index("ERROR"), preceding=2, following=1)
+
+    assert log[start:end] == log, "include both context lines and one following line"
 
 
 def test_rust_command_flags_are_not_mistaken_for_backend_failures() -> None:

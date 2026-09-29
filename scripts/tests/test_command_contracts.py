@@ -24,6 +24,22 @@ TEST_COMMANDS: typ.Final[tuple[str, ...]] = (
 )
 
 
+def _dry_run_test_recipe(
+    environment: dict[str, str], overrides: tuple[str, ...] = ()
+) -> str:
+    """Return normalized output from a dry-run of Make's test target."""
+    repository_root = Path(__file__).resolve().parents[2]
+    output = subprocess.run(
+        ["make", "--no-print-directory", "--dry-run", "test", *overrides],
+        cwd=repository_root,
+        env=environment,
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout
+    return " ".join(output.replace("\\\n\t", " ").split())
+
+
 def test_ci_runs_each_test_lane_through_make(
     workflow_texts: dict[str, str],
 ) -> None:
@@ -86,34 +102,16 @@ def test_make_test_uses_runner_and_preserves_overrides(
     for name in inherited_make_variables:
         make_environment.pop(name, None)
 
-    repository_root = Path(__file__).resolve().parents[2]
-    default_command = subprocess.run(
-        ["make", "--no-print-directory", "--dry-run", "test"],
-        cwd=repository_root,
-        env=make_environment,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout
-    override_command = subprocess.run(
-        [
-            "make",
-            "--no-print-directory",
-            "--dry-run",
-            "test",
+    default_command = _dry_run_test_recipe(make_environment)
+    override_command = _dry_run_test_recipe(
+        make_environment,
+        (
             "TEST_FLAGS=--no-default-features --test cli_feature_gating -- --nocapture",
             "TEST_TIMEOUT=42",
             "RUST_FLAGS=-D warnings -W unused",
             "BUILD_JOBS=-j 2",
-        ],
-        cwd=repository_root,
-        env=make_environment,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout
-    default_command = " ".join(default_command.replace("\\\n\t", " ").split())
-    override_command = " ".join(override_command.replace("\\\n\t", " ").split())
+        ),
+    )
 
     assert "uv run --no-project --python 3.14" in default_command, (
         "the test recipe must use the configured Python runtime"

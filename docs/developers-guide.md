@@ -48,10 +48,11 @@ tool dependency graph or if Podbot adds a MySQL runtime integration.
 ### 2.2. Private Cargo test-runner process supervision
 
 The private process supervisor owns only the subprocess tree launched by one
-`scripts/test_runner.py` invocation. Reuse it only for metadata and Cargo phases
-and direct test harnesses; it is not a general process manager. It cleans only
-its own descendants, never kills unrelated processes, and never deletes cache
-locks. On bounded failure, it reports lock and process diagnostics.
+`scripts/test_runner.py` invocation. Reuse it only for metadata and Cargo
+phases and direct test harnesses; it is not a general process manager. It
+cleans only its own descendants, never kills unrelated processes, and never
+deletes cache locks. On bounded failure, it reports lock and process
+diagnostics.
 
 `TestRunnerContext` carries the Cargo command, working directory, environment,
 and supervisor for one runner invocation. Use it only between
@@ -62,8 +63,8 @@ expose it to application code.
 `CommandRequest` carries one child command from a runner phase to the
 supervisor. `StreamCapture` and `ProcessTreeRoot` stay within process I/O and
 cleanup; `StallReportContext` represents one diagnostic snapshot.
-`test_runner_subreaper.py` owns the Linux process-wide child-subreaper controls;
-use them only to scope orphan adoption to supervised test cleanup.
+`test_runner_subreaper.py` owns the Linux process-wide child-subreaper
+controls; use them only to scope orphan adoption to supervised test cleanup.
 `TargetArgumentContext` is local to `test_runner_target_arguments.py`, which
 expands Cargo selectors after target selection. `_CargoOptionToken` is local to
 Cargo option parsing. `test_runner_phases.py` sequences ordinary tests,
@@ -90,11 +91,11 @@ of the parent build process, including the no-default-features CLI boundary
 test. Doctests remain a separate phase, and empty phases are reported as
 skipped.
 
-Default and plural target selection respects each target's
-`required-features` against the package defaults and requested feature flags.
-Explicitly named targets retain Cargo's own missing-feature error. Feature
-resolution is private to the runner's target-selection module and does not
-change dependency feature resolution.
+Default and plural target selection respects each target's `required-features`
+against the package defaults and requested feature flags. Explicitly named
+targets retain Cargo's own missing-feature error. Feature resolution is private
+to the runner's target-selection module and does not change dependency feature
+resolution.
 
 The run has one bounded deadline. Set `TEST_TIMEOUT` as a Make variable, or
 `PODBOT_TEST_TIMEOUT` in the environment; the default is 1800 seconds. A
@@ -109,12 +110,14 @@ retrying. Do not delete Cargo lock files, use a separate `CARGO_HOME`, or
 terminate unrelated processes. These diagnostics describe the observed process
 and lock state; they do not establish a Cargo-internal cause.
 
-Use `uv run --no-project --python 3.14 python scripts/test_runner.py
---supervise --timeout 180 -- <command>` for a bounded investigation of a legacy
-command that needs the same process-tree cleanup and lock diagnostics. This
-mode runs the supplied command directly; it does not split Cargo test phases.
-See [the issue 188 investigation](cargo-package-cache-investigation.md) for
-the bounded Rust 1.88 attempt and its limitations.
+Use
+`uv run --no-project --python 3.14 python scripts/test_runner.py
+--supervise --timeout 180 -- <command>`
+for a bounded investigation of a legacy command that needs the same
+process-tree cleanup and lock diagnostics. This mode runs the supplied command
+directly; it does not split Cargo test phases. See
+[the issue 188 investigation](cargo-package-cache-investigation.md) for the
+bounded Rust 1.88 attempt and its limitations.
 
 ### 2.4. Coverage action boundary
 
@@ -134,7 +137,8 @@ demonstrate the repository runner's process-tree supervision. Reassess this
 boundary if the action's target selection broadens. The pinned sources are
 [`action.yml`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/action.yml),
 [`scripts/run_rust.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/run_rust.py),
-and [`scripts/_cargo_runner.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/_cargo_runner.py).
+and
+[`scripts/_cargo_runner.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/_cargo_runner.py).
 
 ## 3. Repository layout (exec subsystem)
 
