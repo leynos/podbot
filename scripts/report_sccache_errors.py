@@ -50,14 +50,20 @@ _GITHUB_TOKEN = re.compile(
     r"\b(?:gh[oprsu]_[A-Za-z0-9_]{8,}|github_pat_[A-Za-z0-9_]{8,})\b"
 )
 _ERROR = re.compile(
-    r"\b(?:error|failed|failure|status|response|caused by|http\s+\d{3}|[1-5]\d{2})\b",
+    r"(?<![-\w])(?:error|failed|failure|status|response|caused by|"
+    r"http\s+\d{3})(?![-\w])",
     re.IGNORECASE,
 )
-_WRITE = re.compile(
-    r"\b(?:write|writes|writing|written|store|storing|stored|upload|uploaded|put|persist)\b",
+_WRITE_FAILURE = re.compile(
+    r"\b(?:write|store|upload|put)[ \t]+"
+    r"(?:request[ \t]+|operation[ \t]+|attempt[ \t]+)?"
+    r"(?:failed|failure|error|denied|timeout|rate[- ]limited)\b"
+    r"|\b(?:failed|failure|error|denied|timeout|rate[- ]limited)[ \t]+"
+    r"(?:to[ \t]+)?(?:write|store|upload|put)\b",
     re.IGNORECASE,
 )
 _STARTUP_PROBE = re.compile(r"\.sccache_check\b")
+_ERROR_LINE = re.compile(rf"(?im)^[^\r\n]*(?:{_ERROR.pattern})[^\r\n]*$")
 
 
 def _environment_secrets(environment: Mapping[str, str]) -> tuple[str, ...]:
@@ -103,38 +109,83 @@ def _sanitize_line(line: str, secrets: Iterable[str]) -> str:
     return safe[:MAX_LINE_LENGTH]
 
 
+def _line_window(
+    text: str, line_start: int, preceding: int, following: int
+) -> tuple[int, int]:
+    """Return offsets spanning one line and its requested neighbours."""
+    start = line_start
+    for _ in range(preceding):
+        previous_newline = text.rfind("\n", 0, start)
+        if previous_newline < 0:
+            start = 0
+            break
+        start = previous_newline
+
+    end = line_start
+    for _ in range(following + 1):
+        next_newline = text.find("\n", end)
+        if next_newline < 0:
+            end = len(text)
+            break
+        end = next_newline + 1
+    return start, end
+
+
 def sanitize_error_log(
     log_text: str, secret_values: Iterable[str] = ()
 ) -> tuple[str, ...]:
-    """Return a bounded set of sanitized error lines, write-related first.
+    """Return bounded sanitized error lines, backend write failures first.
 
     The sccache error log can include backend request details. This function
     keeps useful status and cause text while removing credential-bearing URLs,
     token fields and known secret values before anything reaches workflow logs.
     """
     secrets = tuple(value for value in secret_values if value)
-    lines = log_text.splitlines()
-    error_indices = [
-        index
-        for index, line in enumerate(lines)
-        if _ERROR.search(line) and not _STARTUP_PROBE.search(line)
-    ]
-    write_indices = [index for index in error_indices if _WRITE.search(lines[index])]
-    if not error_indices:
+    first_write_start = None
+    for match in _WRITE_FAILURE.finditer(log_text):
+        line_start = log_text.rfind("\n", 0, match.start()) + 1
+        line_end = log_text.find("\n", match.end())
+        line = log_text[line_start : line_end if line_end >= 0 else len(log_text)]
+        if not _STARTUP_PROBE.search(line):
+            first_write_start = line_start
+            break
+
+    error_lines = []
+    for match in _ERROR_LINE.finditer(log_text):
+        if _STARTUP_PROBE.search(match.group()):
+            continue
+        error_lines.append((match.start(), match.group()))
+        if len(error_lines) >= MAX_DIAGNOSTIC_LINES:
+            break
+
+    if not error_lines:
         return ()
 
-    first_write = write_indices[0] if write_indices else error_indices[0]
-    nearby = [
-        index
-        for index in error_indices
-        if max(0, first_write - 2) <= index <= first_write + 4
-    ]
-    selected = nearby or error_indices
-    selected.extend(index for index in error_indices if index not in selected)
-    return tuple(
-        _sanitize_line(lines[index], secrets)
-        for index in selected[:MAX_DIAGNOSTIC_LINES]
+    nearby_start, nearby_end = _line_window(
+        log_text,
+        first_write_start if first_write_start is not None else error_lines[0][0],
+        preceding=2 if first_write_start is not None else 0,
+        following=4,
     )
+    nearby = [
+        (match.start(), match.group())
+        for match in _ERROR_LINE.finditer(log_text, nearby_start, nearby_end)
+        if not _STARTUP_PROBE.search(match.group())
+    ]
+
+    selected: list[str] = []
+    selected_offsets: set[int] = set()
+    for index_group in (nearby, error_lines):
+        for offset, line in index_group:
+            if offset in selected_offsets:
+                continue
+            selected_offsets.add(offset)
+            selected.append(line)
+            if len(selected) >= MAX_DIAGNOSTIC_LINES:
+                break
+        if len(selected) >= MAX_DIAGNOSTIC_LINES:
+            break
+    return tuple(_sanitize_line(line, secrets) for line in selected)
 
 
 def _read_diagnostic(path: Path, secrets: Iterable[str]) -> tuple[str, ...]:
@@ -150,8 +201,8 @@ def _read_diagnostic(path: Path, secrets: Iterable[str]) -> tuple[str, ...]:
     lines = sanitize_error_log(text, secrets)
     if lines:
         prefix = (
-            "first write-related sccache error"
-            if any(_WRITE.search(line) for line in lines)
+            "first sccache backend write failure"
+            if any(_WRITE_FAILURE.search(line) for line in lines)
             else "sccache error log"
         )
         inspected_bytes = min(len(contents), MAX_LOG_BYTES)
@@ -161,9 +212,9 @@ def _read_diagnostic(path: Path, secrets: Iterable[str]) -> tuple[str, ...]:
         header += ")"
         return (header, *lines)
     return (
-        "no write-related sccache error found in the bounded error log"
+        "no backend write failure found in the bounded error log"
         if not was_truncated
-        else "no write-related error found in the inspected log prefix (truncated)",
+        else "no backend write failure found in the inspected log prefix (truncated)",
     )
 
 
