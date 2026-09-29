@@ -108,6 +108,39 @@ def test_artifact_selection_matches_package_target_and_test_profile(
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        pytest.param("target", None, id="missing-target-object"),
+        pytest.param("target", [], id="non-object-target"),
+        pytest.param(
+            "target",
+            {"name": "compile_contract", "kind": "test"},
+            id="non-list-target-kinds",
+        ),
+        pytest.param("profile", None, id="missing-profile-object"),
+        pytest.param("profile", [], id="non-object-profile"),
+    ],
+)
+def test_artifact_selection_ignores_malformed_target_and_profile_values(
+    tmp_path: pathlib.Path, field: str, value: typ.Any
+) -> None:
+    """Malformed Cargo mappings cannot crash current-build selection."""
+    metadata = package_document(tmp_path)
+    target = create_test_plan(
+        metadata, parse_cargo_test_options(["--test", "compile_contract"])
+    ).nested_targets[0]
+    malformed = _artifact(
+        target.package_id,
+        target.name,
+        _executable(tmp_path / "target/debug/deps/compile_contract"),
+    )
+    malformed[field] = value
+
+    with pytest.raises(RunnerError, match="found 0"):
+        select_test_executables([malformed], (target,))
+
+
 def test_artifact_selection_rejects_missing_and_duplicate_current_outputs(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -182,6 +215,48 @@ def test_runtime_environment_preserves_binary_and_native_paths(
     )
     assert case.inherited_environment["LD_LIBRARY_PATH"] == "/caller/native", (
         "runtime reconstruction must not mutate the caller's environment"
+    )
+
+
+def test_runtime_environment_ignores_malformed_artifact_mappings(
+    runtime_environment_case: RuntimeEnvironmentCase,
+) -> None:
+    """Malformed target and profile objects do not break environment setup."""
+    case = runtime_environment_case
+    package = package_document(case.package_directory)["packages"][0]
+    test_executable = case.target_directory / "debug/deps/compile_contract"
+    context = TestRunnerContext(
+        ("cargo", "+1.88.0"),
+        case.package_directory,
+        case.inherited_environment,
+        ProcessSupervisor(timeout_seconds=1800),
+    )
+    messages = [
+        {
+            "reason": "compiler-artifact",
+            "package_id": package["id"],
+            "target": None,
+            "profile": None,
+            "executable": str(test_executable),
+        },
+        {
+            "reason": "compiler-artifact",
+            "package_id": package["id"],
+            "target": {"name": "podbot", "kind": "bin"},
+            "profile": [],
+            "executable": str(case.binary),
+        },
+    ]
+
+    environment = create_test_runtime_environment(
+        context, package, test_executable, messages
+    )
+
+    assert "CARGO_BIN_EXE_podbot" not in environment, (
+        "malformed target kinds must not create Cargo binary variables"
+    )
+    assert "CARGO_DEBUG_ASSERTIONS" not in environment, (
+        "malformed profile objects must not create profile variables"
     )
 
 
