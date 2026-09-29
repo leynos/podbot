@@ -24,8 +24,8 @@ resulting `runs-on` carries a newline inside the expression. GitHub
 evaluates it anyway, so a green run is not evidence the defect is absent
 and nothing but a contract will find it.
 
-The last of those cannot be proved by this repository's own files: every
-job here names a literal runner, so a check parametrized over them passes
+The last of those cannot be proved by this repository's own files: no
+job here folds its `runs-on` across lines, so a check parametrized over them passes
 whether or not it discriminates anything. The mechanism is driven
 directly with constructed documents, in both directions, and the real
 files are asserted separately.

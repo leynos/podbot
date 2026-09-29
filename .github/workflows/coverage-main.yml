@@ -23,7 +23,16 @@ concurrency:
 
 jobs:
   coverage-upload:
-    runs-on: ubuntu-latest
+    # Ubicloud's cache proxy is scoped by ref, so a pull request's Ubicloud
+    # build-test reads a warm main scope only if a main job on Ubicloud
+    # writes it. This is that writer. The fork arm never applies on push or
+    # dispatch; it is kept so every Ubicloud lane reads the same way.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || 'ubicloud-standard-2' }}
+    # An Ubicloud runner is a self-hosted just-in-time runner with no
+    # six-hour hosted cap. Provisional: sized for the first, cold run on
+    # Ubicloud; tightened to twice a measured warm Ubicloud run once one
+    # exists.
+    timeout-minutes: 30
     # The CodeScene token lives in this environment, whose deployment policy
     # admits `main` alone; the codescene environment contract holds it to
     # this job.
