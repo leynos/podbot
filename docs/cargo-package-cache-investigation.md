@@ -27,6 +27,15 @@ exclusive lock.
 The checkout pinned Rust 1.88.0 and Cargo 1.88.0. `Cargo.lock` resolved
 `trybuild` 1.0.117; `Cargo.toml` requests 1.0.116 with the `diff` feature.
 
+## Rebased test-tooling baseline
+
+The rebase onto `origin/main` retained its test dependency updates:
+`Cargo.toml` now requests `rstest` 0.27.0, and `Cargo.lock` resolves `trybuild`
+1.0.121 while `Cargo.toml` continues to request 1.0.116 with the `diff`
+feature. The updated GitHub Actions pins were retained as well. These are the
+current validation inputs for this branch; the version changes do not explain
+or demonstrate a fix for the historical package-cache lock cycle.
+
 ## Bounded Rust 1.88 attempt
 
 The legacy Cargo command was run directly under the new process supervisor on
