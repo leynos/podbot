@@ -1,8 +1,8 @@
 """The runner-placement rule, and the reading it rests on.
 
 Kept apart from the pin and watchdog contracts because it is the one
-rule this repository's own files cannot prove. Every job here names a
-literal runner, so a check parametrized over them passes whether or not
+rule this repository's own files cannot prove. No job here folds its
+`runs-on` across lines, so a check parametrized over them passes whether or not
 it discriminates anything; the rule is a function taking a parsed value
 so the contracts can drive it directly, in both directions, with the
 documents this repository does not contain.

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import typing as typ
 
-from workflow_contracts import shared_actions_references
+from workflow_contracts import parse, shared_actions_references
 from workflow_coverage import cache_reports, coverage_jobs
 from workflow_placement import line_break_fault, runs_on_declarations
 
@@ -43,7 +43,18 @@ COVERAGE_JOBS: typ.Final[list[tuple[str, str]]] = [
 RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
     ("audit.yml", "audit", "ubuntu-latest"),
     ("ci.yml", "build-test", "ubuntu-latest"),
-    ("coverage-main.yml", "coverage-upload", "ubuntu-latest"),
+    (
+        "coverage-main.yml",
+        "coverage-upload",
+        "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
+        "|| 'ubicloud-standard-2' }}",
+    ),
+]
+
+#: Every job whose runner can be an Ubicloud one, with the ceiling it
+#: states in minutes.
+CEILINGS: typ.Final[list[tuple[str, str, object]]] = [
+    ("coverage-main.yml", "coverage-upload", 45),
 ]
 
 
@@ -100,8 +111,8 @@ def test_every_runner_declaration_is_found_raw_and_parsed(
 ) -> None:
     """Each declaration's source text is kept beside its parsed value.
 
-    A literal label reads the same both ways, so the raw text must equal
-    the value here; the folded-scalar case below is where they differ.
+    A single-line declaration reads the same both ways, so the raw text
+    must equal the value here; the folded-scalar case below is where they differ.
     """
     declarations = runs_on_declarations(workflow_texts)
     assert [(d.workflow, d.job, d.value) for d in declarations] == RUNNERS
@@ -138,3 +149,22 @@ def test_no_runner_placement_carries_a_line_break(
             f"a line break, which GitHub evaluates as written. The value "
             f"parsed as {fault!r}, from:\n{declaration.raw}"
         )
+
+
+def test_every_ubicloud_job_states_its_own_ceiling(
+    workflow_texts: dict[str, str],
+) -> None:
+    """A job that can land on Ubicloud declares `timeout-minutes`.
+
+    An Ubicloud runner is a self-hosted just-in-time runner, so GitHub's
+    six-hour cap for hosted jobs does not apply, and a hung job would hold a
+    billable runner for days. The inventory is exact, so a new Ubicloud job
+    without a ceiling, or a ceiling removed, fails here.
+    """
+    found = [
+        (workflow, job_name, job.get("timeout-minutes"))
+        for workflow, text in sorted(workflow_texts.items())
+        for job_name, job in (parse(workflow, text).get("jobs") or {}).items()
+        if isinstance(job, dict) and "ubicloud" in str(job.get("runs-on", ""))
+    ]
+    assert found == CEILINGS
