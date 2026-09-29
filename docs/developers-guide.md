@@ -994,8 +994,7 @@ tracked UTF-8 text. Commit the regenerated `typos.toml`; never edit it by hand.
 Bump the pin by changing `TYPOS_CONFIG_BUILDER_VERSION` in the `Makefile`.
 
 Repository exceptions belong in the local overlay as narrow exact or full-line
-patterns; do not add bare accepted words for machine interfaces or formal
-names.
+patterns; do not add bare accepted words for machine interfaces or formal names.
 
 ## 16. Behavioural test infrastructure
 
