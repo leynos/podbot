@@ -40,6 +40,9 @@ MODES: typ.Final[dict[str, str]] = {"check-fmt": "--check", "fmt": "--in-place"}
 
 _ASSIGNMENT = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*(?::=|\?=|=)\s*(.*)$")
 _REFERENCE = re.compile(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)")
+# `$(shell command -v NAME ...)` is how this estate locates a tool with a
+# fallback path; the tool a recipe runs is NAME.
+_TOOL_PROBE = re.compile(r"^\$\(shell\s+command\s+-v\s+([A-Za-z0-9_.-]+)")
 _CONDITIONAL = re.compile(r"^(ifeq|ifneq|ifdef|ifndef)\b")
 _CHECK_FMT_RUN = re.compile(r"(^|\s)make\s+(\S+\s+)*check-fmt(\s|$)")
 
@@ -64,6 +67,12 @@ def _assignments(makefile: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def _tool_name(value: str) -> str:
+    """Return the tool a `$(shell command -v NAME ...)` value locates, else it."""
+    probe = _TOOL_PROBE.match(value)
+    return probe.group(1) if probe else value
+
+
 def variables(makefile: str) -> dict[str, str]:
     """Return each variable with exactly one unconditional assignment.
 
@@ -73,7 +82,7 @@ def variables(makefile: str) -> dict[str, str]:
     """
     seen: dict[str, list[str]] = {}
     for name, value in _assignments(makefile):
-        seen.setdefault(name, []).append(value)
+        seen.setdefault(name, []).append(_tool_name(value))
     return {name: values[0] for name, values in seen.items() if len(values) == 1}
 
 
@@ -157,6 +166,50 @@ def runs_mdtablefix(makefile: str, target: str) -> bool:
     flags = ESTATE_FLAGS | {MODES[target]}
     known = variables(makefile)
     return any(_line_qualifies(line, known, flags) for line in recipe(makefile, target))
+
+
+def _invokes_tool(segment: str, tool: str, flag: str) -> bool:
+    """Return whether one `&&` segment runs ``tool`` with ``flag``."""
+    words = shlex.split(segment.strip().lstrip("@+"), posix=True)
+    is_tool = bool(words) and words[0].rsplit("/", 1)[-1] == tool
+    return is_tool and flag in words[1:]
+
+
+def _binding_lines(lines: list[str], known: dict[str, str]) -> list[str]:
+    """Return the expanded recipe lines whose exit status reaches Make."""
+    expanded = [expand(line, known) for line in lines]
+    return [line for line in expanded if _binds_status(line)]
+
+
+def _first_index(lines: list[str], tool: str, flag: str) -> int | None:
+    """Return the index of the first line that runs ``tool`` with ``flag``."""
+    for index, line in enumerate(lines):
+        if any(_invokes_tool(part, tool, flag) for part in line.split("&&")):
+            return index
+    return None
+
+
+def lints_after_rewrite(makefile: str) -> bool:
+    """Return whether `fmt` runs `markdownlint-cli2 --fix` after the rewrite.
+
+    The linter's fixes are applied to the text mdtablefix has just written, so
+    the other order leaves the tree in a state neither tool would produce.
+
+    Parameters
+    ----------
+    makefile
+        The Makefile text.
+
+    Returns
+    -------
+    bool
+        True when a status-binding line runs `markdownlint-cli2 --fix` after a
+        status-binding line that runs `mdtablefix --in-place`.
+    """
+    lines = _binding_lines(recipe(makefile, "fmt"), variables(makefile))
+    rewrite = _first_index(lines, "mdtablefix", "--in-place")
+    lint = _first_index(lines, "markdownlint-cli2", "--fix")
+    return rewrite is not None and lint is not None and rewrite < lint
 
 
 def runs_mdtablefix_check(makefile: str) -> bool:

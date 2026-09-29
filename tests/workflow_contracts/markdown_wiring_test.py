@@ -23,6 +23,7 @@ from markdown_wiring_rules import (
     job_steps,
     lint_action_globs,
     lint_action_steps,
+    lints_after_rewrite,
     runs_mdtablefix,
     runs_mdtablefix_check,
 )
@@ -222,3 +223,101 @@ def test_every_lint_step_is_counted() -> None:
     documents = fresh_documents()
     total = lint_action_steps(documents)
     assert total == len(_steps_matching(documents, LINT_ACTION))
+
+
+@pytest.mark.parametrize(
+    ("recipe_lines", "expected"),
+    [
+        (f'{REWRITE}\n\tmarkdownlint-cli2 --fix "**/*.md"', True),
+        (f'\tmarkdownlint-cli2 --fix "**/*.md"\n{REWRITE}', False),
+        (f'{REWRITE}\n\tmarkdownlint-cli2 "**/*.md"', False),
+        (f'{REWRITE}\n\tmarkdownlint-cli2 --fix "**/*.md" || true', False),
+        (f'{REWRITE}\n\t-markdownlint-cli2 --fix "**/*.md"', False),
+        (f'{REWRITE}\n\t$(MDLINT) --fix "**/*.md"', True),
+        ('\t$(MDLINT) --fix "**/*.md"', False),
+    ],
+    ids=[
+        "in_order",
+        "reversed",
+        "no_fix",
+        "masked",
+        "ignored",
+        "via_variable",
+        "no_rewrite",
+    ],
+)
+def test_the_lint_fix_must_follow_the_rewrite(
+    recipe_lines: str, expected: bool
+) -> None:
+    """`fmt` lints after it rewrites, and the lint's status reaches Make."""
+    variables = (
+        VARIABLES + "MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null)\n"
+    )
+    text = _makefile("fmt", recipe_lines, variables)
+    assert lints_after_rewrite(text) is expected
+
+
+def test_the_repository_makefile_lints_after_the_rewrite() -> None:
+    """`make fmt` here runs the linter's fix after `mdtablefix --in-place`."""
+    assert lints_after_rewrite(MAKEFILE.read_text(encoding="utf-8"))
+
+
+_NAMES = st.lists(
+    st.from_regex(r"[A-Z][A-Z0-9_]{2,8}", fullmatch=True),
+    min_size=1,
+    max_size=5,
+    unique=True,
+)
+
+
+@given(names=_NAMES, cuts=st.lists(st.integers(0, 7), min_size=4, max_size=4))
+def test_flags_split_across_any_variables_still_comply(
+    names: list[str], cuts: list[int]
+) -> None:
+    """However the estate flags are spread over variables, the recipe complies."""
+    flags = ALL_FLAGS
+    parts: list[list[str]] = [[] for _ in names]
+    for position, flag in enumerate(flags):
+        parts[(position + cuts[position % len(cuts)]) % len(names)].append(flag)
+    definitions = "".join(
+        f"{name} = {' '.join(part)}\n" for name, part in zip(names, parts, strict=True)
+    )
+    references = " ".join(f"$({name})" for name in names)
+    line = f"\tmdtablefix --check {references}"
+    assert runs_mdtablefix_check(_makefile("check-fmt", line, definitions))
+
+
+@given(names=_NAMES)
+def test_a_variable_assigned_twice_is_never_guessed(names: list[str]) -> None:
+    """A doubly assigned variable stays unexpanded, so the recipe is refused."""
+    duplicate = names[0]
+    definitions = "".join(f"{name} = {' '.join(ALL_FLAGS)}\n" for name in names)
+    definitions += f"{duplicate} = {' '.join(ALL_FLAGS)}\n"
+    line = f"\tmdtablefix --check $({duplicate})"
+    assert not runs_mdtablefix_check(_makefile("check-fmt", line, definitions))
+
+
+@given(before=st.integers(0, 3), after=st.integers(0, 3))
+def test_the_install_must_precede_the_check_wherever_the_other_steps_sit(
+    before: int, after: int
+) -> None:
+    """Any number of unrelated steps around the install leaves the order rule intact."""
+    noise = {"run": "echo noise"}
+    install = {"uses": f"{INSTALL_ACTION}@abc", "with": {"version": "0.6.0"}}
+    check = {"run": "make check-fmt"}
+    good = {
+        "ci.yml": {
+            "jobs": {
+                "a": {"steps": [*[noise] * before, install, *[noise] * after, check]}
+            }
+        }
+    }
+    bad = {
+        "ci.yml": {
+            "jobs": {
+                "a": {"steps": [*[noise] * before, check, *[noise] * after, install]}
+            }
+        }
+    }
+    assert install_precedes_check_fmt(good) == []
+    assert install_precedes_check_fmt(bad) == ["ci.yml:a"]
