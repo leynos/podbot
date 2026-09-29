@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+import time
 
 import pytest
 import report_sccache_errors
@@ -124,6 +125,35 @@ def test_startup_probe_already_exists_does_not_hide_store_failure() -> None:
     assert "secret" not in lines[0], "keep the real backend URL sanitized"
 
 
+def test_rust_command_flags_are_not_mistaken_for_backend_failures() -> None:
+    """Compiler arguments can contain both `error` and `write` as values."""
+    log = (
+        "DEBUG sccache::server: parse_arguments: Ok: "
+        '["--error-format=json", "--cfg", "feature=\\"write\\""]'
+    )
+
+    assert sanitize_error_log(log) == (), "ignore compiler-command debug output"
+    assert sanitize_error_log("DEBUG compiler command includes 403") == (), (
+        "a bare three-digit value is not an HTTP response"
+    )
+
+
+def test_large_debug_logs_have_bounded_diagnostic_cost() -> None:
+    """Two hundred thousand debug records stay fast and output-capped."""
+    debug_line = (
+        "DEBUG sccache::server: parse_arguments: Ok: "
+        '["--error-format=json", "--cfg", "feature=\\"write\\"", "status=429"]'
+    )
+    log = "\n".join((debug_line,) * 200_000)
+
+    start = time.perf_counter()
+    lines = sanitize_error_log(log)
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 1, f"sanitizing 200,000 debug records took {elapsed:.3f}s"
+    assert len(lines) <= MAX_DIAGNOSTIC_LINES, "cap diagnostic output"
+
+
 def test_diagnostic_reads_only_the_bounded_log_prefix(
     tmp_path: pathlib.Path, monkeypatch
 ) -> None:
@@ -135,7 +165,7 @@ def test_diagnostic_reads_only_the_bounded_log_prefix(
     lines = report_sccache_errors._read_diagnostic(log_file, ())
 
     assert lines == (
-        "no write-related error found in the inspected log prefix (truncated)",
+        "no backend write failure found in the inspected log prefix (truncated)",
     ), "do not inspect or report log entries beyond the configured byte limit"
 
 
