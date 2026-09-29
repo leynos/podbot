@@ -47,7 +47,7 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
         "ci.yml",
         "build-test",
         "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
-        "|| 'ubicloud-standard-2' }}",
+        "|| 'ubicloud-standard-4' }}",
     ),
     (
         "coverage-main.yml",
@@ -60,7 +60,7 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
 #: Every job whose runner can be an Ubicloud one, with the ceiling it
 #: states in minutes.
 CEILINGS: typ.Final[list[tuple[str, str, object]]] = [
-    ("ci.yml", "build-test", 35),
+    ("ci.yml", "build-test", 45),
     ("coverage-main.yml", "coverage-upload", 45),
 ]
 

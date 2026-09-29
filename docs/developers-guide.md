@@ -1635,20 +1635,23 @@ reusable-workflow call; every coverage step and its cache report; and every
 runner declaration, raw and parsed. A change that adds or removes an entry
 fails that module until its expected inventory is updated in the same commit.
 
-`build-test` and `coverage-upload`, main's only cache writer, run on
-`ubicloud-standard-2`, and a pull request from a fork falls back to
-`ubuntu-latest`, because a fork cannot obtain an Ubicloud runner. Ubicloud's
-cache proxy is scoped by ref, so a pull request's Ubicloud `build-test` reads a
-warm main scope only when a main job on Ubicloud writes it; a fork's pull
-request restores a hosted cache that main no longer refreshes, which is
-accepted because fork pull requests are rare here. An Ubicloud runner is a
-self-hosted just-in-time runner, so GitHub's six-hour cap for hosted jobs does
-not apply to it. Every job whose `runs-on` can select Ubicloud therefore states
-its own `timeout-minutes`, and the same module asserts that inventory exactly:
-`coverage-upload` at a provisional 45 minutes, held 15 minutes above its 1,800 s
-cargo watchdog so the watchdog, not the ceiling, ends a stalled run, and
-`build-test` at a ceiling set from a measured warm run. Neither may sit below
-the watchdog plus setup.
+`build-test`, on `ubicloud-standard-4`, and `coverage-upload`, main's only
+cache writer, on `ubicloud-standard-2`, run on Ubicloud, and a pull request
+from a fork falls back to `ubuntu-latest`, because a fork cannot obtain an
+Ubicloud runner. Ubicloud's cache proxy is scoped by ref, so a pull request's
+Ubicloud `build-test` reads a warm main scope only when a main job on Ubicloud
+writes it; a fork's pull request restores a hosted cache that main no longer
+refreshes, which is accepted because fork pull requests are rare here. An
+Ubicloud runner is a self-hosted just-in-time runner, so GitHub's six-hour cap
+for hosted jobs does not apply to it. Every job whose `runs-on` can select
+Ubicloud therefore states its own `timeout-minutes`, and the same module
+asserts that inventory exactly: `coverage-upload` at a provisional 45 minutes,
+held 15 minutes above its 1,800 s cargo watchdog so the watchdog, not the
+ceiling, ends a stalled run, and `build-test` at 45 minutes, provisional until
+a warm `standard-4` run sizes it. Neither may sit below the watchdog plus setup.
+`build-test` is `standard-4` on a measured shortfall: its first warm run on
+`standard-2` spent 19 minutes in lint and reached its 35-minute ceiling
+mid-test (run 36559052173), against a hosted median of 14.8 minutes.
 
 Both coverage lanes also check the compiler cache after reporting on it.
 `sccache --show-stats --stats-format json > sccache-stats.json` writes the
