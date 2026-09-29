@@ -81,6 +81,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_sccache_fallback_contract.py \
 	scripts/tests/test_workflow_condition_properties.py
 WORKFLOW_PY_TESTS := $(filter scripts/tests/test_%,$(WORKFLOW_PY_SRCS))
+WORKFLOW_PY_DOCTESTS := $(filter-out $(WORKFLOW_PY_TESTS) scripts/tests/conftest.py,$(WORKFLOW_PY_SRCS))
 WORKFLOW_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
 	--with pytest==9.0.2 --with pyyaml==$(PYYAML_VERSION) \
 	--with hypothesis==$(HYPOTHESIS_VERSION) python -m pytest
@@ -136,24 +137,7 @@ test-workflow-contracts: ## Assert what the workflow files must say
 workflow-contracts: ## Assert what the workflow files must say
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(WORKFLOW_PY_SRCS)
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(WORKFLOW_PY_SRCS)
-	@$(WORKFLOW_PYTEST) $(WORKFLOW_PY_TESTS) \
-		scripts/workflow_contracts.py scripts/workflow_commands.py \
-		scripts/workflow_condition.py scripts/workflow_coverage.py scripts/workflow_placement.py \
-		scripts/test_runner.py scripts/test_runner_cargo.py \
-		scripts/test_runner_context.py \
-		scripts/test_runner_nested.py scripts/test_runner_phases.py \
-		scripts/test_runner_subreaper.py \
-		scripts/test_runner_target_arguments.py \
-		scripts/test_runner_supervise.py \
-		scripts/test_runner_commands.py \
-		scripts/test_runner_diagnostics.py scripts/test_runner_process_io.py \
-		scripts/test_runner_process_tree.py \
-		scripts/test_runner_supervisor.py \
-		scripts/test_runner_models.py scripts/test_runner_options.py \
-		scripts/test_runner_plan.py scripts/test_runner_registry.py \
-		scripts/test_runner_selection.py \
-		scripts/check_sccache_health.py \
-		scripts/report_sccache_errors.py \
+	@$(WORKFLOW_PYTEST) $(WORKFLOW_PY_TESTS) $(WORKFLOW_PY_DOCTESTS) \
 		--doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 

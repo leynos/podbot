@@ -197,13 +197,136 @@ def test_read_process_replaces_invalid_utf8_in_stat_command_name(
     )
 
 
-def _process(pid: int, parent_pid: int, start_time: int) -> process_tree.ProcessInfo:
+@pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
+@pytest.mark.parametrize("refresh", [True, False], ids=["refresh", "after-refresh"])
+def test_descendants_excludes_root_process(
+    monkeypatch: pytest.MonkeyPatch, refresh: bool
+) -> None:
+    """The root remains owned for supervision but is not a descendant."""
+    root = _process(81001, os.getpid(), 201)
+    tree = _tree_for_snapshot(monkeypatch, root, {root.pid: root})
+
+    descendants = _descendants_after_refresh(tree, refresh=refresh)
+
+    assert root.pid in tree.owned, "the root must remain tracked for supervision"
+    assert descendants == (), "the root child must not appear among its descendants"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
+@pytest.mark.parametrize("refresh", [True, False], ids=["refresh", "after-refresh"])
+def test_descendants_returns_live_processes_in_tracking_order(
+    monkeypatch: pytest.MonkeyPatch, refresh: bool
+) -> None:
+    """Current live descendants retain the ownership dictionary's order."""
+    root = _process(81002, os.getpid(), 202)
+    child = _process(81003, root.pid, 203)
+    grandchild = _process(81004, child.pid, 204)
+    tree = _tree_for_snapshot(
+        monkeypatch,
+        root,
+        {root.pid: root, child.pid: child, grandchild.pid: grandchild},
+    )
+
+    descendants = _descendants_after_refresh(tree, refresh=refresh)
+
+    assert tuple(item.info.pid for item in descendants) == (
+        child.pid,
+        grandchild.pid,
+    ), "live descendants must exclude the root and preserve tracking order"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
+@pytest.mark.parametrize("refresh", [True, False], ids=["refresh", "after-refresh"])
+@pytest.mark.parametrize(
+    ("condition", "state"),
+    [("zombie", "Z"), ("exiting", "X"), ("exited", None)],
+    ids=["zombie", "exiting", "exited"],
+)
+def test_descendants_excludes_zombie_or_exited_processes(
+    monkeypatch: pytest.MonkeyPatch,
+    refresh: bool,
+    condition: str,
+    state: str | None,
+) -> None:
+    """Zombie, exiting, and missing process records are never live descendants."""
+    root = _process(81005, os.getpid(), 205)
+    child = _process(81006, root.pid, 206)
+    snapshot = {root.pid: root, child.pid: child}
+    tree = _tree_for_snapshot(monkeypatch, root, snapshot)
+    tree.refresh()
+    assert child.pid in tree.owned, "the test must begin with a tracked child"
+
+    if state is None:
+        snapshot.pop(child.pid)
+    else:
+        snapshot[child.pid] = _process(
+            child.pid, child.parent_pid, child.start_time, state=state
+        )
+
+    descendants = _descendants_after_refresh(tree, refresh=refresh)
+
+    assert child.pid not in {item.info.pid for item in descendants}, (
+        f"a {condition} process must not be reported as live"
+    )
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
+@pytest.mark.parametrize("refresh", [True, False], ids=["refresh", "after-refresh"])
+def test_descendants_rejects_a_reused_pid(
+    monkeypatch: pytest.MonkeyPatch, refresh: bool
+) -> None:
+    """A numeric PID with a new start time cannot retain the old ownership."""
+    root = _process(81007, os.getpid(), 207)
+    child = _process(81008, root.pid, 208)
+    snapshot = {root.pid: root, child.pid: child}
+    tree = _tree_for_snapshot(monkeypatch, root, snapshot)
+    tree.refresh()
+    assert child.pid in tree.owned, "the original child must be tracked"
+    snapshot[child.pid] = _process(child.pid, 99999, child.start_time + 1)
+
+    descendants = _descendants_after_refresh(tree, refresh=refresh)
+
+    assert child.pid not in {item.info.pid for item in descendants}, (
+        "a reused PID must not remain attached to its old process identity"
+    )
+    assert child.pid not in tree.owned, "the stale process identity must be discarded"
+
+
+def _tree_for_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+    root: process_tree.ProcessInfo,
+    snapshot: dict[int, process_tree.ProcessInfo],
+) -> process_tree.OwnedProcessTree:
+    """Build an owned tree over a controllable procfs snapshot."""
+    monkeypatch.setattr(
+        process_tree,
+        "_read_process",
+        lambda pid: root if pid == root.pid else None,
+    )
+    monkeypatch.setattr(process_tree, "_read_process_table", lambda: dict(snapshot))
+    return process_tree.OwnedProcessTree(
+        process_tree.ProcessTreeRoot(root.pid, "controlled child", 0.0, False)
+    )
+
+
+def _descendants_after_refresh(
+    tree: process_tree.OwnedProcessTree, *, refresh: bool
+) -> tuple[process_tree.OwnedProcess, ...]:
+    """Respect the cached-snapshot contract of ``descendants(refresh=False)``."""
+    if not refresh:
+        tree.refresh()
+    return tree.descendants(refresh=refresh)
+
+
+def _process(
+    pid: int, parent_pid: int, start_time: int, *, state: str = "S"
+) -> process_tree.ProcessInfo:
     """Build a stable fake process identity for procfs ownership tests."""
     return process_tree.ProcessInfo(
         pid=pid,
         parent_pid=parent_pid,
         process_group=pid,
         start_time=start_time,
-        state="S",
+        state=state,
         command=f"process-{pid}",
     )

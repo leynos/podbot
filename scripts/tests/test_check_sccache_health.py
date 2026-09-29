@@ -160,6 +160,21 @@ def test_the_cache_write_count_is_reported(
     assert capsys.readouterr().out == "sccache cache_writes=7\n"
 
 
+def test_malformed_stats_use_the_same_empty_mapping_for_output_and_assessment(
+    checker: typ.Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A malformed stats value reports zero writes and still fails strictly."""
+    statistics = tmp_path / "sccache-stats.json"
+    statistics.write_text(
+        json.dumps({"cache_location": "ghac", "stats": []}), encoding="utf-8"
+    )
+
+    assert checker.main(["--expect-location", "ghac", str(statistics)]) == 1
+    output = capsys.readouterr().out
+    assert "sccache cache_writes=0" in output
+    assert "sccache handled no compile requests" in output
+
+
 def test_a_missing_file_fails(checker: typ.Any, tmp_path: Path) -> None:
     """No statistics is a broken lane, not a pass."""
     assert (

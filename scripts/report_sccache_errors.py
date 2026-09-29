@@ -115,11 +115,11 @@ def _line_window(
     """Return offsets spanning one line and its requested neighbours."""
     start = line_start
     for _ in range(preceding):
-        previous_newline = text.rfind("\n", 0, start)
+        previous_newline = text.rfind("\n", 0, start - 1) if start else -1
         if previous_newline < 0:
             start = 0
             break
-        start = previous_newline
+        start = previous_newline + 1
 
     end = line_start
     for _ in range(following + 1):
@@ -129,6 +129,66 @@ def _line_window(
             break
         end = next_newline + 1
     return start, end
+
+
+def _first_write_failure_start(log_text: str) -> int | None:
+    """Find the first non-probe line that describes a backend write failure."""
+    for match in _WRITE_FAILURE.finditer(log_text):
+        line_start = log_text.rfind("\n", 0, match.start()) + 1
+        line_end = log_text.find("\n", match.end())
+        line = log_text[line_start : line_end if line_end >= 0 else len(log_text)]
+        if not _STARTUP_PROBE.search(line):
+            return line_start
+    return None
+
+
+def _error_lines(
+    log_text: str, start: int = 0, end: int | None = None
+) -> list[tuple[int, str]]:
+    """Return bounded error lines in a log range, excluding startup probes."""
+    matches = _ERROR_LINE.finditer(
+        log_text, start, len(log_text) if end is None else end
+    )
+    lines = []
+    for match in matches:
+        if _STARTUP_PROBE.search(match.group()):
+            continue
+        lines.append((match.start(), match.group()))
+        if len(lines) >= MAX_DIAGNOSTIC_LINES:
+            break
+    return lines
+
+
+def _nearby_error_lines(
+    log_text: str,
+    first_write_start: int | None,
+    error_lines: list[tuple[int, str]],
+) -> list[tuple[int, str]]:
+    """Return error lines near the first write failure or first reported error."""
+    nearby_start, nearby_end = _line_window(
+        log_text,
+        first_write_start if first_write_start is not None else error_lines[0][0],
+        preceding=2 if first_write_start is not None else 0,
+        following=4,
+    )
+    return _error_lines(log_text, nearby_start, nearby_end)
+
+
+def _prioritize_error_lines(
+    nearby: list[tuple[int, str]], all_errors: list[tuple[int, str]]
+) -> tuple[str, ...]:
+    """Prefer nearby context, then fill the bounded result from other errors."""
+    selected: list[str] = []
+    selected_offsets: set[int] = set()
+    for group in (nearby, all_errors):
+        for offset, line in group:
+            if offset in selected_offsets:
+                continue
+            selected_offsets.add(offset)
+            selected.append(line)
+            if len(selected) >= MAX_DIAGNOSTIC_LINES:
+                return tuple(selected)
+    return tuple(selected)
 
 
 def sanitize_error_log(
@@ -141,50 +201,13 @@ def sanitize_error_log(
     token fields and known secret values before anything reaches workflow logs.
     """
     secrets = tuple(value for value in secret_values if value)
-    first_write_start = None
-    for match in _WRITE_FAILURE.finditer(log_text):
-        line_start = log_text.rfind("\n", 0, match.start()) + 1
-        line_end = log_text.find("\n", match.end())
-        line = log_text[line_start : line_end if line_end >= 0 else len(log_text)]
-        if not _STARTUP_PROBE.search(line):
-            first_write_start = line_start
-            break
-
-    error_lines = []
-    for match in _ERROR_LINE.finditer(log_text):
-        if _STARTUP_PROBE.search(match.group()):
-            continue
-        error_lines.append((match.start(), match.group()))
-        if len(error_lines) >= MAX_DIAGNOSTIC_LINES:
-            break
-
+    first_write_start = _first_write_failure_start(log_text)
+    error_lines = _error_lines(log_text)
     if not error_lines:
         return ()
 
-    nearby_start, nearby_end = _line_window(
-        log_text,
-        first_write_start if first_write_start is not None else error_lines[0][0],
-        preceding=2 if first_write_start is not None else 0,
-        following=4,
-    )
-    nearby = [
-        (match.start(), match.group())
-        for match in _ERROR_LINE.finditer(log_text, nearby_start, nearby_end)
-        if not _STARTUP_PROBE.search(match.group())
-    ]
-
-    selected: list[str] = []
-    selected_offsets: set[int] = set()
-    for index_group in (nearby, error_lines):
-        for offset, line in index_group:
-            if offset in selected_offsets:
-                continue
-            selected_offsets.add(offset)
-            selected.append(line)
-            if len(selected) >= MAX_DIAGNOSTIC_LINES:
-                break
-        if len(selected) >= MAX_DIAGNOSTIC_LINES:
-            break
+    nearby = _nearby_error_lines(log_text, first_write_start, error_lines)
+    selected = _prioritize_error_lines(nearby, error_lines)
     return tuple(_sanitize_line(line, secrets) for line in selected)
 
 

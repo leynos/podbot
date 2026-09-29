@@ -110,6 +110,26 @@ def _structural_failures(
     return [message for failed, message in checks if failed]
 
 
+def _stats(document: Mapping[str, object]) -> Mapping[str, object]:
+    """Return the statistics mapping or an empty mapping for malformed input."""
+    value = document.get("stats", {})
+    return value if isinstance(value, Mapping) else {}
+
+
+def _assess_stats(
+    stats: Mapping[str, object], location: str, expected: str
+) -> Assessment:
+    """Assess one normalized statistics mapping against the configured backend."""
+    failures = _structural_failures(stats, location, expected)
+    counters = (*WARNED_COUNTERS, "cache_errors")
+    warnings = [
+        f"{name} is {count}"
+        for name in counters
+        if (count := _counted(stats.get(name))) > 0
+    ]
+    return Assessment(tuple(failures), tuple(warnings))
+
+
 def assess(document: Mapping[str, object], expected: str) -> Assessment:
     """Judge one `sccache --show-stats --stats-format json` document.
 
@@ -131,17 +151,9 @@ def assess(document: Mapping[str, object], expected: str) -> Assessment:
         ...     "compile_requests": 1, "cache_writes": 1}}, "ghac").failures
         ()
     """
-    stats = document.get("stats", {})
-    stats = stats if isinstance(stats, Mapping) else {}
+    stats = _stats(document)
     location = str(document.get("cache_location", ""))
-    failures = _structural_failures(stats, location, expected)
-    counters = (*WARNED_COUNTERS, "cache_errors")
-    warnings = [
-        f"{name} is {count}"
-        for name in counters
-        if (count := _counted(stats.get(name))) > 0
-    ]
-    return Assessment(tuple(failures), tuple(warnings))
+    return _assess_stats(stats, location, expected)
 
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
@@ -167,10 +179,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
     if not isinstance(document, Mapping):
         print(f"::error::{options.statistics} is not a statistics object")
         return 1
-    stats = document.get("stats", {})
-    stats = stats if isinstance(stats, Mapping) else {}
+    stats = _stats(document)
     print(f"sccache cache_writes={_counted(stats.get('cache_writes'))}")
-    assessment = assess(document, options.expect_location)
+    assessment = _assess_stats(
+        stats, str(document.get("cache_location", "")), options.expect_location
+    )
     for warning in assessment.warnings:
         print(f"::warning::sccache {warning}")
     for failure in assessment.failures:
