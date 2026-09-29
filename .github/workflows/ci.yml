@@ -55,6 +55,13 @@ jobs:
         # keeps asserting nothing if its `run:` is changed. The contract
         # next door asserts this exact command.
         run: make workflow-contracts
+      - name: Install mdtablefix
+        # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
+        # first release with `--check` and `--git`.
+        uses: >-
+          leynos/shared-actions/.github/actions/install-mdtablefix@a5765019912a8ab6882b12db049c7cde635f3a85
+        with:
+          version: '0.6.0'
       - name: Format
         run: make check-fmt
       - name: Enforce en-GB-oxendict spelling
@@ -62,12 +69,7 @@ jobs:
       - name: Markdown lint
         uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff
         with:
-          globs: |
-            **/*.md
-            !**/target/**
-            !**/dist/**
-            !**/.uv-cache/**
-            !**/.uv-tools/**
+          globs: '**/*.md'
       # Dependency audits report advisories against the whole lockfile, so a
       # newly published advisory would fail every Dependabot PR regardless of
       # content and deadlock auto-merge. The scheduled audit workflow covers
