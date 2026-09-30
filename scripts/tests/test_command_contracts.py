@@ -140,8 +140,9 @@ def test_make_test_uses_runner_and_preserves_overrides(
     )
 
 
-def test_make_workflow_gate_formats_lints_and_documents_runner_modules() -> None:
-    """Every runner module stays covered by Make's Python gate and doctests."""
+@pytest.fixture(scope="module")
+def _workflow_gate_commands() -> tuple[str, ...]:
+    """Return the normalized commands Make would run for workflow-contracts."""
     repository_root = Path(__file__).resolve().parents[2]
     output = subprocess.run(
         ["make", "--no-print-directory", "--dry-run", "workflow-contracts"],
@@ -150,27 +151,73 @@ def test_make_workflow_gate_formats_lints_and_documents_runner_modules() -> None
         check=True,
         text=True,
     ).stdout
-    commands = output.replace("\\\n\t", " ").splitlines()
-    format_command = next(
-        line for line in commands if "ruff" in line and "format" in line
-    )
-    lint_command = next(line for line in commands if "ruff" in line and "check" in line)
-    pytest_command = next(line for line in commands if "python -m pytest" in line)
-    runner_modules = tuple(
+    return tuple(output.replace("\\\n\t", " ").splitlines())
+
+
+@pytest.fixture(scope="module")
+def _runner_modules() -> tuple[str, ...]:
+    """Discover sorted runner-module paths relative to the repository root."""
+    repository_root = Path(__file__).resolve().parents[2]
+    return tuple(
         path.relative_to(repository_root).as_posix()
         for path in sorted((repository_root / "scripts").glob("test_runner*.py"))
     )
 
-    assert runner_modules, "the Python test runner must have modules to validate"
-    for module in runner_modules:
-        assert module in format_command, f"{module} is missing from Ruff formatting"
-        assert module in lint_command, f"{module} is missing from Ruff linting"
-        assert module in pytest_command, f"{module} is missing from doctests"
-    for module in (
+
+@pytest.mark.parametrize(
+    ("command_terms", "missing_from"),
+    [
+        pytest.param(("ruff", "format"), "Ruff formatting", id="format"),
+        pytest.param(("ruff", "check"), "Ruff linting", id="lint"),
+        pytest.param(("python -m pytest",), "doctests", id="doctests"),
+    ],
+)
+def test_make_workflow_gate_formats_lints_and_documents_runner_modules(
+    command_terms: tuple[str, ...],
+    missing_from: str,
+    _workflow_gate_commands: tuple[str, ...],
+    _runner_modules: tuple[str, ...],
+) -> None:
+    """Every runner module stays covered by its selected Python gate."""
+    selected_command = next(
+        (
+            command
+            for command in _workflow_gate_commands
+            if all(term in command for term in command_terms)
+        ),
+        None,
+    )
+    assert selected_command is not None, (
+        f"workflow-contracts is missing a command containing {command_terms!r}"
+    )
+    assert _runner_modules, "the Python test runner must have modules to validate"
+    for module in _runner_modules:
+        assert module in selected_command, f"{module} is missing from {missing_from}"
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
         "scripts/check_sccache_health.py",
         "scripts/report_sccache_errors.py",
-    ):
-        assert module in pytest_command, f"{module} is missing from doctests"
+    ],
+    ids=["sccache-health", "sccache-diagnostics"],
+)
+def test_workflow_gate_includes_sccache_doctests(
+    module: str,
+    _workflow_gate_commands: tuple[str, ...],
+) -> None:
+    """Both cache helpers remain covered by the workflow doctest command."""
+    pytest_command = next(
+        (
+            command
+            for command in _workflow_gate_commands
+            if "python -m pytest" in command
+        ),
+        None,
+    )
+    assert pytest_command is not None, "workflow-contracts must run Python doctests"
+    assert module in pytest_command, f"{module} is missing from doctests"
 
 
 def test_the_contracts_are_run_by_ci(workflow_texts: dict[str, str]) -> None:
