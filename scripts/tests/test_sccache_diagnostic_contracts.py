@@ -13,7 +13,6 @@ from report_sccache_errors import _line_window
 from report_sccache_errors import sanitize_error_log
 from workflow_contracts import of_type
 from workflow_contracts import parse as parse_workflow
-from workflow_coverage import CacheReport
 from workflow_coverage import cache_reports
 
 SETUP_RUST_ACTION = "leynos/shared-actions/.github/actions/setup-rust"
@@ -26,21 +25,21 @@ HEALTH_CHECK_COMMAND = (
 
 def _cache_job_steps(
     workflow: str, workflow_texts: dict[str, str]
-) -> tuple[CacheReport, list[dict[str, typ.Any]]]:
-    """Parse one workflow and retrieve its coverage job and steps."""
+) -> tuple[list[dict[str, typ.Any]], int]:
+    """Return typed cache-job steps and the workflow's coverage index."""
     (report,) = cache_reports({workflow: workflow_texts[workflow]})
     document = parse_workflow(workflow, workflow_texts[workflow])
     job = of_type(of_type(document.get("jobs"), dict).get(report.job), dict)
     steps = [of_type(step, dict) for step in of_type(job.get("steps"), list)]
-    return report, steps
+    return steps, report.coverage_index
 
 
 @pytest.mark.parametrize("workflow", ("ci.yml", "coverage-main.yml"))
-def test_setup_enables_logging_and_collects_sanitized_diagnostics(
+def test_setup_enables_persistent_sccache_logging(
     workflow: str, workflow_texts: dict[str, str]
 ) -> None:
     """Configure diagnostics before server startup and coverage compilation."""
-    report, steps = _cache_job_steps(workflow, workflow_texts)
+    steps, coverage_index = _cache_job_steps(workflow, workflow_texts)
     setup_index = next(
         index
         for index, step in enumerate(steps)
@@ -65,17 +64,17 @@ def test_setup_enables_logging_and_collects_sanitized_diagnostics(
     assert not steps[setup_index].get("env"), (
         f"{workflow}: setup-rust must inherit job-persisted diagnostic settings"
     )
-    assert setup_index < report.coverage_index, (
+    assert setup_index < coverage_index, (
         f"{workflow}: setup-rust must precede coverage compilation"
     )
 
 
 @pytest.mark.parametrize("workflow", ("ci.yml", "coverage-main.yml"))
-def test_health_check_precedes_sanitized_diagnostics_without_raw_upload(
+def test_sccache_diagnostics_follow_health_check_without_exposing_raw_logs(
     workflow: str, workflow_texts: dict[str, str]
 ) -> None:
     """Report after the health check without exposing the raw server log."""
-    _, steps = _cache_job_steps(workflow, workflow_texts)
+    steps, _ = _cache_job_steps(workflow, workflow_texts)
     diagnostic_index = next(
         index
         for index, step in enumerate(steps)
