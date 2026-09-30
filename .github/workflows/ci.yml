@@ -130,7 +130,7 @@ jobs:
       # ratchet, which gates on this repository's own baseline, needs no
       # token, and applies to pull requests from forks too.
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/generate-coverage@c4ed5ffaf0640b1907d5359a87fd1677034eec27
         with:
           features: internal
           output-path: lcov.info
