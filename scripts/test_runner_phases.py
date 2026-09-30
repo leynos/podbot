@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pathlib
 from collections.abc import Callable, Iterable
 
 from test_runner_commands import (
@@ -77,9 +76,8 @@ def _run_ordinary_phase(
         )
         return _run_cargo_test(
             context,
-            plan.options,
+            plan,
             target_arguments,
-            workspace_root=plan.workspace_root,
             package_name=package_name,
         )
 
@@ -97,9 +95,8 @@ def _run_doctest_phase(
     print("== Running Cargo documentation tests ==", flush=True)
     status = _run_cargo_test(
         context,
-        plan.options,
+        plan,
         ("--doc",),
-        workspace_root=plan.workspace_root,
     )
     should_stop = bool(status and not plan.options.no_fail_fast)
     return (status,), should_stop
@@ -160,13 +157,13 @@ def _run_no_run(context: TestRunnerContext, plan: CargoTestPlan) -> int:
 
 def _run_cargo_test(
     context: TestRunnerContext,
-    options: CargoTestOptions,
+    plan: CargoTestPlan,
     target_arguments: tuple[str, ...],
     *,
-    workspace_root: pathlib.Path,
     package_name: str | None = None,
 ) -> int:
     """Run one ordinary Cargo test phase with caller filters and flags."""
+    options = plan.options
     common = (
         without_package_selection(options.common)
         if package_name is not None
@@ -184,7 +181,7 @@ def _run_cargo_test(
     _append_harness_flags(command, options)
     return context.supervisor.run_inherited(
         CommandRequest(
-            command, workspace_root, context.environment, "ordinary Cargo tests"
+            command, plan.workspace_root, context.environment, "ordinary Cargo tests"
         )
     )
 
