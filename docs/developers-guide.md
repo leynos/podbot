@@ -108,6 +108,11 @@ its own policy checks. `_set_executable_profile_environment` is called only by
 `create_test_runtime_environment`, after binary registration and before
 dynamic-library path reconstruction.
 
+In `report_sccache_errors.py`, `_preceding_line_start` is private to
+`_line_window` and owns only its backward offset scan, including the
+start-of-text boundary guard. Keep it out of diagnostic selection and
+sanitisation logic.
+
 Explicit singular target selectors retain feature-gated matches so Cargo can
 report its normal error. A private selector helper applies that exception only
 within `_unique_selected_targets`; plural category selectors continue to filter
