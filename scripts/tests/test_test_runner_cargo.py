@@ -21,6 +21,8 @@ from test_runner_plan import create_test_plan
 from test_runner_context import TestRunnerContext
 from test_runner_supervisor import CommandRequest, ProcessSupervisor
 
+from test_runner_fixtures import cargo_artifact_message as _artifact
+from test_runner_fixtures import executable_file as _executable
 from test_runner_fixtures import package_document
 
 
@@ -370,29 +372,3 @@ def test_relative_manifest_is_anchored_to_caller_directory(
     assert str(expected_target_directory) in options.common, (
         "relative target paths must preserve their caller-relative meaning"
     )
-
-
-def _artifact(
-    package_id: str,
-    name: str,
-    executable: pathlib.Path,
-    *,
-    kind: str = "test",
-) -> dict[str, typ.Any]:
-    """Return a Cargo compiler-artifact message for one executable."""
-    return {
-        "reason": "compiler-artifact",
-        "package_id": package_id,
-        "target": {"name": name, "kind": [kind]},
-        "profile": {"test": kind == "test", "debug_assertions": True},
-        "executable": str(executable),
-        "filenames": [str(executable)],
-    }
-
-
-def _executable(path: pathlib.Path) -> pathlib.Path:
-    """Create an executable file usable as a fake test artifact."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    path.chmod(0o755)
-    return path

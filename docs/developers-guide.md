@@ -111,7 +111,7 @@ dynamic-library path reconstruction.
 In `report_sccache_errors.py`, `_preceding_line_start` is private to
 `_line_window` and owns only its backward offset scan, including the
 start-of-text boundary guard. Keep it out of diagnostic selection and
-sanitisation logic.
+sanitization logic.
 
 Explicit singular target selectors retain feature-gated matches so Cargo can
 report its normal error. A private selector helper applies that exception only

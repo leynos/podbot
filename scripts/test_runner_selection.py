@@ -253,13 +253,13 @@ def _feature_values_for_package(package: dict[str, typ.Any], value: str) -> list
 
 
 def _feature_values(value: typ.Any) -> list[str]:
-    """Return comma-separated Cargo feature names from metadata or arguments."""
+    """Return comma- or whitespace-separated Cargo feature names."""
     if not isinstance(value, (list, tuple)):
         value = [value]
     return [
         feature.strip()
         for item in value
-        for feature in str(item).split(",")
+        for feature in str(item).replace(",", " ").split()
         if feature.strip()
     ]
 
