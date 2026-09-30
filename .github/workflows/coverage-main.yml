@@ -92,7 +92,7 @@ jobs:
         # upload instead of failing the run.
         id: codescene-upload
         if: steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@a5765019912a8ab6882b12db049c7cde635f3a85
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@2f58fab140cc8dfe69756aaa6a3bbb987c426023
         with:
           format: lcov
           mode: upload
