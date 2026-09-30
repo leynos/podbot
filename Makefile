@@ -25,6 +25,15 @@ WHITAKER ?= whitaker
 NIXIE ?= nixie
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# only parameters.
+CV005_CONTRACTS_REF ?= a38feb9be25755c30eca5bda96bd3786a5b89c6b
+CV005_CONTRACTS = $(UV_ENV) $(UV) tool run --python 3.13 \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
+
 RUFF_VERSION ?= 0.15.12
 PYYAML_VERSION ?= 6.0.3
 HYPOTHESIS_VERSION ?= 6.151.9
@@ -88,6 +97,7 @@ spelling: ## Enforce en-GB-oxendict spelling and shared phrase corrections
 	$(TYPOS_CONFIG_BUILDER) gate --repository .
 
 test-workflow-contracts: ## Assert what the workflow files must say
+	$(CV005_CONTRACTS) check --repository .
 	$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(WORKFLOW_CONTRACTS_DIR)
 	$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(WORKFLOW_CONTRACTS_DIR)
 	$(WORKFLOW_CONTRACTS_PYTEST) $(WORKFLOW_CONTRACTS_DIR) --doctest-modules \

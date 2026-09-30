@@ -134,6 +134,7 @@ jobs:
           format: lcov
           use-cargo-nextest: 'false'
           with-ratchet: 'true'
+          publish-artefact: 'false'
       - name: Report compiler cache effectiveness
         # After the compiling steps and on failure too, because a red lane
         # is exactly when "did anything reach the cache" is worth knowing.

@@ -1500,64 +1500,31 @@ reason: coverage built from one commit must not be recorded against another.
 
 ### 19.2. The contract
 
-`make test-workflow-contracts` runs `tests/workflow_contracts/` through pytest,
-with Ruff format and lint checks first, and CI runs it as an unguarded step of
-its own early in `build-test`. The modules are:
+`make test-workflow-contracts` runs `cv005-contracts check`, the shared
+contract library in `leynos/shared-actions` (`packages/cv005-contracts`), from
+a full commit named by `CV005_CONTRACTS_REF` in the Makefile, then
+`tests/workflow_contracts/` through pytest, with Ruff format and lint checks
+first. CI runs it as an unguarded step of its own early in `build-test`. A fix
+to the rules is therefore a pin bump. The target needs `uv`, which fetches the
+Python 3.13 the library runs under. The repository's one parameter is its
+`repository` name in `.github/cv005.toml`.
 
-| Module                        | Subject                                                               |
-| ----------------------------- | --------------------------------------------------------------------- |
-| `workflow_reading.py`         | Strict parsing, trigger forms, push filters, and the workflow files   |
-| `codescene_coverage.py`       | The pull-request closure, the publisher, and the coverage steps       |
-| `codescene_reach.py`          | Whole-document readings of the action, CLI, secret, and host          |
-| `publisher_rules.py`          | The upload guard and the publisher's cancellation                     |
-| `token_check.py`              | The token check, the upload's input, the decision record, stray reads |
-| `shell_commands.py`           | Whether a `run:` block is exactly one unconditional command           |
-| `codescene_coverage_test.py`  | The rule over this repository's workflows                             |
-| `codescene_publisher_test.py` | The publisher's upload step                                           |
-| `codescene_uploader_test.py`  | The uploader's approved pin and its retired checksum input            |
-| `*_test.py` (the rest)        | The readers, driven on documents this repository does not contain     |
+The library holds the pull-request closure, the publisher's shape, the upload
+guard, the token check, the retired installer checksum and its refresher
+workflow, and the strict reading that refuses a duplicate key or a reader that
+finds nothing. Its own suite proves each rule refuses the shape it exists to
+refuse, so this repository keeps no copy of the readers or the refusal cases.
+The modules that remain in `tests/workflow_contracts/` are:
+
+| Module                     | Subject                                                        |
+| -------------------------- | -------------------------------------------------------------- |
+| `workflow_reading.py`      | Strict parsing, trigger forms, push filters and workflow files |
+| `concurrency_test.py`      | Cancelling superseded pull-request runs only                   |
+| `markdown_wiring_*.py`     | The Markdown gates' wiring into CI                             |
+| `gitignore_test.py`        | The ignored coverage file the spelling gate writes             |
+| `workflow_reading_test.py` | The reader, driven on documents this repository lacks          |
 
 _Table 2: Workflow contract modules._
-
-The readings are built so that each one fails loudly rather than passing over
-nothing:
-
-- **The pull-request lane is a closure, not a trigger list.** A workflow
-  declaring only `workflow_call` runs on a pull request when a pull-request
-  workflow calls it, and `secrets: inherit` hands it the token. Every
-  pull-request clause runs over the pull-request workflows and everything they
-  call, transitively. A local call is recognized by shape: a leading `./` or
-  `$/` is stripped, and the remainder must name a file directly under
-  `.github/workflows/`. A call to this repository at a ref
-  (`leynos/podbot/.github/workflows/x.yml@main`, or a local prefix with `@`)
-  runs a version the closure cannot read, so it is refused rather than followed.
-- **The secret and the host are read over the whole document.** Every key and
-  scalar is visited, case-folded, so a workflow-level `env`, a
-  `defaults.run.shell` wrapper, a reusable call's `with`, or a callee's
-  `workflow_call` secret declaration cannot reach CodeScene unseen. The secret
-  is found as a key naming it, an expression reading it, or `secrets: inherit`.
-  The parser discards comments, so prose explaining this policy is not read as
-  a breach of it.
-- **The upload guard is split on `&&`, and an unquoted `||` is refused.**
-  `&&` binds tighter than `||`, so a guard containing the ref test as a
-  substring, or even as a whole conjunct, can still make it optional.
-- **Workflows load through a loader refusing duplicate keys.** PyYAML keeps the
-  last of two equal keys silently, so a doubled `runs-on` would otherwise read
-  as whichever half the contract happened to see.
-- **Triggers are read as a mapping, a sequence, or a string**, under both the
-  `on` key and the boolean `True` that YAML 1.1 resolves an unquoted `on:` to.
-  Push filters are read as globs with `!` negation, so `'**'` counts as naming
-  `main`. A workflow that declares triggers under both keys is refused with a
-  `WorkflowReadingError`: a resolving loader turns an unquoted `on:` into
-  `True` and leaves a quoted `'on':` as a string, GitHub merges the two, and a
-  reader that picked one key would miss the other's triggers.
-- **A required command is read as a step's sole command.** `false && X`,
-  `echo X` and a step guarded by `if:` all contain `X` and run nothing, so the
-  contract step and the ratcheting coverage step must each be unguarded, and
-  the contract command must be the whole of its step.
-
-Every clause was proved by mutating the workflows or the reader and watching
-the named test fail; the pull request adopting CV-005 records the table.
 
 ### 19.3. The uploader pin and its trust anchor
 
@@ -1570,17 +1537,8 @@ input. The `CODESCENE_CLI_SHA256` repository variable that used to feed it has
 no consumer. The `get-codescene-sha.yml` dispatch workflow that refreshed the
 variable must not return. `archive-checksum` is not a renamed
 `installer-checksum`: it could only repeat the manifest's digest, so it is not
-passed either.
-
-`codescene_uploader_test.py` asserts all four points over the parsed workflows,
-so a commented-out `uses:` line cannot stand in for an upload step:
-
-- at least one uploader step exists, and every one runs at the approved pin;
-- no document passes `installer-checksum`;
-- no expression reads `CODESCENE_CLI_SHA256`;
-- `get-codescene-sha.yml` is absent from the workflow directory.
-
-It runs under `make test-workflow-contracts`.
+passed either. The shared contract's retired-checksum clause refuses the input,
+the variable and the workflow.
 
 To move the uploader pin, take these steps in the same commit:
 
@@ -1589,7 +1547,6 @@ To move the uploader pin, take these steps in the same commit:
 2. Confirm that the new commit is on shared-actions' default branch and
    descends from `c6125f1`.
 3. Add the new commit to `WRAPPER_EXPORTING_PINS` (section 20).
-4. Update `APPROVED_UPLOADER_PIN`.
 
 The pin contract in section 20 requires every shared-actions reference to name
 one commit, so the other references move with it.

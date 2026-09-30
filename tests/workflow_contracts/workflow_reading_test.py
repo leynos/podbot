@@ -17,7 +17,6 @@ import typing as typ
 
 import pytest
 import yaml
-from codescene_coverage import publishers, pull_request_workflows
 from workflow_reading import (
     WorkflowReadingError,
     load_workflow,
@@ -116,13 +115,6 @@ def test_the_push_reader_answers_every_filter_form(
     assert pushes_to_main(document) is expected, f"push{filters!r}"
 
 
-def test_a_workflow_serving_pull_requests_is_not_a_publisher() -> None:
-    """Both halves of the publisher predicate, the second being the one dropped."""
-    both = load_workflow(f"on: [pull_request, push]\n{JOBS}")
-    assert pushes_to_main(both), "the premise: the fixture pushes to main"
-    assert publishers({"ci.yml": both}) == {}
-
-
 @pytest.mark.parametrize(
     ("body", "key"),
     [
@@ -205,13 +197,6 @@ def test_a_file_that_is_not_a_workflow_names_its_file(
     with pytest.raises(WorkflowReadingError) as raised:
         read_workflows(tmp_path)
     assert "broken.yml" in (raised.value.path or ""), raised.value
-
-
-def test_no_pull_request_workflow_is_a_reader_fault() -> None:
-    """A repository whose pull-request lane reads as empty has a broken reader."""
-    with pytest.raises(WorkflowReadingError) as raised:
-        pull_request_workflows({"main.yml": load_workflow(f"on:\n  push:\n{JOBS}")})
-    assert raised.value.reader == "pull_request_workflows"
 
 
 @pytest.mark.parametrize(
