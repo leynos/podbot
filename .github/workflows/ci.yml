@@ -87,6 +87,8 @@ jobs:
       # Dependabot merges instead.
       - name: Install cargo-audit
         if: github.actor != 'dependabot[bot]'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: cargo binstall --no-confirm cargo-audit
       - name: Setup Python for audit manifest extraction
         if: github.actor != 'dependabot[bot]'

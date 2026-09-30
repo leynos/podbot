@@ -21,6 +21,8 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
       - name: Install cargo-audit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: cargo binstall --no-confirm cargo-audit
       - name: Setup Python for audit manifest extraction
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
