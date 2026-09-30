@@ -62,6 +62,10 @@ WRAPPER_EXPORTING_PINS: typ.Final[frozenset[str]] = frozenset(
         # `0e3c4d24` on shared-actions' default branch; the uploader's
         # committed CLI manifest arrived here.
         "a5765019912a8ab6882b12db049c7cde635f3a85",
+        # 6dea5677, 2026-09-29. Verified descendant of `a5765019` (ahead by
+        # 18, behind by 0 on the GitHub compare API) and so of `c6125f1`;
+        # the change that made `install-whitaker` carry the install rules.
+        "6dea5677a84fec60ca51b07202570e3af12ffdb4",
     }
 )
 
