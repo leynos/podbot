@@ -192,18 +192,40 @@ def test_repeated_and_mixed_selectors_preserve_target_order_and_deduplicate(
     ], "selection must retain first occurrence order and deduplicate by target identity"
 
 
-def test_transitive_package_features_enable_required_target(
+@pytest.mark.parametrize(
+    ("case", "features"),
+    [
+        pytest.param(
+            "transitive",
+            {
+                "default": ["first"],
+                "first": ["second"],
+                "second": ["gate"],
+                "gate": [],
+            },
+            id="transitive",
+        ),
+        pytest.param(
+            "cycle",
+            {
+                "default": ["first"],
+                "first": ["second"],
+                "second": ["first", "gate"],
+                "gate": [],
+            },
+            id="cycle",
+        ),
+    ],
+)
+def test_package_feature_reachability_enables_required_target(
     tmp_path: pathlib.Path,
+    case: str,
+    features: dict[str, list[str]],
 ) -> None:
-    """A package-local feature chain enables its final target gate."""
+    """Package-local feature reachability enables the required target."""
     plan = _plan_with_package_feature_gate(
         tmp_path,
-        {
-            "default": ["first"],
-            "first": ["second"],
-            "second": ["gate"],
-            "gate": [],
-        },
+        features,
     )
 
     contract = next(
@@ -211,59 +233,32 @@ def test_transitive_package_features_enable_required_target(
     )
 
     assert "gate" in contract.enabled_features, (
-        "transitive package feature activation must reach target metadata"
+        f"{case} package feature reachability must satisfy target metadata"
     )
 
 
-def test_package_feature_cycle_terminates_and_enables_target(
+@pytest.mark.parametrize(
+    "activation",
+    ["dep:gate", "dependency/gate"],
+    ids=["dep-activation", "dependency-feature"],
+)
+def test_dependency_activations_do_not_enable_package_feature(
     tmp_path: pathlib.Path,
+    activation: str,
 ) -> None:
-    """A feature cycle stops at visited features while preserving reachability."""
+    """Dependency feature activations do not satisfy package target gates."""
     plan = _plan_with_package_feature_gate(
         tmp_path,
         {
             "default": ["first"],
-            "first": ["second"],
-            "second": ["first", "gate"],
+            "first": [activation],
             "gate": [],
         },
     )
 
-    contract = next(
-        target for target in plan.selected_targets if target.name == "compile_contract"
-    )
-
-    assert "gate" in contract.enabled_features, (
-        "the cycle guard must not prevent other activated features"
-    )
-
-
-def test_dependency_activation_does_not_enable_package_feature(
-    tmp_path: pathlib.Path,
-) -> None:
-    """A dep: activation is not a package-local target feature."""
-    plan = _plan_with_package_feature_gate(
-        tmp_path,
-        {"default": ["first"], "first": ["dep:gate"], "gate": []},
-    )
-
     assert not any(
         target.name == "compile_contract" for target in plan.selected_targets
-    ), "dep: activation must not satisfy a package target's required feature"
-
-
-def test_dependency_feature_activation_does_not_enable_package_feature(
-    tmp_path: pathlib.Path,
-) -> None:
-    """A slash-qualified dependency activation is not package-local."""
-    plan = _plan_with_package_feature_gate(
-        tmp_path,
-        {"default": ["first"], "first": ["dependency/gate"], "gate": []},
-    )
-
-    assert not any(
-        target.name == "compile_contract" for target in plan.selected_targets
-    ), "dependency feature activation must not satisfy a package target gate"
+    ), f"{activation} must not satisfy a package target's required feature"
 
 
 def test_requested_package_feature_enables_required_target(
