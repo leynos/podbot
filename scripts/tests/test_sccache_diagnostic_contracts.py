@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import pathlib
 import time
 import typing as typ
@@ -21,6 +22,19 @@ DIAGNOSTIC_COMMAND = 'python3 scripts/report_sccache_errors.py "$SCCACHE_ERROR_L
 HEALTH_CHECK_COMMAND = (
     "python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json"
 )
+
+
+@dataclasses.dataclass(frozen=True)
+class LineWindowCase:
+    """Keep input and exact expected offsets together for one line window."""
+
+    text: str
+    line_start: int
+    preceding: int
+    following: int
+    start: int
+    end: int
+    window: str
 
 
 def _cache_job_steps(
@@ -165,43 +179,48 @@ def test_line_window_includes_all_requested_preceding_lines() -> None:
 
 
 @pytest.mark.parametrize(
-    ("text", "line_start", "preceding", "following", "start", "end", "window"),
+    "case",
     [
         pytest.param(
-            "first\nselected\nlast\n", 6, 0, 0, 6, 15, "selected\n", id="zero-context"
+            LineWindowCase("first\nselected\nlast\n", 6, 0, 0, 6, 15, "selected\n"),
+            id="zero-context",
         ),
         pytest.param(
-            "selected\nmiddle\nlast", 0, 2, 0, 0, 9, "selected\n", id="at-start"
-        ),
-        pytest.param("first\nselected", 6, 0, 1, 6, 14, "selected", id="at-end"),
-        pytest.param(
-            "one\nselected\n", 4, 9, 9, 0, 13, "one\nselected\n", id="excess-context"
+            LineWindowCase("selected\nmiddle\nlast", 0, 2, 0, 0, 9, "selected\n"),
+            id="at-start",
         ),
         pytest.param(
-            "before\nlast", 7, 1, 0, 0, 11, "before\nlast", id="no-final-newline"
+            LineWindowCase("first\nselected", 6, 0, 1, 6, 14, "selected"),
+            id="at-end",
         ),
-        pytest.param("", 0, 0, 0, 0, 0, "", id="empty-text"),
         pytest.param(
-            "\n\nselected\n\nlast", 2, 2, 1, 0, 12, "\n\nselected\n\n", id="blank-lines"
+            LineWindowCase("one\nselected\n", 4, 9, 9, 0, 13, "one\nselected\n"),
+            id="excess-context",
+        ),
+        pytest.param(
+            LineWindowCase("before\nlast", 7, 1, 0, 0, 11, "before\nlast"),
+            id="no-final-newline",
+        ),
+        pytest.param(LineWindowCase("", 0, 0, 0, 0, 0, ""), id="empty-text"),
+        pytest.param(
+            LineWindowCase("\n\nselected\n\nlast", 2, 2, 1, 0, 12, "\n\nselected\n\n"),
+            id="blank-lines",
         ),
     ],
 )
 def test_line_window_returns_exact_offsets_and_text(
-    text: str,
-    line_start: int,
-    preceding: int,
-    following: int,
-    start: int,
-    end: int,
-    window: str,
+    case: LineWindowCase,
 ) -> None:
     """Retain exact line boundaries for available and missing context."""
     actual_start, actual_end = _line_window(
-        text, line_start, preceding=preceding, following=following
+        case.text,
+        case.line_start,
+        preceding=case.preceding,
+        following=case.following,
     )
 
-    assert (actual_start, actual_end) == (start, end)
-    assert text[actual_start:actual_end] == window
+    assert (actual_start, actual_end) == (case.start, case.end)
+    assert case.text[actual_start:actual_end] == case.window
 
 
 def test_rust_command_flags_are_not_mistaken_for_backend_failures() -> None:

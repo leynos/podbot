@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pathlib
-import typing as typ
+from collections.abc import Callable, Iterable
 
 from test_runner_commands import (
     first_failure,
@@ -14,8 +14,6 @@ from test_runner_context import TestRunnerContext
 from test_runner_models import CargoTestOptions, CargoTestPlan
 from test_runner_nested import run_nested_target
 from test_runner_supervisor import CommandRequest
-
-PhaseItem = typ.TypeVar("PhaseItem")
 
 
 def run_test_plan(context: TestRunnerContext, plan: CargoTestPlan) -> int:
@@ -123,11 +121,11 @@ def _run_nested_phase(
     )
 
 
-def _run_fail_fast_items(
+def _run_fail_fast_items[PhaseItem](
     context: TestRunnerContext,
     plan: CargoTestPlan,
-    items: typ.Iterable[PhaseItem],
-    run_item: typ.Callable[[PhaseItem], int],
+    items: Iterable[PhaseItem],
+    run_item: Callable[[PhaseItem], int],
 ) -> tuple[tuple[int, ...], bool]:
     """Run an ordered target set under Cargo's selected fail-fast policy.
 

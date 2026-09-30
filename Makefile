@@ -71,6 +71,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_workflow_inventory.py \
 	scripts/tests/test_runner_placement_rule.py \
 	scripts/tests/test_runner_fixtures.py \
+	scripts/tests/test_test_runner_selection.py \
 	scripts/tests/test_test_runner_plan.py \
 	scripts/tests/test_test_runner_cargo_validation.py \
 	scripts/tests/test_test_runner_nested_output.py \

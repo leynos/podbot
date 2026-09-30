@@ -33,6 +33,32 @@ class FakeCargoConfiguration:
     metadata: dict[str, typ.Any] | None = None
 
 
+def cargo_artifact_message(
+    package_id: str,
+    name: str,
+    executable: pathlib.Path,
+    *,
+    kind: str = "test",
+) -> dict[str, typ.Any]:
+    """Return one Cargo compiler-artifact message for runner tests."""
+    return {
+        "reason": "compiler-artifact",
+        "package_id": package_id,
+        "target": {"name": name, "kind": [kind]},
+        "profile": {"test": kind == "test", "debug_assertions": True},
+        "executable": str(executable),
+        "filenames": [str(executable)],
+    }
+
+
+def executable_file(path: pathlib.Path) -> pathlib.Path:
+    """Create an executable placeholder for artifact-selection tests."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
 def package_document(root: pathlib.Path) -> dict[str, typ.Any]:
     """Return a workspace metadata document with each Cargo target kind."""
     package_id = "path+file:///workspace/podbot#podbot@0.1.0"
