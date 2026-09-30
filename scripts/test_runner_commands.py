@@ -1,4 +1,11 @@
-"""Build Cargo phase arguments and explain phases stopped by fail-fast."""
+"""Build Cargo phase arguments and explain phases stopped by fail-fast.
+
+The runner uses these helpers to prepare artifact and ordinary test invocations.
+For example, it removes an inherited output mode before forcing JSON artifacts:
+
+>>> without_message_format(("test", "--message-format", "human"))
+('test',)
+"""
 
 from __future__ import annotations
 
