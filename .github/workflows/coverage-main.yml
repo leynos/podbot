@@ -52,6 +52,8 @@ jobs:
       RUN_RUST_CARGO_WAIT_TIMEOUT: '1800'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@a5765019912a8ab6882b12db049c7cde635f3a85
       - name: Test and Measure Coverage
