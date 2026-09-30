@@ -1620,6 +1620,15 @@ failed. Isolated read errors, write errors and timeouts only produce a warning:
 one failed store costs one compile, and failing on it would make the lane as
 flaky as the cache service. Both steps run under `always()`, so a red lane is
 still judged, and the coverage contracts assert them after every cache report.
+The one exception is a declared fallback: `setup-rust` gives sccache a startup
+timeout and, if the server still will not start, clears the compiler wrapper,
+raises a `sccache-fallback` annotation and sets its `sccache-status` output to
+`fallback`. The health check would then report that nothing was wrapped and
+fail a job the action had already annotated, so it skips when the `setup-rust`
+step's `sccache-status` is `fallback`, and a notice step keeps the skip
+visible. Any other status, including the empty one an older pin gives, still
+runs the check. `scripts/tests/test_sccache_fallback_contract.py` holds the
+step id, the guard and the notice to both workflows.
 
 ### 20.1. Running the contracts
 
