@@ -164,6 +164,46 @@ def test_line_window_includes_all_requested_preceding_lines() -> None:
     assert log[start:end] == log, "include both context lines and one following line"
 
 
+@pytest.mark.parametrize(
+    ("text", "line_start", "preceding", "following", "start", "end", "window"),
+    [
+        pytest.param(
+            "first\nselected\nlast\n", 6, 0, 0, 6, 15, "selected\n", id="zero-context"
+        ),
+        pytest.param(
+            "selected\nmiddle\nlast", 0, 2, 0, 0, 9, "selected\n", id="at-start"
+        ),
+        pytest.param("first\nselected", 6, 0, 1, 6, 14, "selected", id="at-end"),
+        pytest.param(
+            "one\nselected\n", 4, 9, 9, 0, 13, "one\nselected\n", id="excess-context"
+        ),
+        pytest.param(
+            "before\nlast", 7, 1, 0, 0, 11, "before\nlast", id="no-final-newline"
+        ),
+        pytest.param("", 0, 0, 0, 0, 0, "", id="empty-text"),
+        pytest.param(
+            "\n\nselected\n\nlast", 2, 2, 1, 0, 12, "\n\nselected\n\n", id="blank-lines"
+        ),
+    ],
+)
+def test_line_window_returns_exact_offsets_and_text(
+    text: str,
+    line_start: int,
+    preceding: int,
+    following: int,
+    start: int,
+    end: int,
+    window: str,
+) -> None:
+    """Retain exact line boundaries for available and missing context."""
+    actual_start, actual_end = _line_window(
+        text, line_start, preceding=preceding, following=following
+    )
+
+    assert (actual_start, actual_end) == (start, end)
+    assert text[actual_start:actual_end] == window
+
+
 def test_rust_command_flags_are_not_mistaken_for_backend_failures() -> None:
     """Compiler arguments can contain both `error` and `write` as values."""
     log = (

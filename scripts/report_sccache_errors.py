@@ -113,14 +113,7 @@ def _line_window(
     text: str, line_start: int, preceding: int, following: int
 ) -> tuple[int, int]:
     """Return offsets spanning one line and its requested neighbours."""
-    start = line_start
-    for _ in range(preceding):
-        previous_newline = text.rfind("\n", 0, start - 1) if start else -1
-        if previous_newline < 0:
-            start = 0
-            break
-        start = previous_newline + 1
-
+    start = _preceding_line_start(text, line_start, preceding)
     end = line_start
     for _ in range(following + 1):
         next_newline = text.find("\n", end)
@@ -129,6 +122,17 @@ def _line_window(
             break
         end = next_newline + 1
     return start, end
+
+
+def _preceding_line_start(text: str, line_start: int, preceding: int) -> int:
+    """Return the first requested context-line offset before a selected line."""
+    start = line_start
+    for _ in range(preceding):
+        previous_newline = text.rfind("\n", 0, start - 1) if start else -1
+        if previous_newline < 0:
+            return 0
+        start = previous_newline + 1
+    return start
 
 
 def _first_write_failure_start(log_text: str) -> int | None:
