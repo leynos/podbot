@@ -12,6 +12,8 @@ import test_runner_cargo
 from test_runner_cargo import create_test_runtime_environment
 from test_runner_cargo import select_test_executables
 from test_runner_context import TestRunnerContext
+from test_runner_fixtures import cargo_artifact_message as _artifact
+from test_runner_fixtures import executable_file as _executable
 from test_runner_fixtures import package_document
 from test_runner_models import RunnerError, Target
 from test_runner_options import parse_cargo_test_options
@@ -274,29 +276,3 @@ def test_runtime_library_paths_keep_the_cargo_order(
         "/caller/native",
     ]
     assert case.context.environment == case.inherited_environment
-
-
-def _artifact(
-    package_id: str,
-    name: str,
-    executable: pathlib.Path,
-    *,
-    kind: str = "test",
-) -> dict[str, typ.Any]:
-    """Create one Cargo artifact message for test setup."""
-    return {
-        "reason": "compiler-artifact",
-        "package_id": package_id,
-        "target": {"name": name, "kind": [kind]},
-        "profile": {"test": kind == "test", "debug_assertions": True},
-        "executable": str(executable),
-        "filenames": [str(executable)],
-    }
-
-
-def _executable(path: pathlib.Path) -> pathlib.Path:
-    """Create an executable placeholder for artifact selection."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    path.chmod(0o755)
-    return path
