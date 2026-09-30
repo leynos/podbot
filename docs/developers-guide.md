@@ -1529,7 +1529,7 @@ _Table 2: Workflow contract modules._
 ### 19.3. The uploader pin and its trust anchor
 
 The publisher runs `upload-codescene-coverage` at shared-actions
-`6dea5677a84fec60ca51b07202570e3af12ffdb4`. At that commit the action pins the
+`6cec89bac47a21cf756d68d638a9a510998e57f8`. At that commit the action pins the
 cs-coverage CLI through its committed `cli-manifest.json`, which names the
 approved version and the archive's digest. It rejects a non-empty
 `installer-checksum` outright. This repository therefore passes no checksum

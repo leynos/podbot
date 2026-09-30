@@ -66,6 +66,10 @@ WRAPPER_EXPORTING_PINS: typ.Final[frozenset[str]] = frozenset(
         # 18, behind by 0 on the GitHub compare API) and so of `c6125f1`;
         # the change that made `install-whitaker` carry the install rules.
         "6dea5677a84fec60ca51b07202570e3af12ffdb4",
+        # 6cec89ba, 2026-09-30. Verified descendant of `6dea5677` (ahead by
+        # 28, behind by 0 on the GitHub compare API); it gives sccache's
+        # server startup 60 s and fails open when it cannot start.
+        "6cec89bac47a21cf756d68d638a9a510998e57f8",
     }
 )
 
