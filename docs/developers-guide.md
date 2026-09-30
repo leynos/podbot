@@ -150,6 +150,11 @@ boundary if the action's target selection broadens. The pinned sources are
 and
 [`scripts/_cargo_runner.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/_cargo_runner.py).
 
+The sccache diagnostic contract tests keep their cache-job parsing helper local
+to `test_sccache_diagnostic_contracts.py`. Only the paired setup and diagnostic
+contracts call it; it parses a selected workflow and returns its coverage job
+steps, rather than acting as a general workflow test helper.
+
 ## 3. Repository layout (exec subsystem)
 
 The exec subsystem lives under `src/engine/connection/exec/` and implements

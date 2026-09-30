@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pathlib
 import time
+import typing as typ
 
 import pytest
 import report_sccache_errors
@@ -12,6 +13,7 @@ from report_sccache_errors import _line_window
 from report_sccache_errors import sanitize_error_log
 from workflow_contracts import of_type
 from workflow_contracts import parse as parse_workflow
+from workflow_coverage import CacheReport
 from workflow_coverage import cache_reports
 
 SETUP_RUST_ACTION = "leynos/shared-actions/.github/actions/setup-rust"
@@ -22,74 +24,88 @@ HEALTH_CHECK_COMMAND = (
 )
 
 
-def test_setup_enables_logging_and_collects_sanitized_diagnostics(
-    workflow_texts: dict[str, str],
-) -> None:
-    """Both cache workflows collect bounded diagnostics after health checks."""
-    for workflow in ("ci.yml", "coverage-main.yml"):
-        (report,) = cache_reports({workflow: workflow_texts[workflow]})
-        document = parse_workflow(workflow, workflow_texts[workflow])
-        job = of_type(of_type(document.get("jobs"), dict).get(report.job), dict)
-        steps = [of_type(step, dict) for step in of_type(job.get("steps"), list)]
-        setup_index = next(
-            index
-            for index, step in enumerate(steps)
-            if str(step.get("uses", "")).partition("@")[0] == SETUP_RUST_ACTION
-        )
-        configure_index = next(
-            index
-            for index, step in enumerate(steps)
-            if step.get("name") == "Configure sccache diagnostics"
-        )
-        configure = steps[configure_index]
-        assert configure_index < setup_index, (
-            f"{workflow}: diagnostic logging must be configured before server startup"
-        )
-        assert of_type(configure.get("env"), dict) == {
-            "SCCACHE_ERROR_LOG": ERROR_LOG_PATH,
-        }, f"{workflow}: use this job's runner temporary directory"
-        assert str(configure.get("run", "")).splitlines() == [
-            "printf 'SCCACHE_LOG=debug\\n' >> \"$GITHUB_ENV\"",
-            'printf \'SCCACHE_ERROR_LOG=%s\\n\' "$SCCACHE_ERROR_LOG" >> "$GITHUB_ENV"',
-        ], f"{workflow}: both diagnostics must persist for later server restarts"
-        assert not steps[setup_index].get("env"), (
-            f"{workflow}: setup-rust must inherit job-persisted diagnostic settings"
-        )
-        assert setup_index < report.coverage_index, (
-            f"{workflow}: setup-rust must precede coverage compilation"
-        )
+def _cache_job_steps(
+    workflow: str, workflow_texts: dict[str, str]
+) -> tuple[CacheReport, list[dict[str, typ.Any]]]:
+    """Parse one workflow and retrieve its coverage job and steps."""
+    (report,) = cache_reports({workflow: workflow_texts[workflow]})
+    document = parse_workflow(workflow, workflow_texts[workflow])
+    job = of_type(of_type(document.get("jobs"), dict).get(report.job), dict)
+    steps = [of_type(step, dict) for step in of_type(job.get("steps"), list)]
+    return report, steps
 
-        diagnostic_index = next(
-            index
-            for index, step in enumerate(steps)
-            if step.get("run") == DIAGNOSTIC_COMMAND
-        )
-        health_index = next(
-            index
-            for index, step in enumerate(steps)
-            if step.get("run") == HEALTH_CHECK_COMMAND
-        )
-        diagnostic = steps[diagnostic_index]
-        assert diagnostic_index > health_index, (
-            f"{workflow}: diagnostics must follow the cache health check"
-        )
-        assert diagnostic.get("if") == "always()", (
-            f"{workflow}: partial write errors must be reported on green jobs too"
-        )
-        assert diagnostic.get("continue-on-error") is True, (
-            f"{workflow}: diagnostic failure must not replace the original result"
-        )
-        assert of_type(diagnostic.get("env"), dict).get("SCCACHE_ERROR_LOG") == (
-            ERROR_LOG_PATH
-        ), f"{workflow}: the diagnostic must read this job's server log"
-        raw_uploads = [
-            step
-            for step in steps
-            if str(step.get("uses", "")).partition("@")[0] == "actions/upload-artifact"
-            and "sccache-error.log"
-            in str(of_type(step.get("with"), dict).get("path", ""))
-        ]
-        assert not raw_uploads, f"{workflow}: never upload the raw sccache log"
+
+@pytest.mark.parametrize("workflow", ("ci.yml", "coverage-main.yml"))
+def test_setup_enables_logging_and_collects_sanitized_diagnostics(
+    workflow: str, workflow_texts: dict[str, str]
+) -> None:
+    """Configure diagnostics before server startup and coverage compilation."""
+    report, steps = _cache_job_steps(workflow, workflow_texts)
+    setup_index = next(
+        index
+        for index, step in enumerate(steps)
+        if str(step.get("uses", "")).partition("@")[0] == SETUP_RUST_ACTION
+    )
+    configure_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") == "Configure sccache diagnostics"
+    )
+    configure = steps[configure_index]
+    assert configure_index < setup_index, (
+        f"{workflow}: diagnostic logging must be configured before server startup"
+    )
+    assert of_type(configure.get("env"), dict) == {
+        "SCCACHE_ERROR_LOG": ERROR_LOG_PATH,
+    }, f"{workflow}: use this job's runner temporary directory"
+    assert str(configure.get("run", "")).splitlines() == [
+        "printf 'SCCACHE_LOG=debug\\n' >> \"$GITHUB_ENV\"",
+        'printf \'SCCACHE_ERROR_LOG=%s\\n\' "$SCCACHE_ERROR_LOG" >> "$GITHUB_ENV"',
+    ], f"{workflow}: both diagnostics must persist for later server restarts"
+    assert not steps[setup_index].get("env"), (
+        f"{workflow}: setup-rust must inherit job-persisted diagnostic settings"
+    )
+    assert setup_index < report.coverage_index, (
+        f"{workflow}: setup-rust must precede coverage compilation"
+    )
+
+
+@pytest.mark.parametrize("workflow", ("ci.yml", "coverage-main.yml"))
+def test_health_check_precedes_sanitized_diagnostics_without_raw_upload(
+    workflow: str, workflow_texts: dict[str, str]
+) -> None:
+    """Report after the health check without exposing the raw server log."""
+    _, steps = _cache_job_steps(workflow, workflow_texts)
+    diagnostic_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("run") == DIAGNOSTIC_COMMAND
+    )
+    health_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("run") == HEALTH_CHECK_COMMAND
+    )
+    diagnostic = steps[diagnostic_index]
+    assert diagnostic_index > health_index, (
+        f"{workflow}: diagnostics must follow the cache health check"
+    )
+    assert diagnostic.get("if") == "always()", (
+        f"{workflow}: partial write errors must be reported on green jobs too"
+    )
+    assert diagnostic.get("continue-on-error") is True, (
+        f"{workflow}: diagnostic failure must not replace the original result"
+    )
+    assert of_type(diagnostic.get("env"), dict).get("SCCACHE_ERROR_LOG") == (
+        ERROR_LOG_PATH
+    ), f"{workflow}: the diagnostic must read this job's server log"
+    raw_uploads = [
+        step
+        for step in steps
+        if str(step.get("uses", "")).partition("@")[0] == "actions/upload-artifact"
+        and "sccache-error.log" in str(of_type(step.get("with"), dict).get("path", ""))
+    ]
+    assert not raw_uploads, f"{workflow}: never upload the raw sccache log"
 
 
 def test_write_error_output_redacts_credentials_and_caps_lines() -> None:
