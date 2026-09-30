@@ -1,1 +1,2 @@
 repository = "leynos/podbot"
+environment = true
