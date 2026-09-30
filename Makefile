@@ -44,7 +44,8 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_command_contracts.py \
 	scripts/tests/test_coverage_contracts.py \
 	scripts/tests/test_workflow_inventory.py \
-	scripts/tests/test_runner_placement_rule.py
+	scripts/tests/test_runner_placement_rule.py \
+	scripts/tests/test_sccache_fallback_contract.py
 WORKFLOW_PY_TESTS := $(filter scripts/tests/test_%,$(WORKFLOW_PY_SRCS))
 WORKFLOW_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
 	--with pytest==9.0.2 --with pyyaml==6.0.3 python -m pytest

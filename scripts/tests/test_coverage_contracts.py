@@ -306,6 +306,14 @@ HEALTH_STEPS: typ.Final[tuple[str, ...]] = (
 )
 
 
+#: The guards of those two steps, in order: the check stands down only for a
+#: declared sccache fallback (see `test_sccache_fallback_contract.py`).
+HEALTH_GUARDS: typ.Final[tuple[str, ...]] = (
+    "always()",
+    "always() && steps.setup-rust.outputs.sccache-status != 'fallback'",
+)
+
+
 def test_every_cache_report_is_checked_for_health(
     workflow_texts: dict[str, str],
 ) -> None:
@@ -315,8 +323,11 @@ def test_every_cache_report_is_checked_for_health(
     store still compiles and stays green, and the report above would say so
     only to someone reading it. After each report, the lane writes the
     statistics as JSON and runs the health check on them, each as its own
-    step and in that order, and neither is guarded by anything but
-    `always()`, so a red lane is still judged.
+    step and in that order. The statistics step is guarded by `always()`
+    alone, so a red lane is still judged; the check adds only the fallback
+    exception, skipping when `setup-rust` declared it fell back to no
+    compiler cache, since the wrapper is cleared then and the check would
+    fail a job the action already annotated.
     """
     for report in cache_reports(workflow_texts):
         document = parse_workflow(report.workflow, workflow_texts[report.workflow])
@@ -332,7 +343,8 @@ def test_every_cache_report_is_checked_for_health(
             f"{report.workflow}:{report.job} must run, after its cache report "
             f"and in this order: {HEALTH_STEPS}; it runs {runs}"
         )
-        guards = {later[index].get("if") for index in positions}
-        assert guards == {"always()"}, (
-            f"{report.workflow}:{report.job} guards its health steps with {guards}"
+        guards = [later[index].get("if") for index in positions]
+        assert guards == list(HEALTH_GUARDS), (
+            f"{report.workflow}:{report.job} guards its health steps with {guards}, "
+            f"expected {list(HEALTH_GUARDS)}"
         )
