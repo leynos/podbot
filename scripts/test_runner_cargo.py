@@ -125,10 +125,10 @@ def select_test_executables(
 
 def _is_test_artifact(message: dict[str, typ.Any], expected: Target) -> bool:
     """Match one JSON message to the requested package's test executable."""
-    target = message.get("target")
-    profile = message.get("profile")
-    if not isinstance(target, dict) or not isinstance(profile, dict):
+    artifact_metadata = _artifact_target_and_profile(message)
+    if artifact_metadata is None:
         return False
+    target, profile = artifact_metadata
     kinds = target.get("kind")
     return (
         message.get("reason") == "compiler-artifact"
@@ -186,20 +186,7 @@ def create_test_runtime_environment(
     for message in messages:
         if message.get("reason") == "compiler-artifact":
             _record_binary_executable(environment, package, message)
-    profile_message = next(
-        (
-            message
-            for message in messages
-            if message.get("reason") == "compiler-artifact"
-            and message.get("executable") == str(executable)
-        ),
-        {},
-    )
-    profile = profile_message.get("profile")
-    if not isinstance(profile, dict):
-        profile = {}
-    if "debug_assertions" in profile:
-        environment["CARGO_DEBUG_ASSERTIONS"] = str(profile["debug_assertions"]).lower()
+    _set_executable_profile_environment(environment, executable, messages)
     _set_dynamic_library_environment(environment, executable, messages)
     return environment
 
@@ -248,10 +235,10 @@ def _record_binary_executable(
     message: dict[str, typ.Any],
 ) -> None:
     """Restore a Cargo binary path for its owning package when available."""
-    target = message.get("target")
-    profile = message.get("profile")
-    if not isinstance(target, dict) or not isinstance(profile, dict):
+    artifact_metadata = _artifact_target_and_profile(message)
+    if artifact_metadata is None:
         return
+    target, profile = artifact_metadata
     kinds = target.get("kind")
     if message.get("package_id") != package.get("id"):
         return
@@ -263,6 +250,39 @@ def _record_binary_executable(
     name = target.get("name")
     if isinstance(executable, str) and isinstance(name, str):
         environment[f"CARGO_BIN_EXE_{name}"] = executable
+
+
+def _artifact_target_and_profile(
+    message: dict[str, typ.Any],
+) -> tuple[dict[str, typ.Any], dict[str, typ.Any]] | None:
+    """Return Cargo target and profile mappings only when both are objects."""
+    target = message.get("target")
+    profile = message.get("profile")
+    if not isinstance(target, dict) or not isinstance(profile, dict):
+        return None
+    return target, profile
+
+
+def _set_executable_profile_environment(
+    environment: dict[str, str],
+    executable: pathlib.Path,
+    messages: list[dict[str, typ.Any]],
+) -> None:
+    """Restore debug-assertion metadata from the first matching artifact."""
+    profile_message = next(
+        (
+            message
+            for message in messages
+            if message.get("reason") == "compiler-artifact"
+            and message.get("executable") == str(executable)
+        ),
+        {},
+    )
+    profile = profile_message.get("profile")
+    if not isinstance(profile, dict):
+        profile = {}
+    if "debug_assertions" in profile:
+        environment["CARGO_DEBUG_ASSERTIONS"] = str(profile["debug_assertions"]).lower()
 
 
 def _set_dynamic_library_environment(

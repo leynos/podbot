@@ -102,6 +102,12 @@ Within that traversal, the private package-local activation filter is scoped to
 activations. Defaults and explicitly requested package features enter the
 enabled set through their existing paths.
 
+In `test_runner_cargo.py`, `_artifact_target_and_profile` is shared only by
+test-artifact selection and binary environment restoration; each caller keeps
+its own policy checks. `_set_executable_profile_environment` is called only by
+`create_test_runtime_environment`, after binary registration and before
+dynamic-library path reconstruction.
+
 Explicit singular target selectors retain feature-gated matches so Cargo can
 report its normal error. A private selector helper applies that exception only
 within `_unique_selected_targets`; plural category selectors continue to filter
