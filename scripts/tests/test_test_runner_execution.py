@@ -20,18 +20,70 @@ from test_runner_options import parse_cargo_test_options
 from test_runner_plan import create_test_plan
 
 
-def test_ordinary_cargo_phase_uses_the_planned_workspace_root(
-    tmp_path: pathlib.Path,
+@pytest.mark.parametrize(
+    ("phase", "cargo_arguments", "supervisor_status", "expected_command"),
+    [
+        pytest.param(
+            test_runner_phases._run_ordinary_phase,
+            [
+                "--package",
+                "podbot",
+                "--features",
+                "internal",
+                "--lib",
+                "selected_test",
+                "--",
+                "--exact",
+                "--nocapture",
+            ],
+            23,
+            [
+                "cargo",
+                "test",
+                "--features",
+                "internal",
+                "--package",
+                "podbot",
+                "--lib",
+                "selected_test",
+                "--",
+                "--exact",
+                "--nocapture",
+            ],
+            id="ordinary",
+        ),
+        pytest.param(
+            test_runner_phases._run_doctest_phase,
+            ["--doc", "documentation_case", "--", "--exact", "--nocapture"],
+            29,
+            [
+                "cargo",
+                "test",
+                "--doc",
+                "documentation_case",
+                "--",
+                "--exact",
+                "--nocapture",
+            ],
+            id="doctest",
+        ),
+    ],
+)
+def test_cargo_phase_preserves_planned_process_inputs(
+    phase: typ.Callable[[typ.Any, typ.Any], tuple[tuple[int, ...], bool]],
+    cargo_arguments: list[str],
+    supervisor_status: int,
+    expected_command: list[str],
 ) -> None:
-    """The ordinary phase uses its plan for command and process inputs."""
-    caller_directory = tmp_path / "caller"
-    workspace_root = tmp_path / "workspace"
-    environment = {"CARGO_HOME": str(tmp_path / "cargo-home")}
+    """Cargo phases preserve the command and process inputs from their plan."""
+    caller_directory = pathlib.Path("caller")
+    workspace_root = pathlib.Path("workspace")
+    environment = {"CARGO_HOME": "cargo-home"}
     captured_requests = []
 
     def run_inherited(request: typ.Any) -> int:
         captured_requests.append(request)
-        return 23
+        return supervisor_status
 
     context = types.SimpleNamespace(
         cargo_command=("cargo",),
@@ -42,98 +94,31 @@ def test_ordinary_cargo_phase_uses_the_planned_workspace_root(
             terminal_status=None,
         ),
     )
-    options = parse_cargo_test_options(
-        [
-            "--package",
-            "podbot",
-            "--features",
-            "internal",
-            "--lib",
-            "selected_test",
-            "--",
-            "--exact",
-            "--nocapture",
-        ],
-        cwd=caller_directory,
-    )
+    options = parse_cargo_test_options(cargo_arguments, cwd=caller_directory)
     plan = create_test_plan(package_document(workspace_root), options)
 
-    phase_statuses, should_stop = test_runner_phases._run_ordinary_phase(context, plan)
+    phase_statuses, should_stop = phase(context, plan)
+    phase_name = phase.__name__.removeprefix("_run_").removesuffix("_phase")
 
-    assert phase_statuses == (23,), "the supervisor status must pass through the phase"
-    assert should_stop, "ordinary failure must retain Cargo's fail-fast policy"
+    assert phase_statuses == (supervisor_status,), (
+        f"{phase_name} must pass through the supervisor status"
+    )
+    assert should_stop, f"{phase_name} failure must retain Cargo's fail-fast policy"
+    assert len(captured_requests) == 1, (
+        f"{phase_name} must capture exactly one supervisor request"
+    )
     request = captured_requests[0]
-    assert request.command == [
-        "cargo",
-        "test",
-        "--features",
-        "internal",
-        "--package",
-        "podbot",
-        "--lib",
-        "selected_test",
-        "--",
-        "--exact",
-        "--nocapture",
-    ], "ordinary command order must preserve features, filter, and harness flags"
+    assert request.command == expected_command, (
+        f"{phase_name} command order must preserve Cargo, filter, and harness flags"
+    )
     assert request.cwd == plan.workspace_root, (
-        "ordinary Cargo tests must run from the metadata workspace root"
+        f"{phase_name} must run from the metadata workspace root"
     )
     assert context.cwd != plan.workspace_root, (
-        "the planned workspace root must remain distinct from caller cwd"
+        f"{phase_name} workspace root must remain distinct from caller cwd"
     )
     assert request.environment is environment, (
-        "ordinary Cargo tests must receive the caller's environment"
-    )
-
-
-def test_doctest_phase_preserves_filters_and_harness_arguments(
-    tmp_path: pathlib.Path,
-) -> None:
-    """The doctest phase uses its plan and forwards Cargo and harness inputs."""
-    caller_directory = tmp_path / "caller"
-    workspace_root = tmp_path / "workspace"
-    environment = {"CARGO_HOME": str(tmp_path / "cargo-home")}
-    captured_requests = []
-
-    def run_inherited(request: typ.Any) -> int:
-        captured_requests.append(request)
-        return 29
-
-    context = types.SimpleNamespace(
-        cargo_command=("cargo",),
-        cwd=caller_directory,
-        environment=environment,
-        supervisor=types.SimpleNamespace(run_inherited=run_inherited),
-    )
-    options = parse_cargo_test_options(
-        ["--doc", "documentation_case", "--", "--exact", "--nocapture"],
-        cwd=caller_directory,
-    )
-    plan = create_test_plan(package_document(workspace_root), options)
-
-    phase_statuses, should_stop = test_runner_phases._run_doctest_phase(context, plan)
-
-    assert phase_statuses == (29,), "the supervisor status must pass through the phase"
-    assert should_stop, "doctest failure must retain Cargo's fail-fast policy"
-    request = captured_requests[0]
-    assert request.command == [
-        "cargo",
-        "test",
-        "--doc",
-        "documentation_case",
-        "--",
-        "--exact",
-        "--nocapture",
-    ], "doctest command order must preserve filter and harness flags"
-    assert request.cwd == plan.workspace_root, (
-        "doctests must run from the metadata workspace root"
-    )
-    assert context.cwd != plan.workspace_root, (
-        "the planned workspace root must remain distinct from caller cwd"
-    )
-    assert request.environment is environment, (
-        "doctests must receive the caller's environment"
+        f"{phase_name} must receive the caller's environment"
     )
 
 
