@@ -91,6 +91,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_test_runner_process_tree.py \
 	scripts/tests/test_test_runner_supervise.py \
 	scripts/tests/test_test_runner_supervisor.py \
+	scripts/tests/test_test_runner_supervisor_launch.py \
 	scripts/tests/test_test_runner_supervisor_terminal.py \
 	scripts/tests/test_sccache_fallback_contract.py \
 	scripts/tests/test_workflow_condition_properties.py
