@@ -9,24 +9,22 @@ import signal
 import subprocess
 import time
 import typing as typ
+from collections.abc import Mapping
+from types import MappingProxyType
 
+from test_runner_process_snapshot import (
+    ProcessInfo,
+    _read_process,
+    _read_process_table,
+    parse_proc_stat as parse_proc_stat,
+    snapshot_direct_child_identities as snapshot_direct_child_identities,
+)
 from test_runner_subreaper import (
     enable_child_subreaper as enable_child_subreaper,
     get_child_subreaper as get_child_subreaper,
     set_child_subreaper as set_child_subreaper,
 )
-
-
-@dataclasses.dataclass(frozen=True)
-class ProcessInfo:
-    """One process snapshot read from procfs."""
-
-    pid: int
-    parent_pid: int
-    process_group: int
-    start_time: int
-    state: str
-    command: str
+from test_runner_windows_process import signal_windows_process_tree
 
 
 @dataclasses.dataclass(frozen=True)
@@ -35,6 +33,53 @@ class OwnedProcess:
 
     info: ProcessInfo
     first_seen: float
+
+
+@dataclasses.dataclass(frozen=True)
+class ProcessTreeSnapshot:
+    """Immutable process state returned by one explicit tree refresh."""
+
+    root_pid: int
+    proc_available: bool
+    processes: Mapping[int, ProcessInfo]
+    owned: tuple[OwnedProcess, ...]
+
+    def __post_init__(self) -> None:
+        """Freeze caller-provided containers as well as snapshots from refresh."""
+        object.__setattr__(self, "processes", MappingProxyType(dict(self.processes)))
+        object.__setattr__(self, "owned", tuple(self.owned))
+
+    def live_owned(self) -> tuple[OwnedProcess, ...]:
+        """Return snapshot-owned processes that remain live and identity-matched."""
+        if not self.proc_available:
+            return ()
+        return tuple(
+            owned
+            for owned in self.owned
+            if (current := self.processes.get(owned.info.pid)) is not None
+            and current.start_time == owned.info.start_time
+            and current.state not in {"Z", "X"}
+        )
+
+    def descendants(self) -> tuple[OwnedProcess, ...]:
+        """Return live snapshot descendants in the order first tracked."""
+        return tuple(
+            owned for owned in self.live_owned() if owned.info.pid != self.root_pid
+        )
+
+    def ancestors_of(self, pid: int) -> set[int]:
+        """Return owned process ancestors using only this captured snapshot."""
+        owned_by_pid = {owned.info.pid: owned for owned in self.owned}
+        ancestors: set[int] = set()
+        current = owned_by_pid.get(pid)
+        while current is not None and current.info.parent_pid not in ancestors:
+            parent_pid = current.info.parent_pid
+            parent = owned_by_pid.get(parent_pid)
+            if parent is None:
+                break
+            ancestors.add(parent_pid)
+            current = parent
+        return ancestors
 
 
 @dataclasses.dataclass(frozen=True)
@@ -53,29 +98,6 @@ class ProcessTreeRoot:
     preexisting_child_identities: frozenset[tuple[int, int]] = frozenset()
 
 
-def parse_proc_stat(contents: str, command: str = "") -> ProcessInfo:
-    """Parse the fields needed from Linux ``/proc/<pid>/stat``.
-
-    The command name is parenthesized and may itself contain spaces or closing
-    parentheses, so parsing begins after its final closing parenthesis.
-    """
-    closing_parenthesis = contents.rfind(")")
-    if closing_parenthesis < 0:
-        raise ValueError("process stat has no command delimiter")
-    pid_text = contents[: contents.find(" ")]
-    fields = contents[closing_parenthesis + 1 :].split()
-    if len(fields) <= 19:
-        raise ValueError("process stat is missing required fields")
-    return ProcessInfo(
-        pid=int(pid_text),
-        parent_pid=int(fields[1]),
-        process_group=int(fields[2]),
-        start_time=int(fields[19]),
-        state=fields[0],
-        command=command,
-    )
-
-
 class OwnedProcessTree:
     """Track a child and its descendants without addressing unrelated PIDs."""
 
@@ -85,20 +107,28 @@ class OwnedProcessTree:
         self.started_at = root.started_at
         self.subreaper = root.subreaper
         self.preexisting_child_identities = root.preexisting_child_identities
-        self.proc_available = pathlib.Path("/proc").is_dir()
-        root_info = _read_process(root.pid)
+        self.proc_available = False
         self.owned: dict[int, OwnedProcess] = {}
-        if root_info is not None:
-            self.owned[root.pid] = OwnedProcess(root_info, root.started_at)
 
-    def refresh(self) -> dict[int, ProcessInfo]:
-        """Discover descendants and return the current procfs snapshot."""
+    def refresh(self) -> ProcessTreeSnapshot:
+        """Refresh owned state and return an immutable process snapshot."""
+        self.proc_available = pathlib.Path("/proc").is_dir()
         if not self.proc_available:
-            return {}
+            return ProcessTreeSnapshot(
+                self.root_pid, False, MappingProxyType({}), tuple(self.owned.values())
+            )
         processes = _read_process_table()
+        root_info = processes.get(self.root_pid)
+        if root_info is not None and self.root_pid not in self.owned:
+            self.owned[self.root_pid] = OwnedProcess(root_info, self.started_at)
         self._refresh_known_processes(processes)
         self._discover_descendants(processes)
-        return processes
+        return ProcessTreeSnapshot(
+            self.root_pid,
+            True,
+            processes,
+            tuple(self.owned.values()),
+        )
 
     def _refresh_known_processes(self, processes: dict[int, ProcessInfo]) -> None:
         """Update identities and discard exited or reused descendant PIDs."""
@@ -167,67 +197,21 @@ class OwnedProcessTree:
         """Remember one descendant's current PID and start-time identity."""
         self.owned[process.pid] = OwnedProcess(process, time.monotonic())
 
-    def live_owned(self) -> tuple[OwnedProcess, ...]:
-        """Return owned processes that have not exited or become zombies."""
-        processes = self.refresh()
-        if not self.proc_available:
-            return ()
-        return tuple(
-            owned
-            for pid, owned in self.owned.items()
-            if (current := processes.get(pid)) is not None
-            and current.start_time == owned.info.start_time
-            and current.state not in {"Z", "X"}
-        )
-
-    def descendants(self, *, refresh: bool = True) -> tuple[OwnedProcess, ...]:
-        """Return all live tracked processes except the root child.
-
-        Set ``refresh`` to false only immediately after refreshing this tree.
-        """
-        processes = self.refresh() if refresh else None
-        if not self.proc_available:
-            return ()
-        descendants: list[OwnedProcess] = []
-        for pid, owned in self.owned.items():
-            if pid == self.root_pid:
-                continue
-            current = processes.get(pid) if processes is not None else owned.info
-            if (
-                current is not None
-                and current.start_time == owned.info.start_time
-                and current.state not in {"Z", "X"}
-            ):
-                descendants.append(owned)
-        return tuple(descendants)
-
-    def ancestors_of(self, pid: int) -> set[int]:
-        """Return owned ancestors of a process from the latest parent links."""
-        self.refresh()
-        ancestors: set[int] = set()
-        current = self.owned.get(pid)
-        while current is not None and current.info.parent_pid not in ancestors:
-            parent_pid = current.info.parent_pid
-            parent = self.owned.get(parent_pid)
-            if parent is None:
-                break
-            ancestors.add(parent_pid)
-            current = parent
-        return ancestors
-
     def signal_all(self, process: typ.Any, signum: int) -> None:
         """Signal the verified owned tree, falling back to its private group."""
+        snapshot = self.refresh()
         if not self.proc_available:
             _signal_process_group(process, self.root_pid, signum)
             return
-        self._signal_visible_processes(signum)
+        self._signal_visible_processes(snapshot, signum)
         self._signal_root(process, signum)
 
-    def _signal_visible_processes(self, signum: int) -> None:
+    def _signal_visible_processes(
+        self, snapshot: ProcessTreeSnapshot, signum: int
+    ) -> None:
         """Signal visible children only while their PID identities still match."""
-        processes = self.refresh()
-        for pid, owned in tuple(self.owned.items()):
-            current = processes.get(pid)
+        for owned in snapshot.owned:
+            current = snapshot.processes.get(owned.info.pid)
             if current is not None and current.start_time == owned.info.start_time:
                 _signal_identity(current, signum)
 
@@ -261,7 +245,7 @@ class OwnedProcessTree:
         self._wait_for_tree(process, grace_seconds)
         self._wait_for_root(process, grace_seconds)
         self.reap_adopted()
-        return process.poll() is not None and not self.live_owned()
+        return process.poll() is not None and not self.refresh().live_owned()
 
     def _wait_for_tree(
         self,
@@ -274,7 +258,7 @@ class OwnedProcessTree:
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
             self.reap_adopted()
-            if process.poll() is not None and not self.live_owned():
+            if process.poll() is not None and not self.refresh().live_owned():
                 return
             if repeat_signal is not None:
                 self.signal_all(process, repeat_signal)
@@ -292,52 +276,6 @@ class OwnedProcessTree:
                 process.wait(timeout=timeout_seconds)
             except subprocess.TimeoutExpired:
                 return
-
-
-def snapshot_direct_child_identities() -> frozenset[tuple[int, int]]:
-    """Capture existing direct children before launching an owned process."""
-    if not pathlib.Path("/proc").is_dir():
-        return frozenset()
-    return frozenset(
-        (process.pid, process.start_time)
-        for process in _read_process_table().values()
-        if process.parent_pid == os.getpid()
-    )
-
-
-def _read_process_table() -> dict[int, ProcessInfo]:
-    """Read visible process identities and commands from Linux procfs."""
-    table: dict[int, ProcessInfo] = {}
-    try:
-        process_paths = pathlib.Path("/proc").iterdir()
-        for process_path in process_paths:
-            if not process_path.name.isdecimal():
-                continue
-            process = _read_process(int(process_path.name))
-            if process is not None:
-                table[process.pid] = process
-    except OSError:
-        return table
-    return table
-
-
-def _read_process(pid: int) -> ProcessInfo | None:
-    """Read one process stat and command line when it remains available."""
-    try:
-        process_path = pathlib.Path("/proc") / str(pid)
-        stat = (process_path / "stat").read_bytes().decode("utf-8", errors="replace")
-        command_line = (process_path / "cmdline").read_bytes()
-    except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
-        return None
-    command = " ".join(
-        part.decode("utf-8", errors="replace")
-        for part in command_line.split(b"\0")
-        if part
-    )
-    try:
-        return parse_proc_stat(stat, command)
-    except ValueError:
-        return None
 
 
 def _signal_identity(process: ProcessInfo, signum: int) -> None:
@@ -378,6 +316,8 @@ def _signal_with_pidfd(process: ProcessInfo, signum: int) -> bool:
 def _signal_process_group(process: typ.Any, group_id: int, signum: int) -> None:
     """Signal the process group created exclusively for the Cargo child."""
     if os.name != "posix":
+        if signal_windows_process_tree(group_id, signum):
+            return
         _signal_single_process(process, signum)
         return
     try:

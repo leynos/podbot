@@ -9,7 +9,7 @@ import shlex
 import time
 from collections.abc import Iterable
 
-from test_runner_process_tree import OwnedProcessTree
+from test_runner_process_tree import ProcessTreeSnapshot
 
 _PROCESS_COMMAND_LIMIT = 256
 
@@ -34,7 +34,7 @@ class StallReportContext:
     diagnostics reflect one command and its environment at the same instant.
     """
 
-    tree: OwnedProcessTree
+    process_snapshot: ProcessTreeSnapshot
     command: tuple[str, ...]
     cwd: pathlib.Path
     environment: dict[str, str]
@@ -155,9 +155,11 @@ def format_stall_report(context: StallReportContext) -> str:
         f"  working directory: {context.cwd}",
     ]
     lines.extend(_toolchain_lines(context.cwd, context.environment))
-    lines.extend(_process_lines(context.tree))
+    lines.extend(_process_lines(context.process_snapshot))
     lines.extend(
-        _lock_lines(context.tree, context.environment, context.target_directory)
+        _lock_lines(
+            context.process_snapshot, context.environment, context.target_directory
+        )
     )
     return "\n".join(lines)
 
@@ -199,9 +201,9 @@ def _toolchain_file_line(toolchain: pathlib.Path) -> str:
     return f"    toolchain file: {toolchain} ({contents[:512]})"
 
 
-def _process_lines(tree: OwnedProcessTree) -> list[str]:
+def _process_lines(snapshot: ProcessTreeSnapshot) -> list[str]:
     """Describe commands, ancestry, and observed elapsed time for owned PIDs."""
-    processes = tree.live_owned()
+    processes = snapshot.live_owned()
     lines = ["  owned process tree:"]
     if processes:
         now = time.monotonic()
@@ -227,17 +229,19 @@ def _display_process_command(command: str) -> str:
 
 
 def _lock_lines(
-    tree: OwnedProcessTree,
+    snapshot: ProcessTreeSnapshot,
     environment: dict[str, str],
     target_directory: pathlib.Path | None,
 ) -> list[str]:
     """Map known Cargo lock inodes and classify runner-owned waiters."""
-    if not tree.proc_available:
+    if not snapshot.proc_available:
         return ["  lock diagnostics: unsupported; Linux /proc is unavailable"]
     records_or_error = _read_lock_records()
     if isinstance(records_or_error, str):
         return [records_or_error]
-    return _format_lock_records(tree, records_or_error, environment, target_directory)
+    return _format_lock_records(
+        snapshot, records_or_error, environment, target_directory
+    )
 
 
 def _read_lock_records() -> tuple[LockRecord, ...] | str:
@@ -250,14 +254,14 @@ def _read_lock_records() -> tuple[LockRecord, ...] | str:
 
 
 def _format_lock_records(
-    tree: OwnedProcessTree,
+    snapshot: ProcessTreeSnapshot,
     records: tuple[LockRecord, ...],
     environment: dict[str, str],
     target_directory: pathlib.Path | None,
 ) -> list[str]:
     """Map parsed lock records to known paths and classify owned waiters."""
     identities = lock_path_identities(environment, target_directory)
-    owned_pids = {owned.info.pid for owned in tree.live_owned()}
+    owned_pids = {owned.info.pid for owned in snapshot.live_owned()}
     relevant = tuple(record for record in records if record.device_inode in identities)
     if not relevant:
         return [
@@ -267,7 +271,7 @@ def _format_lock_records(
     return [
         "  known Cargo lock ownership and waiters:",
         *_visible_lock_lines(relevant, identities, owned_pids),
-        *_waiter_diagnosis_lines(tree, relevant, identities, owned_pids),
+        *_waiter_diagnosis_lines(snapshot, relevant, identities, owned_pids),
     ]
 
 
@@ -292,7 +296,7 @@ def _format_lock_record(
 
 
 def _waiter_diagnosis_lines(
-    tree: OwnedProcessTree,
+    snapshot: ProcessTreeSnapshot,
     records: tuple[LockRecord, ...],
     identities: dict[str, str],
     owned_pids: set[int],
@@ -308,7 +312,7 @@ def _waiter_diagnosis_lines(
             if not record.waiter and record.device_inode == waiter.device_inode
         )
         classification = classify_lock_waiter(
-            holders, owned_pids, tree.ancestors_of(waiter.pid)
+            holders, owned_pids, snapshot.ancestors_of(waiter.pid)
         )
         lines.append(
             f"    diagnosis: {classification} "

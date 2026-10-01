@@ -105,11 +105,12 @@ def select_targets(
 
 
 def _default_test_targets(targets: tuple[Target, ...]) -> tuple[Target, ...]:
-    """Select the integration and executable targets tested by Cargo by default."""
+    """Select Cargo's default test targets and examples built without tests."""
     return tuple(
         target
         for target in targets
-        if _is_default_test_target(target) and target.has_required_features_enabled
+        if (_is_default_test_target(target) or "example" in target.kinds)
+        and target.has_required_features_enabled
     )
 
 

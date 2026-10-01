@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import operator
 import pathlib
+import subprocess
 import sys
+import time
 
 import pytest
 
@@ -71,14 +74,12 @@ def test_subreaper_snapshot_precedes_runner_child_launch(
         order.append("snapshot")
         return frozenset()
 
-    def fail_to_start(*_args: object) -> None:
+    def fail_to_start(*_args: object, **_kwargs: object) -> None:
         order.append("start")
         raise OSError("controlled spawn failure")
 
     monkeypatch.setattr(supervisor_module, "snapshot_direct_child_identities", snapshot)
-    monkeypatch.setattr(
-        supervisor_module.ProcessSupervisor, "_start_process", fail_to_start
-    )
+    monkeypatch.setattr(supervisor_module, "_start_process", fail_to_start)
     supervisor = supervisor_module.ProcessSupervisor(1)
     supervisor.subreaper_enabled = True
 
@@ -198,24 +199,20 @@ def test_read_process_replaces_invalid_utf8_in_stat_command_name(
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
-@pytest.mark.parametrize("refresh", [True, False], ids=["refresh", "after-refresh"])
-def test_descendants_excludes_root_process(
-    monkeypatch: pytest.MonkeyPatch, refresh: bool
-) -> None:
+def test_descendants_excludes_root_process(monkeypatch: pytest.MonkeyPatch) -> None:
     """The root remains owned for supervision but is not a descendant."""
     root = _process(81001, os.getpid(), 201)
     tree = _tree_for_snapshot(monkeypatch, root, {root.pid: root})
 
-    descendants = _descendants_after_refresh(tree, refresh=refresh)
+    descendants = tree.refresh().descendants()
 
     assert root.pid in tree.owned, "the root must remain tracked for supervision"
     assert descendants == (), "the root child must not appear among its descendants"
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
-@pytest.mark.parametrize("refresh", [True, False], ids=["refresh", "after-refresh"])
 def test_descendants_returns_live_processes_in_tracking_order(
-    monkeypatch: pytest.MonkeyPatch, refresh: bool
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Current live descendants retain the ownership dictionary's order."""
     root = _process(81002, os.getpid(), 202)
@@ -227,7 +224,7 @@ def test_descendants_returns_live_processes_in_tracking_order(
         {root.pid: root, child.pid: child, grandchild.pid: grandchild},
     )
 
-    descendants = _descendants_after_refresh(tree, refresh=refresh)
+    descendants = tree.refresh().descendants()
 
     assert tuple(item.info.pid for item in descendants) == (
         child.pid,
@@ -236,7 +233,6 @@ def test_descendants_returns_live_processes_in_tracking_order(
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
-@pytest.mark.parametrize("refresh", [True, False], ids=["refresh", "after-refresh"])
 @pytest.mark.parametrize(
     ("condition", "state"),
     [("zombie", "Z"), ("exiting", "X"), ("exited", None)],
@@ -244,7 +240,6 @@ def test_descendants_returns_live_processes_in_tracking_order(
 )
 def test_descendants_excludes_zombie_or_exited_processes(
     monkeypatch: pytest.MonkeyPatch,
-    refresh: bool,
     condition: str,
     state: str | None,
 ) -> None:
@@ -263,7 +258,7 @@ def test_descendants_excludes_zombie_or_exited_processes(
             child.pid, child.parent_pid, child.start_time, state=state
         )
 
-    descendants = _descendants_after_refresh(tree, refresh=refresh)
+    descendants = tree.refresh().descendants()
 
     assert child.pid not in {item.info.pid for item in descendants}, (
         f"a {condition} process must not be reported as live"
@@ -271,10 +266,7 @@ def test_descendants_excludes_zombie_or_exited_processes(
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
-@pytest.mark.parametrize("refresh", [True, False], ids=["refresh", "after-refresh"])
-def test_descendants_rejects_a_reused_pid(
-    monkeypatch: pytest.MonkeyPatch, refresh: bool
-) -> None:
+def test_descendants_rejects_a_reused_pid(monkeypatch: pytest.MonkeyPatch) -> None:
     """A numeric PID with a new start time cannot retain the old ownership."""
     root = _process(81007, os.getpid(), 207)
     child = _process(81008, root.pid, 208)
@@ -284,7 +276,7 @@ def test_descendants_rejects_a_reused_pid(
     assert child.pid in tree.owned, "the original child must be tracked"
     snapshot[child.pid] = _process(child.pid, 99999, child.start_time + 1)
 
-    descendants = _descendants_after_refresh(tree, refresh=refresh)
+    descendants = tree.refresh().descendants()
 
     assert child.pid not in {item.info.pid for item in descendants}, (
         "a reused PID must not remain attached to its old process identity"
@@ -309,13 +301,72 @@ def _tree_for_snapshot(
     )
 
 
-def _descendants_after_refresh(
-    tree: process_tree.OwnedProcessTree, *, refresh: bool
-) -> tuple[process_tree.OwnedProcess, ...]:
-    """Respect the cached-snapshot contract of ``descendants(refresh=False)``."""
-    if not refresh:
-        tree.refresh()
-    return tree.descendants(refresh=refresh)
+@pytest.mark.skipif(sys.platform != "linux", reason="procfs tracking is Linux-only")
+def test_snapshot_queries_do_not_refresh_or_mutate_tree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read APIs consume one explicit snapshot without procfs I/O."""
+    root = _process(81009, os.getpid(), 209)
+    child = _process(81010, root.pid, 210)
+    reads = 0
+
+    def read_table() -> dict[int, process_tree.ProcessInfo]:
+        nonlocal reads
+        reads += 1
+        return {root.pid: root, child.pid: child}
+
+    tree = _tree_for_snapshot(monkeypatch, root, {root.pid: root, child.pid: child})
+    monkeypatch.setattr(process_tree, "_read_process_table", read_table)
+    snapshot = tree.refresh()
+    owned_before_queries = dict(tree.owned)
+
+    assert snapshot.descendants()[0].info.pid == child.pid
+    assert snapshot.live_owned()[0].info.pid == root.pid
+    assert snapshot.ancestors_of(child.pid) == {root.pid}
+    assert reads == 1, "snapshot queries must not read procfs again"
+    assert tree.owned == owned_before_queries, "queries must not mutate tracked state"
+    with pytest.raises(TypeError):
+        operator.setitem(snapshot.processes, child.pid, root)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows Job Objects are Windows-only")
+def test_windows_supervisor_terminates_descendants_in_the_job(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Timeout cleanup reaps child and grandchild processes on Windows."""
+    pid_file = tmp_path / "windows-descendants.txt"
+    grandchild_code = "import time; time.sleep(60)"
+    child_code = (
+        "import os,pathlib,subprocess,sys,time; "
+        "grandchild=subprocess.Popen([sys.executable,'-c',sys.argv[2]]); "
+        "pathlib.Path(sys.argv[1]).write_text("
+        "f'{os.getpid()} {grandchild.pid}', encoding='utf-8'); "
+        "time.sleep(60)"
+    )
+    root_code = "import subprocess,sys,time; subprocess.Popen([sys.executable,'-c',sys.argv[1],*sys.argv[2:]]); time.sleep(60)"
+    root = [sys.executable, "-c", root_code, child_code, str(pid_file), grandchild_code]
+    request = supervisor_module.CommandRequest(
+        root, pathlib.Path.cwd(), os.environ.copy(), "Windows descendant cleanup test"
+    )
+
+    with supervisor_module.ProcessSupervisor(5, 0.1) as supervisor:
+        status = supervisor.run_inherited(request)
+
+    deadline = time.monotonic() + 5
+    while not pid_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    child_pid, grandchild_pid = map(int, pid_file.read_text().split())
+    assert status == 124, "the supervised root must retain timeout status"
+    for process_id in (child_pid, grandchild_pid):
+        listing = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {process_id}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert str(process_id) not in listing.stdout, (
+            "the Job Object must terminate every descendant, not only Cargo"
+        )
 
 
 def _process(

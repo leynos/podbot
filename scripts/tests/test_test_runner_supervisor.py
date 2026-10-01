@@ -20,7 +20,12 @@ from test_runner_diagnostics import (
     lock_path_identities,
     parse_proc_locks,
 )
-from test_runner_process_tree import OwnedProcess, ProcessInfo, parse_proc_stat
+from test_runner_process_tree import (
+    OwnedProcess,
+    ProcessInfo,
+    ProcessTreeSnapshot,
+    parse_proc_stat,
+)
 from test_runner_supervisor import ProcessSupervisor
 
 
@@ -110,11 +115,11 @@ def test_supervisor_retains_first_terminal_reason() -> None:
     """Later checks preserve the timeout reason used in the first report."""
     supervisor = ProcessSupervisor(timeout_seconds=1)
     supervisor.deadline = time.monotonic() - 1
-    tree = types.SimpleNamespace(descendants=lambda: ())
+    snapshot = ProcessTreeSnapshot(1, False, {}, ())
     process = types.SimpleNamespace()
 
-    first_reason = supervisor._terminal_reason(tree, process, None)
-    later_reason = supervisor._terminal_reason(tree, process, None)
+    first_reason = supervisor._terminal_reason(snapshot, process, None)
+    later_reason = supervisor._terminal_reason(snapshot, process, None)
 
     assert first_reason == "timed out", "the initial report must identify timeout"
     assert later_reason == first_reason, (
@@ -137,14 +142,16 @@ def test_stall_report_truncates_long_process_commands(
         ),
     )
     owned = OwnedProcess(info, time.monotonic())
-    tree = types.SimpleNamespace(
-        proc_available=False,
-        live_owned=lambda: (owned,),
+    snapshot = ProcessTreeSnapshot(
+        root_pid=info.pid,
+        proc_available=True,
+        processes={info.pid: info},
+        owned=(owned,),
     )
 
     report = format_stall_report(
         StallReportContext(
-            tree=tree,
+            process_snapshot=snapshot,
             command=("cargo", "test"),
             cwd=tmp_path,
             environment={},

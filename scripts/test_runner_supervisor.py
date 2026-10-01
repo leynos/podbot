@@ -21,18 +21,19 @@ from test_runner_process_io import (
     drain_events as _drain_events,
     join_readers as _join_readers,
     normal_exit_status as _normal_exit_status,
-    piped_stream_names as _piped_stream_names,
-    process_group_arguments as _process_group_arguments,
-    read_stream as _read_stream,
+    start_process as _start_process,
+    start_readers as _start_readers,
 )
 from test_runner_process_tree import (
     OwnedProcessTree,
+    ProcessTreeSnapshot,
     ProcessTreeRoot,
     enable_child_subreaper,
     get_child_subreaper,
     snapshot_direct_child_identities,
     set_child_subreaper,
 )
+from test_runner_windows_process import WindowsProcessJob
 
 _TIMEOUT_EXIT = 124
 _CLEANUP_EXIT = 125
@@ -72,6 +73,7 @@ class _ProcessRun:
     events: queue.Queue[tuple[str, str | object]]
     readers: list[threading.Thread]
     capture: StreamCapture
+    windows_job: WindowsProcessJob | None
 
 
 class ProcessSupervisor:
@@ -179,14 +181,38 @@ class ProcessSupervisor:
             if self.subreaper_enabled
             else frozenset()
         )
+        windows_job = WindowsProcessJob.create()
         try:
-            process = self._start_process(request, stdout_pipe, stderr_pipe)
+            process = _start_process(
+                request.command,
+                request.cwd,
+                request.environment,
+                stdout_pipe,
+                stderr_pipe,
+                suspended=windows_job is not None,
+            )
         except OSError as exc:
+            if windows_job is not None:
+                windows_job.close()
             print(
                 f"test runner: could not start {request.command[0]}: {exc}",
                 file=sys.stderr,
             )
             return 127, "", ""
+        if windows_job is not None:
+            try:
+                if not windows_job.assign_and_resume(process._handle):
+                    windows_job.close()
+                    windows_job = None
+            except OSError as exc:
+                windows_job.close()
+                process.kill()
+                process.wait()
+                print(
+                    f"test runner: could not contain {request.command[0]}: {exc}",
+                    file=sys.stderr,
+                )
+                return 127, "", ""
         tree = OwnedProcessTree(
             ProcessTreeRoot(
                 process.pid,
@@ -196,7 +222,7 @@ class ProcessSupervisor:
                 preexisting_child_identities,
             )
         )
-        events, readers, capture = self._start_readers(
+        events, readers, capture = _start_readers(
             process, stdout_pipe, stderr_pipe, policy.stdout_handler
         )
         run = _ProcessRun(
@@ -206,78 +232,35 @@ class ProcessSupervisor:
             events,
             readers,
             capture,
+            windows_job,
         )
-        return self._monitor_process(run)
-
-    @staticmethod
-    def _start_process(
-        request: CommandRequest,
-        stdout_pipe: bool,
-        stderr_pipe: bool,
-    ) -> subprocess.Popen[str]:
-        """Start one command in a private process group with selected pipes."""
-        return subprocess.Popen(
-            request.command,
-            cwd=request.cwd,
-            env=request.environment,
-            stdin=None,
-            stdout=subprocess.PIPE if stdout_pipe else None,
-            stderr=subprocess.PIPE if stderr_pipe else None,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            close_fds=True,
-            **_process_group_arguments(),
-        )
-
-    @staticmethod
-    def _start_readers(
-        process: subprocess.Popen[str],
-        stdout_pipe: bool,
-        stderr_pipe: bool,
-        stdout_handler: typ.Callable[[str], None] | None,
-    ) -> tuple[
-        queue.Queue[tuple[str, str | object]],
-        list[threading.Thread],
-        StreamCapture,
-    ]:
-        """Read piped child streams concurrently so monitoring remains bounded."""
-        events: queue.Queue[tuple[str, str | object]] = queue.Queue()
-        readers: list[threading.Thread] = []
-        expected_streams = set(_piped_stream_names(stdout_pipe, stderr_pipe))
-        for stream_name in expected_streams:
-            stream = process.stdout if stream_name == "stdout" else process.stderr
-            if stream is None:
-                continue
-            reader = threading.Thread(
-                target=_read_stream,
-                args=(stream_name, stream, events),
-                name=f"test-runner-{stream_name}-{process.pid}",
-                daemon=True,
-            )
-            reader.start()
-            readers.append(reader)
-        return events, readers, StreamCapture(expected_streams, stdout_handler)
+        try:
+            return self._monitor_process(run)
+        finally:
+            if windows_job is not None:
+                windows_job.close()
 
     def _monitor_process(self, run: _ProcessRun) -> tuple[int, str, str]:
         """Coordinate output, deadline checks, diagnostics, and final status."""
         next_watch = time.monotonic() + self.watch_interval_seconds
         next_tree_refresh = time.monotonic() + _PROCESS_TREE_REFRESH_SECONDS
         exit_status: int | None = None
+        snapshot = run.tree.refresh()
         while True:
             _drain_events(run.events, run.capture)
             return_status = run.process.poll()
             now = time.monotonic()
             if return_status is not None or now >= next_tree_refresh:
-                run.tree.refresh()
+                snapshot = run.tree.refresh()
                 next_tree_refresh = now + _PROCESS_TREE_REFRESH_SECONDS
             run.tree.reap_adopted()
             terminal_reason = self._terminal_reason(
-                run.tree, run.process, return_status
+                snapshot, run.process, return_status, run.windows_job
             )
             if terminal_reason is not None:
-                self._emit_diagnostics(run.tree, run.request, terminal_reason)
-                self._terminate_tree(run.tree, run.process)
+                snapshot = run.tree.refresh()
+                self._emit_diagnostics(snapshot, run.request, terminal_reason)
+                self._terminate_tree(run.tree, run.process, run.windows_job)
                 _drain_after_cleanup(
                     run.events,
                     run.capture,
@@ -291,8 +274,9 @@ class ProcessSupervisor:
                 exit_status = _normal_exit_status(return_status)
                 break
             if now >= next_watch:
+                snapshot = run.tree.refresh()
                 self._emit_diagnostics(
-                    run.tree,
+                    snapshot,
                     run.request,
                     f"still running ({run.request.purpose})",
                 )
@@ -309,9 +293,10 @@ class ProcessSupervisor:
 
     def _terminal_reason(
         self,
-        tree: OwnedProcessTree,
+        snapshot: ProcessTreeSnapshot,
         process: subprocess.Popen[str],
         return_status: int | None,
+        windows_job: WindowsProcessJob | None = None,
     ) -> str | None:
         """Set the terminal status for signals, deadline, or leaked descendants."""
         if self.terminal_status is not None:
@@ -325,7 +310,12 @@ class ProcessSupervisor:
             self.terminal_status = _TIMEOUT_EXIT
             self.terminal_reason = "timed out"
             return self.terminal_reason
-        if return_status is not None and tree.descendants(refresh=False):
+        has_windows_descendants = bool(
+            windows_job is not None and (windows_job.active_processes() or 0) > 0
+        )
+        if return_status is not None and (
+            snapshot.descendants() or has_windows_descendants
+        ):
             self.terminal_status = _CLEANUP_EXIT
             self.terminal_reason = "command exited while owned descendants remained"
             return self.terminal_reason
@@ -347,14 +337,14 @@ class ProcessSupervisor:
 
     def _emit_diagnostics(
         self,
-        tree: OwnedProcessTree,
+        snapshot: ProcessTreeSnapshot,
         request: CommandRequest,
         reason: str,
     ) -> None:
         """Write the process and known-lock report before cleanup begins."""
         try:
             report_context = StallReportContext(
-                tree=tree,
+                process_snapshot=snapshot,
                 command=tuple(request.command),
                 cwd=request.cwd,
                 environment=request.environment,
@@ -376,9 +366,23 @@ class ProcessSupervisor:
             pass
 
     @staticmethod
-    def _terminate_tree(tree: OwnedProcessTree, process: subprocess.Popen[str]) -> None:
+    def _terminate_tree(
+        tree: OwnedProcessTree,
+        process: subprocess.Popen[str],
+        windows_job: WindowsProcessJob | None = None,
+    ) -> None:
         """Clean only the current process tree and report any failed reap."""
-        if not tree.terminate(process):
+        if windows_job is None:
+            reaped = tree.terminate(process)
+        else:
+            windows_job.terminate()
+            try:
+                process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=2.0)
+            reaped = windows_job.active_processes() == 0
+        if not reaped:
             print(
                 "test runner: cleanup did not reap the complete owned process tree",
                 file=sys.stderr,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import queue
 import subprocess
 import threading
@@ -98,11 +99,66 @@ def join_readers(readers: list[threading.Thread]) -> None:
         reader.join(timeout=1.0)
 
 
-def process_group_arguments() -> dict[str, int | bool]:
-    """Create a private process group for descendants launched by this runner."""
+def process_group_arguments(*, suspended: bool = False) -> dict[str, int | bool]:
+    """Create a private process group and optionally suspend its first process."""
     if os.name == "posix":
         return {"start_new_session": True}
-    return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+    flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    if suspended:
+        flags |= getattr(subprocess, "CREATE_SUSPENDED", 0)
+    return {"creationflags": flags}
+
+
+def start_process(
+    command: list[str],
+    cwd: pathlib.Path,
+    environment: dict[str, str],
+    stdout_pipe: bool,
+    stderr_pipe: bool,
+    *,
+    suspended: bool = False,
+) -> subprocess.Popen[str]:
+    """Launch one command in a private process group with selected pipes."""
+    return subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=environment,
+        stdin=None,
+        stdout=subprocess.PIPE if stdout_pipe else None,
+        stderr=subprocess.PIPE if stderr_pipe else None,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        close_fds=True,
+        **process_group_arguments(suspended=suspended),
+    )
+
+
+def start_readers(
+    process: subprocess.Popen[str],
+    stdout_pipe: bool,
+    stderr_pipe: bool,
+    stdout_handler: typ.Callable[[str], None] | None,
+) -> tuple[
+    queue.Queue[tuple[str, str | object]], list[threading.Thread], StreamCapture
+]:
+    """Read piped child streams concurrently so monitoring remains bounded."""
+    events: queue.Queue[tuple[str, str | object]] = queue.Queue()
+    readers: list[threading.Thread] = []
+    expected_streams = set(piped_stream_names(stdout_pipe, stderr_pipe))
+    for stream_name in expected_streams:
+        stream = process.stdout if stream_name == "stdout" else process.stderr
+        if stream is None:
+            continue
+        reader = threading.Thread(
+            target=read_stream,
+            args=(stream_name, stream, events),
+            name=f"test-runner-{stream_name}-{process.pid}",
+            daemon=True,
+        )
+        reader.start()
+        readers.append(reader)
+    return events, readers, StreamCapture(expected_streams, stdout_handler)
 
 
 def normal_exit_status(return_code: int) -> int:

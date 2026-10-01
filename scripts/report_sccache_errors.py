@@ -63,13 +63,15 @@ _WRITE_FAILURE = re.compile(
     re.IGNORECASE,
 )
 _STARTUP_PROBE = re.compile(r"\.sccache_check\b")
+# This embeds only the fixed module-level _ERROR pattern, never log input.
 _ERROR_LINE = re.compile(rf"(?im)^[^\r\n]*(?:{_ERROR.pattern})[^\r\n]*$")
 
 
 def _environment_secrets(environment: Mapping[str, str]) -> tuple[str, ...]:
     """Return non-empty values from environment variables named as secrets."""
     secret_name = re.compile(
-        r"(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH|API[_-]?KEY|ACCESS[_-]?KEY)$",
+        r"(?:TOKEN|SECRET|PASSWORD|CREDENTIALS?(?:_FILE)?|AUTH(?:_CONFIG|_SOCK)?|"
+        r"API[_-]?KEY|ACCESS[_-]?KEY(?:[_-]?ID)?|SIGNATURE|SAS)$",
         re.IGNORECASE,
     )
     return tuple(
@@ -100,12 +102,12 @@ def _sanitize_line(line: str, secrets: Iterable[str]) -> str:
     """Remove credentials, URLs and control sequences from one log line."""
     safe = _ANSI.sub("", line)
     safe = _CONTROL.sub("?", safe)
+    for secret in secrets:
+        safe = safe.replace(secret, "<redacted>")
     safe = _URL.sub(_redact_url, safe)
     safe = _BEARER.sub(r"\1 <redacted>", safe)
     safe = _SECRET_FIELD.sub(r"\1<redacted>", safe)
     safe = _GITHUB_TOKEN.sub("<redacted>", safe)
-    for secret in secrets:
-        safe = safe.replace(secret, "<redacted>")
     return safe[:MAX_LINE_LENGTH]
 
 
@@ -136,14 +138,33 @@ def _preceding_line_start(text: str, line_start: int, preceding: int) -> int:
 
 
 def _first_write_failure_start(log_text: str) -> int | None:
-    """Find the first non-probe line that describes a backend write failure."""
+    """Find the first non-probe error line describing a backend write failure."""
     for match in _WRITE_FAILURE.finditer(log_text):
         line_start = log_text.rfind("\n", 0, match.start()) + 1
         line_end = log_text.find("\n", match.end())
         line = log_text[line_start : line_end if line_end >= 0 else len(log_text)]
-        if not _STARTUP_PROBE.search(line):
+        if _ERROR.search(line) and not _STARTUP_PROBE.search(line):
             return line_start
     return None
+
+
+def _write_failure_lines(
+    log_text: str, start: int = 0, end: int | None = None
+) -> list[tuple[int, str]]:
+    """Return bounded, non-probe lines that describe backend write failures."""
+    selected_end = len(log_text) if end is None else end
+    lines: dict[int, str] = {}
+    for match in _WRITE_FAILURE.finditer(log_text, start, selected_end):
+        line_start = log_text.rfind("\n", 0, match.start()) + 1
+        if line_start in lines:
+            continue
+        line_end = log_text.find("\n", match.end(), selected_end)
+        line = log_text[line_start : line_end if line_end >= 0 else selected_end]
+        if not _STARTUP_PROBE.search(line):
+            lines[line_start] = line
+        if len(lines) >= MAX_DIAGNOSTIC_LINES:
+            break
+    return list(lines.items())
 
 
 def _error_lines(
@@ -166,25 +187,38 @@ def _error_lines(
 def _nearby_error_lines(
     log_text: str,
     first_write_start: int | None,
-    error_lines: list[tuple[int, str]],
+    diagnostic_lines: list[tuple[int, str]],
 ) -> list[tuple[int, str]]:
-    """Return error lines near the first write failure or first reported error."""
+    """Return diagnostics near the first write failure or reported error."""
     nearby_start, nearby_end = _line_window(
         log_text,
-        first_write_start if first_write_start is not None else error_lines[0][0],
+        first_write_start if first_write_start is not None else diagnostic_lines[0][0],
         preceding=2 if first_write_start is not None else 0,
         following=4,
     )
-    return _error_lines(log_text, nearby_start, nearby_end)
+    return _combined_diagnostic_lines(
+        _error_lines(log_text, nearby_start, nearby_end),
+        _write_failure_lines(log_text, nearby_start, nearby_end),
+    )
+
+
+def _combined_diagnostic_lines(
+    *groups: list[tuple[int, str]],
+) -> list[tuple[int, str]]:
+    """Merge diagnostic groups by source offset without duplicate lines."""
+    by_offset = {offset: line for group in groups for offset, line in group}
+    return sorted(by_offset.items())
 
 
 def _prioritize_error_lines(
-    nearby: list[tuple[int, str]], all_errors: list[tuple[int, str]]
+    nearby: list[tuple[int, str]],
+    write_failures: list[tuple[int, str]],
+    all_errors: list[tuple[int, str]],
 ) -> tuple[str, ...]:
-    """Prefer nearby context, then fill the bounded result from other errors."""
+    """Prefer backend failures, then nearby context and other error lines."""
     selected: list[str] = []
     selected_offsets: set[int] = set()
-    for group in (nearby, all_errors):
+    for group in (write_failures, nearby, all_errors):
         for offset, line in group:
             if offset in selected_offsets:
                 continue
@@ -207,11 +241,13 @@ def sanitize_error_log(
     secrets = tuple(value for value in secret_values if value)
     first_write_start = _first_write_failure_start(log_text)
     error_lines = _error_lines(log_text)
-    if not error_lines:
+    write_failure_lines = _write_failure_lines(log_text)
+    all_diagnostics = _combined_diagnostic_lines(error_lines, write_failure_lines)
+    if not all_diagnostics:
         return ()
 
-    nearby = _nearby_error_lines(log_text, first_write_start, error_lines)
-    selected = _prioritize_error_lines(nearby, error_lines)
+    nearby = _nearby_error_lines(log_text, first_write_start, all_diagnostics)
+    selected = _prioritize_error_lines(nearby, write_failure_lines, error_lines)
     return tuple(_sanitize_line(line, secrets) for line in selected)
 
 

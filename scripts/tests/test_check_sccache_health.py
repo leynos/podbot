@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import types
 import typing as typ
 from pathlib import Path
@@ -26,6 +27,7 @@ def checker() -> types.ModuleType:
         message = "could not load the sccache health checker"
         raise ImportError(message)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -150,7 +152,7 @@ def test_the_exit_status_follows_the_assessment(
 
 
 def test_the_cache_write_count_is_reported(
-    checker: typ.Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    checker: types.ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The lane log exposes successful stores without weakening the gate."""
     statistics = tmp_path / "sccache-stats.json"
@@ -161,7 +163,7 @@ def test_the_cache_write_count_is_reported(
 
 
 def test_malformed_stats_use_the_same_empty_mapping_for_output_and_assessment(
-    checker: typ.Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    checker: types.ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A malformed stats value reports zero writes and still fails strictly."""
     statistics = tmp_path / "sccache-stats.json"
