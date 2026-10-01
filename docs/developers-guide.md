@@ -54,11 +54,21 @@ cleans only its own descendants, never kills unrelated processes, and never
 deletes cache locks. On bounded failure, it reports lock and process
 diagnostics.
 
+`OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
+returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that
+captured state; they perform no further I/O or mutation.
+
+When `RUSTC_WRAPPER` names sccache, `scripts/test_runner.py` best-effort runs
+the configured wrapper with `--start-server` before entering
+`ProcessSupervisor`, keeping the daemon outside its owned-child tree. A missing
+or unresponsive wrapper does not fail the run.
+
 `TestRunnerContext` carries the Cargo command, working directory, environment,
-and supervisor for one runner invocation. Use it only between
-`scripts/test_runner.py` and `scripts/test_runner_cargo.py`; the test plan owns
-target and feature selection. Do not retain the context between invocations or
-expose it to application code.
+and supervisor for one runner invocation. Its runner consumers are
+`scripts/test_runner.py`, `scripts/test_runner_cargo.py`, `run_test_plan`,
+`_run_cargo_test`, `run_nested_target`, and `_run_json_build`; the test plan
+owns target and feature selection. Do not retain the context between
+invocations or expose it to application code.
 
 `CommandRequest` carries one child command from a runner phase to the
 supervisor. `StreamCapture` and `ProcessTreeRoot` stay within process I/O and
@@ -761,11 +771,11 @@ This confirms that library consumers who depend on podbot with
 unconditional imports of CLI types. The full feature matrix tested during
 development is:
 
-| Command                             | What it verifies                            |
-| ----------------------------------- | ------------------------------------------- |
-| `cargo check --no-default-features` | Library compiles without CLI                |
-| `cargo check --all-features`        | Everything compiles together                |
-| `make test`                         | All workspace tests pass (default features) |
+| Command                             | What it verifies                                              |
+| ----------------------------------- | ------------------------------------------------------------- |
+| `cargo check --no-default-features` | Library compiles without CLI                                  |
+| `cargo check --all-features`        | Everything compiles together                                  |
+| `make test`                         | Supervised runner; defaults to `--all-targets --all-features` |
 
 ### 10.4. Feature gate maintenance
 
@@ -1790,27 +1800,39 @@ the action, either caller workflow, the workflow itself or
 `check_sccache_health.py` changes, and costs one hosted job of about a minute
 per status.
 
-### 20.1. Running the contracts
+### 20.1. sccache diagnostic logs
+
+Both workflows supply `SCCACHE_LOG=debug` and a job-temporary
+`SCCACHE_ERROR_LOG` path to `setup-rust` before it starts sccache. The shared
+cache-reader composite runs after coverage with
+`if: always()`. The separate `scripts/report_sccache_errors.py` step also has
+`if: always()` and `continue-on-error: true`, so it prints a bounded, sanitized
+report on both successful and failed jobs without changing the job result.
+Neither workflow uploads the raw log.
+
+### 20.2. Running the contracts
 
 ```bash
 make workflow-contracts
 ```
 
-The target runs four things over the reader modules and their tests: a Ruff
-format check, a Ruff lint pass, the contract tests themselves, and the modules'
-doctests, which `--doctest-modules` collects so a documented example is
-executed rather than merely read. It is part of `make all`, and CI runs it as
-an unguarded step whose `run:` is asserted to be exactly this command.
+The target formats and lints the registered `WORKFLOW_PY_SRCS` inventory. It
+derives `WORKFLOW_PY_TESTS` from test files in that inventory and
+`WORKFLOW_PY_DOCTESTS` from the remaining source modules, excluding
+`conftest.py`. Pytest runs the registered tests and collects doctests from the
+registered modules, so documented examples are executed. The target is part of
+`make all`, and CI runs it as an unguarded step whose `run:` is asserted to be
+exactly this command.
 
 Ruff runs `--isolated` at a pinned version, so these files are checked the same
-way wherever the target is invoked. The target needs Python 3.14 and `pytest`,
-both supplied by `uv` at the pinned versions named in the Makefile, together
-with the pinned `hypothesis` (`HYPOTHESIS_VERSION`). Both pytest invocations
-install it, because `scripts/tests/test_workflow_condition_properties.py` runs
-a property-based test of `scripts/workflow_condition.py` that compares
-`evaluate` with an independent model over generated condition trees.
+way wherever the target is invoked. The target uses Python 3.14, `pytest`,
+PyYAML, and Hypothesis, supplied by `uv` at the pinned versions named in the
+Makefile. Both pytest invocations install Hypothesis because
+`scripts/tests/test_workflow_condition_properties.py` uses it to compare
+`scripts/workflow_condition.py`'s `evaluate` with an independent model over
+generated condition trees.
 
-### 20.2. `of_type`, and why it is shared
+### 20.3. `of_type`, and why it is shared
 
 `of_type(value, kind)` returns `value` when it has the expected shape and an
 empty instance of `kind` otherwise. The four reader modules listed in section
