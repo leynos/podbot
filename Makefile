@@ -55,6 +55,9 @@ WORKFLOW_PY_SRCS := \
 	scripts/test_runner_subreaper.py \
 	scripts/test_runner_target_arguments.py \
 	scripts/test_runner_supervise.py \
+	scripts/test_runner_process_snapshot.py \
+	scripts/test_runner_windows_process.py \
+	scripts/test_runner_sccache.py \
 	scripts/test_runner_commands.py \
 	scripts/test_runner_diagnostics.py scripts/test_runner_process_io.py \
 	scripts/test_runner_process_tree.py \
@@ -72,11 +75,18 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_runner_placement_rule.py \
 	scripts/tests/test_runner_fixtures.py \
 	scripts/tests/test_test_runner_selection.py \
+	scripts/tests/test_test_runner_target_selection.py \
+	scripts/tests/test_test_runner_options.py \
+	scripts/tests/test_test_runner_registry.py \
 	scripts/tests/test_test_runner_plan.py \
 	scripts/tests/test_test_runner_cargo_validation.py \
 	scripts/tests/test_test_runner_nested_output.py \
 	scripts/tests/test_test_runner_cargo.py \
 	scripts/tests/test_test_runner_execution.py \
+	scripts/tests/test_test_runner_nested_execution.py \
+	scripts/tests/test_test_runner_failure_policy.py \
+	scripts/tests/test_test_runner_properties.py \
+	scripts/tests/test_test_runner_sccache.py \
 	scripts/tests/test_test_runner_process_tree.py \
 	scripts/tests/test_test_runner_supervise.py \
 	scripts/tests/test_test_runner_supervisor.py \
@@ -84,7 +94,8 @@ WORKFLOW_PY_SRCS := \
 WORKFLOW_PY_TESTS := $(filter scripts/tests/test_%,$(WORKFLOW_PY_SRCS))
 WORKFLOW_PY_DOCTESTS := $(filter-out $(WORKFLOW_PY_TESTS) scripts/tests/conftest.py,$(WORKFLOW_PY_SRCS))
 WORKFLOW_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
-	--with pytest==9.0.2 --with pyyaml==6.0.3 python -m pytest
+	--with pytest==9.0.2 --with pyyaml==6.0.3 \
+	--with hypothesis==$(HYPOTHESIS_VERSION) python -m pytest
 
 build: target/debug/$(TARGET) ## Build debug binary
 release: target/release/$(TARGET) ## Build release binary

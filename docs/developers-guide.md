@@ -54,11 +54,21 @@ cleans only its own descendants, never kills unrelated processes, and never
 deletes cache locks. On bounded failure, it reports lock and process
 diagnostics.
 
+`OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
+returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that
+captured state; they perform no further I/O or mutation.
+
+When `RUSTC_WRAPPER` names sccache, `scripts/test_runner.py` best-effort runs
+the configured wrapper with `--start-server` before entering
+`ProcessSupervisor`, keeping the daemon outside its owned-child tree. A missing
+or unresponsive wrapper does not fail the run.
+
 `TestRunnerContext` carries the Cargo command, working directory, environment,
-and supervisor for one runner invocation. Use it only between
-`scripts/test_runner.py` and `scripts/test_runner_cargo.py`; the test plan owns
-target and feature selection. Do not retain the context between invocations or
-expose it to application code.
+and supervisor for one runner invocation. Its runner consumers are
+`scripts/test_runner.py`, `scripts/test_runner_cargo.py`, `run_test_plan`,
+`_run_cargo_test`, `run_nested_target`, and `_run_json_build`; the test plan
+owns target and feature selection. Do not retain the context between
+invocations or expose it to application code.
 
 `CommandRequest` carries one child command from a runner phase to the
 supervisor. `StreamCapture` and `ProcessTreeRoot` stay within process I/O and
@@ -761,11 +771,11 @@ This confirms that library consumers who depend on podbot with
 unconditional imports of CLI types. The full feature matrix tested during
 development is:
 
-| Command                             | What it verifies                            |
-| ----------------------------------- | ------------------------------------------- |
-| `cargo check --no-default-features` | Library compiles without CLI                |
-| `cargo check --all-features`        | Everything compiles together                |
-| `make test`                         | All workspace tests pass (default features) |
+| Command                             | What it verifies                                              |
+| ----------------------------------- | ------------------------------------------------------------- |
+| `cargo check --no-default-features` | Library compiles without CLI                                  |
+| `cargo check --all-features`        | Everything compiles together                                  |
+| `make test`                         | Supervised runner; defaults to `--all-targets --all-features` |
 
 ### 10.4. Feature gate maintenance
 
@@ -1751,7 +1761,15 @@ visible. Any other status, including the empty one an older pin gives, still
 runs the check. `scripts/tests/test_sccache_fallback_contract.py` holds the
 step id, the guard and the notice to both workflows.
 
-### 20.1. Running the contracts
+### 20.1. sccache diagnostic logs
+
+Both workflows persist `SCCACHE_LOG=debug` and `SCCACHE_ERROR_LOG` through
+`GITHUB_ENV` before `setup-rust` starts sccache. After the cache health check,
+an `if: always()` step runs `scripts/report_sccache_errors.py` with
+`continue-on-error: true`. It prints a bounded, sanitized report; neither
+workflow uploads the raw log.
+
+### 20.2. Running the contracts
 
 ```bash
 make workflow-contracts
@@ -1764,10 +1782,11 @@ executed rather than merely read. It is part of `make all`, and CI runs it as
 an unguarded step whose `run:` is asserted to be exactly this command.
 
 Ruff runs `--isolated` at a pinned version, so these files are checked the same
-way wherever the target is invoked. The target needs Python 3.14 and `pytest`,
-both supplied by `uv` at the pinned versions named in the Makefile.
+way wherever the target is invoked. The target uses Python 3.14 and `pytest`,
+PyYAML, and Hypothesis, supplied by `uv` at the pinned versions named in the
+Makefile.
 
-### 20.2. `of_type`, and why it is shared
+### 20.3. `of_type`, and why it is shared
 
 `of_type(value, kind)` returns `value` when it has the expected shape and an
 empty instance of `kind` otherwise. The four reader modules listed in section

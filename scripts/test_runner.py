@@ -28,6 +28,7 @@ from test_runner_plan import create_test_plan
 from test_runner_context import TestRunnerContext
 from test_runner_phases import run_test_plan
 from test_runner_supervise import supervise_command
+from test_runner_sccache import start_configured_sccache
 from test_runner_supervisor import ProcessSupervisor
 
 
@@ -114,6 +115,7 @@ def _run_cargo_tests(
     cwd = pathlib.Path.cwd().resolve()
     options = parse_cargo_test_options(cargo_arguments, cwd=cwd)
     environment = os.environ.copy()
+    start_configured_sccache(environment)
     with ProcessSupervisor(
         parsed.timeout,
         parsed.watch_interval,
