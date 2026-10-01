@@ -26,6 +26,20 @@ class ProcessLaunchRequest:
     suspended: bool = False
 
 
+@dataclass(frozen=True)
+class CommandRequest:
+    """Describe one child command launched by the test-runner supervisor.
+
+    Keep argv, working directory, environment, and diagnostic purpose together
+    from the Cargo phase builder through process launch and stall reporting.
+    """
+
+    command: list[str]
+    cwd: pathlib.Path
+    environment: dict[str, str]
+    purpose: str
+
+
 @dataclass
 class StreamCapture:
     """Collect one command's selected output streams until they reach EOF."""
