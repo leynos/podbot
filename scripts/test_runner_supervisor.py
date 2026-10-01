@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from test_runner_diagnostics import StallReportContext, format_stall_report
 from test_runner_process_io import (
+    CommandRequest,
     ProcessLaunchRequest,
     StreamCapture,
     dispatch_event as _dispatch_event,
@@ -40,20 +41,6 @@ from test_runner_windows_process import WindowsProcessJob
 _TIMEOUT_EXIT = 124
 _CLEANUP_EXIT = 125
 _PROCESS_TREE_REFRESH_SECONDS = 1.0
-
-
-@dataclass(frozen=True)
-class CommandRequest:
-    """Describe one child command launched by the test-runner supervisor.
-
-    Keep argv, working directory, environment, and diagnostic purpose together
-    from the Cargo phase builder through process launch and stall reporting.
-    """
-
-    command: list[str]
-    cwd: pathlib.Path
-    environment: dict[str, str]
-    purpose: str
 
 
 @dataclass(frozen=True)
@@ -183,40 +170,11 @@ class ProcessSupervisor:
             if self.subreaper_enabled
             else frozenset()
         )
-        windows_job = WindowsProcessJob.create()
-        try:
-            process = _start_process(
-                ProcessLaunchRequest(
-                    command=request.command,
-                    cwd=request.cwd,
-                    environment=request.environment,
-                    stdout_pipe=stdout_pipe,
-                    stderr_pipe=stderr_pipe,
-                    suspended=windows_job is not None,
-                )
-            )
-        except OSError as exc:
-            if windows_job is not None:
-                windows_job.close()
-            print(
-                f"test runner: could not start {request.command[0]}: {exc}",
-                file=sys.stderr,
-            )
+        launch = self._launch_process(request, stdout_pipe, stderr_pipe)
+        if launch is None:
             return 127, "", ""
-        if windows_job is not None:
-            try:
-                if not windows_job.assign_and_resume(process._handle):
-                    windows_job.close()
-                    windows_job = None
-            except OSError as exc:
-                windows_job.close()
-                process.kill()
-                process.wait()
-                print(
-                    f"test runner: could not contain {request.command[0]}: {exc}",
-                    file=sys.stderr,
-                )
-                return 127, "", ""
+        process, windows_job = launch
+
         tree = OwnedProcessTree(
             ProcessTreeRoot(
                 process.pid,
@@ -243,6 +201,50 @@ class ProcessSupervisor:
         finally:
             if windows_job is not None:
                 windows_job.close()
+
+    def _launch_process(
+        self,
+        request: CommandRequest,
+        stdout_pipe: bool,
+        stderr_pipe: bool,
+    ) -> tuple[subprocess.Popen[str], WindowsProcessJob | None] | None:
+        """Start a child and transfer any successful Windows job to the caller."""
+        windows_job = WindowsProcessJob.create()
+        try:
+            launch_request = ProcessLaunchRequest(
+                command=request.command,
+                cwd=request.cwd,
+                environment=request.environment,
+                stdout_pipe=stdout_pipe,
+                stderr_pipe=stderr_pipe,
+                suspended=windows_job is not None,
+            )
+            process = _start_process(launch_request)
+        except OSError as exc:
+            if windows_job is not None:
+                windows_job.close()
+            print(
+                f"test runner: could not start {request.command[0]}: {exc}",
+                file=sys.stderr,
+            )
+            return None
+        if windows_job is None:
+            return process, None
+        try:
+            assigned = windows_job.assign_and_resume(process._handle)
+        except OSError as exc:
+            windows_job.close()
+            process.kill()
+            process.wait()
+            print(
+                f"test runner: could not contain {request.command[0]}: {exc}",
+                file=sys.stderr,
+            )
+            return None
+        if not assigned:
+            windows_job.close()
+            return process, None
+        return process, windows_job
 
     def _monitor_process(self, run: _ProcessRun) -> tuple[int, str, str]:
         """Coordinate output, deadline checks, diagnostics, and final status."""
