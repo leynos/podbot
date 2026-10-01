@@ -82,3 +82,29 @@ def test_the_health_check_skips_only_on_a_declared_fallback(
     assert steps.index(note[0]) == steps.index(check[0]) + 1, (
         f"{workflow}: the note must follow the check it stands in for"
     )
+
+
+@pytest.mark.parametrize("workflow", WORKFLOWS)
+def test_every_step_reading_sccache_stats_stands_down_on_a_fallback(
+    workflow: str, workflow_texts: dict[str, str]
+) -> None:
+    """Guard each `sccache --show-stats` step, not only the health check.
+
+    With the wrapper cleared and no server, a stats read would restart the
+    dead server or report zero requests and turn the declared fallback red.
+
+    Parameters
+    ----------
+    workflow : str
+        The workflow file to read.
+    workflow_texts : dict[str, str]
+        Every workflow's text, from the shared fixture.
+    """
+    steps = build_steps(workflow_texts[workflow], workflow)
+    readers = [s for s in steps if "sccache --show-stats" in str(s.get("run"))]
+    assert len(readers) == 2, f"{workflow}: expected the report and the JSON write"
+    for step in readers:
+        assert step.get("if") == RUN_GUARD, (
+            f"{workflow}: {step.get('name')!r} must stand down on a fallback, "
+            f"found {step.get('if')!r}"
+        )
