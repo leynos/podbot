@@ -14,6 +14,18 @@ from dataclasses import dataclass, field
 READ_END = object()
 
 
+@dataclass(frozen=True)
+class ProcessLaunchRequest:
+    """Group the process-I/O values needed for one child launch."""
+
+    command: list[str]
+    cwd: pathlib.Path
+    environment: dict[str, str]
+    stdout_pipe: bool
+    stderr_pipe: bool
+    suspended: bool = False
+
+
 @dataclass
 class StreamCapture:
     """Collect one command's selected output streams until they reach EOF."""
@@ -109,28 +121,20 @@ def process_group_arguments(*, suspended: bool = False) -> dict[str, int | bool]
     return {"creationflags": flags}
 
 
-def start_process(
-    command: list[str],
-    cwd: pathlib.Path,
-    environment: dict[str, str],
-    stdout_pipe: bool,
-    stderr_pipe: bool,
-    *,
-    suspended: bool = False,
-) -> subprocess.Popen[str]:
+def start_process(request: ProcessLaunchRequest) -> subprocess.Popen[str]:
     """Launch one command in a private process group with selected pipes."""
     return subprocess.Popen(
-        command,
-        cwd=cwd,
-        env=environment,
+        request.command,
+        cwd=request.cwd,
+        env=request.environment,
         stdin=None,
-        stdout=subprocess.PIPE if stdout_pipe else None,
-        stderr=subprocess.PIPE if stderr_pipe else None,
+        stdout=subprocess.PIPE if request.stdout_pipe else None,
+        stderr=subprocess.PIPE if request.stderr_pipe else None,
         text=True,
         encoding="utf-8",
         errors="replace",
         close_fds=True,
-        **process_group_arguments(suspended=suspended),
+        **process_group_arguments(suspended=request.suspended),
     )
 
 

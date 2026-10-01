@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from test_runner_diagnostics import StallReportContext, format_stall_report
 from test_runner_process_io import (
+    ProcessLaunchRequest,
     StreamCapture,
     dispatch_event as _dispatch_event,
     drain_after_cleanup as _drain_after_cleanup,
@@ -33,6 +34,7 @@ from test_runner_process_tree import (
     snapshot_direct_child_identities,
     set_child_subreaper,
 )
+from test_runner_terminal import has_leaked_descendants, signal_terminal_state
 from test_runner_windows_process import WindowsProcessJob
 
 _TIMEOUT_EXIT = 124
@@ -184,12 +186,14 @@ class ProcessSupervisor:
         windows_job = WindowsProcessJob.create()
         try:
             process = _start_process(
-                request.command,
-                request.cwd,
-                request.environment,
-                stdout_pipe,
-                stderr_pipe,
-                suspended=windows_job is not None,
+                ProcessLaunchRequest(
+                    command=request.command,
+                    cwd=request.cwd,
+                    environment=request.environment,
+                    stdout_pipe=stdout_pipe,
+                    stderr_pipe=stderr_pipe,
+                    suspended=windows_job is not None,
+                )
             )
         except OSError as exc:
             if windows_job is not None:
@@ -301,25 +305,20 @@ class ProcessSupervisor:
         """Set the terminal status for signals, deadline, or leaked descendants."""
         if self.terminal_status is not None:
             return self.terminal_reason or "supervision already stopped"
-        if self._received_signal is not None:
-            signum = self._received_signal
-            self.terminal_status = 128 + signum
-            self.terminal_reason = f"interrupted by {signal.Signals(signum).name}"
-            return self.terminal_reason
-        if time.monotonic() >= self.deadline:
-            self.terminal_status = _TIMEOUT_EXIT
-            self.terminal_reason = "timed out"
-            return self.terminal_reason
-        has_windows_descendants = bool(
-            windows_job is not None and (windows_job.active_processes() or 0) > 0
-        )
-        if return_status is not None and (
-            snapshot.descendants() or has_windows_descendants
+        terminal_state = signal_terminal_state(self._received_signal)
+        if terminal_state is None and time.monotonic() >= self.deadline:
+            terminal_state = (_TIMEOUT_EXIT, "timed out")
+        if terminal_state is None and has_leaked_descendants(
+            snapshot, return_status, windows_job
         ):
-            self.terminal_status = _CLEANUP_EXIT
-            self.terminal_reason = "command exited while owned descendants remained"
-            return self.terminal_reason
-        return None
+            terminal_state = (
+                _CLEANUP_EXIT,
+                "command exited while owned descendants remained",
+            )
+        if terminal_state is None:
+            return None
+        self.terminal_status, self.terminal_reason = terminal_state
+        return self.terminal_reason
 
     def _wait_for_event(
         self,
