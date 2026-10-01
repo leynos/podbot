@@ -31,6 +31,7 @@ SHARED_ACTIONS: typ.Final[list[tuple[str, str]]] = [
     ("audit.yml", "setup-rust"),
     ("ci.yml", "setup-rust"),
     ("ci.yml", "install-mdtablefix"),
+    ("ci.yml", "install-whitaker"),
     ("ci.yml", "generate-coverage"),
     ("coverage-main.yml", "setup-rust"),
     ("coverage-main.yml", "generate-coverage"),
@@ -72,7 +73,7 @@ CEILINGS: typ.Final[list[tuple[str, str, object]]] = [
 def test_every_shared_actions_reference_is_found(
     workflow_texts: dict[str, str],
 ) -> None:
-    """All eight, including the job-level reusable-workflow call."""
+    """All nine, including the job-level reusable-workflow call."""
     found = [
         (reference.workflow, reference.path.rsplit("/", 1)[-1])
         for reference in shared_actions_references(workflow_texts)
