@@ -56,7 +56,11 @@ diagnostics.
 
 `OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
 returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that
-captured state; they perform no further I/O or mutation.
+captured state; they perform no further I/O or mutation. The private
+`test_runner_terminal.py` module owns the pure `signal_terminal_state()` and
+`has_leaked_descendants()` predicates used by `ProcessSupervisor`. The
+supervisor retains signal-before-deadline-before-descendant-cleanup precedence
+when combining them.
 
 When `RUSTC_WRAPPER` names sccache, `scripts/test_runner.py` best-effort runs
 the configured wrapper with `--start-server` before entering
@@ -73,6 +77,10 @@ invocations or expose it to application code.
 `CommandRequest` carries one child command from a runner phase to the
 supervisor. `StreamCapture` and `ProcessTreeRoot` stay within process I/O and
 cleanup; `StallReportContext` represents one diagnostic snapshot.
+`ProcessLaunchRequest` is a lower-level immutable record grouping only one
+launch's argv, cwd, environment, stdout/stderr pipe choices, and suspended flag.
+`ProcessSupervisor` constructs it for each launch; keep it specific to Popen
+inputs, not as a general command/request abstraction.
 `test_runner_subreaper.py` owns the Linux process-wide child-subreaper
 controls; use them only to scope orphan adoption to supervised test cleanup.
 `TargetArgumentContext` is local to `test_runner_target_arguments.py`, which
