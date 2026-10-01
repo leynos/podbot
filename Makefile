@@ -56,6 +56,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/test_runner_target_arguments.py \
 	scripts/test_runner_supervise.py \
 	scripts/test_runner_process_snapshot.py \
+	scripts/test_runner_terminal.py \
 	scripts/test_runner_windows_process.py \
 	scripts/test_runner_sccache.py \
 	scripts/test_runner_commands.py \
@@ -90,6 +91,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_test_runner_process_tree.py \
 	scripts/tests/test_test_runner_supervise.py \
 	scripts/tests/test_test_runner_supervisor.py \
+	scripts/tests/test_test_runner_supervisor_terminal.py \
 	scripts/tests/test_sccache_fallback_contract.py
 WORKFLOW_PY_TESTS := $(filter scripts/tests/test_%,$(WORKFLOW_PY_SRCS))
 WORKFLOW_PY_DOCTESTS := $(filter-out $(WORKFLOW_PY_TESTS) scripts/tests/conftest.py,$(WORKFLOW_PY_SRCS))
