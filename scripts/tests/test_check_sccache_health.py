@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import types
 import typing as typ
 from pathlib import Path
@@ -26,6 +27,7 @@ def checker() -> types.ModuleType:
         message = "could not load the sccache health checker"
         raise ImportError(message)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -147,6 +149,32 @@ def test_the_exit_status_follows_the_assessment(
     assert checker.main(["--expect-location", "ghac", str(statistics)]) == status
     output = capsys.readouterr().out
     assert ("::error::" in output) is (status == 1)
+
+
+def test_the_cache_write_count_is_reported(
+    checker: types.ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The lane log exposes successful stores without weakening the gate."""
+    statistics = tmp_path / "sccache-stats.json"
+    statistics.write_text(json.dumps(_document(cache_writes=7)), encoding="utf-8")
+
+    assert checker.main(["--expect-location", "ghac", str(statistics)]) == 0
+    assert capsys.readouterr().out == "sccache cache_writes=7\n"
+
+
+def test_malformed_stats_use_the_same_empty_mapping_for_output_and_assessment(
+    checker: types.ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A malformed stats value reports zero writes and still fails strictly."""
+    statistics = tmp_path / "sccache-stats.json"
+    statistics.write_text(
+        json.dumps({"cache_location": "ghac", "stats": []}), encoding="utf-8"
+    )
+
+    assert checker.main(["--expect-location", "ghac", str(statistics)]) == 1
+    output = capsys.readouterr().out
+    assert "sccache cache_writes=0" in output
+    assert "sccache handled no compile requests" in output
 
 
 def test_a_missing_file_fails(checker: typ.Any, tmp_path: Path) -> None:

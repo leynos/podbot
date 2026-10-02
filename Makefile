@@ -20,6 +20,7 @@ RUST_FLAGS ?= -D warnings
 CARGO_FLAGS ?= --all-targets --all-features
 CLIPPY_FLAGS ?= $(CARGO_FLAGS) -- $(RUST_FLAGS)
 TEST_FLAGS ?= $(CARGO_FLAGS)
+TEST_TIMEOUT ?= $(if $(PODBOT_TEST_TIMEOUT),$(PODBOT_TEST_TIMEOUT),1800)
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 WHITAKER ?= whitaker
 NIXIE ?= nixie
@@ -48,16 +49,56 @@ WORKFLOW_CONTRACTS_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
 WORKFLOW_PY_SRCS := \
 	scripts/workflow_contracts.py scripts/workflow_commands.py \
 	scripts/workflow_coverage.py scripts/workflow_placement.py \
+	scripts/test_runner.py scripts/test_runner_cargo.py \
+	scripts/test_runner_context.py \
+	scripts/test_runner_nested.py scripts/test_runner_phases.py \
+	scripts/test_runner_subreaper.py \
+	scripts/test_runner_target_arguments.py \
+	scripts/test_runner_supervise.py \
+	scripts/test_runner_process_snapshot.py \
+	scripts/test_runner_terminal.py \
+	scripts/test_runner_windows_process.py \
+	scripts/test_runner_sccache.py \
+	scripts/test_runner_commands.py \
+	scripts/test_runner_diagnostics.py scripts/test_runner_process_io.py \
+	scripts/test_runner_process_tree.py \
+	scripts/test_runner_supervisor.py \
+	scripts/test_runner_models.py scripts/test_runner_options.py \
+	scripts/test_runner_plan.py scripts/test_runner_registry.py \
+	scripts/test_runner_selection.py \
 	scripts/check_sccache_health.py scripts/tests/test_check_sccache_health.py \
+	scripts/report_sccache_errors.py \
 	scripts/tests/conftest.py scripts/tests/test_workflow_contracts.py \
 	scripts/tests/test_command_contracts.py \
 	scripts/tests/test_coverage_contracts.py \
+	scripts/tests/test_sccache_diagnostic_contracts.py \
 	scripts/tests/test_workflow_inventory.py \
 	scripts/tests/test_runner_placement_rule.py \
+	scripts/tests/test_runner_fixtures.py \
+	scripts/tests/test_test_runner_selection.py \
+	scripts/tests/test_test_runner_target_selection.py \
+	scripts/tests/test_test_runner_options.py \
+	scripts/tests/test_test_runner_registry.py \
+	scripts/tests/test_test_runner_plan.py \
+	scripts/tests/test_test_runner_cargo_validation.py \
+	scripts/tests/test_test_runner_nested_output.py \
+	scripts/tests/test_test_runner_cargo.py \
+	scripts/tests/test_test_runner_execution.py \
+	scripts/tests/test_test_runner_nested_execution.py \
+	scripts/tests/test_test_runner_failure_policy.py \
+	scripts/tests/test_test_runner_properties.py \
+	scripts/tests/test_test_runner_sccache.py \
+	scripts/tests/test_test_runner_process_tree.py \
+	scripts/tests/test_test_runner_supervise.py \
+	scripts/tests/test_test_runner_supervisor.py \
+	scripts/tests/test_test_runner_supervisor_launch.py \
+	scripts/tests/test_test_runner_supervisor_terminal.py \
 	scripts/tests/test_sccache_fallback_contract.py
 WORKFLOW_PY_TESTS := $(filter scripts/tests/test_%,$(WORKFLOW_PY_SRCS))
+WORKFLOW_PY_DOCTESTS := $(filter-out $(WORKFLOW_PY_TESTS) scripts/tests/conftest.py,$(WORKFLOW_PY_SRCS))
 WORKFLOW_PYTEST = $(UV_ENV) $(UV) run --no-project --python 3.14 \
-	--with pytest==9.0.2 --with pyyaml==6.0.3 python -m pytest
+	--with pytest==9.0.2 --with pyyaml==6.0.3 \
+	--with hypothesis==$(HYPOTHESIS_VERSION) python -m pytest
 
 build: target/debug/$(TARGET) ## Build debug binary
 release: target/release/$(TARGET) ## Build release binary
@@ -69,7 +110,10 @@ clean: ## Remove build artefacts
 	rm -rf .uv-cache .uv-tools
 
 test: ## Run tests with warnings treated as errors
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(TEST_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="$(RUST_FLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
+		python scripts/test_runner.py --cargo "$(CARGO)" \
+		--timeout "$(TEST_TIMEOUT)" -- \
+		$(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(TEST_FLAGS)
 
 target/%/$(TARGET): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(TARGET)
@@ -107,10 +151,7 @@ test-workflow-contracts: ## Assert what the workflow files must say
 workflow-contracts: ## Assert what the workflow files must say
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(WORKFLOW_PY_SRCS)
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(WORKFLOW_PY_SRCS)
-	@$(WORKFLOW_PYTEST) $(WORKFLOW_PY_TESTS) \
-		scripts/workflow_contracts.py scripts/workflow_commands.py \
-		scripts/workflow_coverage.py scripts/workflow_placement.py \
-		scripts/check_sccache_health.py \
+	@$(WORKFLOW_PYTEST) $(WORKFLOW_PY_TESTS) $(WORKFLOW_PY_DOCTESTS) \
 		--doctest-modules \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 

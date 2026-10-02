@@ -8,9 +8,9 @@ made sccache work is only observable through its counters.
 
 from __future__ import annotations
 
+import pytest
 import typing as typ
 
-import pytest
 from workflow_contracts import of_type
 from workflow_contracts import parse as parse_workflow
 from workflow_coverage import (

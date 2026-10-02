@@ -25,7 +25,7 @@ All quality gates must pass before committing. The canonical targets are:
 | `make check-fmt`    | `cargo fmt --workspace -- --check`, then `mdtablefix --check`               | Verify Rust and Markdown formatting                                |
 | `make fmt`          | `cargo fmt --workspace`, `mdtablefix --in-place`, `markdownlint-cli2 --fix` | Apply Rust and Markdown formatting fixes                           |
 | `make lint`         | `cargo clippy --workspace --all-targets --all-features -- -D warnings`      | Lint with all warnings denied                                      |
-| `make test`         | `cargo test --workspace`                                                    | Run full test suite                                                |
+| `make test`         | `uv run --no-project --python 3.14 python scripts/test_runner.py`           | Run the full test suite through the supervised runner              |
 | `make typecheck`    | `cargo check --workspace --all-targets --all-features`                      | Type-check the workspace                                           |
 | `make audit`        | `cargo metadata --no-deps --format-version 1 \| python3 -c ...`             | Derive workspace root with `python3`; run `cargo audit` once there |
 | `make markdownlint` | markdownlint-cli                                                            | Validate Markdown files                                            |
@@ -44,6 +44,145 @@ advisory. Podbot does not use SQLx or MySQL at runtime; the advisory enters the
 graph through tooling dependencies rather than an application database path.
 Keep the ignore scoped to `RUSTSEC-2023-0071`, and remove it if SQLx leaves the
 tool dependency graph or if Podbot adds a MySQL runtime integration.
+
+### 2.2. Private Cargo test-runner process supervision
+
+The private process supervisor owns only the subprocess tree launched by one
+`scripts/test_runner.py` invocation. Reuse it only for metadata and Cargo
+phases and direct test harnesses; it is not a general process manager. It
+cleans only its own descendants, never kills unrelated processes, and never
+deletes cache locks. On bounded failure, it reports lock and process
+diagnostics.
+
+`OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
+returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that
+captured state; they perform no further I/O or mutation. The private
+`test_runner_terminal.py` module owns the pure `signal_terminal_state()` and
+`has_leaked_descendants()` predicates used by `ProcessSupervisor`. The
+supervisor retains signal-before-deadline-before-descendant-cleanup precedence
+when combining them.
+
+When `RUSTC_WRAPPER` names sccache, `scripts/test_runner.py` best-effort runs
+the configured wrapper with `--start-server` before entering
+`ProcessSupervisor`, keeping the daemon outside its owned-child tree. A missing
+or unresponsive wrapper does not fail the run.
+
+`TestRunnerContext` carries the Cargo command, working directory, environment,
+and supervisor for one runner invocation. Its runner consumers are
+`scripts/test_runner.py`, `scripts/test_runner_cargo.py`, `run_test_plan`,
+`_run_cargo_test`, `run_nested_target`, and `_run_json_build`; the test plan
+owns target and feature selection. Do not retain the context between
+invocations or expose it to application code.
+
+`CommandRequest` carries one child command from a runner phase to the
+supervisor. `StreamCapture` and `ProcessTreeRoot` stay within process I/O and
+cleanup; `StallReportContext` represents one diagnostic snapshot.
+`ProcessLaunchRequest` is a lower-level immutable record grouping only one
+launch's argv, cwd, environment, stdout/stderr pipe choices, and suspended flag.
+`ProcessSupervisor` constructs it for each launch; keep it specific to Popen
+inputs, not as a general command/request abstraction.
+`test_runner_subreaper.py` owns the Linux process-wide child-subreaper
+controls; use them only to scope orphan adoption to supervised test cleanup.
+`TargetArgumentContext` is local to `test_runner_target_arguments.py`, which
+expands Cargo selectors after target selection. `_CargoOptionToken` is local to
+Cargo option parsing. `test_runner_phases.py` sequences ordinary tests,
+doctests, and nested targets; its fail-fast loop serves only ordinary package
+and registered nested-target phases, while filter helpers serve the ordinary
+and compile-only Cargo commands. `test_runner_nested.py` owns the JSON build
+and direct launch for registered nested-Cargo targets. Its `run_nested_target`
+entry point is called only by the phase orchestrator. These records and module
+interfaces have no application call sites.
+
+### 2.3. Supported test orchestration
+
+Use `make test` for the supported test path. Its default `TEST_FLAGS` are
+`--all-targets --all-features`; set `TEST_FLAGS` to choose another supported
+feature or target selection. The Make target forwards `RUST_FLAGS` as
+`RUSTFLAGS` (defaulting to `-D warnings`) and forwards `BUILD_JOBS` to Cargo.
+The runner invokes Python through `uv run --no-project --python 3.14`.
+
+The runner executes ordinary Cargo test phases first. It separately builds
+registered trybuild targets (`cli_feature_gating` and `compile_contract`) with
+Cargo's `--no-run` mode, waits for that Cargo process to exit, then executes
+the exact harness artefact. This keeps nested-Cargo work outside the lifetime
+of the parent build process, including the no-default-features CLI boundary
+test. Doctests remain a separate phase, and empty phases are reported as
+skipped.
+
+Default and plural target selection respects each target's `required-features`
+against the package defaults and requested feature flags. Explicitly named
+targets retain Cargo's own missing-feature error. Feature resolution is private
+to the runner's target-selection module and does not change dependency feature
+resolution.
+
+Within that traversal, the private package-local activation filter is scoped to
+`_enabled_features`; it ignores `dep:` and slash-qualified dependency
+activations. Defaults and explicitly requested package features enter the
+enabled set through their existing paths.
+
+In `test_runner_cargo.py`, `_artifact_target_and_profile` is shared only by
+test-artefact selection and binary environment restoration; each caller keeps
+its own policy checks. `_set_executable_profile_environment` is called only by
+`create_test_runtime_environment`, after binary registration and before
+dynamic-library path reconstruction.
+
+In `report_sccache_errors.py`, `_preceding_line_start` is private to
+`_line_window` and owns only its backward offset scan, including the
+start-of-text boundary guard. Keep it out of diagnostic selection and
+sanitization logic.
+
+Explicit singular target selectors retain feature-gated matches so Cargo can
+report its normal error. A private selector helper applies that exception only
+within `_unique_selected_targets`; plural category selectors continue to filter
+against enabled features.
+
+The run has one bounded deadline. Set `TEST_TIMEOUT` as a Make variable, or
+`PODBOT_TEST_TIMEOUT` in the environment; the default is 1800 seconds. A
+timeout exits with status 124. An interrupt exits with 128 plus the signal
+number. Periodic and terminal diagnostics include the command, process ancestry
+and elapsed time, toolchain details, and recognized Cargo cache or target-lock
+owners and waiters. On timeout or interruption the runner cleans up and reaps
+only its owned process tree. Read the report before retrying; it distinguishes
+an owned parent/descendant lock cycle from ordinary external contention where
+the platform exposes the lock data. Let unrelated Cargo work finish before
+retrying. Do not delete Cargo lock files, use a separate `CARGO_HOME`, or
+terminate unrelated processes. These diagnostics describe the observed process
+and lock state; they do not establish a Cargo-internal cause.
+
+Use
+`uv run --no-project --python 3.14 python scripts/test_runner.py
+--supervise --timeout 180 -- <command>`
+for a bounded investigation of a legacy command that needs the same
+process-tree cleanup and lock diagnostics. This mode runs the supplied command
+directly; it does not split Cargo test phases. See
+[the issue 188 investigation](cargo-package-cache-investigation.md) for the
+bounded Rust 1.88 attempt and its limitations.
+
+### 2.4. Coverage action boundary
+
+The pull-request coverage step pins shared-actions
+[`generate-coverage` at `a5765019912a8ab6882b12db049c7cde635f3a85`](https://github.com/leynos/shared-actions/tree/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage).
+The workflow supplies `features: internal` and `use-cargo-nextest: 'false'`;
+the action's Rust runner invokes `cargo llvm-cov`. At this pin, `all-targets`
+defaults to false, and enabling it adds benches, examples, and every test
+target. `doctests` also defaults to false. Therefore the current action
+selection does not include every test target or the registered compile-contract
+target. The action remains outside the repository test runner, but its current
+selection does not run the nested compile-contract tests.
+
+The action's `RUN_RUST_CARGO_WAIT_TIMEOUT` is 1800 seconds. Its watchdog
+terminates the Cargo process it started; the pinned implementation does not
+demonstrate the repository runner's process-tree supervision. Reassess this
+boundary if the action's target selection broadens. The pinned sources are
+[`action.yml`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/action.yml),
+[`scripts/run_rust.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/run_rust.py),
+and
+[`scripts/_cargo_runner.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/_cargo_runner.py).
+
+The sccache diagnostic contract tests keep their cache-job parsing helper local
+to `test_sccache_diagnostic_contracts.py`. Only the paired setup and diagnostic
+contracts call it; it parses a selected workflow and returns its coverage job
+steps, rather than acting as a general workflow test helper.
 
 ## 3. Repository layout (exec subsystem)
 
@@ -640,11 +779,11 @@ This confirms that library consumers who depend on podbot with
 unconditional imports of CLI types. The full feature matrix tested during
 development is:
 
-| Command                             | What it verifies                            |
-| ----------------------------------- | ------------------------------------------- |
-| `cargo check --no-default-features` | Library compiles without CLI                |
-| `cargo check --all-features`        | Everything compiles together                |
-| `make test`                         | All workspace tests pass (default features) |
+| Command                             | What it verifies                                              |
+| ----------------------------------- | ------------------------------------------------------------- |
+| `cargo check --no-default-features` | Library compiles without CLI                                  |
+| `cargo check --all-features`        | Everything compiles together                                  |
+| `make test`                         | Supervised runner; defaults to `--all-targets --all-features` |
 
 ### 10.4. Feature gate maintenance
 
@@ -1630,7 +1769,15 @@ visible. Any other status, including the empty one an older pin gives, still
 runs the check. `scripts/tests/test_sccache_fallback_contract.py` holds the
 step id, the guard and the notice to both workflows.
 
-### 20.1. Running the contracts
+### 20.1. sccache diagnostic logs
+
+Both workflows persist `SCCACHE_LOG=debug` and `SCCACHE_ERROR_LOG` through
+`GITHUB_ENV` before `setup-rust` starts sccache. After the cache health check,
+an `if: always()` step runs `scripts/report_sccache_errors.py` with
+`continue-on-error: true`. It prints a bounded, sanitized report; neither
+workflow uploads the raw log.
+
+### 20.2. Running the contracts
 
 ```bash
 make workflow-contracts
@@ -1643,10 +1790,11 @@ executed rather than merely read. It is part of `make all`, and CI runs it as
 an unguarded step whose `run:` is asserted to be exactly this command.
 
 Ruff runs `--isolated` at a pinned version, so these files are checked the same
-way wherever the target is invoked. The target needs Python 3.14 and `pytest`,
-both supplied by `uv` at the pinned versions named in the Makefile.
+way wherever the target is invoked. The target uses Python 3.14 and `pytest`,
+PyYAML, and Hypothesis, supplied by `uv` at the pinned versions named in the
+Makefile.
 
-### 20.2. `of_type`, and why it is shared
+### 20.3. `of_type`, and why it is shared
 
 `of_type(value, kind)` returns `value` when it has the expected shape and an
 empty instance of `kind` otherwise. The four reader modules listed in section

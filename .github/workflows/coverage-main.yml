@@ -54,6 +54,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Configure sccache diagnostics
+        env:
+          SCCACHE_ERROR_LOG: ${{ runner.temp }}/sccache-error.log
+        run: |
+          printf 'SCCACHE_LOG=debug\n' >> "$GITHUB_ENV"
+          printf 'SCCACHE_ERROR_LOG=%s\n' "$SCCACHE_ERROR_LOG" >> "$GITHUB_ENV"
       - name: Setup Rust
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
@@ -89,6 +95,14 @@ jobs:
       - name: Note the skipped compiler cache health check
         if: always() && steps.setup-rust.outputs.sccache-status == 'fallback'
         run: echo "::notice title=sccache fallback::compiler cache health check skipped because setup-rust fell back to no cache for this job"
+      - name: Diagnose compiler-cache write errors
+        # Partial write failures are warnings, so collect the sanitized report
+        # even when the health check leaves the job green.
+        if: always()
+        continue-on-error: true
+        env:
+          SCCACHE_ERROR_LOG: ${{ runner.temp }}/sccache-error.log
+        run: python3 scripts/report_sccache_errors.py "$SCCACHE_ERROR_LOG"
       - name: Check for the CodeScene token
         # GitHub evaluates the expression before the shell starts, so this
         # step's shell receives only `true` or `false`, and the token is in
