@@ -1626,9 +1626,16 @@ raises a `sccache-fallback` annotation and sets its `sccache-status` output to
 `fallback`. The health check would then report that nothing was wrapped and
 fail a job the action had already annotated, so it skips when the `setup-rust`
 step's `sccache-status` is `fallback`, and a notice step keeps the skip
-visible. Any other status, including the empty one an older pin gives, still
-runs the check. `scripts/tests/test_sccache_fallback_contract.py` holds the
-step id, the guard and the notice to both workflows.
+visible. Every reader of `sccache --show-stats` stands down the same way: the
+cache report, the JSON write and the health check each carry the guard
+`always() && steps.setup-rust.outputs.sccache-status != 'fallback'`, so an
+uncached job prints no table of zeros and writes no `sccache-stats.json`. Any
+other status, including the empty one an older pin gives, still runs all three.
+`scripts/tests/test_sccache_fallback_contract.py` holds the step id, the guard
+on every reader and the notice to both workflows, and it evaluates each
+reader's real `if:` for a `fallback` status and for a normal one. Its small
+evaluator models only `&&`, `||`, `==`, `!=`, `!`, `always()` and that one
+output, and refuses any other syntax so it cannot pass vacuously.
 
 ### 20.1. Running the contracts
 

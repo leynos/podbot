@@ -68,11 +68,11 @@ jobs:
       - name: Report compiler cache effectiveness
         # On failure too: a red lane is exactly when "did anything reach
         # the cache" is worth knowing.
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         run: sccache --show-stats
       - name: Write compiler cache statistics
         # The JSON form of the report above, for the health check below.
-        if: always()
+        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
         run: sccache --show-stats --stats-format json > sccache-stats.json
       - name: Check compiler cache health
         # Fails a structurally broken integration: the wrong backend, nothing

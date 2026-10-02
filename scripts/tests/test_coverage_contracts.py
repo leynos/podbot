@@ -199,11 +199,13 @@ def test_every_coverage_step_is_followed_by_a_cache_report(
             f"{report.workflow}:{report.job} guards the whole job with "
             f"{report.job_guard!r}, which can skip the cache report with it"
         )
-        assert report.guard == "always()", (
+        assert report.guard == HEALTH_GUARDS[0], (
             f"{report.workflow}:{report.job} guards its cache report with "
-            f"{report.guard!r}. It must be always(): a red lane is exactly "
-            f"when the counters are worth having, and a report that runs only "
-            f"on success is absent whenever it would say most"
+            f"{report.guard!r}. It must be {HEALTH_GUARDS[0]!r}: always(), "
+            f"because a red lane is exactly when the counters are worth "
+            f"having and a report that runs only on success is absent whenever "
+            f"it would say most, and not on a declared sccache fallback, where "
+            f"there is no server to read"
         )
 
 
@@ -309,7 +311,7 @@ HEALTH_STEPS: typ.Final[tuple[str, ...]] = (
 #: The guards of those two steps, in order: the check stands down only for a
 #: declared sccache fallback (see `test_sccache_fallback_contract.py`).
 HEALTH_GUARDS: typ.Final[tuple[str, ...]] = (
-    "always()",
+    "always() && steps.setup-rust.outputs.sccache-status != 'fallback'",
     "always() && steps.setup-rust.outputs.sccache-status != 'fallback'",
 )
 
@@ -323,9 +325,8 @@ def test_every_cache_report_is_checked_for_health(
     store still compiles and stays green, and the report above would say so
     only to someone reading it. After each report, the lane writes the
     statistics as JSON and runs the health check on them, each as its own
-    step and in that order. The statistics step is guarded by `always()`
-    alone, so a red lane is still judged; the check adds only the fallback
-    exception, skipping when `setup-rust` declared it fell back to no
+    step and in that order. Both steps run under `always()`, so a red lane
+    is still judged, and both carry the fallback exception, skipping when `setup-rust` declared it fell back to no
     compiler cache, since the wrapper is cleared then and the check would
     fail a job the action already annotated.
     """
