@@ -90,8 +90,9 @@ def test_every_step_reading_sccache_stats_stands_down_on_a_fallback(
 ) -> None:
     """Guard each `sccache --show-stats` step, not only the health check.
 
-    With the wrapper cleared and no server, a stats read would restart the
-    dead server or report zero requests and turn the declared fallback red.
+    With the wrapper cleared and no server, a stats read prints a table of
+    zero requests for a job that was never cached; the guard keeps that noise
+    out of a declared fallback.
 
     Parameters
     ----------
