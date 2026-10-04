@@ -1633,9 +1633,10 @@ uncached job prints no table of zeros and writes no `sccache-stats.json`. Any
 other status, including the empty one an older pin gives, still runs all three.
 `scripts/tests/test_sccache_fallback_contract.py` holds the step id, the guard
 on every reader and the notice to both workflows, and it evaluates each
-reader's real `if:` for a `fallback` status and for a normal one. Its small
-evaluator models only `&&`, `||`, `==`, `!=`, `!`, `always()` and that one
-output, and refuses any other syntax so it cannot pass vacuously.
+reader's real `if:` for a `fallback` status and for a normal one. The small
+evaluator, `scripts/workflow_condition.py`, models only `&&`, `||`, `==`, `!=`,
+`!`, `always()` and that one output, and refuses any other syntax so it cannot
+pass vacuously.
 
 ### 20.1. Running the contracts
 
