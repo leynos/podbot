@@ -151,11 +151,18 @@ class _Parser:
         return self.fail(f"unmodelled {kind} {value!r}")
 
     def comparison(self) -> str | bool:
-        """Read operands joined by `==` and `!=`, case-insensitively."""
+        """Read operands joined by `==` and `!=`, case-insensitively.
+
+        GitHub coerces unlike types to numbers, which this model does not
+        reproduce, so a boolean compared with a string is refused.
+        """
         left = self.operand()
         while self.peek() in {("op", "=="), ("op", "!=")}:
             _, operator = self.take()
-            same = str(left).lower() == str(self.operand()).lower()
+            right = self.operand()
+            if isinstance(left, bool) != isinstance(right, bool):
+                self.fail("mixed-type comparison")
+            same = str(left).lower() == str(right).lower()
             left = same if operator == "==" else not same
         return left
 
@@ -190,7 +197,8 @@ def evaluate(expression: str, status: str) -> bool:
 
     Handles `&&`, `||`, `==`, `!=`, `!`, parentheses, string literals,
     `always()` and the one `sccache-status` output. Comparison of strings is
-    case-insensitive, as in GitHub's expression language.
+    case-insensitive, as in GitHub's expression language. A boolean compared
+    with a string is refused, because GitHub would coerce both to numbers.
 
     Parameters
     ----------

@@ -196,6 +196,8 @@ def test_a_guard_that_runs_under_a_fallback_is_rejected(condition: str | None) -
         "steps.other.outputs.sccache-status != 'fallback'",
         "always() && steps.setup-rust.outputs.sccache-status > 'a'",
         f"always() && ({STATUS_PATH} != 'fallback'",
+        "always() == 'true'",
+        f"!({STATUS_PATH} == 'fallback') != 'false'",
     ],
 )
 def test_the_evaluator_refuses_what_it_does_not_model(condition: str) -> None:

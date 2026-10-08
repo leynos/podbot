@@ -1634,9 +1634,14 @@ other status, including the empty one an older pin gives, still runs all three.
 `scripts/tests/test_sccache_fallback_contract.py` holds the step id, the guard
 on every reader and the notice to both workflows, and it evaluates each
 reader's real `if:` for a `fallback` status and for a normal one. The small
-evaluator, `scripts/workflow_condition.py`, models only `&&`, `||`, `==`, `!=`,
-`!`, `always()` and that one output, and refuses any other syntax so it cannot
-pass vacuously.
+evaluator, `scripts/workflow_condition.py`, is called as
+`evaluate(expression, status)`: it takes the `if:` text and the value of the
+`setup-rust` step's `sccache-status` output and returns whether the step runs.
+It models only `&&`, `||`, `==`, `!=`, `!`, `always()` and that one output.
+Anything else, including any other context, a comparison of a boolean with a
+string (which GitHub would coerce to numbers) and malformed syntax, raises
+`UnmodelledExpressionError`, so a contract cannot pass vacuously. A contract
+author lets that error fail the test rather than catching it.
 
 ### 20.1. Running the contracts
 
