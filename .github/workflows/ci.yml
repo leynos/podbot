@@ -51,7 +51,7 @@ jobs:
           fetch-depth: 0
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@03ef8cdcea566bd1d34fac511f27928cf763c7d5
       - name: Setup uv
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       # The contracts read `.github/workflows` and need no Rust build, so
@@ -70,7 +70,7 @@ jobs:
         # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
         # first release with `--check` and `--git`.
         uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@6cec89bac47a21cf756d68d638a9a510998e57f8
+          leynos/shared-actions/.github/actions/install-mdtablefix@03ef8cdcea566bd1d34fac511f27928cf763c7d5
         with:
           version: '0.6.1'
       - name: Format
@@ -99,7 +99,7 @@ jobs:
         if: github.actor != 'dependabot[bot]'
         run: make audit
       - name: Install Whitaker
-        uses: leynos/shared-actions/.github/actions/install-whitaker@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/install-whitaker@03ef8cdcea566bd1d34fac511f27928cf763c7d5
       - name: Lint
         run: make lint
       - name: No-CLI compile check
@@ -113,7 +113,7 @@ jobs:
       # ratchet, which gates on this repository's own baseline, needs no
       # token, and applies to pull requests from forks too.
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@03ef8cdcea566bd1d34fac511f27928cf763c7d5
         with:
           features: internal
           output-path: lcov.info
