@@ -1657,7 +1657,11 @@ an unguarded step whose `run:` is asserted to be exactly this command.
 
 Ruff runs `--isolated` at a pinned version, so these files are checked the same
 way wherever the target is invoked. The target needs Python 3.14 and `pytest`,
-both supplied by `uv` at the pinned versions named in the Makefile.
+both supplied by `uv` at the pinned versions named in the Makefile, together
+with the pinned `hypothesis` (`HYPOTHESIS_VERSION`). Both pytest invocations
+install it, because `scripts/tests/test_workflow_condition_properties.py` runs
+a property-based test of `scripts/workflow_condition.py` that compares
+`evaluate` with an independent model over generated condition trees.
 
 ### 20.2. `of_type`, and why it is shared
 

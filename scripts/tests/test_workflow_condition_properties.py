@@ -134,7 +134,7 @@ def test_evaluate_agrees_with_an_independent_model(tree: Tree, status: str) -> N
     ],
 )
 def test_unbracketed_mixed_operators_follow_github_precedence(
-    condition: str, status: str, runs: bool
+    condition: str, status: str, *, runs: bool
 ) -> None:
     """Hold handwritten expectations for `!`, `&&` and `||` without brackets.
 
@@ -150,4 +150,6 @@ def test_unbracketed_mixed_operators_follow_github_precedence(
     runs : bool
         The result GitHub gives.
     """
-    assert evaluate(condition, status) is runs
+    assert evaluate(condition, status) is runs, (
+        f"{condition!r} with status {status!r} should give {runs}"
+    )
