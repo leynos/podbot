@@ -136,7 +136,7 @@ def test_evaluate_agrees_with_an_independent_model(tree: Tree, status: str) -> N
 def test_unbracketed_mixed_operators_follow_github_precedence(
     condition: str, status: str, runs: bool
 ) -> None:
-    """Hold hand-written expectations for `!`, `&&` and `||` without brackets.
+    """Hold handwritten expectations for `!`, `&&` and `||` without brackets.
 
     The property test brackets every node, so it cannot see a precedence slip.
     These cases state the GitHub precedence (`!`, then `&&`, then `||`) directly.
