@@ -72,7 +72,7 @@ jobs:
         uses: >-
           leynos/shared-actions/.github/actions/install-mdtablefix@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
-          version: '0.6.0'
+          version: '0.6.1'
       - name: Format
         run: make check-fmt
       - name: Enforce en-GB-oxendict spelling
@@ -150,7 +150,7 @@ jobs:
         if: always() && steps.setup-rust.outputs.sccache-status == 'fallback'
         run: echo "::notice title=sccache fallback::compiler cache health check skipped because setup-rust fell back to no cache for this job"
       - name: Set up Rust for Merman
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:
           toolchain: '1.95.0'
       - name: Install Mermaid validation tools
