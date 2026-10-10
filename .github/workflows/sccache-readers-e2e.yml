@@ -50,6 +50,15 @@ jobs:
           esac
           SHIM
           chmod +x "$shim/sccache"
+          # The health check is a Python script that leaves no trace of its
+          # own, so a python3 shim records its invocation and runs the real one.
+          real="$(command -v python3)"
+          cat > "$shim/python3" <<PYSHIM
+          #!/bin/sh
+          echo "python3 \$*" >> "\$RUNNER_TEMP/python-calls.log"
+          exec "$real" "\$@"
+          PYSHIM
+          chmod +x "$shim/python3"
           echo "$shim" >> "$GITHUB_PATH"
       - name: Run the readers
         uses: ./.github/actions/sccache-readers
@@ -62,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           calls="$RUNNER_TEMP/sccache-calls.log"
-          touch "$calls"
+          touch "$calls" "$RUNNER_TEMP/python-calls.log"
           leg="status '$STATUS'"
           if [ "$STATUS" = fallback ]; then
             if [ -s "$calls" ]; then
@@ -73,11 +82,18 @@ jobs:
               echo "::error::$leg: the JSON write ran under a declared fallback (sccache-stats.json exists)"
               exit 1
             fi
+            if grep -q 'check_sccache_health.py' "$RUNNER_TEMP/python-calls.log"; then
+              echo "::error::$leg: the health check ran under a declared fallback"
+              exit 1
+            fi
           else
             grep -qxF -- '--show-stats' "$calls" \
               || { echo "::error::$leg: the cache report did not run"; exit 1; }
             grep -qxF -- '--show-stats --stats-format json' "$calls" \
               || { echo "::error::$leg: the JSON write did not run"; exit 1; }
             [ -s sccache-stats.json ] \
-              || { echo "::error::$leg: the health check had no statistics file"; exit 1; }
+              || { echo "::error::$leg: the JSON write left no statistics file"; exit 1; }
+            grep -qF -- 'check_sccache_health.py --expect-location ghac sccache-stats.json' \
+              "$RUNNER_TEMP/python-calls.log" \
+              || { echo "::error::$leg: the health check did not run"; exit 1; }
           fi
