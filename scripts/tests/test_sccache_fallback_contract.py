@@ -23,6 +23,7 @@ evaluate the same guards on a runner, which this module cannot do because
 
 from __future__ import annotations
 
+import re
 import typing as typ
 
 import pytest
@@ -131,7 +132,7 @@ def test_no_lane_reads_sccache_statistics_outside_the_readers_action(
     """
     for step in build_steps(workflow_texts[workflow], workflow):
         command = str(step.get("run", ""))
-        assert "sccache --show-stats" not in command, (
+        assert not re.search(r"sccache\s+--show-stats", command), (
             f"{workflow}: {step.get('name')!r} reads sccache outside {READERS_ACTION}"
         )
         assert "check_sccache_health.py" not in command, (
