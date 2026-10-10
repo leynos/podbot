@@ -96,23 +96,33 @@ def _test_arguments(
     targets: tuple[Target, ...], omitted: frozenset[Target]
 ) -> tuple[str, ...]:
     """Expand Cargo's tests selector into libraries, bins and test targets."""
-    arguments = [
+    return (*_test_group_arguments(targets), *_test_target_arguments(targets, omitted))
+
+
+def _test_group_arguments(targets: tuple[Target, ...]) -> tuple[str, ...]:
+    """Select the library and binary groups available to Cargo tests."""
+    return tuple(
         group
         for group, kind in (("--lib", "lib"), ("--bins", "bin"))
         if any(kind in target.kinds for target in targets)
-    ]
+    )
+
+
+def _test_target_arguments(
+    targets: tuple[Target, ...], omitted: frozenset[Target]
+) -> tuple[str, ...]:
+    """Expand eligible test/example harnesses after nested-target removal."""
     candidates = tuple(
         target
         for target in targets
         if bool(set(target.kinds) & {"test", "example"}) and target.is_test
     )
-    arguments.extend(
+    return tuple(
         part
         for target in candidates
         if target not in omitted and target.has_required_features_enabled
         for part in target.cargo_selector()
     )
-    return tuple(arguments)
 
 
 def _group_arguments(selector: str, targets: tuple[Target, ...]) -> tuple[str, ...]:

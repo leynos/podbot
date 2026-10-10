@@ -6,9 +6,12 @@ import dataclasses
 import os
 import pathlib
 import shlex
+import sys
 import time
 from collections.abc import Iterable
+from typing import Protocol
 
+from test_runner_process_io import CommandRequest
 from test_runner_process_tree import ProcessTreeSnapshot
 
 _PROCESS_COMMAND_LIMIT = 256
@@ -42,6 +45,13 @@ class StallReportContext:
     elapsed_seconds: float
     timeout_seconds: float
     reason: str
+
+
+class _StallReportTiming(Protocol):
+    """Expose the supervisor timing values needed by a stall report."""
+
+    started_at: float
+    timeout_seconds: float
 
 
 def parse_proc_locks(contents: str) -> tuple[LockRecord, ...]:
@@ -162,6 +172,37 @@ def format_stall_report(context: StallReportContext) -> str:
         )
     )
     return "\n".join(lines)
+
+
+def emit_stall_diagnostics(
+    snapshot: ProcessTreeSnapshot,
+    request: CommandRequest,
+    timing: _StallReportTiming,
+    reason: str,
+) -> None:
+    """Build and print one bounded report for a supervised command."""
+    try:
+        context = StallReportContext(
+            process_snapshot=snapshot,
+            command=tuple(request.command),
+            cwd=request.cwd,
+            environment=request.environment,
+            target_directory=(
+                pathlib.Path(request.environment["CARGO_TARGET_DIR"])
+                if request.environment.get("CARGO_TARGET_DIR")
+                else None
+            ),
+            elapsed_seconds=time.monotonic() - timing.started_at,
+            timeout_seconds=timing.timeout_seconds,
+            reason=reason,
+        )
+        report = format_stall_report(context)
+    except Exception as exc:
+        report = f"test runner: {reason}; diagnostics unavailable: {exc}"
+    try:
+        print(report, file=sys.stderr, flush=True)
+    except OSError:
+        pass
 
 
 def _toolchain_lines(cwd: pathlib.Path, environment: dict[str, str]) -> list[str]:

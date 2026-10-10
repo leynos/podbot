@@ -18,9 +18,7 @@ from workflow_coverage import cache_reports
 SETUP_RUST_ACTION = "leynos/shared-actions/.github/actions/setup-rust"
 ERROR_LOG_PATH = "${{ runner.temp }}/sccache-error.log"
 DIAGNOSTIC_COMMAND = 'python3 scripts/report_sccache_errors.py "$SCCACHE_ERROR_LOG"'
-HEALTH_CHECK_COMMAND = (
-    "python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json"
-)
+READERS_ACTION = "./.github/actions/sccache-readers"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -69,11 +67,11 @@ def test_setup_enables_persistent_sccache_logging(
     )
     assert of_type(configure.get("env"), dict) == {
         "SCCACHE_ERROR_LOG": ERROR_LOG_PATH,
-    }, f"{workflow}: use this job's runner temporary directory"
+    }, f"{workflow}: diagnostic log must use this job's runner temporary directory"
     assert str(configure.get("run", "")).splitlines() == [
         "printf 'SCCACHE_LOG=debug\\n' >> \"$GITHUB_ENV\"",
         'printf \'SCCACHE_ERROR_LOG=%s\\n\' "$SCCACHE_ERROR_LOG" >> "$GITHUB_ENV"',
-    ], f"{workflow}: both diagnostics must persist for later server restarts"
+    ], f"{workflow}: both diagnostic settings must persist for server restarts"
     assert not steps[setup_index].get("env"), (
         f"{workflow}: setup-rust must inherit job-persisted diagnostic settings"
     )
@@ -93,13 +91,11 @@ def test_sccache_diagnostics_follow_health_check_without_exposing_raw_logs(
         for index, step in enumerate(steps)
         if step.get("run") == DIAGNOSTIC_COMMAND
     )
-    health_index = next(
-        index
-        for index, step in enumerate(steps)
-        if step.get("run") == HEALTH_CHECK_COMMAND
+    health_action_index = next(
+        index for index, step in enumerate(steps) if step.get("uses") == READERS_ACTION
     )
     diagnostic = steps[diagnostic_index]
-    assert diagnostic_index > health_index, (
+    assert diagnostic_index > health_action_index, (
         f"{workflow}: diagnostics must follow the cache health check"
     )
     assert diagnostic.get("if") == "always()", (
@@ -272,8 +268,12 @@ def test_line_window_returns_exact_offsets_and_text(
         following=case.following,
     )
 
-    assert (actual_start, actual_end) == (case.start, case.end)
-    assert case.text[actual_start:actual_end] == case.window
+    assert (actual_start, actual_end) == (case.start, case.end), (
+        "the selected context must retain its exact source offsets"
+    )
+    assert case.text[actual_start:actual_end] == case.window, (
+        "the selected context must retain the exact expected text"
+    )
 
 
 def test_rust_command_flags_are_not_mistaken_for_backend_failures() -> None:
@@ -323,4 +323,6 @@ def test_empty_error_log_environment_is_treated_as_unavailable(
     """An empty optional path reaches the helper's unavailable-file message."""
     monkeypatch.setenv("SCCACHE_ERROR_LOG", "")
 
-    assert report_sccache_errors.parse_arguments([]).log_file is None
+    assert report_sccache_errors.parse_arguments([]).log_file is None, (
+        "an empty optional log path must be treated as unavailable"
+    )

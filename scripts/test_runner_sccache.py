@@ -25,6 +25,9 @@ def start_configured_sccache(environment: dict[str, str]) -> None:
     command = configured_sccache_start_command(environment)
     if command is None:
         return
+    # Keep the prestarted server alive so a later compiler cannot auto-start
+    # an owned daemon inside the supervisor's process tree.
+    environment["SCCACHE_IDLE_TIMEOUT"] = "0"
     try:
         subprocess.run(
             command,

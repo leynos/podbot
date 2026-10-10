@@ -320,9 +320,15 @@ def test_snapshot_queries_do_not_refresh_or_mutate_tree(
     snapshot = tree.refresh()
     owned_before_queries = dict(tree.owned)
 
-    assert snapshot.descendants()[0].info.pid == child.pid
-    assert snapshot.live_owned()[0].info.pid == root.pid
-    assert snapshot.ancestors_of(child.pid) == {root.pid}
+    assert snapshot.descendants()[0].info.pid == child.pid, (
+        "the snapshot must expose its live descendant"
+    )
+    assert snapshot.live_owned()[0].info.pid == root.pid, (
+        "the snapshot must expose the owned root as live"
+    )
+    assert snapshot.ancestors_of(child.pid) == {root.pid}, (
+        "the snapshot must retain the child's owned ancestor"
+    )
     assert reads == 1, "snapshot queries must not read procfs again"
     assert tree.owned == owned_before_queries, "queries must not mutate tracked state"
     with pytest.raises(TypeError):

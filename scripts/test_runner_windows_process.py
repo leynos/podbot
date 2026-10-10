@@ -1,4 +1,9 @@
-"""Contain and terminate a supervised Windows process tree with a Job Object."""
+"""Contain and terminate a supervised Windows process tree with a Job Object.
+
+Python's standard library has no Job Object binding, so the required ``ctypes``
+interop is confined to this module. It remains importable cross-platform;
+``create()`` loads Windows libraries only when ``os.name == "nt"``.
+"""
 
 from __future__ import annotations
 

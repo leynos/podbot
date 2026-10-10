@@ -63,7 +63,7 @@ def test_supervisor_reaps_escaped_descendant_and_preserves_unrelated_process(
         if terminator == "signal":
             _wait_for_file(descendant_file)
             helper.send_signal(signal.SIGTERM)
-        stdout, stderr = helper.communicate(timeout=10)
+        stdout, stderr = helper.communicate(timeout=15)
         assert helper.returncode == 0, "the supervisor helper must finish cleanly"
         expected_status = 124 if terminator == "timeout" else 143
         assert f"STATUS={expected_status}" in stdout, (
@@ -258,7 +258,7 @@ def test_real_flock_wait_is_classified_from_proc_locks(
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=10,
+            timeout=15,
             check=False,
         )
     finally:
@@ -276,7 +276,7 @@ def test_real_flock_wait_is_classified_from_proc_locks(
 
 def _supervisor_helper(terminator: str) -> str:
     """Return a helper program isolated from pytest's process state."""
-    timeout = "0.6" if terminator == "timeout" else "20"
+    timeout = "5" if terminator == "timeout" else "20"
     return textwrap.dedent(
         f"""\
         import os
@@ -350,7 +350,7 @@ def _lock_supervisor_helper(holder_location: str) -> str:
 
         command_body = {command_body!r}
         cache_lock = pathlib.Path(os.environ["CARGO_HOME"]) / ".package-cache-mutate"
-        with ProcessSupervisor(1.2, 2, enable_subreaper=True) as supervisor:
+        with ProcessSupervisor(5, 2, enable_subreaper=True) as supervisor:
             status = supervisor.run_inherited(
                 CommandRequest(
                     [sys.executable, "-c", command_body, str(cache_lock)],

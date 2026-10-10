@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pathlib
 import queue
 import shlex
 import signal
@@ -13,7 +12,7 @@ import time
 import typing as typ
 from dataclasses import dataclass
 
-from test_runner_diagnostics import StallReportContext, format_stall_report
+from test_runner_diagnostics import emit_stall_diagnostics
 from test_runner_process_io import (
     CommandRequest,
     ProcessLaunchRequest,
@@ -260,30 +259,20 @@ class ProcessSupervisor:
                 snapshot = run.tree.refresh()
                 next_tree_refresh = now + _PROCESS_TREE_REFRESH_SECONDS
             run.tree.reap_adopted()
-            terminal_reason = self._terminal_reason(
-                snapshot, run.process, return_status, run.windows_job
+            completion_status = self._completion_status(
+                run,
+                snapshot,
+                return_status,
             )
-            if terminal_reason is not None:
-                snapshot = run.tree.refresh()
-                self._emit_diagnostics(snapshot, run.request, terminal_reason)
-                self._terminate_tree(run.tree, run.process, run.windows_job)
-                _drain_after_cleanup(
-                    run.events,
-                    run.capture,
-                )
-                exit_status = self.terminal_status
-                break
-            if (
-                return_status is not None
-                and run.capture.ended_streams >= run.capture.expected_streams
-            ):
-                exit_status = _normal_exit_status(return_status)
+            if completion_status is not None:
+                exit_status = completion_status
                 break
             if now >= next_watch:
                 snapshot = run.tree.refresh()
-                self._emit_diagnostics(
+                emit_stall_diagnostics(
                     snapshot,
                     run.request,
+                    self,
                     f"still running ({run.request.purpose})",
                 )
                 next_watch = now + self.watch_interval_seconds
@@ -296,6 +285,38 @@ class ProcessSupervisor:
             "".join(run.capture.output["stdout"]),
             "".join(run.capture.output["stderr"]),
         )
+
+    def _completion_status(
+        self,
+        run: _ProcessRun,
+        snapshot: ProcessTreeSnapshot,
+        return_status: int | None,
+    ) -> int | None:
+        """Apply terminal cleanup before normal process-and-reader completion."""
+        terminal_reason = self._terminal_reason(
+            snapshot,
+            run.process,
+            return_status,
+            run.windows_job,
+        )
+        if terminal_reason is not None:
+            snapshot = run.tree.refresh()
+            emit_stall_diagnostics(
+                snapshot,
+                run.request,
+                self,
+                terminal_reason,
+            )
+            self._terminate_tree(run.tree, run.process, run.windows_job)
+            _drain_after_cleanup(run.events, run.capture)
+            assert self.terminal_status is not None
+            return self.terminal_status
+        if (
+            return_status is not None
+            and run.capture.ended_streams >= run.capture.expected_streams
+        ):
+            return _normal_exit_status(return_status)
+        return None
 
     def _terminal_reason(
         self,
@@ -335,36 +356,6 @@ class ProcessSupervisor:
             return events.get(timeout=wait_seconds)
         except queue.Empty:
             return None
-
-    def _emit_diagnostics(
-        self,
-        snapshot: ProcessTreeSnapshot,
-        request: CommandRequest,
-        reason: str,
-    ) -> None:
-        """Write the process and known-lock report before cleanup begins."""
-        try:
-            report_context = StallReportContext(
-                process_snapshot=snapshot,
-                command=tuple(request.command),
-                cwd=request.cwd,
-                environment=request.environment,
-                target_directory=(
-                    pathlib.Path(request.environment["CARGO_TARGET_DIR"])
-                    if request.environment.get("CARGO_TARGET_DIR")
-                    else None
-                ),
-                elapsed_seconds=time.monotonic() - self.started_at,
-                timeout_seconds=self.timeout_seconds,
-                reason=reason,
-            )
-            report = format_stall_report(report_context)
-        except Exception as exc:
-            report = f"test runner: {reason}; diagnostics unavailable: {exc}"
-        try:
-            print(report, file=sys.stderr, flush=True)
-        except OSError:
-            pass
 
     @staticmethod
     def _terminate_tree(
