@@ -113,6 +113,56 @@ def test_each_lane_hands_the_readers_the_setup_status(
     )
 
 
+def reads_cache_statistics(command: str) -> bool:
+    """Say whether a shell command reads sccache's statistics or checks its health.
+
+    Parameters
+    ----------
+    command : str
+        A step's `run:` text.
+
+    Returns
+    -------
+    bool
+        True for `sccache --show-stats` with any whitespace between the words,
+        and for the health-check script.
+    """
+    return bool(
+        re.search(r"sccache\s+--show-stats", command)
+        or "check_sccache_health.py" in command
+    )
+
+
+@pytest.mark.parametrize(
+    ("command", "reads"),
+    [
+        pytest.param("sccache --show-stats", True, id="single-space"),
+        pytest.param("sccache  --show-stats", True, id="double-space"),
+        pytest.param("sccache\t--show-stats --stats-format json", True, id="tab"),
+        pytest.param(
+            "python3 scripts/check_sccache_health.py x.json", True, id="check"
+        ),
+        pytest.param("cargo test", False, id="unrelated"),
+        pytest.param("echo sccache is on", False, id="mention-only"),
+    ],
+)
+def test_the_stray_reader_rule_recognises_statistics_commands(
+    command: str, *, reads: bool
+) -> None:
+    """Hold the rule behind the stray-reader contract against spacing tricks.
+
+    Parameters
+    ----------
+    command : str
+        A synthetic lane command.
+    reads : bool
+        Whether the rule must flag it.
+    """
+    assert reads_cache_statistics(command) is reads, (
+        f"{command!r} should{'' if reads else ' not'} be flagged as a statistics reader"
+    )
+
+
 @pytest.mark.parametrize("workflow", WORKFLOWS)
 def test_no_lane_reads_sccache_statistics_outside_the_readers_action(
     workflow: str, workflow_texts: dict[str, str]
@@ -131,13 +181,8 @@ def test_no_lane_reads_sccache_statistics_outside_the_readers_action(
         Every workflow's text, from the shared fixture.
     """
     for step in build_steps(workflow_texts[workflow], workflow):
-        command = str(step.get("run", ""))
-        assert not re.search(r"sccache\s+--show-stats", command), (
+        assert not reads_cache_statistics(str(step.get("run", ""))), (
             f"{workflow}: {step.get('name')!r} reads sccache outside {READERS_ACTION}"
-        )
-        assert "check_sccache_health.py" not in command, (
-            f"{workflow}: {step.get('name')!r} checks cache health outside "
-            f"{READERS_ACTION}"
         )
 
 

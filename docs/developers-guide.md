@@ -1654,11 +1654,20 @@ a real 60 s sccache startup timeout.
 `.github/workflows/sccache-readers-e2e.yml` closes that gap. It calls the same
 action on a hosted `ubuntu-latest` runner once for each status a pin can give
 (`fallback`, `started` and the empty output of an older pin), with a recording
-`sccache` shim on `PATH`, and its last step fails the leg unless the shim saw
-no call and no statistics file was written under `fallback`, and saw both reads
-and left the statistics otherwise. It runs only when the action, either caller
-workflow, the workflow itself or `check_sccache_health.py` changes, and costs
-one hosted job of about a minute per status.
+`sccache` shim and a recording `python3` shim on `PATH` (the second runs the
+real interpreter and logs its arguments, because the health check is a Python
+script that leaves no other trace). The last step fails the leg unless, under
+`fallback`, the `sccache` shim saw no call, no statistics file was written and
+`check_sccache_health.py` did not run; and, under any other status, the shim
+saw both reads, the statistics file exists and the log shows
+`check_sccache_health.py --expect-location ghac sccache-stats.json`. The
+stray-reader contract that keeps lanes from reading sccache themselves uses
+`reads_cache_statistics`, which matches any whitespace between `sccache` and
+`--show-stats`; its own parametrized test holds the single-space, double-space
+and tab forms, so the rule cannot pass vacuously. The workflow runs only when
+the action, either caller workflow, the workflow itself or
+`check_sccache_health.py` changes, and costs one hosted job of about a minute
+per status.
 
 ### 20.1. Running the contracts
 
