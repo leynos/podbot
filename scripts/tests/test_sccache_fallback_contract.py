@@ -1,13 +1,22 @@
-"""The compiler-cache health check stands down for a declared sccache fallback.
+"""Every `sccache --show-stats` reader stands down for a declared sccache fallback.
 
 `setup-rust` gives sccache a startup timeout and, if the server still will not
 start, clears the compiler wrapper, raises a `sccache-fallback` annotation and
-sets its `sccache-status` output to `fallback`. The health check then finds
-that nothing was wrapped and would turn the job red, hiding a fallback the
-action already announced. The check therefore reads the output of the
-`setup-rust` step by its id, skips on `fallback`, and a companion step keeps
+sets its `sccache-status` output to `fallback`. Three steps read the cache's
+statistics: the cache report, the JSON write and the health check. With no
+wrapper and no server they would print a table of zeros for a job that was
+never cached, and the health check would turn the job red and hide a fallback
+the action already announced. Each therefore reads the output of the
+`setup-rust` step by its id and skips on `fallback`, and a companion step keeps
 the skip visible. Anything else (`started`, empty on an older pin) still runs
-the check, so a genuinely broken integration is still refused.
+all three, so a genuinely broken integration is still refused.
+
+The contracts here hold the step id, the guard on every reader and the notice
+to both workflows. They also evaluate each reader's real `if:` for a
+`fallback` status and for normal ones with a small evaluator that models only
+the operators the guards use and refuses the rest, and reject synthetic guards
+that would run under a fallback. They cannot run `setup-rust` itself, which has
+no input that forces its fallback.
 """
 
 from __future__ import annotations
@@ -15,6 +24,7 @@ from __future__ import annotations
 import typing as typ
 
 import pytest
+from workflow_condition import STATUS_PATH, UnmodelledExpressionError, evaluate
 from workflow_contracts import of_type, parse
 
 #: Every workflow that runs the health check, with the `setup-rust` step id.
@@ -82,3 +92,121 @@ def test_the_health_check_skips_only_on_a_declared_fallback(
     assert steps.index(note[0]) == steps.index(check[0]) + 1, (
         f"{workflow}: the note must follow the check it stands in for"
     )
+
+
+@pytest.mark.parametrize("workflow", WORKFLOWS)
+def test_every_step_reading_sccache_stats_stands_down_on_a_fallback(
+    workflow: str, workflow_texts: dict[str, str]
+) -> None:
+    """Guard each `sccache --show-stats` step, not only the health check.
+
+    With the wrapper cleared and no server, a stats read prints a table of
+    zero requests for a job that was never cached; the guard keeps that noise
+    out of a declared fallback.
+
+    Parameters
+    ----------
+    workflow : str
+        The workflow file to read.
+    workflow_texts : dict[str, str]
+        Every workflow's text, from the shared fixture.
+    """
+    steps = build_steps(workflow_texts[workflow], workflow)
+    readers = [s for s in steps if "sccache --show-stats" in str(s.get("run"))]
+    assert len(readers) == 2, f"{workflow}: expected the report and the JSON write"
+    for step in readers:
+        assert step.get("if") == RUN_GUARD, (
+            f"{workflow}: {step.get('name')!r} must stand down on a fallback, "
+            f"found {step.get('if')!r}"
+        )
+
+
+def runs(step: dict[str, object], status: str) -> bool:
+    """Return whether a step runs for a status, an omitted `if` meaning it does."""
+    condition = step.get("if")
+    return True if condition is None else evaluate(str(condition), status)
+
+
+@pytest.mark.parametrize("workflow", WORKFLOWS)
+def test_each_stats_reader_is_skipped_under_a_fallback_and_runs_otherwise(
+    workflow: str, workflow_texts: dict[str, str]
+) -> None:
+    """Execute each reader's real `if:` for a fallback and for normal statuses.
+
+    The expression is evaluated, not compared as text, so an equivalent guard
+    passes and a guard that merely resembles the right one does not. What this
+    cannot do is run `setup-rust`: the action has no input that forces its
+    fallback in a hosted run, which only a real sccache startup failure
+    reaches.
+
+    Parameters
+    ----------
+    workflow : str
+        The workflow file to read.
+    workflow_texts : dict[str, str]
+        Every workflow's text, from the shared fixture.
+    """
+    steps = build_steps(workflow_texts[workflow], workflow)
+    readers = [s for s in steps if "sccache --show-stats" in str(s.get("run"))]
+    readers += [s for s in steps if "check_sccache_health.py" in str(s.get("run"))]
+    assert len(readers) == 3, (
+        f"{workflow}: expected the report, the JSON write and the check"
+    )
+    for step in readers:
+        assert not runs(step, "fallback"), (
+            f"{workflow}: {step.get('name')!r} runs under a fallback"
+        )
+        for status in ("started", "active", ""):
+            assert runs(step, status), (
+                f"{workflow}: {step.get('name')!r} is skipped for status {status!r}"
+            )
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        pytest.param(None, id="guard-omitted"),
+        pytest.param("always()", id="guard-dropped"),
+        pytest.param(
+            f"always() && {STATUS_PATH} == 'fallback'", id="comparison-inverted"
+        ),
+        pytest.param(f"always() && !({STATUS_PATH} != 'fallback')", id="negated"),
+        pytest.param(
+            f"always() && {STATUS_PATH} != 'fallback' || always()", id="or-composition"
+        ),
+    ],
+)
+def test_a_guard_that_runs_under_a_fallback_is_rejected(condition: str | None) -> None:
+    """Treat each broken guard as one that runs under a fallback.
+
+    Parameters
+    ----------
+    condition : str | None
+        A synthetic `if:` that fails to stand down on `fallback`.
+    """
+    step: dict[str, object] = {} if condition is None else {"if": condition}
+    assert runs(step, "fallback"), f"{condition!r} would have been accepted"
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        "success()",
+        "contains(steps.setup-rust.outputs.sccache-status, 'fall')",
+        "steps.other.outputs.sccache-status != 'fallback'",
+        "always() && steps.setup-rust.outputs.sccache-status > 'a'",
+        f"always() && ({STATUS_PATH} != 'fallback'",
+        "always() == 'true'",
+        f"!({STATUS_PATH} == 'fallback') != 'false'",
+    ],
+)
+def test_the_evaluator_refuses_what_it_does_not_model(condition: str) -> None:
+    """Raise on syntax or contexts outside the model instead of guessing.
+
+    Parameters
+    ----------
+    condition : str
+        An expression using something the evaluator does not implement.
+    """
+    with pytest.raises(UnmodelledExpressionError):
+        evaluate(condition, "fallback")
