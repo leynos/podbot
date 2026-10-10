@@ -52,7 +52,9 @@ The private process supervisor owns only the subprocess tree launched by one
 phases and direct test harnesses; it is not a general process manager. It
 cleans only its own descendants, never kills unrelated processes, and never
 deletes cache locks. On bounded failure, it reports lock and process
-diagnostics.
+diagnostics. Diagnostic report formatting remains in
+`scripts/test_runner_diagnostics.py`; only `ProcessSupervisor` invokes it, for
+stalled commands and terminal cleanup.
 
 `OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
 returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that
@@ -62,10 +64,22 @@ captured state; they perform no further I/O or mutation. The private
 supervisor retains signal-before-deadline-before-descendant-cleanup precedence
 when combining them.
 
-When `RUSTC_WRAPPER` names sccache, `scripts/test_runner.py` best-effort runs
-the configured wrapper with `--start-server` before entering
-`ProcessSupervisor`, keeping the daemon outside its owned-child tree. A missing
-or unresponsive wrapper does not fail the run.
+Windows has no standard-library binding for Job Objects, so the required
+`ctypes` interop is confined to `scripts/test_runner_windows_process.py`. The
+module remains importable across platforms; `create()` loads Windows libraries
+only when `os.name == "nt"`.
+
+When `RUSTC_WRAPPER` names sccache, `scripts/test_runner.py` sets
+`SCCACHE_IDLE_TIMEOUT=0` and best-effort starts the configured wrapper before
+entering `ProcessSupervisor`. Disabling idle shutdown prevents later phases
+from auto-starting a server that the supervisor could adopt into its owned
+tree. A missing or unresponsive wrapper does not fail the run.
+
+Cargo planning keeps package selection, package-local feature reachability and
+metadata conversion, target filtering, and nested-target registry validation as
+separate, narrow concerns. Test planning composes their private helpers; they
+are not general Cargo APIs. The process-completion helper remains scoped to
+`ProcessSupervisor`'s monitoring loop and preserves cleanup order.
 
 `TestRunnerContext` carries the Cargo command, working directory, environment,
 and supervisor for one runner invocation. Its runner consumers are
@@ -161,23 +175,25 @@ bounded Rust 1.88 attempt and its limitations.
 ### 2.4. Coverage action boundary
 
 The pull-request coverage step pins shared-actions
-[`generate-coverage` at `a5765019912a8ab6882b12db049c7cde635f3a85`](https://github.com/leynos/shared-actions/tree/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage).
+[`generate-coverage` at `6cec89bac47a21cf756d68d638a9a510998e57f8`](https://github.com/leynos/shared-actions/tree/6cec89bac47a21cf756d68d638a9a510998e57f8/.github/actions/generate-coverage).
 The workflow supplies `features: internal` and `use-cargo-nextest: 'false'`;
 the action's Rust runner invokes `cargo llvm-cov`. At this pin, `all-targets`
-defaults to false, and enabling it adds benches, examples, and every test
-target. `doctests` also defaults to false. Therefore the current action
-selection does not include every test target or the registered compile-contract
-target. The action remains outside the repository test runner, but its current
-selection does not run the nested compile-contract tests.
+defaults to false; enabling it adds benches, examples, and every test target.
+The `doctests` input also defaults to false and runs
+`cargo test --doc --workspace` when enabled. Neither input is set by the
+workflow, so the current selection does not include every test target or the
+registered `compile_contract` target. The action remains outside the repository
+test runner, and its current selection does not run the nested compile-contract
+tests.
 
-The action's `RUN_RUST_CARGO_WAIT_TIMEOUT` is 1800 seconds. Its watchdog
-terminates the Cargo process it started; the pinned implementation does not
-demonstrate the repository runner's process-tree supervision. Reassess this
-boundary if the action's target selection broadens. The pinned sources are
-[`action.yml`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/action.yml),
-[`scripts/run_rust.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/run_rust.py),
+The workflow sets `RUN_RUST_CARGO_WAIT_TIMEOUT` to 1800 seconds. The pinned
+action's watchdog terminates the Cargo process it started; its implementation
+does not provide the repository runner's process-tree supervision. Reassess
+this boundary if the action's target selection broadens. The pinned sources are
+[`action.yml`](https://github.com/leynos/shared-actions/blob/6cec89bac47a21cf756d68d638a9a510998e57f8/.github/actions/generate-coverage/action.yml),
+[`scripts/run_rust.py`](https://github.com/leynos/shared-actions/blob/6cec89bac47a21cf756d68d638a9a510998e57f8/.github/actions/generate-coverage/scripts/run_rust.py),
 and
-[`scripts/_cargo_runner.py`](https://github.com/leynos/shared-actions/blob/a5765019912a8ab6882b12db049c7cde635f3a85/.github/actions/generate-coverage/scripts/_cargo_runner.py).
+[`scripts/_cargo_runner.py`](https://github.com/leynos/shared-actions/blob/6cec89bac47a21cf756d68d638a9a510998e57f8/.github/actions/generate-coverage/scripts/_cargo_runner.py).
 
 The sccache diagnostic contract tests keep their cache-job parsing helper local
 to `test_sccache_diagnostic_contracts.py`. Only the paired setup and diagnostic
@@ -1812,11 +1828,11 @@ per status.
 
 Both workflows supply `SCCACHE_LOG=debug` and a job-temporary
 `SCCACHE_ERROR_LOG` path to `setup-rust` before it starts sccache. The shared
-cache-reader composite runs after coverage with
-`if: always()`. The separate `scripts/report_sccache_errors.py` step also has
-`if: always()` and `continue-on-error: true`, so it prints a bounded, sanitized
-report on both successful and failed jobs without changing the job result.
-Neither workflow uploads the raw log.
+cache-reader composite runs after coverage with `if: always()`. The separate
+`scripts/report_sccache_errors.py` step also has `if: always()` and
+`continue-on-error: true`, so it prints a bounded, sanitized report on both
+successful and failed jobs without changing the job result. Neither workflow
+uploads the raw log.
 
 ### 20.2. Running the contracts
 
