@@ -7,6 +7,7 @@ import typing as typ
 
 from test_runner_cargo import (
     create_test_runtime_environment,
+    ensure_test_runtime_tmpdir,
     parse_cargo_json_message,
     select_test_executables,
 )
@@ -42,6 +43,7 @@ def run_nested_target(
     environment = create_test_runtime_environment(
         context, package, executable, messages
     )
+    ensure_test_runtime_tmpdir(environment)
     arguments = [plan.options.test_filter] if plan.options.test_filter else []
     arguments.extend(plan.options.harness_args)
     print(

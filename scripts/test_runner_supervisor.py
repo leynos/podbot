@@ -12,7 +12,7 @@ import time
 import typing as typ
 from dataclasses import dataclass
 
-from test_runner_diagnostics import emit_stall_diagnostics
+from test_runner_diagnostic_collection import emit_stall_diagnostics
 from test_runner_process_io import (
     CommandRequest,
     ProcessLaunchRequest,

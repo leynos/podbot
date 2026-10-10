@@ -12,6 +12,7 @@ import pathlib
 import shlex
 
 from test_runner_models import RunnerError
+from test_runner_sccache import start_configured_sccache
 from test_runner_supervisor import CommandRequest, ProcessSupervisor
 
 
@@ -27,6 +28,7 @@ def supervise_command(
         raise RunnerError("supervise mode requires a command after `--`")
     working_directory = pathlib.Path.cwd().resolve()
     environment = os.environ.copy()
+    start_configured_sccache(environment)
     print(
         f"== Supervised command (timeout {timeout_seconds:g}s): "
         f"{shlex.join(command)} ==",

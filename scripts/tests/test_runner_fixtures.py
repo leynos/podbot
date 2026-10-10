@@ -175,6 +175,8 @@ def _write_fake_cargo_program(cargo_path: pathlib.Path) -> None:
                         "import json, os, pathlib, sys\\n"
                         "if os.environ.get('FAKE_REQUIRE_BUILD_RETURNED') == 'true' and not pathlib.Path(os.environ['FAKE_BUILD_RETURNED']).exists():\\n"
                         "    raise SystemExit(41)\\n"
+                        "if not pathlib.Path(os.environ['CARGO_TARGET_TMPDIR']).is_dir():\\n"
+                        "    raise SystemExit(42)\\n"
                         "pathlib.Path(os.environ['FAKE_TEST_ARGS']).write_text(json.dumps(sys.argv[1:]))\\n"
                         "raise SystemExit(int(os.environ['FAKE_TEST_EXIT']))\\n"
                     )
