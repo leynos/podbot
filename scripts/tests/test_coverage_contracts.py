@@ -16,6 +16,8 @@ from workflow_contracts import parse as parse_workflow
 from workflow_coverage import (
     CACHE_REPORT_COMMAND,
     COVERAGE_ACTION,
+    READERS_ACTION,
+    READERS_ACTION_FILE,
     WATCHDOG_VARIABLE,
     cache_reports,
 )
@@ -199,13 +201,12 @@ def test_every_coverage_step_is_followed_by_a_cache_report(
             f"{report.workflow}:{report.job} guards the whole job with "
             f"{report.job_guard!r}, which can skip the cache report with it"
         )
-        assert report.guard == HEALTH_GUARDS[0], (
+        assert report.guard == "always()", (
             f"{report.workflow}:{report.job} guards its cache report with "
-            f"{report.guard!r}. It must be {HEALTH_GUARDS[0]!r}: always(), "
-            f"because a red lane is exactly when the counters are worth "
-            f"having and a report that runs only on success is absent whenever "
-            f"it would say most, and not on a declared sccache fallback, where "
-            f"there is no server to read"
+            f"{report.guard!r}. It must be 'always()': a red lane is exactly "
+            f"when the counters are worth having, and a report that runs only "
+            f"on success is absent whenever it would say most. The fallback "
+            f"exception lives inside the readers action"
         )
 
 
@@ -301,19 +302,24 @@ def test_the_cache_report_carries_its_job_guard(
     assert found.job_guard == expected
 
 
-#: The two steps that turn the cache report into a verdict, in order.
-HEALTH_STEPS: typ.Final[tuple[str, ...]] = (
-    "sccache --show-stats --stats-format json > sccache-stats.json",
-    "python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json",
+#: The steps of the readers action, in order, and the guard each carries: the
+#: report, the JSON write and the health check stand down for a declared
+#: sccache fallback, and the note that keeps the skip visible runs only then
+#: (see `test_sccache_fallback_contract.py`).
+READER_STEPS: typ.Final[tuple[tuple[str, str], ...]] = (
+    ("sccache --show-stats", "always() && inputs.sccache-status != 'fallback'"),
+    (
+        "sccache --show-stats --stats-format json > sccache-stats.json",
+        "always() && inputs.sccache-status != 'fallback'",
+    ),
+    (
+        "python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json",
+        "always() && inputs.sccache-status != 'fallback'",
+    ),
 )
 
-
-#: The guards of those two steps, in order: the check stands down only for a
-#: declared sccache fallback (see `test_sccache_fallback_contract.py`).
-HEALTH_GUARDS: typ.Final[tuple[str, ...]] = (
-    "always() && steps.setup-rust.outputs.sccache-status != 'fallback'",
-    "always() && steps.setup-rust.outputs.sccache-status != 'fallback'",
-)
+#: What a caller passes to the readers action: setup-rust's status output.
+STATUS_ARGUMENT: typ.Final = "${{ steps.setup-rust.outputs.sccache-status }}"
 
 
 def test_every_cache_report_is_checked_for_health(
@@ -322,30 +328,37 @@ def test_every_cache_report_is_checked_for_health(
     """Printing the counters is not checking them.
 
     A lane whose sccache bound local disk, wrapped nothing, or failed every
-    store still compiles and stays green, and the report above would say so
-    only to someone reading it. After each report, the lane writes the
-    statistics as JSON and runs the health check on them, each as its own
-    step and in that order. Both steps run under `always()`, so a red lane
-    is still judged, and both carry the fallback exception, skipping when `setup-rust` declared it fell back to no
-    compiler cache, since the wrapper is cleared then and the check would
-    fail a job the action already annotated.
+    store still compiles and stays green, and the report would say so only to
+    someone reading it. The report, the JSON write and the health check live
+    in one local action that every lane calls, so they cannot differ between
+    lanes. Each lane calls it after its coverage step, under `always()` so a
+    red lane is still judged, and hands it setup-rust's status; the action's
+    own steps carry the fallback exception.
     """
+    action = parse_workflow(
+        READERS_ACTION_FILE.name,
+        READERS_ACTION_FILE.read_text(encoding="utf-8"),
+    )
+    steps = [
+        of_type(step, dict)
+        for step in of_type(of_type(action.get("runs"), dict).get("steps"), list)
+    ]
+    runs = tuple((str(s.get("run", "")).strip(), s.get("if")) for s in steps[:3])
+    assert runs == READER_STEPS, (
+        f"the readers action runs {runs}, expected {READER_STEPS}"
+    )
     for report in cache_reports(workflow_texts):
         document = parse_workflow(report.workflow, workflow_texts[report.workflow])
         job = of_type(of_type(document.get("jobs"), dict).get(report.job), dict)
-        later = [of_type(step, dict) for step in of_type(job.get("steps"), list)][
-            report.report_index + 1 :
-        ]
-        runs = [str(step.get("run", "")).strip() for step in later]
-        positions = [
-            runs.index(command) if command in runs else -1 for command in HEALTH_STEPS
-        ]
-        assert -1 not in positions and positions == sorted(positions), (
-            f"{report.workflow}:{report.job} must run, after its cache report "
-            f"and in this order: {HEALTH_STEPS}; it runs {runs}"
+        call = of_type(
+            of_type(job.get("steps"), list)[report.report_index],
+            dict,
         )
-        guards = [later[index].get("if") for index in positions]
-        assert guards == list(HEALTH_GUARDS), (
-            f"{report.workflow}:{report.job} guards its health steps with {guards}, "
-            f"expected {list(HEALTH_GUARDS)}"
+        assert call.get("uses") == READERS_ACTION, (
+            f"{report.workflow}:{report.job} reports the cache without {READERS_ACTION}"
+        )
+        arguments = of_type(call.get("with"), dict)
+        assert arguments.get("sccache-status") == STATUS_ARGUMENT, (
+            f"{report.workflow}:{report.job} passes {arguments.get('sccache-status')!r}, "
+            f"expected {STATUS_ARGUMENT!r}"
         )

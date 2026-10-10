@@ -1,0 +1,46 @@
+name: Read the compiler cache
+description: >-
+  Report sccache's statistics, write them as JSON and check the integration's
+  health, unless setup-rust declared a fallback to no compiler cache.
+
+inputs:
+  sccache-status:
+    description: >-
+      The `sccache-status` output of the setup-rust step. `fallback` stands
+      every reader down; any other value, including the empty one an older
+      pin gives, runs all three.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Report compiler cache effectiveness
+      # After the compiling steps and on failure too, because a red lane
+      # is exactly when "did anything reach the cache" is worth knowing. A
+      # fallback has no server to read: with the wrapper cleared, the report
+      # would be a table of zeros for a job that was never cached.
+      if: always() && inputs.sccache-status != 'fallback'
+      shell: bash
+      run: sccache --show-stats
+    - name: Write compiler cache statistics
+      # The JSON form of the report above, for the health check below.
+      if: always() && inputs.sccache-status != 'fallback'
+      shell: bash
+      run: sccache --show-stats --stats-format json > sccache-stats.json
+    - name: Check compiler cache health
+      # Fails a structurally broken integration: the wrong backend, nothing
+      # wrapped, or every store or read failing. Isolated write or read
+      # errors only warn, because a cache hiccup costs one compile and must
+      # not turn a pull request red.
+      # Skipped when setup-rust fell back to no compiler cache after its
+      # server would not start: the wrapper is cleared then, so the check
+      # would report that nothing was wrapped and turn the job red, hiding
+      # a fallback the action already announced as an annotation and in the
+      # job summary. The next step keeps the skip visible.
+      if: always() && inputs.sccache-status != 'fallback'
+      shell: bash
+      run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
+    - name: Note the skipped compiler cache health check
+      if: always() && inputs.sccache-status == 'fallback'
+      shell: bash
+      run: echo "::notice title=sccache fallback::compiler cache health check skipped because setup-rust fell back to no cache for this job"

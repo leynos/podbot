@@ -1,0 +1,83 @@
+name: sccache readers (end to end)
+
+# `setup-rust` has no input that forces its sccache fallback, which fires only
+# after a real 60 s server timeout. This job runs the composite action that
+# holds the readers with each status a pin can give, so GitHub itself
+# evaluates their real `if:` guards. A shim `sccache` records every call;
+# the last step says which readers ran. It costs one small hosted job per
+# status, and only when the action, a caller or this file changes.
+
+'on':
+  pull_request:
+    paths:
+      - .github/actions/sccache-readers/action.yml
+      - .github/workflows/ci.yml
+      - .github/workflows/coverage-main.yml
+      - .github/workflows/sccache-readers-e2e.yml
+      - scripts/check_sccache_health.py
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  readers:
+    # Hosted on purpose: about a minute of shell with nothing to compile or
+    # cache, so a standard Ubicloud runner would add a queue and nothing else.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # A declared fallback, a started server, and the empty output of an
+        # older pin.
+        status: [fallback, started, '']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Put a recording sccache shim on PATH
+        run: |
+          shim="$RUNNER_TEMP/shim"
+          mkdir -p "$shim"
+          cat > "$shim/sccache" <<'SHIM'
+          #!/bin/sh
+          echo "$*" >> "$RUNNER_TEMP/sccache-calls.log"
+          case "$*" in
+            *json*) echo '{"cache_location": "ghac, name: e2e", "stats": {"compile_requests": 1, "cache_writes": 1}}' ;;
+            *) echo "sccache shim: no server" ;;
+          esac
+          SHIM
+          chmod +x "$shim/sccache"
+          echo "$shim" >> "$GITHUB_PATH"
+      - name: Run the readers
+        uses: ./.github/actions/sccache-readers
+        with:
+          sccache-status: ${{ matrix.status }}
+      - name: Check which readers ran
+        if: always()
+        env:
+          STATUS: ${{ matrix.status }}
+        run: |
+          set -euo pipefail
+          calls="$RUNNER_TEMP/sccache-calls.log"
+          touch "$calls"
+          leg="status '$STATUS'"
+          if [ "$STATUS" = fallback ]; then
+            if [ -s "$calls" ]; then
+              echo "::error::$leg: a reader called sccache under a declared fallback: $(tr '\n' ';' < "$calls")"
+              exit 1
+            fi
+            if [ -e sccache-stats.json ]; then
+              echo "::error::$leg: the JSON write ran under a declared fallback (sccache-stats.json exists)"
+              exit 1
+            fi
+          else
+            grep -qxF -- '--show-stats' "$calls" \
+              || { echo "::error::$leg: the cache report did not run"; exit 1; }
+            grep -qxF -- '--show-stats --stats-format json' "$calls" \
+              || { echo "::error::$leg: the JSON write did not run"; exit 1; }
+            [ -s sccache-stats.json ] \
+              || { echo "::error::$leg: the health check had no statistics file"; exit 1; }
+          fi

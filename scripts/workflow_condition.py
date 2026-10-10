@@ -1,7 +1,7 @@
 """A small evaluator for the step conditions that guard the sccache readers.
 
 It models only what those guards use: `&&`, `||`, `==`, `!=`, `!`,
-parentheses, string literals, `always()` and the one `sccache-status` output,
+parentheses, string literals, `always()` and the one `sccache-status` input,
 and raises on anything else, so a contract built on it cannot pass vacuously
 over syntax it silently misreads.
 
@@ -17,7 +17,7 @@ import re
 import typing as typ
 
 #: The one context value the guards read; every other lookup is refused.
-STATUS_PATH: typ.Final = "steps.setup-rust.outputs.sccache-status"
+STATUS_PATH: typ.Final = "inputs.sccache-status"
 _TOKEN: typ.Final = re.compile(
     r"\s*(?:(&&|\|\||!=|==|!|\(|\))|'([^']*)'|(always\(\))|([A-Za-z][\w.-]*))"
 )
@@ -85,7 +85,7 @@ class _Parser:
         expression : str
             The `if:` text.
         status : str
-            The value of `steps.setup-rust.outputs.sccache-status`.
+            The value of `inputs.sccache-status`.
         """
         self.expression = expression
         self.status = status
@@ -196,7 +196,7 @@ def evaluate(expression: str, status: str) -> bool:
     """Evaluate a step condition with `always()` true and the given status.
 
     Handles `&&`, `||`, `==`, `!=`, `!`, parentheses, string literals,
-    `always()` and the one `sccache-status` output. Comparison of strings is
+    `always()` and the one `sccache-status` input. Comparison of strings is
     case-insensitive, as in GitHub's expression language. A boolean compared
     with a string is refused, because GitHub would coerce both to numbers.
 
@@ -205,7 +205,7 @@ def evaluate(expression: str, status: str) -> bool:
     expression : str
         The `if:` text.
     status : str
-        The value of `steps.setup-rust.outputs.sccache-status`.
+        The value of `inputs.sccache-status`.
 
     Returns
     -------
