@@ -8,6 +8,7 @@ import sys
 import pytest
 
 import test_runner
+import test_runner_supervise as supervise_module
 import test_runner_supervisor
 
 
@@ -33,6 +34,56 @@ def test_supervise_mode_propagates_command_failure() -> None:
     )
 
     assert status == 23, "supervise mode must preserve ordinary child failures"
+
+
+def test_supervise_mode_prestarts_sccache_before_process_supervisor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured compiler caches start before the generic supervisor."""
+    monkeypatch.setenv("RUSTC_WRAPPER", "sccache")
+    events: list[str] = []
+    started_environments: list[dict[str, str]] = []
+    requests: list[test_runner_supervisor.CommandRequest] = []
+
+    def prestart(environment: dict[str, str]) -> None:
+        events.append("prestart")
+        environment["SCCACHE_IDLE_TIMEOUT"] = "0"
+        started_environments.append(environment)
+
+    class FakeSupervisor:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            events.append("construct")
+
+        def __enter__(self) -> FakeSupervisor:
+            events.append("enter")
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            events.append("exit")
+
+        def run_inherited(self, request: test_runner_supervisor.CommandRequest) -> int:
+            events.append("run")
+            requests.append(request)
+            return 29
+
+    monkeypatch.setattr(supervise_module, "start_configured_sccache", prestart)
+    monkeypatch.setattr(supervise_module, "ProcessSupervisor", FakeSupervisor)
+
+    status = supervise_module.supervise_command(
+        ["cargo", "test"], 5, 0.1, enable_subreaper=True
+    )
+
+    assert status == 29, "supervised command status must pass through unchanged"
+    assert events == ["prestart", "construct", "enter", "run", "exit"], (
+        "sccache startup must complete before supervisor entry"
+    )
+    assert len(requests) == 1, "the command must be submitted exactly once"
+    assert requests[0].environment is started_environments[0], (
+        "the started environment must be forwarded unchanged to the child"
+    )
+    assert requests[0].environment["SCCACHE_IDLE_TIMEOUT"] == "0", (
+        "the supervised child must inherit the persistent server setting"
+    )
 
 
 def test_process_tree_refresh_is_throttled_and_refreshed_on_exit(

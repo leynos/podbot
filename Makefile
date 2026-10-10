@@ -61,7 +61,8 @@ WORKFLOW_PY_SRCS := \
 	scripts/test_runner_windows_process.py \
 	scripts/test_runner_sccache.py \
 	scripts/test_runner_commands.py \
-	scripts/test_runner_diagnostics.py scripts/test_runner_process_io.py \
+	scripts/test_runner_diagnostics.py \
+	scripts/test_runner_diagnostic_collection.py scripts/test_runner_process_io.py \
 	scripts/test_runner_process_tree.py \
 	scripts/test_runner_target_selection.py \
 	scripts/test_runner_supervisor.py \
@@ -83,6 +84,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_test_runner_registry.py \
 	scripts/tests/test_test_runner_plan.py \
 	scripts/tests/test_test_runner_cargo_validation.py \
+	scripts/tests/test_test_runner_diagnostic_collection.py \
 	scripts/tests/test_test_runner_nested_output.py \
 	scripts/tests/test_test_runner_cargo.py \
 	scripts/tests/test_test_runner_execution.py \

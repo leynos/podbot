@@ -191,7 +191,9 @@ def test_runtime_environment_restores_target_and_toolchain(
     assert target_tmpdir == case.target_directory / "tmp", (
         "direct tests must receive Cargo's target temporary directory"
     )
-    assert target_tmpdir.is_dir(), "Cargo's target temporary directory must exist"
+    assert not target_tmpdir.exists(), (
+        "environment reconstruction must not create directories"
+    )
     assert case.environment["CARGO"] == "cargo", (
         "bare Cargo names must continue to resolve through PATH"
     )

@@ -178,7 +178,6 @@ def create_test_runtime_environment(
     _set_package_environment(environment, package)
     target_directory = pathlib.Path(environment["CARGO_TARGET_DIR"])
     target_temporary_directory = target_directory / "tmp"
-    target_temporary_directory.mkdir(parents=True, exist_ok=True)
     environment["CARGO_TARGET_TMPDIR"] = str(target_temporary_directory)
     environment["CARGO"] = _resolve_cargo_executable(context.cargo_command)
     if len(context.cargo_command) > 1 and context.cargo_command[1].startswith("+"):
@@ -189,6 +188,15 @@ def create_test_runtime_environment(
     _set_executable_profile_environment(environment, executable, messages)
     _set_dynamic_library_environment(environment, executable, messages)
     return environment
+
+
+def ensure_test_runtime_tmpdir(environment: dict[str, str]) -> None:
+    """Create the Cargo temporary directory before launching a test harness.
+
+    This command belongs at the nested-target execution boundary; environment
+    reconstruction itself remains free of filesystem mutations.
+    """
+    pathlib.Path(environment["CARGO_TARGET_TMPDIR"]).mkdir(parents=True, exist_ok=True)
 
 
 def _set_package_environment(

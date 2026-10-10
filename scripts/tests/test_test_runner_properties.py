@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import os
 
 from hypothesis import given, strategies as st
 
@@ -14,7 +15,12 @@ from report_sccache_errors import (
 from test_runner_commands import without_package_selection
 from test_runner_options import parse_cargo_test_options
 from test_runner_process_snapshot import ProcessInfo
-from test_runner_process_tree import OwnedProcess, OwnedProcessTree, ProcessTreeRoot
+from test_runner_process_tree import (
+    OwnedProcess,
+    OwnedProcessTree,
+    ProcessTreeRoot,
+    ProcessTreeSnapshot,
+)
 
 _FEATURE_NAME = st.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789_-", min_size=1, max_size=12
@@ -114,6 +120,168 @@ def test_process_tree_discovery_matches_reachable_children(
     assert set(tree.owned) == reachable, (
         "discovery must own exactly the processes reachable from the root"
     )
+
+
+@dataclasses.dataclass(frozen=True)
+class _ProcessTreeIdentities:
+    runner_pid: int
+    root_pid: int
+    tracked_pid: int
+    changing_pid: int
+    preexisting_pid: int
+    adopted_pid: int
+    external_parent_pid: int
+
+
+@dataclasses.dataclass(frozen=True)
+class _ProcessTreeTransitionCase:
+    tree: OwnedProcessTree
+    snapshot: ProcessTreeSnapshot
+    identities: _ProcessTreeIdentities
+
+
+def _process_tree_transition_case(
+    reused_pid: bool,
+    reused_state: str,
+    adopt_new_child: bool,
+    adopted_state: str,
+) -> _ProcessTreeTransitionCase:
+    """Build the prior and current process observations for one transition."""
+    runner_pid = os.getpid()
+    root_pid = runner_pid + 10_000
+    identities = _ProcessTreeIdentities(
+        runner_pid,
+        root_pid,
+        root_pid + 1,
+        root_pid + 2,
+        root_pid + 3,
+        root_pid + 4,
+        root_pid + 100,
+    )
+    tree, prior = _initial_process_tree(identities)
+    changing = prior[identities.changing_pid]
+
+    next_changing = ProcessInfo(
+        pid=identities.changing_pid,
+        parent_pid=(
+            identities.external_parent_pid if reused_pid else identities.tracked_pid
+        ),
+        process_group=1,
+        start_time=changing.start_time + int(reused_pid),
+        state=reused_state,
+        command=changing.command,
+    )
+    current = {**prior, identities.changing_pid: next_changing}
+    if adopt_new_child:
+        current[identities.adopted_pid] = ProcessInfo(
+            pid=identities.adopted_pid,
+            parent_pid=identities.runner_pid,
+            process_group=1,
+            start_time=identities.adopted_pid,
+            state=adopted_state,
+            command=f"process-{identities.adopted_pid}",
+        )
+
+    tree._refresh_known_processes(current)
+    tree._discover_descendants(current)
+    snapshot = ProcessTreeSnapshot(
+        identities.root_pid, True, current, tuple(tree.owned.values())
+    )
+    return _ProcessTreeTransitionCase(tree, snapshot, identities)
+
+
+def _initial_process_tree(
+    identities: _ProcessTreeIdentities,
+) -> tuple[OwnedProcessTree, dict[int, ProcessInfo]]:
+    """Seed prior ownership, including a child present before subreaping."""
+    root = _process_info(identities.root_pid, identities.runner_pid)
+    tracked = _process_info(identities.tracked_pid, identities.root_pid)
+    changing = _process_info(identities.changing_pid, identities.tracked_pid)
+    preexisting = _process_info(identities.preexisting_pid, identities.runner_pid)
+    prior = {
+        identities.root_pid: root,
+        identities.tracked_pid: tracked,
+        identities.changing_pid: changing,
+        identities.preexisting_pid: preexisting,
+    }
+    tree = OwnedProcessTree(
+        ProcessTreeRoot(
+            identities.root_pid,
+            "root",
+            0.0,
+            True,
+            frozenset(
+                {
+                    (
+                        identities.preexisting_pid,
+                        preexisting.start_time,
+                    )
+                }
+            ),
+        )
+    )
+    tree.owned[identities.root_pid] = OwnedProcess(root, 0.0)
+    tree._discover_descendants(prior)
+    return tree, prior
+
+
+@given(
+    reused_pid=st.booleans(),
+    reused_state=st.sampled_from(("S", "Z", "X")),
+    adopt_new_child=st.booleans(),
+    adopted_state=st.sampled_from(("S", "Z", "X")),
+)
+def test_process_tree_transitions_keep_only_current_owned_identities(
+    reused_pid: bool,
+    reused_state: str,
+    adopt_new_child: bool,
+    adopted_state: str,
+) -> None:
+    """Refresh removes reused identities and preserves valid adoption."""
+    case = _process_tree_transition_case(
+        reused_pid, reused_state, adopt_new_child, adopted_state
+    )
+    identities = case.identities
+    expected_owned = {identities.root_pid, identities.tracked_pid}
+    if not reused_pid:
+        expected_owned.add(identities.changing_pid)
+    if adopt_new_child:
+        expected_owned.add(identities.adopted_pid)
+
+    assert identities.preexisting_pid not in case.tree.owned, (
+        "a child present before subreaper ownership must remain excluded"
+    )
+    assert set(case.tree.owned) == expected_owned, (
+        "refresh must retain only current descendants and newly adopted identities"
+    )
+
+
+@given(
+    reused_pid=st.booleans(),
+    reused_state=st.sampled_from(("S", "Z", "X")),
+    adopt_new_child=st.booleans(),
+    adopted_state=st.sampled_from(("S", "Z", "X")),
+)
+def test_process_tree_transition_descendants_match_live_identities(
+    reused_pid: bool,
+    reused_state: str,
+    adopt_new_child: bool,
+    adopted_state: str,
+) -> None:
+    """Snapshots retain only live descendants in stable discovery order."""
+    case = _process_tree_transition_case(
+        reused_pid, reused_state, adopt_new_child, adopted_state
+    )
+    identities = case.identities
+    expected_descendants = [identities.tracked_pid]
+    if not reused_pid and reused_state not in {"Z", "X"}:
+        expected_descendants.append(identities.changing_pid)
+    if adopt_new_child and adopted_state not in {"Z", "X"}:
+        expected_descendants.append(identities.adopted_pid)
+
+    assert tuple(item.info.pid for item in case.snapshot.descendants()) == tuple(
+        expected_descendants
+    ), "live descendants must exclude inactive identities and retain discovery order"
 
 
 @given(

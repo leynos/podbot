@@ -10,6 +10,7 @@ import typing as typ
 import pytest
 import test_runner_cargo
 from test_runner_cargo import create_test_runtime_environment
+from test_runner_cargo import ensure_test_runtime_tmpdir
 from test_runner_cargo import select_test_executables
 from test_runner_context import TestRunnerContext
 from test_runner_fixtures import cargo_artifact_message as _artifact
@@ -239,6 +240,20 @@ def test_runtime_profile_uses_the_first_matching_artifact(
     )
 
     assert environment["CARGO_DEBUG_ASSERTIONS"] == "false"
+
+
+def test_runtime_tmpdir_is_created_at_the_nested_execution_boundary(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The nested runner prepares Cargo's temporary directory explicitly."""
+    target_temporary_directory = tmp_path / "target" / "tmp"
+    environment = {"CARGO_TARGET_TMPDIR": str(target_temporary_directory)}
+
+    ensure_test_runtime_tmpdir(environment)
+
+    assert target_temporary_directory.is_dir(), (
+        "the nested execution command must prepare Cargo's target tmp directory"
+    )
 
 
 def test_runtime_library_paths_keep_the_cargo_order(

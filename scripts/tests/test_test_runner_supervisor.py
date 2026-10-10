@@ -17,9 +17,9 @@ from test_runner_diagnostics import (
     StallReportContext,
     classify_lock_waiter,
     format_stall_report,
-    lock_path_identities,
     parse_proc_locks,
 )
+from test_runner_diagnostic_collection import lock_path_identities
 from test_runner_process_tree import (
     OwnedProcess,
     ProcessInfo,
@@ -155,10 +155,13 @@ def test_stall_report_truncates_long_process_commands(
             command=("cargo", "test"),
             cwd=tmp_path,
             environment={},
-            target_directory=None,
             elapsed_seconds=1.0,
             timeout_seconds=30.0,
             reason="controlled diagnostic test",
+            process_observed_at=time.monotonic(),
+            toolchain_file_line=None,
+            lock_records=(),
+            lock_path_identities=(),
         )
     )
     process_line = next(line for line in report.splitlines() if "pid=123" in line)

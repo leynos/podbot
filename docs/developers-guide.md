@@ -52,9 +52,10 @@ The private process supervisor owns only the subprocess tree launched by one
 phases and direct test harnesses; it is not a general process manager. It
 cleans only its own descendants, never kills unrelated processes, and never
 deletes cache locks. On bounded failure, it reports lock and process
-diagnostics. Diagnostic report formatting remains in
-`scripts/test_runner_diagnostics.py`; only `ProcessSupervisor` invokes it, for
-stalled commands and terminal cleanup.
+diagnostics. `test_runner_diagnostic_collection.py` owns clock, toolchain,
+procfs, and lock-file observations and emits reports only when invoked by
+`ProcessSupervisor` for stalled commands or terminal cleanup.
+`test_runner_diagnostics.py` formats only the captured data it receives.
 
 `OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
 returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that
@@ -69,11 +70,14 @@ Windows has no standard-library binding for Job Objects, so the required
 module remains importable across platforms; `create()` loads Windows libraries
 only when `os.name == "nt"`.
 
-When `RUSTC_WRAPPER` names sccache, `scripts/test_runner.py` sets
-`SCCACHE_IDLE_TIMEOUT=0` and best-effort starts the configured wrapper before
-entering `ProcessSupervisor`. Disabling idle shutdown prevents later phases
-from auto-starting a server that the supervisor could adopt into its owned
-tree. A missing or unresponsive wrapper does not fail the run.
+When `RUSTC_WRAPPER` names sccache, the phased runner calls the shared
+`start_configured_sccache` helper before entering `ProcessSupervisor`. The
+`--supervise` entry point routes through
+`test_runner_supervise.supervise_command`, which calls that helper before
+entering `ProcessSupervisor`. The helper sets `SCCACHE_IDLE_TIMEOUT=0` and
+best-effort starts the configured wrapper. Disabling idle shutdown prevents
+later phases from auto-starting a server that the supervisor could adopt into
+its owned tree. A missing or unresponsive wrapper does not fail the run.
 
 Cargo planning keeps package selection, package-local feature reachability and
 metadata conversion, target filtering, and nested-target registry validation as
@@ -138,7 +142,9 @@ In `test_runner_cargo.py`, `_artifact_target_and_profile` is shared only by
 test-artefact selection and binary environment restoration; each caller keeps
 its own policy checks. `_set_executable_profile_environment` is called only by
 `create_test_runtime_environment`, after binary registration and before
-dynamic-library path reconstruction.
+dynamic-library path reconstruction. That function reconstructs environment
+values without filesystem mutation; `run_nested_target` explicitly calls
+`ensure_test_runtime_tmpdir` before launching the nested harness.
 
 In `report_sccache_errors.py`, `_preceding_line_start` is private to
 `_line_window` and owns only its backward offset scan, including the
