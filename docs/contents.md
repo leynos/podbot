@@ -59,6 +59,9 @@ guide.
 
 ## Reference material
 
+- [Cargo package-cache investigation for issue 188](cargo-package-cache-investigation.md)
+  records the observed lock cycle, bounded Rust 1.88 attempt, and unresolved
+  cause.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md)
   explains code-health smells and refactoring approaches.
 - [Reliable testing in Rust via dependency injection](reliable-testing-in-rust-via-dependency-injection.md)
