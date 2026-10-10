@@ -121,34 +121,15 @@ jobs:
           use-cargo-nextest: 'false'
           with-ratchet: 'true'
           publish-artefact: 'false'
-      - name: Report compiler cache effectiveness
-        # After the compiling steps and on failure too, because a red lane
-        # is exactly when "did anything reach the cache" is worth knowing.
-        # This is the evidence for the repin above: on the pins this job
-        # used before, sccache was installed and started on every run and
-        # Cargo routed nothing through it, so these counters were all zero
-        # and nobody was looking.
-        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
-        run: sccache --show-stats
-      - name: Write compiler cache statistics
-        # The JSON form of the report above, for the health check below.
-        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
-        run: sccache --show-stats --stats-format json > sccache-stats.json
-      - name: Check compiler cache health
-        # Fails a structurally broken integration: the wrong backend, nothing
-        # wrapped, or every store or read failing. Isolated write or read
-        # errors only warn, because a cache hiccup costs one compile and must
-        # not turn a pull request red.
-        # Skipped when setup-rust fell back to no compiler cache after its
-        # server would not start: the wrapper is cleared then, so the check
-        # would report that nothing was wrapped and turn the job red, hiding
-        # a fallback the action already announced as an annotation and in the
-        # job summary. The next step keeps the skip visible.
-        if: always() && steps.setup-rust.outputs.sccache-status != 'fallback'
-        run: python3 scripts/check_sccache_health.py --expect-location ghac sccache-stats.json
-      - name: Note the skipped compiler cache health check
-        if: always() && steps.setup-rust.outputs.sccache-status == 'fallback'
-        run: echo "::notice title=sccache fallback::compiler cache health check skipped because setup-rust fell back to no cache for this job"
+      - name: Read the compiler cache
+        # One definition for the report, the JSON write, the health check and
+        # the fallback note, so the two lanes cannot drift. `always()`: a red
+        # lane is exactly when the counters are worth having. The status
+        # decides inside the action; see sccache-readers-e2e.yml.
+        if: always()
+        uses: ./.github/actions/sccache-readers
+        with:
+          sccache-status: ${{ steps.setup-rust.outputs.sccache-status }}
       - name: Set up Rust for Merman
         uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
         with:

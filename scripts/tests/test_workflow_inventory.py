@@ -39,11 +39,9 @@ SHARED_ACTIONS: typ.Final[list[tuple[str, str]]] = [
     ("dependabot-automerge.yml", "dependabot-automerge.yml"),
 ]
 
-#: The guard of every cache report: always(), and not on a declared sccache
-#: fallback, where there is no server to read.
-REPORT_GUARD: typ.Final = (
-    "always() && steps.setup-rust.outputs.sccache-status != 'fallback'"
-)
+#: The guard of every cache report call: always(), because the fallback
+#: exception lives inside the readers action.
+REPORT_GUARD: typ.Final = "always()"
 
 #: Every coverage step, as workflow and job.
 COVERAGE_JOBS: typ.Final[list[tuple[str, str]]] = [
@@ -66,6 +64,8 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
         "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
         "|| 'ubicloud-standard-2' }}",
     ),
+    # Hosted on purpose: about a minute of shell with nothing to compile.
+    ("sccache-readers-e2e.yml", "readers", "ubuntu-latest"),
 ]
 
 #: Every job whose runner can be an Ubicloud one, with the ceiling it

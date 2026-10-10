@@ -9,6 +9,7 @@ step, so a job running the action twice cannot hide one of them.
 from __future__ import annotations
 
 import collections.abc as cabc
+import pathlib
 import typing as typ
 
 from workflow_contracts import of_type, parse
@@ -27,6 +28,16 @@ COVERAGE_ACTION: typ.Final[str] = (
 #: report step that is absent, guarded, or placed before the compiling
 #: work would leave the repin unevidenced while every other rule passed.
 CACHE_REPORT_COMMAND: typ.Final[str] = "sccache --show-stats"
+
+#: The local composite action that holds the report and the steps after it.
+#: A lane that calls it has its cache report there, so the call counts as the
+#: report step for the rules about where the report sits.
+READERS_ACTION: typ.Final[str] = "./.github/actions/sccache-readers"
+
+#: That action's definition, read by the contracts about its steps.
+READERS_ACTION_FILE: typ.Final[pathlib.Path] = (
+    pathlib.Path(__file__).resolve().parents[1] / READERS_ACTION / "action.yml"
+)
 
 #: The variable naming that watchdog. It takes precedence over the
 #: action's `cargo-wait-timeout` input, so a caller pinning the budget
@@ -204,11 +215,14 @@ def _report_indices(steps: list[dict[str, object]]) -> list[int]:
     [1]
     >>> _report_indices([{"run": "echo sccache --show-stats"}])
     []
+    >>> _report_indices([{"uses": READERS_ACTION}])
+    [0]
     """
     return [
         index
         for index, step in enumerate(steps)
         if str(step.get("run", "")).strip() == CACHE_REPORT_COMMAND
+        or str(step.get("uses", "")) == READERS_ACTION
     ]
 
 

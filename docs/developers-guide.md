@@ -1610,38 +1610,55 @@ first warm run on `standard-2` spent 19 minutes in lint and reached its
 35-minute ceiling mid-test (run 36559052173), against a hosted median of 14.8
 minutes.
 
-Both coverage lanes also check the compiler cache after reporting on it.
-`sccache --show-stats --stats-format json > sccache-stats.json` writes the
-statistics, and `scripts/check_sccache_health.py --expect-location ghac`,
-ported from Whitaker, fails the job only when the integration is structurally
-broken. That means one of: the cache location is not the GitHub Actions
-backend; sccache handled no compile requests; every store failed; or every read
-failed. Isolated read errors, write errors and timeouts only produce a warning:
-one failed store costs one compile, and failing on it would make the lane as
-flaky as the cache service. Both steps run under `always()`, so a red lane is
-still judged, and the coverage contracts assert them after every cache report.
+Both coverage lanes also check the compiler cache after reporting on it, and
+they do it through one local composite action,
+`.github/actions/sccache-readers`, so the two lanes cannot differ. Each calls
+it once, after its coverage step and under `always()`, passing `setup-rust`'s
+`sccache-status` output as the action's `sccache-status` input. The action
+reports `sccache --show-stats`, writes
+`sccache --show-stats --stats-format json > sccache-stats.json`, and runs
+`scripts/check_sccache_health.py --expect-location ghac`, ported from Whitaker,
+which fails the job only when the integration is structurally broken. That
+means one of: the cache location is not the GitHub Actions backend; sccache
+handled no compile requests; every store failed; or every read failed. Isolated
+read errors, write errors and timeouts only produce a warning: one failed store
+costs one compile, and failing on it would make the lane as flaky as the cache
+service. The calls run under `always()`, so a red lane is still judged, and the
+coverage contracts assert the call after every coverage step.
+
 The one exception is a declared fallback: `setup-rust` gives sccache a startup
 timeout and, if the server still will not start, clears the compiler wrapper,
 raises a `sccache-fallback` annotation and sets its `sccache-status` output to
 `fallback`. The health check would then report that nothing was wrapped and
-fail a job the action had already annotated, so it skips when the `setup-rust`
-step's `sccache-status` is `fallback`, and a notice step keeps the skip
-visible. Every reader of `sccache --show-stats` stands down the same way: the
-cache report, the JSON write and the health check each carry the guard
-`always() && steps.setup-rust.outputs.sccache-status != 'fallback'`, so an
-uncached job prints no table of zeros and writes no `sccache-stats.json`. Any
-other status, including the empty one an older pin gives, still runs all three.
-`scripts/tests/test_sccache_fallback_contract.py` holds the step id, the guard
-on every reader and the notice to both workflows, and it evaluates each
-reader's real `if:` for a `fallback` status and for a normal one. The small
-evaluator, `scripts/workflow_condition.py`, is called as
+fail a job the action had already annotated, so every reader of
+`sccache --show-stats` stands down: the report, the JSON write and the health
+check each carry the guard `always() && inputs.sccache-status != 'fallback'`,
+so an uncached job prints no table of zeros and writes no `sccache-stats.json`,
+and a notice step keeps the skip visible. Any other status, including the empty
+one an older pin gives, still runs all three.
+`scripts/tests/test_sccache_fallback_contract.py` holds the call, the step id
+and status it passes, and the guard on every reader and the notice, and it
+evaluates each reader's real `if:` for a `fallback` status and for a normal
+one. The small evaluator, `scripts/workflow_condition.py`, is called as
 `evaluate(expression, status)`: it takes the `if:` text and the value of the
-`setup-rust` step's `sccache-status` output and returns whether the step runs.
-It models only `&&`, `||`, `==`, `!=`, `!`, `always()` and that one output.
-Anything else, including any other context, a comparison of a boolean with a
-string (which GitHub would coerce to numbers) and malformed syntax, raises
+action's `sccache-status` input and returns whether the step runs. It models
+only `&&`, `||`, `==`, `!=`, `!`, `always()` and that one input. Anything else,
+including any other context, a comparison of a boolean with a string (which
+GitHub would coerce to numbers) and malformed syntax, raises
 `UnmodelledExpressionError`, so a contract cannot pass vacuously. A contract
 author lets that error fail the test rather than catching it.
+
+Those contracts evaluate the guards themselves; they cannot make GitHub do it,
+and `setup-rust` has no input that forces its fallback, which fires only after
+a real 60 s sccache startup timeout.
+`.github/workflows/sccache-readers-e2e.yml` closes that gap. It calls the same
+action on a hosted `ubuntu-latest` runner once for each status a pin can give
+(`fallback`, `started` and the empty output of an older pin), with a recording
+`sccache` shim on `PATH`, and its last step fails the leg unless the shim saw
+no call and no statistics file was written under `fallback`, and saw both reads
+and left the statistics otherwise. It runs only when the action, either caller
+workflow, the workflow itself or `check_sccache_health.py` changes, and costs
+one hosted job of about a minute per status.
 
 ### 20.1. Running the contracts
 
