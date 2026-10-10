@@ -145,9 +145,10 @@ def test_write_error_output_redacts_credentials_and_caps_lines() -> None:
 
 
 def test_environment_secret_names_cover_platform_credentials() -> None:
-    """Known AWS, SSH, and auth-config values are redacted before structure."""
+    """Known AWS, SSH, auth-config, and token-file values are redacted."""
     environment = {
         "AWS_ACCESS_KEY_ID": "aws-access-key",
+        "AWS_SESSION_TOKEN_FILE": "session-token.example",
         "SSH_AUTH_SOCK": "/tmp/agent.sock",
         "CACHE_AUTH_CONFIG": "cache.internal",
     }
@@ -158,10 +159,14 @@ def test_environment_secret_names_cover_platform_credentials() -> None:
     )
     line = sanitize_error_log(
         "ERROR failed to write from https://cache.internal/path "
+        "https://session-token.example/item "
         "AWS_ACCESS_KEY_ID=aws-access-key SSH_AUTH_SOCK=/tmp/agent.sock",
         secrets,
     )[0]
     assert "cache.internal" not in line, "redact known secrets before URL handling"
+    assert "session-token.example" not in line, (
+        "redact token-file values before URL handling"
+    )
     assert "aws-access-key" not in line, "redact access-key identifiers"
     assert "/tmp/agent.sock" not in line, "redact SSH agent socket paths"
 

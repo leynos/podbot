@@ -70,7 +70,8 @@ _ERROR_LINE = re.compile(rf"(?im)^[^\r\n]*(?:{_ERROR.pattern})[^\r\n]*$")
 def _environment_secrets(environment: Mapping[str, str]) -> tuple[str, ...]:
     """Return non-empty values from environment variables named as secrets."""
     secret_name = re.compile(
-        r"(?:TOKEN|SECRET|PASSWORD|CREDENTIALS?(?:_FILE)?|AUTH(?:_CONFIG|_SOCK)?|"
+        r"(?:TOKEN(?:_FILE)?|SECRET|PASSWORD|CREDENTIALS?(?:_FILE)?|"
+        r"AUTH(?:_CONFIG|_SOCK)?|"
         r"API[_-]?KEY|ACCESS[_-]?KEY(?:[_-]?ID)?|SIGNATURE|SAS)$",
         re.IGNORECASE,
     )
