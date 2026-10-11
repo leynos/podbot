@@ -9,7 +9,11 @@ import pytest
 import test_runner_diagnostic_collection as collection
 import test_runner_diagnostics as diagnostics
 from test_runner_diagnostics import StallReportContext, format_stall_report
-from test_runner_process_tree import ProcessTreeSnapshot
+from test_runner_process_tree import (
+    OwnedProcess,
+    ProcessInfo,
+    ProcessTreeSnapshot,
+)
 
 
 def test_stall_report_formatting_uses_only_supplied_observations(
@@ -68,3 +72,87 @@ def test_stall_report_formatting_uses_only_supplied_observations(
             "    no locks on mapped Cargo package-cache or target files",
         )
     ), "the renderer must preserve report text while using the captured values"
+
+
+def test_stall_report_redacts_command_environment_and_process_credentials() -> None:
+    """Captured diagnostics retain safe command identity without credential values."""
+    environment = {
+        "AWS_SESSION_TOKEN": "environment-secret-value",
+        "CARGO": "https://user:password@cache.example:8443/private?token=url-secret",
+        "RUSTC_WRAPPER": "sccache",
+    }
+    process = ProcessInfo(
+        pid=123,
+        parent_pid=100,
+        process_group=123,
+        start_time=456,
+        state="S",
+        command=(
+            "rustc --token process-secret-value "
+            "--message environment-secret-value --crate-name compile_contract"
+        ),
+    )
+    snapshot = ProcessTreeSnapshot(
+        root_pid=process.pid,
+        proc_available=True,
+        processes={process.pid: process},
+        owned=(OwnedProcess(process, 99.0),),
+    )
+
+    report = format_stall_report(
+        StallReportContext(
+            process_snapshot=snapshot,
+            command=(
+                "cargo",
+                "test",
+                "--token",
+                "argument-secret-value",
+                "--message",
+                "environment-secret-value",
+                "https://user:password@cache.example/private?token=url-secret",
+            ),
+            cwd=pathlib.Path("/workspace"),
+            environment=environment,
+            elapsed_seconds=1.0,
+            timeout_seconds=30.0,
+            reason="timed out",
+            process_observed_at=100.0,
+            toolchain_file_line=None,
+            lock_records=(),
+            lock_path_identities=(),
+        )
+    )
+
+    assert "cargo test --token <redacted>" in report, (
+        "stall output must retain safe command identity and hide option values"
+    )
+    assert "--message <redacted>" in report, (
+        "known secret environment values must be removed from arbitrary arguments"
+    )
+    assert "<URL https://cache.example>" in report, (
+        "credential-bearing URLs must retain only their endpoint authority"
+    )
+    assert "RUSTC_WRAPPER=sccache" in report, (
+        "safe toolchain values must remain available for diagnosis"
+    )
+    for secret in (
+        "environment-secret-value",
+        "password",
+        "url-secret",
+        "argument-secret-value",
+        "process-secret-value",
+    ):
+        assert secret not in report, "stall reports must not expose credential values"
+
+
+def test_diagnostic_text_is_bounded_after_redaction() -> None:
+    """Long command text keeps a bounded prefix and a visible truncation mark."""
+    diagnostic = diagnostics.redact_diagnostic_text("cargo " + "--verbose " * 200)
+
+    assert len(diagnostic) <= 1000, "one diagnostic value must stay within its bound"
+    assert diagnostic.startswith("cargo --verbose"), (
+        "bounded output must retain the command prefix"
+    )
+    assert diagnostic.endswith("... [truncated]"), (
+        "bounded output must explain that text was shortened"
+    )

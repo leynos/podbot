@@ -111,7 +111,9 @@ def test_selection_requires_the_exact_boolean_test_flag(
 
     if matches:
         selected = select_test_executables([artifact], (case.target,))
-        assert selected[(case.target.package_id, case.target.name)] == case.executable
+        assert (
+            selected[(case.target.package_id, case.target.name)] == case.executable
+        ), "the selected executable must match the package target"
     else:
         with pytest.raises(RunnerError, match="found 0"):
             select_test_executables([artifact], (case.target,))
@@ -149,7 +151,9 @@ def test_binary_registration_requires_string_name_and_executable(
         case.context, case.package, case.executable, [artifact]
     )
 
-    assert "CARGO_BIN_EXE_podbot" not in environment
+    assert "CARGO_BIN_EXE_podbot" not in environment, (
+        "malformed Cargo target metadata must not register a binary environment variable"
+    )
 
 
 @pytest.mark.parametrize(
@@ -173,7 +177,9 @@ def test_binary_registration_requires_the_exact_boolean_false_flag(
         case.context, case.package, case.executable, [artifact]
     )
 
-    assert ("CARGO_BIN_EXE_podbot" in environment) is registers
+    assert ("CARGO_BIN_EXE_podbot" in environment) is registers, (
+        "binary registration must follow the exact Boolean test flag"
+    )
 
 
 @pytest.mark.parametrize(
@@ -194,7 +200,9 @@ def test_runtime_profile_exports_boolean_debug_assertions(
         case.context, case.package, case.executable, [artifact]
     )
 
-    assert environment["CARGO_DEBUG_ASSERTIONS"] == expected
+    assert environment["CARGO_DEBUG_ASSERTIONS"] == expected, (
+        "Cargo's Boolean debug_assertions value must be exported as lowercase text"
+    )
 
 
 @pytest.mark.parametrize(
@@ -222,7 +230,9 @@ def test_runtime_profile_preserves_inherited_value_when_unavailable(
         case.context, case.package, case.executable, [artifact]
     )
 
-    assert environment["CARGO_DEBUG_ASSERTIONS"] == "inherited"
+    assert environment["CARGO_DEBUG_ASSERTIONS"] == "inherited", (
+        "inherited debug-assertions state must survive unavailable profile metadata"
+    )
 
 
 def test_runtime_profile_uses_the_first_matching_artifact(
@@ -239,7 +249,9 @@ def test_runtime_profile_uses_the_first_matching_artifact(
         case.context, case.package, case.executable, [first, second]
     )
 
-    assert environment["CARGO_DEBUG_ASSERTIONS"] == "false"
+    assert environment["CARGO_DEBUG_ASSERTIONS"] == "false", (
+        "profile lookup must keep the first matching Cargo artifact"
+    )
 
 
 def test_runtime_tmpdir_is_created_at_the_nested_execution_boundary(
@@ -289,5 +301,7 @@ def test_runtime_library_paths_keep_the_cargo_order(
         str(case.executable.parent.parent),
         str(native),
         "/caller/native",
-    ]
-    assert case.context.environment == case.inherited_environment
+    ], "library search paths must follow Cargo order and retain inherited paths"
+    assert case.context.environment == case.inherited_environment, (
+        "environment construction must not mutate caller-owned state"
+    )

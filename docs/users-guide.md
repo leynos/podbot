@@ -881,6 +881,19 @@ required by the agent.
 make test
 ```
 
+The default command tests all workspace targets with all features enabled. Set
+`TEST_FLAGS` to choose another supported target or feature selection;
+`BUILD_JOBS` controls Cargo's build parallelism. `RUST_FLAGS` is forwarded to
+Rust as `RUSTFLAGS` and defaults to `-D warnings`.
+
+The run deadline defaults to 1800 seconds. Set `TEST_TIMEOUT` when invoking
+Make, or `PODBOT_TEST_TIMEOUT` in the environment. A timeout returns status
+124; an interrupt returns 128 plus the signal number. On a timeout or
+interrupt, the runner reports its owned process tree and cleans up only that
+tree. See the
+[developer's guide](developers-guide.md#23-supported-test-orchestration) for
+the phase layout and diagnostic details.
+
 ### Running lints
 
 ```bash

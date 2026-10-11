@@ -11,6 +11,7 @@ import os
 import pathlib
 import shlex
 
+from test_runner_diagnostics import redact_diagnostic_text
 from test_runner_models import RunnerError
 from test_runner_sccache import start_configured_sccache
 from test_runner_supervisor import CommandRequest, ProcessSupervisor
@@ -29,9 +30,9 @@ def supervise_command(
     working_directory = pathlib.Path.cwd().resolve()
     environment = os.environ.copy()
     start_configured_sccache(environment)
+    safe_command = redact_diagnostic_text(shlex.join(command), environment)
     print(
-        f"== Supervised command (timeout {timeout_seconds:g}s): "
-        f"{shlex.join(command)} ==",
+        f"== Supervised command (timeout {timeout_seconds:g}s): {safe_command} ==",
         flush=True,
     )
     with ProcessSupervisor(

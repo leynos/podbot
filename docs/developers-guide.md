@@ -55,7 +55,14 @@ deletes cache locks. On bounded failure, it reports lock and process
 diagnostics. `test_runner_diagnostic_collection.py` owns clock, toolchain,
 procfs, and lock-file observations and emits reports only when invoked by
 `ProcessSupervisor` for stalled commands or terminal cleanup.
-`test_runner_diagnostics.py` formats only the captured data it receives.
+`test_runner_diagnostics.py` formats only the captured data it receives. Its
+`redact_diagnostic_text()` helper is the single redaction policy for arbitrary
+command and selected toolchain/environment values shown by the `--supervise`
+banner and stall report. Those are its only permitted output call sites. It
+removes known values from secret-named environment entries, credential fields,
+and URL paths, then bounds each value. Keep it composed at these print
+boundaries; it is not a general logging filter. The sccache log reader retains
+its separate selection and sanitization contract in `report_sccache_errors.py`.
 
 `OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
 returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that

@@ -104,6 +104,20 @@ def test_plural_bin_selection_returns_empty_when_every_match_is_feature_gated(
     )
 
 
+def test_named_bin_selection_does_not_reselect_same_named_bench_library(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A named binary selector stays scoped when bench selection adds its library."""
+    plan = create_test_plan(
+        package_document(tmp_path),
+        parse_cargo_test_options(["--bin", "podbot", "--benches"]),
+    )
+
+    assert plan.ordinary_target_args == ("--bin", "podbot", "--benches"), (
+        "the named binary selector must not turn the same-named bench library into --lib"
+    )
+
+
 def test_plural_selector_without_matches_raises_runner_error(
     tmp_path: pathlib.Path,
 ) -> None:

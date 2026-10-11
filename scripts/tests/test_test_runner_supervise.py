@@ -36,6 +36,68 @@ def test_supervise_mode_propagates_command_failure() -> None:
     assert status == 23, "supervise mode must preserve ordinary child failures"
 
 
+def test_supervise_banner_redacts_credentials_and_bounds_command(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The one-off command banner preserves identity without printing secrets."""
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "environment-secret-value")
+
+    class FakeSupervisor:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> FakeSupervisor:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def run_inherited(self, _request: object) -> int:
+            return 0
+
+    monkeypatch.setattr(supervise_module, "start_configured_sccache", lambda _env: None)
+    monkeypatch.setattr(supervise_module, "ProcessSupervisor", FakeSupervisor)
+
+    status = supervise_module.supervise_command(
+        [
+            "cargo",
+            "test",
+            "--token",
+            "argument-secret-value",
+            "--message",
+            "environment-secret-value",
+            "https://user:password@cache.example/private?token=url-secret",
+            *("--verbose" for _ in range(200)),
+        ],
+        30,
+        1,
+        enable_subreaper=False,
+    )
+    banner = capsys.readouterr().out
+
+    assert status == 0, "the banner must not change the supervised command result"
+    assert "cargo test --token <redacted>" in banner, (
+        "the banner must retain safe command identity"
+    )
+    assert "--message <redacted>" in banner, (
+        "known secret environment values must be removed from arbitrary arguments"
+    )
+    assert "<URL https://cache.example>" in banner, (
+        "the banner must retain only a credential-bearing URL's authority"
+    )
+    assert "... [truncated]" in banner, (
+        "the banner must visibly bound a long supervised command"
+    )
+    for secret in (
+        "environment-secret-value",
+        "password",
+        "url-secret",
+        "argument-secret-value",
+    ):
+        assert secret not in banner, "the banner must not expose credential values"
+
+
 def test_supervise_mode_prestarts_sccache_before_process_supervisor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

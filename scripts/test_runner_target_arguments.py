@@ -63,7 +63,7 @@ def _arguments_for_selector(
             return _default_arguments(context.selected_targets, context.omitted_targets)
         case _:
             return _named_target_arguments(
-                pattern, context.selected_targets, context.omitted_targets
+                selector, pattern, context.selected_targets, context.omitted_targets
             )
 
 
@@ -151,15 +151,26 @@ def _default_arguments(
 
 
 def _named_target_arguments(
+    selector: str,
     pattern: str | None,
     targets: tuple[Target, ...],
     omitted: frozenset[Target],
 ) -> tuple[str, ...]:
-    """Select explicitly named or globbed Cargo targets."""
+    """Select names only when the target has the requested Cargo kind.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> library = Target("podbot", "id", Path("."), "podbot", ("lib",), True, True, True, ())
+    >>> binary = Target("podbot", "id", Path("."), "podbot", ("bin",), True, True, False, ())
+    >>> _named_target_arguments("bin", "podbot", (library, binary), frozenset())
+    ('--bin', 'podbot')
+    """
     candidates = tuple(
         target
         for target in targets
-        if target.name == pattern or _matches_target_name(target, pattern)
+        if selector in target.kinds
+        and (target.name == pattern or _matches_target_name(target, pattern))
     )
     return tuple(
         part

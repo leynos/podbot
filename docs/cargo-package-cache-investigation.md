@@ -75,6 +75,14 @@ toolchain change was evaluated; issue
 
 ## CI and coverage boundary
 
+The workflow observations in this section are a historical snapshot from
+2026-09-28, not the current workflow configuration. At the current PR revision,
+`coverage-main.yml` pins shared-actions `generate-coverage` at
+`6cec89bac47a21cf756d68d638a9a510998e57f8`; the current action boundary and
+inputs are documented in the
+[developer's guide](developers-guide.md#24-coverage-action-boundary). The
+pin-specific analysis below applies to the earlier `a576501` revision only.
+
 The two CI test lanes now use `make test`: the no-default-features boundary
 lane selects `cli_feature_gating` and `compile_contract`, and the internal lane
 uses `--features internal`. Existing `cargo check` and coverage steps remain

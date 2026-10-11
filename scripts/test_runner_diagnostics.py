@@ -4,12 +4,37 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
+import re
 import shlex
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from urllib.parse import urlsplit
 
 from test_runner_process_tree import ProcessTreeSnapshot
 
 _PROCESS_COMMAND_LIMIT = 256
+_DIAGNOSTIC_TEXT_LIMIT = 1000
+_DIAGNOSTIC_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_DIAGNOSTIC_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s\"'<>]+", re.IGNORECASE)
+_DIAGNOSTIC_BEARER = re.compile(r"\b(Bearer|Basic)\s+[^\s,;]+", re.IGNORECASE)
+_DIAGNOSTIC_SECRET_FIELD = re.compile(
+    r"(?i)([\"']?[\w.-]*(?:TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTHORIZATION|"
+    r"API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|SIGNATURE|SAS)[\w.-]*[\"']?"
+    r"\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^,\s;}]+)"
+)
+_DIAGNOSTIC_SECRET_OPTION = re.compile(
+    r"(?i)(--?(?:TOKEN|SECRET|PASSWORD|CREDENTIALS?|AUTHORIZATION|"
+    r"API[-_]?KEY|ACCESS[-_]?KEY|PRIVATE[-_]?KEY)(?:=|\s+))"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s]+)"
+)
+_DIAGNOSTIC_GITHUB_TOKEN = re.compile(
+    r"\b(?:gh[oprsu]_[A-Za-z0-9_]{8,}|github_pat_[A-Za-z0-9_]{8,})\b"
+)
+_DIAGNOSTIC_SECRET_NAME = re.compile(
+    r"(?:TOKEN(?:_FILE)?|SECRET|PASSWORD|CREDENTIALS?(?:_FILE)?|"
+    r"AUTH(?:_CONFIG|_SOCK)?|API[_-]?KEY|ACCESS[_-]?KEY(?:[_-]?ID)?|"
+    r"PRIVATE[_-]?KEY(?:_FILE)?|SIGNATURE|SAS)$",
+    re.IGNORECASE,
+)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -43,6 +68,67 @@ class StallReportContext:
     toolchain_file_line: str | None
     lock_records: tuple[LockRecord, ...] | str | None
     lock_path_identities: tuple[tuple[str, str], ...]
+
+
+def redact_diagnostic_text(
+    text: str, environment: Mapping[str, str] | None = None
+) -> str:
+    """Redact credentials and bound one command or environment diagnostic.
+
+    Known secret environment values are removed before credential fields and
+    URLs are filtered. The leading text remains available for useful command
+    identity.
+
+    Examples
+    --------
+    >>> redact_diagnostic_text("cargo --token abc", {})
+    'cargo --token <redacted>'
+    """
+    env = environment or {}
+    secrets = sorted(
+        {
+            value
+            for name, value in env.items()
+            if value and _DIAGNOSTIC_SECRET_NAME.search(name)
+        },
+        key=len,
+        reverse=True,
+    )
+    safe = _DIAGNOSTIC_CONTROL.sub("?", text)
+    for secret in secrets:
+        safe = safe.replace(secret, "<redacted>")
+    safe = _DIAGNOSTIC_URL.sub(_redact_diagnostic_url, safe)
+    safe = _DIAGNOSTIC_BEARER.sub(r"\1 <redacted>", safe)
+    safe = _DIAGNOSTIC_SECRET_OPTION.sub(r"\1<redacted>", safe)
+    safe = _DIAGNOSTIC_SECRET_FIELD.sub(r"\1<redacted>", safe)
+    safe = _DIAGNOSTIC_GITHUB_TOKEN.sub("<redacted>", safe)
+    if len(safe) > _DIAGNOSTIC_TEXT_LIMIT:
+        suffix = "... [truncated]"
+        safe = f"{safe[: _DIAGNOSTIC_TEXT_LIMIT - len(suffix)]}{suffix}"
+    return safe
+
+
+def _redact_diagnostic_url(match: re.Match[str]) -> str:
+    """Keep an endpoint's authority while removing its credentials and path.
+
+    Examples
+    --------
+    >>> _DIAGNOSTIC_URL.sub(
+    ...     _redact_diagnostic_url, "https://user:secret@example.com/private"
+    ... )
+    '<URL https://example.com>'
+    """
+    try:
+        parts = urlsplit(match.group())
+        hostname = parts.hostname
+        if hostname is None:
+            return "<URL>"
+        host = f"[{hostname}]" if ":" in hostname else hostname
+        if parts.port is not None:
+            host = f"{host}:{parts.port}"
+        return f"<URL {parts.scheme}://{host}>"
+    except ValueError:
+        return "<URL>"
 
 
 def parse_proc_locks(contents: str) -> tuple[LockRecord, ...]:
@@ -82,11 +168,19 @@ def format_stall_report(context: StallReportContext) -> str:
     lines = [
         f"test runner: {context.reason} after {context.elapsed_seconds:.1f}s "
         f"(deadline {context.timeout_seconds:.1f}s)",
-        f"  command: {shlex.join(context.command)}",
-        f"  working directory: {context.cwd}",
+        "  command: "
+        + redact_diagnostic_text(shlex.join(context.command), context.environment),
+        "  working directory: "
+        + redact_diagnostic_text(str(context.cwd), context.environment),
     ]
     lines.extend(_toolchain_lines(context.environment, context.toolchain_file_line))
-    lines.extend(_process_lines(context.process_snapshot, context.process_observed_at))
+    lines.extend(
+        _process_lines(
+            context.process_snapshot,
+            context.process_observed_at,
+            context.environment,
+        )
+    )
     lines.extend(
         _lock_lines(
             context.process_snapshot,
@@ -104,7 +198,11 @@ def _toolchain_lines(
     return [
         "  toolchain/environment:",
         *_configured_toolchain_lines(environment),
-        *([toolchain_file_line] if toolchain_file_line is not None else []),
+        *(
+            [redact_diagnostic_text(toolchain_file_line, environment)]
+            if toolchain_file_line is not None
+            else []
+        ),
     ]
 
 
@@ -118,10 +216,18 @@ def _configured_toolchain_lines(environment: dict[str, str]) -> list[str]:
         "CARGO_HOME",
         "CARGO_TARGET_DIR",
     )
-    return [f"    {name}={value}" for name in names if (value := environment.get(name))]
+    return [
+        redact_diagnostic_text(f"    {name}={value}", environment)
+        for name in names
+        if (value := environment.get(name))
+    ]
 
 
-def _process_lines(snapshot: ProcessTreeSnapshot, observed_at: float) -> list[str]:
+def _process_lines(
+    snapshot: ProcessTreeSnapshot,
+    observed_at: float,
+    environment: Mapping[str, str],
+) -> list[str]:
     """Describe commands, ancestry, and captured elapsed time for owned PIDs."""
     processes = snapshot.live_owned()
     lines = ["  owned process tree:"]
@@ -132,7 +238,10 @@ def _process_lines(snapshot: ProcessTreeSnapshot, observed_at: float) -> list[st
                 f"    pid={info.pid} ppid={info.parent_pid} "
                 f"elapsed={max(0.0, observed_at - owned.first_seen):.1f}s "
                 f"state={info.state} "
-                f"command={_display_process_command(info.command)}"
+                "command="
+                + _display_process_command(
+                    redact_diagnostic_text(info.command, environment)
+                )
             )
     else:
         lines.append("    no live owned process entries are visible")
