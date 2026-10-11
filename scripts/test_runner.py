@@ -22,13 +22,14 @@ import shlex
 import sys
 
 from test_runner_cargo import RunnerCommandFailure, load_cargo_metadata
+from test_runner_context import TestRunnerContext
+from test_runner_diagnostics import redact_diagnostic_text
 from test_runner_models import RunnerError
 from test_runner_options import parse_cargo_test_options
-from test_runner_plan import create_test_plan
-from test_runner_context import TestRunnerContext
 from test_runner_phases import run_test_plan
-from test_runner_supervise import supervise_command
+from test_runner_plan import create_test_plan
 from test_runner_sccache import start_configured_sccache
+from test_runner_supervise import supervise_command
 from test_runner_supervisor import ProcessSupervisor
 
 
@@ -46,7 +47,10 @@ def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) 
     except RunnerCommandFailure as exc:
         return exc.status
     except (OSError, RunnerError) as exc:
-        print(f"test runner: {exc}", file=sys.stderr)
+        print(
+            "test runner: " + redact_diagnostic_text(str(exc), os.environ),
+            file=sys.stderr,
+        )
         return 2
 
 

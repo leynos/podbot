@@ -13,6 +13,7 @@ from test_runner_cargo import (
 )
 from test_runner_commands import without_message_format, without_package_selection
 from test_runner_context import TestRunnerContext
+from test_runner_diagnostics import redact_diagnostic_text
 from test_runner_models import CargoTestPlan, RunnerError, Target
 from test_runner_supervisor import CommandRequest
 
@@ -30,7 +31,10 @@ def run_nested_target(
     try:
         executable = select_test_executables(messages, (target,))[key]
     except RunnerError as exc:
-        print(f"test runner: {exc}", file=sys.stderr)
+        print(
+            "test runner: " + redact_diagnostic_text(str(exc), context.environment),
+            file=sys.stderr,
+        )
         return 2
     package = _selected_target_package(plan, target)
     if package is None:

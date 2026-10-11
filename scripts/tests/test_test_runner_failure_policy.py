@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pathlib
 import typing as typ
+from types import SimpleNamespace
 
 import pytest
 import test_runner
@@ -63,6 +64,59 @@ def test_artifact_selection_error_returns_runner_failure(
     assert "no current test artifact" in capsys.readouterr().err, (
         "artifact selection failures must be visible on stderr"
     )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        pytest.param("the Cargo command is empty", id="ordinary-error"),
+        pytest.param(
+            "failed to read https://user:url-secret@example.test/private?token=abc",
+            id="credential-url",
+        ),
+        pytest.param("long diagnostic " + "x" * 1200, id="bounded-long-error"),
+    ],
+)
+def test_main_redacts_and_bounds_runner_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    message: str,
+) -> None:
+    """Top-level runner errors preserve safe text and redact sensitive values."""
+    secret = "known-environment-secret"
+    monkeypatch.setattr(
+        test_runner,
+        "os",
+        SimpleNamespace(environ={"GITHUB_TOKEN": secret}),
+    )
+
+    def fail_dispatch(*args: typ.Any, **kwargs: typ.Any) -> typ.NoReturn:
+        raise RunnerError(message)
+
+    monkeypatch.setattr(test_runner, "_run_parsed_arguments", fail_dispatch)
+
+    status = test_runner.main([])
+
+    error = capsys.readouterr().err
+    diagnostic = error.removeprefix("test runner: ").rstrip("\n")
+    assert status == 2, "runner errors must preserve the established exit status"
+    assert secret not in error, "known environment secrets must not reach stderr"
+    if message == "the Cargo command is empty":
+        assert error == "test runner: the Cargo command is empty\n", (
+            "ordinary runner error wording must remain unchanged"
+        )
+    elif "url-secret" in message:
+        assert "<URL https://example.test>" in error, (
+            "credential-bearing URLs must retain only their safe authority"
+        )
+        assert "url-secret" not in error and "?token=abc" not in error, (
+            "URL credentials and paths must not reach stderr"
+        )
+    else:
+        assert len(diagnostic) <= 1000, "runner errors must obey the text bound"
+        assert diagnostic.endswith("... [truncated]"), (
+            "long runner errors must disclose that their text was truncated"
+        )
 
 
 @pytest.mark.parametrize(
