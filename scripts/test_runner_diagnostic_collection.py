@@ -14,6 +14,7 @@ from test_runner_diagnostics import (
     _normalize_device_inode,
     format_stall_report,
     parse_proc_locks,
+    redact_diagnostic_text,
 )
 from test_runner_process_io import CommandRequest
 from test_runner_process_tree import ProcessTreeSnapshot
@@ -37,7 +38,10 @@ def emit_stall_diagnostics(
         context = _collect_stall_report_context(snapshot, request, timing, reason)
         report = format_stall_report(context)
     except Exception as exc:
-        report = f"test runner: {reason}; diagnostics unavailable: {exc}"
+        report = redact_diagnostic_text(
+            f"test runner: {reason}; diagnostics unavailable: {exc}",
+            request.environment,
+        )
     try:
         print(report, file=sys.stderr, flush=True)
     except OSError:

@@ -13,6 +13,7 @@ import typing as typ
 from dataclasses import dataclass
 
 from test_runner_diagnostic_collection import emit_stall_diagnostics
+from test_runner_diagnostics import redact_diagnostic_text
 from test_runner_process_io import (
     CommandRequest,
     ProcessLaunchRequest,
@@ -223,7 +224,10 @@ class ProcessSupervisor:
             if windows_job is not None:
                 windows_job.close()
             print(
-                f"test runner: could not start {request.command[0]}: {exc}",
+                redact_diagnostic_text(
+                    f"test runner: could not start {request.command[0]}: {exc}",
+                    request.environment,
+                ),
                 file=sys.stderr,
             )
             return None
@@ -236,7 +240,10 @@ class ProcessSupervisor:
             process.kill()
             process.wait()
             print(
-                f"test runner: could not contain {request.command[0]}: {exc}",
+                redact_diagnostic_text(
+                    f"test runner: could not contain {request.command[0]}: {exc}",
+                    request.environment,
+                ),
                 file=sys.stderr,
             )
             return None

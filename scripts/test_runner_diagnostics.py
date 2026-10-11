@@ -186,6 +186,7 @@ def format_stall_report(context: StallReportContext) -> str:
             context.process_snapshot,
             context.lock_records,
             context.lock_path_identities,
+            context.environment,
         )
     )
     return "\n".join(lines)
@@ -260,15 +261,20 @@ def _lock_lines(
     snapshot: ProcessTreeSnapshot,
     records_or_error: tuple[LockRecord, ...] | str | None,
     identities: tuple[tuple[str, str], ...],
+    environment: Mapping[str, str],
 ) -> list[str]:
     """Render collected lock records and classify runner-owned waiters."""
     if not snapshot.proc_available:
         return ["  lock diagnostics: unsupported; Linux /proc is unavailable"]
     if isinstance(records_or_error, str):
-        return [records_or_error]
+        return [redact_diagnostic_text(records_or_error, environment)]
     if records_or_error is None:
         return ["  lock diagnostics: unsupported; Linux /proc is unavailable"]
-    return _format_lock_records(snapshot, records_or_error, dict(identities))
+    redacted_identities = {
+        identity: redact_diagnostic_text(label, environment)
+        for identity, label in identities
+    }
+    return _format_lock_records(snapshot, records_or_error, redacted_identities)
 
 
 def _format_lock_records(

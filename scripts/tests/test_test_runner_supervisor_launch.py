@@ -155,23 +155,41 @@ def test_assignment_failure_closes_job_and_keeps_resumed_process(
     )
 
 
-@pytest.mark.parametrize("with_job", [False, True], ids=["without-job", "with-job"])
+@pytest.mark.parametrize(
+    "spawn_case",
+    [
+        pytest.param((False, False), id="without-job-plain"),
+        pytest.param((False, True), id="without-job-credentials"),
+        pytest.param((True, False), id="with-job-plain"),
+        pytest.param((True, True), id="with-job-credentials"),
+    ],
+)
 def test_spawn_oserror_returns_none_closes_job_and_reports_exact_diagnostic(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    with_job: bool,
+    spawn_case: tuple[bool, bool],
 ) -> None:
     """Spawn errors close only an acquired job and keep the diagnostic exact."""
+    with_job, with_credentials = spawn_case
     calls: list[str] = []
     job = FakeWindowsJob(calls) if with_job else None
+    request = _request(tmp_path)
+    start_error = OSError("spawn refused")
+    if with_credentials:
+        secret = "launch-secret-value"
+        request.command[0] = f"cargo-{secret}"
+        request.environment["API_TOKEN"] = secret
+        start_error = OSError(
+            f"spawn refused {secret} "
+            "https://user:password@cache.example/private?token=url-secret"
+        )
     process, launch_requests = _install_launcher(
         monkeypatch,
         calls,
         job,
-        start_error=OSError("spawn refused"),
+        start_error=start_error,
     )
-    request = _request(tmp_path)
 
     result = ProcessSupervisor(10)._launch_process(request, True, False)
 
@@ -190,24 +208,43 @@ def test_spawn_oserror_returns_none_closes_job_and_reports_exact_diagnostic(
     assert launch_requests[0].suspended is with_job, (
         "only a job-backed process may be suspended"
     )
-    assert capsys.readouterr().err == (
+    expected_diagnostic = (
         "test runner: could not start cargo: spawn refused\n"
-    ), "spawn failures must keep the existing diagnostic"
+        if not with_credentials
+        else "test runner: could not start cargo-<redacted>: spawn refused "
+        "<redacted> <URL https://cache.example>\n"
+    )
+    assert capsys.readouterr().err == expected_diagnostic, (
+        "spawn failures must keep safe diagnostics and redact credentials"
+    )
 
 
+@pytest.mark.parametrize(
+    "with_credentials", [False, True], ids=["plain-diagnostic", "credentials"]
+)
 def test_containment_oserror_closes_job_then_kills_and_waits(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    with_credentials: bool,
 ) -> None:
     """A containment error closes the job before killing and reaping the child."""
     calls: list[str] = []
+    request = _request(tmp_path)
+    assignment_error = OSError("assignment refused")
+    if with_credentials:
+        secret = "containment-secret-value"
+        request.command[0] = f"cargo-{secret}"
+        request.environment["API_TOKEN"] = secret
+        assignment_error = OSError(
+            f"assignment refused {secret} "
+            "https://user:password@cache.example/private?token=url-secret"
+        )
     job = FakeWindowsJob(
         calls,
-        assignment_error=OSError("assignment refused"),
+        assignment_error=assignment_error,
     )
     process, launch_requests = _install_launcher(monkeypatch, calls, job)
-    request = _request(tmp_path)
 
     result = ProcessSupervisor(10)._launch_process(request, True, True)
 
@@ -218,9 +255,15 @@ def test_containment_oserror_closes_job_then_kills_and_waits(
     assert launch_requests[0].suspended is True, (
         "containment must follow a suspended job-backed launch"
     )
-    assert capsys.readouterr().err == (
+    expected_diagnostic = (
         "test runner: could not contain cargo: assignment refused\n"
-    ), "containment failures must keep the existing diagnostic"
+        if not with_credentials
+        else "test runner: could not contain cargo-<redacted>: assignment refused "
+        "<redacted> <URL https://cache.example>\n"
+    )
+    assert capsys.readouterr().err == expected_diagnostic, (
+        "containment failures must keep safe diagnostics and redact credentials"
+    )
 
 
 def test_windows_job_creation_oserror_keeps_existing_failure_policy(
