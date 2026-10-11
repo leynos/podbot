@@ -60,14 +60,15 @@ procfs, and lock-file observations and emits reports only when invoked by
 command and selected toolchain/environment values shown by the `--supervise`
 banner and stall report, including lock-path labels, diagnostic collection
 failures, and process-launch errors. Runner-generated exception text must also
-pass through it at the top-level and nested artefact-selection error handlers.
-It removes known values from secret-named environment entries, credential
-fields, and URL paths, then bounds each value. Keep it composed at these
-runner-controlled print boundaries; it is not a general logging filter or a
-filter for forwarded Cargo and test-process output. Raw lock paths remain
-available for filesystem observation and lock matching. The sccache log reader
-retains its separate selection and sanitization contract in
-`report_sccache_errors.py`.
+pass through it at the argument-parser error method and the top-level and
+nested artefact-selection error handlers. The parser redacts only its printed
+error text; arguments after `--` remain unchanged for Cargo. It removes known
+values from secret-named environment entries, credential fields, and URL paths,
+then bounds each value. Keep it composed at these runner-controlled print
+boundaries; it is not a general logging filter or a filter for forwarded Cargo
+and test-process output. Raw lock paths remain available for filesystem
+observation and lock matching. The sccache log reader retains its separate
+selection and sanitization contract in `report_sccache_errors.py`.
 
 `OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
 returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that

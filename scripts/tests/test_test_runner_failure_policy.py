@@ -120,6 +120,103 @@ def test_main_redacts_and_bounds_runner_errors(
 
 
 @pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            (
+                "--token=known-environment-secret",
+                {"GITHUB_TOKEN": "known-environment-secret"},
+                ("known-environment-secret",),
+                False,
+            ),
+            id="credential-option",
+        ),
+        pytest.param(
+            (
+                "--custom=known-environment-secret",
+                {"SERVICE_API_KEY": "known-environment-secret"},
+                ("known-environment-secret",),
+                False,
+            ),
+            id="environment-secret",
+        ),
+        pytest.param(
+            (
+                "--custom=https://user:url-secret@example.test/private?token=query-secret",
+                {},
+                ("user", "url-secret", "private", "query-secret"),
+                False,
+            ),
+            id="credential-bearing-url",
+        ),
+        pytest.param(
+            ("--custom=" + "x" * 1200, {}, (), True),
+            id="bounded-long-error",
+        ),
+    ],
+)
+def test_parser_errors_redact_sensitive_argument_values(
+    capsys: pytest.CaptureFixture[str],
+    case: tuple[str, dict[str, str], tuple[str, ...], bool],
+) -> None:
+    """Argparse diagnostics redact secrets and retain their existing status."""
+    argument, environment, secrets, is_long = case
+
+    with pytest.raises(SystemExit) as exit_info:
+        test_runner._parse_arguments([argument], environment)
+
+    error = capsys.readouterr().err
+    assert exit_info.value.code == 2, "invalid runner options must keep status 2"
+    assert "error: unrecognized arguments:" in error, (
+        "parser failures must retain their ordinary diagnostic heading"
+    )
+    assert all(secret not in error for secret in secrets), (
+        "sensitive unknown-argument values must not reach stderr"
+    )
+    if is_long:
+        assert len(error.split("error: ", maxsplit=1)[1].rstrip("\n")) <= 1000, (
+            "parser diagnostics must obey the existing text bound"
+        )
+        assert error.rstrip().endswith("... [truncated]"), (
+            "long parser diagnostics must disclose truncation"
+        )
+
+
+def test_parser_error_preserves_ordinary_wording_and_exit_status(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Ordinary argparse errors keep their text and exit status."""
+    with pytest.raises(SystemExit) as exit_info:
+        test_runner._parse_arguments(["--ordinary-unknown"], {})
+
+    error = capsys.readouterr().err
+    assert exit_info.value.code == 2, "ordinary parser errors must keep status 2"
+    assert error.endswith("error: unrecognized arguments: --ordinary-unknown\n"), (
+        "ordinary parser wording must remain unchanged"
+    )
+
+
+def test_parser_help_and_post_separator_arguments_remain_unchanged(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Help remains available and Cargo arguments remain unredacted."""
+    with pytest.raises(SystemExit) as exit_info:
+        test_runner._parse_arguments(["--help"], {})
+
+    help_output = capsys.readouterr()
+    assert exit_info.value.code == 0, "help must retain its successful exit status"
+    assert "usage:" in help_output.out and "--watch-interval" in help_output.out, (
+        "help must retain the parser usage and runner controls"
+    )
+    assert not help_output.err, "help must not add an error diagnostic"
+
+    parsed = test_runner._parse_arguments(["--", "--token=forwarded-secret"], {})
+    assert test_runner._cargo_arguments(parsed) == ["--token=forwarded-secret"], (
+        "arguments after the separator must be forwarded unchanged"
+    )
+
+
+@pytest.mark.parametrize(
     ("no_fail_fast", "nested_phase_runs"),
     [(False, False), (True, True)],
     ids=["fail-fast", "no-fail-fast"],

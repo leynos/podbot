@@ -20,6 +20,8 @@ import os
 import pathlib
 import shlex
 import sys
+from collections.abc import Mapping
+from typing import NoReturn
 
 from test_runner_cargo import RunnerCommandFailure, load_cargo_metadata
 from test_runner_context import TestRunnerContext
@@ -31,6 +33,19 @@ from test_runner_plan import create_test_plan
 from test_runner_sccache import start_configured_sccache
 from test_runner_supervise import supervise_command
 from test_runner_supervisor import ProcessSupervisor
+
+
+class _RedactingArgumentParser(argparse.ArgumentParser):
+    """Redact runner errors without changing arguments forwarded to Cargo."""
+
+    def __init__(self, diagnostic_environment: Mapping[str, str]) -> None:
+        self._diagnostic_environment = diagnostic_environment
+        super().__init__(description=__doc__)
+
+    def error(self, message: str) -> NoReturn:
+        """Redact parser-generated text before argparse writes it to stderr."""
+        safe_message = redact_diagnostic_text(message, self._diagnostic_environment)
+        super().error(safe_message)
 
 
 def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) -> int:
@@ -54,9 +69,15 @@ def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) 
         return 2
 
 
-def _parse_arguments(arguments: list[str] | None) -> argparse.Namespace:
+def _parse_arguments(
+    arguments: list[str] | None,
+    diagnostic_environment: Mapping[str, str] | None = None,
+) -> argparse.Namespace:
     """Parse runner controls separately from Cargo's test arguments."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    environment = (
+        os.environ if diagnostic_environment is None else diagnostic_environment
+    )
+    parser = _RedactingArgumentParser(environment)
     parser.add_argument(
         "--cargo",
         default=os.environ.get("CARGO", "cargo"),
