@@ -59,12 +59,14 @@ def _metadata_request(
 def _raise_metadata_failure(
     status: int, stderr: str, terminal_status: int | None
 ) -> typ.NoReturn:
-    """Preserve supervisor interruption or Cargo's ordinary failure status."""
-    if stderr:
-        sys.stderr.write(stderr)
+    """Preserve failure details for the runner's outer reporting boundary."""
     if terminal_status is not None:
-        raise RunnerCommandFailure(terminal_status)
-    raise RunnerError(f"cargo metadata exited with status {status}")
+        raise RunnerCommandFailure(terminal_status, diagnostic=stderr)
+    raise RunnerCommandFailure(
+        2,
+        diagnostic=stderr,
+        summary=f"cargo metadata exited with status {status}",
+    )
 
 
 def _decode_metadata(stdout: str) -> dict[str, typ.Any]:
@@ -79,11 +81,19 @@ def _decode_metadata(stdout: str) -> dict[str, typ.Any]:
 
 
 class RunnerCommandFailure(RunnerError):
-    """Carry a timeout or interruption status through metadata discovery."""
+    """Carry command status and unrendered diagnostics to the runner boundary."""
 
-    def __init__(self, status: int) -> None:
-        super().__init__(f"test runner stopped with status {status}")
+    def __init__(
+        self,
+        status: int,
+        *,
+        diagnostic: str = "",
+        summary: str | None = None,
+    ) -> None:
+        super().__init__(summary or f"test runner stopped with status {status}")
         self.status = status
+        self.diagnostic = diagnostic
+        self.summary = summary
 
 
 def parse_cargo_json_message(line: str) -> dict[str, typ.Any] | None:

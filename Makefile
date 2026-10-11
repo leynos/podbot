@@ -75,6 +75,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_command_contracts.py \
 	scripts/tests/test_coverage_contracts.py \
 	scripts/tests/test_sccache_diagnostic_contracts.py \
+	scripts/tests/test_sccache_reporter_cli.py \
 	scripts/tests/test_workflow_inventory.py \
 	scripts/tests/test_runner_placement_rule.py \
 	scripts/tests/test_runner_fixtures.py \
@@ -87,6 +88,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_test_runner_diagnostic_collection.py \
 	scripts/tests/test_test_runner_nested_output.py \
 	scripts/tests/test_test_runner_cargo.py \
+	scripts/tests/test_test_runner_metadata_failures.py \
 	scripts/tests/test_test_runner_execution.py \
 	scripts/tests/test_test_runner_nested_execution.py \
 	scripts/tests/test_test_runner_failure_policy.py \

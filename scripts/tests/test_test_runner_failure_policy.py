@@ -196,6 +196,20 @@ def test_parser_error_preserves_ordinary_wording_and_exit_status(
     )
 
 
+def test_parser_redacts_attached_values_for_unknown_options(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Unknown option names remain useful while arbitrary values are hidden."""
+    raw_value = "unrecognized-attached-credential-value"
+    with pytest.raises(SystemExit) as exit_info:
+        test_runner._parse_arguments([f"--custom={raw_value}"], {})
+
+    error = capsys.readouterr().err
+    assert exit_info.value.code == 2, "invalid runner options must keep status 2"
+    assert "--custom=<redacted>" in error, "retain the unknown option name"
+    assert raw_value not in error, "never echo an arbitrary attached value"
+
+
 def test_parser_help_and_post_separator_arguments_remain_unchanged(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

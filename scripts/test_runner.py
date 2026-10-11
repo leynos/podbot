@@ -18,6 +18,7 @@ import argparse
 import math
 import os
 import pathlib
+import re
 import shlex
 import sys
 from collections.abc import Mapping
@@ -34,6 +35,11 @@ from test_runner_sccache import start_configured_sccache
 from test_runner_supervise import supervise_command
 from test_runner_supervisor import ProcessSupervisor
 
+_ATTACHED_UNKNOWN_ARGUMENT = re.compile(
+    r"(?P<option>--?[^\s=]+)=(?:\"[^\"]*\"|'[^']*'|[^\s]+)"
+)
+_DIAGNOSTIC_TRUNCATION_MARKER = "... [truncated]"
+
 
 class _RedactingArgumentParser(argparse.ArgumentParser):
     """Redact runner errors without changing arguments forwarded to Cargo."""
@@ -44,8 +50,34 @@ class _RedactingArgumentParser(argparse.ArgumentParser):
 
     def error(self, message: str) -> NoReturn:
         """Redact parser-generated text before argparse writes it to stderr."""
-        safe_message = redact_diagnostic_text(message, self._diagnostic_environment)
+        safe_message = _redact_attached_unknown_argument_values(
+            redact_diagnostic_text(message, self._diagnostic_environment)
+        )
         super().error(safe_message)
+
+
+def _redact_attached_unknown_argument_values(message: str) -> str:
+    """Hide values argparse echoes for options it does not recognize."""
+    heading = "unrecognized arguments:"
+    was_truncated = message.endswith(_DIAGNOSTIC_TRUNCATION_MARKER)
+    content = (
+        message[: -len(_DIAGNOSTIC_TRUNCATION_MARKER)] if was_truncated else message
+    )
+    prefix, separator, arguments = content.partition(heading)
+    if not separator:
+        return message
+    safe_arguments = _ATTACHED_UNKNOWN_ARGUMENT.sub(r"\g<option>=<redacted>", arguments)
+    marker = _DIAGNOSTIC_TRUNCATION_MARKER if was_truncated else ""
+    return f"{prefix}{heading}{safe_arguments}{marker}"
+
+
+def _redact_captured_diagnostic(message: str) -> str:
+    """Sanitize captured stderr line by line while preserving its boundaries."""
+    return re.sub(
+        r"[^\r\n]+",
+        lambda line: redact_diagnostic_text(line.group(), os.environ),
+        message,
+    )
 
 
 def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) -> int:
@@ -60,6 +92,13 @@ def main(arguments: list[str] | None = None, *, enable_subreaper: bool = False) 
     try:
         return _run_parsed_arguments(parsed, enable_subreaper)
     except RunnerCommandFailure as exc:
+        if exc.diagnostic:
+            sys.stderr.write(_redact_captured_diagnostic(exc.diagnostic))
+        if exc.summary is not None:
+            print(
+                "test runner: " + redact_diagnostic_text(exc.summary, os.environ),
+                file=sys.stderr,
+            )
         return exc.status
     except (OSError, RunnerError) as exc:
         print(
