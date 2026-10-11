@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pathlib
-import typing as typ
 from typing import cast
 
 import pytest
@@ -20,6 +19,12 @@ class FailedMetadataSupervisor:
 
     def __init__(self, terminal_status: int | None) -> None:
         self.terminal_status = terminal_status
+
+    def __enter__(self) -> FailedMetadataSupervisor:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
 
     def run_capture(self, request: CommandRequest) -> tuple[int, str, str]:
         del request
@@ -63,23 +68,15 @@ def test_runner_renders_structured_metadata_failure_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The outer runner redacts and emits structured metadata failure once."""
-    failure = RunnerCommandFailure(
-        2,
-        diagnostic="cargo metadata failed TOKEN=raw-metadata-value\n",
-        summary="cargo metadata exited with status 17",
-    )
+    supervisor = FailedMetadataSupervisor(terminal_status=None)
 
-    def raise_failure(
-        parsed: typ.Any,
-        cargo_arguments: list[str],
-        enable_subreaper: bool,
-    ) -> int:
-        del parsed, cargo_arguments, enable_subreaper
-        raise failure
+    def make_supervisor(*_args: object, **_kwargs: object) -> FailedMetadataSupervisor:
+        return supervisor
 
-    monkeypatch.setattr(test_runner, "_run_cargo_tests", raise_failure)
+    monkeypatch.setattr(test_runner, "ProcessSupervisor", make_supervisor)
+    monkeypatch.setattr(test_runner, "start_configured_sccache", lambda _env: None)
 
-    status = test_runner.main([])
+    status = test_runner.main(["--cargo", "cargo"])
 
     assert status == 2, "metadata failures retain the runner's ordinary status"
     assert capsys.readouterr().err == (
