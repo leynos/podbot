@@ -19,7 +19,7 @@ use std::path::Path;
 use std::process::Command;
 
 use cap_std::fs::Dir;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use tempfile::TempDir;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -94,6 +94,21 @@ fn create_manifest(workspace_dir: &Dir, relative_path: &str) -> TestResult {
     )
 }
 
+/// Fresh temporary workspace with a root `Cargo.toml` already in place.
+///
+/// Every `rust-audit` test starts from this state and layers in
+/// scenario-specific manifests and fake-`cargo` exit codes; returning a
+/// `Result` (rather than panicking) keeps this fixture outwith the set of
+/// things Whitaker's `no_expect_outside_tests` lint treats as a test body, so
+/// the test itself performs the `.expect(...)`.
+#[fixture]
+fn workspace_with_root_manifest() -> TestResult<(TempDir, Dir)> {
+    let temp = TempDir::new()?;
+    let workspace_dir = open_workspace_dir(temp.path())?;
+    create_manifest(&workspace_dir, "Cargo.toml")?;
+    Ok((temp, workspace_dir))
+}
+
 fn cargo_metadata_for(workspace: &Path, manifests: &[&Path]) -> String {
     let packages = manifests
         .iter()
@@ -118,14 +133,15 @@ fn cargo_metadata_for(workspace: &Path, manifests: &[&Path]) -> String {
     )
 }
 
-#[test]
-fn rust_audit_invokes_cargo_audit_once_at_workspace_root() {
-    let temp = TempDir::new().expect("temporary workspace should be created");
+#[rstest]
+fn rust_audit_invokes_cargo_audit_once_at_workspace_root(
+    workspace_with_root_manifest: TestResult<(TempDir, Dir)>,
+) {
+    let (temp, workspace_dir) =
+        workspace_with_root_manifest.expect("workspace fixture should build");
     let workspace = temp.path();
-    let workspace_dir = open_workspace_dir(workspace).expect("workspace dir should open");
     let root_manifest = workspace.join("Cargo.toml");
     let member_manifest = workspace.join("crates/agent/Cargo.toml");
-    create_manifest(&workspace_dir, "Cargo.toml").expect("root manifest should be created");
     create_manifest(&workspace_dir, "crates/agent/Cargo.toml")
         .expect("nested manifest should be created");
     create_manifest(&workspace_dir, "target/ignored/Cargo.toml")
@@ -171,26 +187,40 @@ fn rust_audit_invokes_cargo_audit_once_at_workspace_root() {
     );
 }
 
+/// Table-test case for `rust_audit_propagates_failure`.
+struct AuditFailureCase {
+    audit_exit_status: i32,
+    metadata_exit_status: i32,
+    failure_message: &'static str,
+    should_audit_run: bool,
+}
+
 #[rstest]
-#[case(42, 0, "rust-audit should propagate cargo audit failure", true)]
-#[case(0, 23, "rust-audit should propagate cargo metadata failure", false)]
+#[case(AuditFailureCase {
+    audit_exit_status: 42,
+    metadata_exit_status: 0,
+    failure_message: "rust-audit should propagate cargo audit failure",
+    should_audit_run: true,
+})]
+#[case(AuditFailureCase {
+    audit_exit_status: 0,
+    metadata_exit_status: 23,
+    failure_message: "rust-audit should propagate cargo metadata failure",
+    should_audit_run: false,
+})]
 fn rust_audit_propagates_failure(
-    #[case] audit_exit_status: i32,
-    #[case] metadata_exit_status: i32,
-    #[case] failure_message: &str,
-    #[case] should_audit_run: bool,
+    #[case] case: AuditFailureCase,
+    #[from(workspace_with_root_manifest)] fixture: TestResult<(TempDir, Dir)>,
 ) {
-    let temp = TempDir::new().expect("temporary workspace should be created");
+    let (temp, workspace_dir) = fixture.expect("workspace fixture should build");
     let workspace = temp.path();
-    let workspace_dir = open_workspace_dir(workspace).expect("workspace dir should open");
-    create_manifest(&workspace_dir, "Cargo.toml").expect("root manifest should be created");
 
     let log_path = workspace.join("cargo-audit.log");
     write_fake_cargo(
         &workspace_dir,
         &log_path,
-        audit_exit_status,
-        metadata_exit_status,
+        case.audit_exit_status,
+        case.metadata_exit_status,
     )
     .expect("fake cargo should be built");
     let fake_cargo = workspace.join(FAKE_CARGO_RELATIVE_PATH);
@@ -201,11 +231,12 @@ fn rust_audit_propagates_failure(
 
     assert!(
         !output.status.success(),
-        "{failure_message}: stdout={}, stderr={}",
+        "{}: stdout={}, stderr={}",
+        case.failure_message,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
-    if should_audit_run {
+    if case.should_audit_run {
         let log = workspace_dir
             .read_to_string("cargo-audit.log")
             .expect("fake cargo log should be readable");

@@ -45,29 +45,42 @@ fn token_metadata_subtracts_refresh_buffer(acquired_at: SystemTime, expiry_buffe
     assert_eq!(token.refresh_after(), token.expires_at() - expiry_buffer);
 }
 
-/// Asserts that [`InstallationAccessToken::from_metadata`] returns a
-/// [`GitHubError::TokenAcquisitionFailed`] whose message contains `expected_fragment`.
-fn assert_metadata_rejects(
+/// Extract the failure message from [`InstallationAccessToken::from_metadata`],
+/// or describe the unexpected outcome (success, or a different error variant).
+fn extract_metadata_rejection(
     acquired_at: SystemTime,
     expires_at: SystemTime,
     expiry_buffer: Duration,
-    expected_fragment: &str,
-) {
-    let result = InstallationAccessToken::from_metadata(
+) -> Result<String, String> {
+    match InstallationAccessToken::from_metadata(
         String::from(FIXTURE_TOKEN),
         acquired_at,
         expires_at,
         expiry_buffer,
-    );
-    match result {
-        Err(GitHubError::TokenAcquisitionFailed { message }) => {
-            assert!(
-                message.contains(expected_fragment),
-                "expected message to contain {expected_fragment:?}, got: {message}"
-            );
-        }
-        other => panic!("expected token metadata failure, got: {other:?}"),
+    ) {
+        Err(GitHubError::TokenAcquisitionFailed { message }) => Ok(message),
+        Ok(_) => Err(String::from("token metadata construction should fail")),
+        Err(other) => Err(format!("expected token metadata failure, got: {other:?}")),
     }
+}
+
+/// Asserts that [`InstallationAccessToken::from_metadata`] returns a
+/// [`GitHubError::TokenAcquisitionFailed`] whose message contains
+/// `expected_fragment`.
+///
+/// A macro rather than a function so the panic is raised inside the calling
+/// test, keeping failure line numbers at the call site.
+macro_rules! assert_metadata_rejects {
+    ($acquired_at:expr, $expires_at:expr, $expiry_buffer:expr, $expected_fragment:expr $(,)?) => {{
+        let message = extract_metadata_rejection($acquired_at, $expires_at, $expiry_buffer)
+            .expect("metadata construction should fail with TokenAcquisitionFailed");
+
+        assert!(
+            message.contains($expected_fragment),
+            "expected message to contain {:?}, got: {message}",
+            $expected_fragment
+        );
+    }};
 }
 
 #[rstest]
@@ -85,7 +98,7 @@ fn token_metadata_rejects_invalid_ordering(
         acquired_at - Duration::from_secs(expires_offset_secs.unsigned_abs())
     };
     let expiry_buffer = Duration::from_secs(expiry_buffer_secs);
-    assert_metadata_rejects(acquired_at, expires_at, expiry_buffer, expected_fragment);
+    assert_metadata_rejects!(acquired_at, expires_at, expiry_buffer, expected_fragment);
 }
 
 #[rstest]

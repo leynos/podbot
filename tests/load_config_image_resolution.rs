@@ -7,9 +7,7 @@
 
 mod test_support;
 
-use std::io::Write;
-
-use crate::test_support::env_with;
+use crate::test_support::{env_with, temp_config_path};
 use camino::Utf8PathBuf;
 use mockable::MockEnv;
 use podbot::config::{
@@ -20,32 +18,27 @@ use podbot::error::{ConfigError, PodbotError};
 use rstest::rstest;
 use tempfile::NamedTempFile;
 
-fn temp_config_file(content: &str) -> std::io::Result<NamedTempFile> {
-    let mut file = NamedTempFile::new()?;
-    file.write_all(content.as_bytes())?;
-    Ok(file)
-}
-
-#[expect(clippy::expect_used, reason = "test helper - panics are acceptable")]
-fn config_file_with_image(image: Option<&str>) -> (Option<NamedTempFile>, Option<Utf8PathBuf>) {
+/// Creates a temporary config file naming `image`, or nothing when `image` is
+/// `None`.
+fn config_file_with_image(
+    image: Option<&str>,
+) -> std::io::Result<(Option<NamedTempFile>, Option<Utf8PathBuf>)> {
     let Some(file_image) = image else {
-        return (None, None);
+        return Ok((None, None));
     };
 
-    let config_file = temp_config_file(&format!("image = \"{file_image}\"\n"))
-        .expect("temp config file creation");
-    let config_path = Utf8PathBuf::try_from(config_file.path().to_path_buf())
-        .expect("path should be valid UTF-8");
-    (Some(config_file), Some(config_path))
+    let (config_file, config_path) = temp_config_path(&format!("image = \"{file_image}\"\n"))?;
+    Ok((Some(config_file), Some(config_path)))
 }
 
-#[expect(clippy::expect_used, reason = "test helper - panics are acceptable")]
+/// Loads configuration with the image supplied by the requested layers.
 fn load_config_for_image_layers(
     env: &MockEnv,
     file_image: Option<&str>,
     overrides_image: Option<&str>,
-) -> AppConfig {
-    let (_config_file, config_path) = config_file_with_image(file_image);
+) -> Result<AppConfig, String> {
+    let (_config_file, config_path) =
+        config_file_with_image(file_image).map_err(|error| error.to_string())?;
 
     let options = ConfigLoadOptions {
         config_path_hint: config_path,
@@ -59,7 +52,7 @@ fn load_config_for_image_layers(
         command_intent: CommandIntent::Any,
     };
 
-    load_config_with_env(env, &options).expect("load_config should succeed for image layer test")
+    load_config_with_env(env, &options).map_err(|error| error.to_string())
 }
 
 fn request_from_resolved_config(config: &AppConfig) -> Result<CreateContainerRequest, PodbotError> {
@@ -108,7 +101,8 @@ fn load_config_resolves_image_with_layer_precedence(#[case] case: ImageResolutio
             .env
             .map_or_else(Vec::new, |value| vec![("PODBOT_IMAGE", value)]),
     );
-    let config = load_config_for_image_layers(&env, case.file, case.overrides);
+    let config = load_config_for_image_layers(&env, case.file, case.overrides)
+        .expect("load_config should succeed for image layer test");
     assert_eq!(config.image.as_deref(), case.expected);
 }
 
@@ -144,7 +138,8 @@ fn resolved_config_image_is_used_for_container_request(#[case] case: ResolvedIma
             .env
             .map_or_else(Vec::new, |value| vec![("PODBOT_IMAGE", value)]),
     );
-    let config = load_config_for_image_layers(&env, case.file, case.overrides);
+    let config = load_config_for_image_layers(&env, case.file, case.overrides)
+        .expect("load_config should succeed for image layer test");
     let request = request_from_resolved_config(&config)
         .expect("request should be created from non-empty resolved image");
     assert_eq!(request.image(), case.expected);
@@ -177,7 +172,8 @@ fn resolved_config_image_missing_or_blank_fails_container_request(
             .env
             .map_or_else(Vec::new, |value| vec![("PODBOT_IMAGE", value)]),
     );
-    let config = load_config_for_image_layers(&env, case.file, case.overrides);
+    let config = load_config_for_image_layers(&env, case.file, case.overrides)
+        .expect("load_config should succeed for image layer test");
     assert_eq!(config.image.as_deref(), case.expected);
 
     let error = request_from_resolved_config(&config)

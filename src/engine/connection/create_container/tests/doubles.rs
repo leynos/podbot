@@ -4,7 +4,7 @@
 //! them stays inside the 400-line module limit, following the sibling-module
 //! convention already used by `minimal_mode` and `privileged_mode`.
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use bollard::models::ContainerCreateResponse;
 use mockall::mock;
@@ -91,27 +91,24 @@ pub(super) fn failing_creator(
     creator_with_result(Err(error))
 }
 
-pub(super) fn take_options(
-    captured: &Arc<Mutex<CapturedCreateCall>>,
-) -> Option<CreateContainerOptions> {
-    captured
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .options
-        .clone()
+/// Reads the captured call, recovering from a poisoned mutex because the
+/// captured data stays valid even when a test panics while holding the lock.
+fn captured_call(captured: &Arc<Mutex<CapturedCreateCall>>) -> MutexGuard<'_, CapturedCreateCall> {
+    captured.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-pub(super) fn take_body(captured: &Arc<Mutex<CapturedCreateCall>>) -> Option<ContainerCreateBody> {
-    captured
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .body
-        .clone()
+pub(super) fn clone_captured_options(
+    captured: &Arc<Mutex<CapturedCreateCall>>,
+) -> Option<CreateContainerOptions> {
+    captured_call(captured).options.clone()
+}
+
+pub(super) fn clone_captured_body(
+    captured: &Arc<Mutex<CapturedCreateCall>>,
+) -> Option<ContainerCreateBody> {
+    captured_call(captured).body.clone()
 }
 
 pub(super) fn call_count(captured: &Arc<Mutex<CapturedCreateCall>>) -> usize {
-    captured
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .call_count
+    captured_call(captured).call_count
 }

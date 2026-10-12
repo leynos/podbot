@@ -5,26 +5,43 @@ use rstest::rstest;
 use super::*;
 use crate::error::{ConfigError, PodbotError};
 
-fn assert_exec_request_validation_error(
-    result: Result<ExecRequest, PodbotError>,
-    expected_field: &str,
-) {
-    let field = match result {
+/// Extracts the offending field name from a configuration validation error.
+///
+/// Returns the debug rendering of the actual result in the error case so the
+/// caller can report the mismatch; this helper never panics.
+fn validation_error_field(result: Result<ExecRequest, PodbotError>) -> Result<String, String> {
+    match result {
         Err(PodbotError::Config(
             ConfigError::MissingRequired { field } | ConfigError::InvalidValue { field, .. },
-        )) => field,
-        other => panic!("expected validation error for '{expected_field}', got {other:?}"),
+        )) => Ok(field),
+        other => Err(format!("{other:?}")),
+    }
+}
+
+/// Asserts that request construction failed validation on `$expected_field`.
+///
+/// A macro rather than a function so failures report the calling test's line
+/// number.
+macro_rules! assert_validation_error_field {
+    ($result:expr, $expected_field:expr $(,)?) => {
+        match validation_error_field($result) {
+            Ok(field) => assert_eq!(
+                field, $expected_field,
+                "expected validation error for '{}', got field '{}'",
+                $expected_field, field
+            ),
+            Err(actual) => panic!(
+                "expected validation error for '{}', got {}",
+                $expected_field, actual
+            ),
+        }
     };
-    assert_eq!(
-        field, expected_field,
-        "expected validation error for '{expected_field}', got field '{field}'"
-    );
 }
 
 #[rstest]
 fn exec_request_rejects_empty_command() {
     let result = ExecRequest::new("sandbox", vec![], ExecMode::Attached);
-    assert_exec_request_validation_error(result, "command");
+    assert_validation_error_field!(result, "command");
 }
 
 #[rstest]
@@ -55,5 +72,5 @@ fn exec_request_allows_blank_non_executable_entries(#[case] command: Vec<String>
 #[rstest]
 fn exec_request_rejects_blank_container_id() {
     let result = ExecRequest::new("   ", vec![String::from("echo")], ExecMode::Detached);
-    assert_exec_request_validation_error(result, "container");
+    assert_validation_error_field!(result, "container");
 }

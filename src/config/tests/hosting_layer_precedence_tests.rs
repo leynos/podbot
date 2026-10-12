@@ -1,5 +1,6 @@
 //! Layer precedence tests for hosting-era config fields.
 
+use ortho_config::MergeComposer;
 use ortho_config::serde_json::json;
 use rstest::rstest;
 
@@ -7,8 +8,10 @@ use crate::config::tests::helpers::{create_composer_with_defaults, merge_config}
 use crate::config::{AgentKind, AgentMode, AppConfig, WorkspaceSource};
 
 #[rstest]
-fn hosting_fields_merge_across_layers() {
-    let mut composer = create_composer_with_defaults().expect("composer creation should succeed");
+fn hosting_fields_merge_across_layers(
+    create_composer_with_defaults: Result<MergeComposer, serde_json::Error>,
+) {
+    let mut composer = create_composer_with_defaults.expect("composer creation should succeed");
 
     composer.push_file(
         json!({

@@ -13,7 +13,6 @@
 
 use bollard::container::LogOutput;
 use futures_util::stream;
-use mockall::mock;
 use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
 #[cfg(feature = "experimental")]
 use podbot::api::{RunRequest, list_containers, run_agent, run_token_daemon, stop_container};
@@ -43,16 +42,15 @@ where
     }
 }
 
-mock! {
-    #[derive(Debug)]
-    OrcExecClient {}
-
-    impl ContainerExecClient for OrcExecClient {
-        fn create_exec(&self, container_id: &str, options: bollard::exec::CreateExecOptions<String>) -> CreateExecFuture<'_>;
-        fn start_exec(&self, exec_id: &str, options: Option<bollard::exec::StartExecOptions>) -> StartExecFuture<'_>;
-        fn inspect_exec(&self, exec_id: &str) -> InspectExecFuture<'_>;
-        fn resize_exec(&self, exec_id: &str, options: bollard::exec::ResizeExecOptions) -> ResizeExecFuture<'_>;
-    }
+// The double and the create-exec, resize, and inspect expectations are shared
+// with the interactive-exec suite; only the start-exec expectations below
+// differ, because these scenarios do not pin the daemon options.
+crate::define_exec_client_mock! {
+    mock_base = OrcExecClient,
+    mock_type = MockOrcExecClient,
+    exec_mode = ExecMode,
+    container_id = "orc-sandbox",
+    exec_id = "orc-exec-id",
 }
 
 #[given("a mock container engine")]
@@ -101,10 +99,10 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
     let exit_code = orchestration_state.exit_code.get().unwrap_or(0);
 
     let mut client = MockOrcExecClient::new();
-    configure_create_exec(&mut client);
-    configure_start_exec(&mut client, mode);
-    configure_resize(&mut client, mode);
-    configure_inspect(&mut client, exit_code);
+    configure_create_exec(&mut client, false);
+    configure_start_exec(&mut client, mode)?;
+    configure_resize(&mut client, mode)?;
+    configure_inspect(&mut client, Some(exit_code));
 
     let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
     let runtime =
@@ -168,17 +166,11 @@ fn when_token_daemon_invoked(
     Ok(())
 }
 
-fn configure_create_exec(client: &mut MockOrcExecClient) {
-    client.expect_create_exec().times(1).returning(|_, _| {
-        Box::pin(async {
-            Ok(bollard::exec::CreateExecResults {
-                id: String::from("orc-exec-id"),
-            })
-        })
-    });
-}
-
-fn configure_start_exec(client: &mut MockOrcExecClient, mode: ExecMode) {
+/// Expects a single start-exec call appropriate to `mode`.
+///
+/// These scenarios assert orchestration outcomes rather than daemon options,
+/// so the builder stays local to this module and accepts any options.
+fn configure_start_exec(client: &mut MockOrcExecClient, mode: ExecMode) -> StepResult<()> {
     match mode {
         ExecMode::Attached | ExecMode::Protocol => {
             client.expect_start_exec().times(1).returning(move |_, _| {
@@ -192,38 +184,16 @@ fn configure_start_exec(client: &mut MockOrcExecClient, mode: ExecMode) {
                     })
                 })
             });
+            Ok(())
         }
         ExecMode::Detached => {
             client.expect_start_exec().times(1).returning(|_, _| {
                 Box::pin(async { Ok(bollard::exec::StartExecResults::Detached) })
             });
+            Ok(())
         }
-        _ => panic!("unexpected exec mode in orchestration start-exec expectation"),
+        other => Err(format!(
+            "unexpected exec mode in start-exec expectation: {other:?}"
+        )),
     }
-}
-
-fn configure_resize(client: &mut MockOrcExecClient, mode: ExecMode) {
-    match mode {
-        ExecMode::Attached => {
-            client
-                .expect_resize_exec()
-                .times(0..)
-                .returning(|_, _| Box::pin(async { Ok(()) }));
-        }
-        ExecMode::Detached | ExecMode::Protocol => {
-            client.expect_resize_exec().never();
-        }
-        _ => panic!("unexpected exec mode in orchestration resize expectation"),
-    }
-}
-
-fn configure_inspect(client: &mut MockOrcExecClient, exit_code: i64) {
-    client.expect_inspect_exec().times(1).returning(move |_| {
-        let inspect = bollard::models::ExecInspectResponse {
-            running: Some(false),
-            exit_code: Some(exit_code),
-            ..bollard::models::ExecInspectResponse::default()
-        };
-        Box::pin(async move { Ok(inspect) })
-    });
 }

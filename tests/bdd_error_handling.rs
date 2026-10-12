@@ -90,6 +90,12 @@ fn expired_github_token(error_state: &ErrorState) {
     error_state.success.set(false);
 }
 
+/// Marks the point at which the caller inspects the operation's result.
+///
+/// Inspection is intentionally inert: the outcome is already recorded in the
+/// state by the `Given`, and the assertion lives in `the outcome is ok`. The
+/// step exists so the Gherkin narrative retains its `When` phase, and the sole
+/// scenario using it does assert afterwards.
 #[when("the result is inspected")]
 fn result_is_inspected(error_state: &ErrorState) {
     let _ = error_state;

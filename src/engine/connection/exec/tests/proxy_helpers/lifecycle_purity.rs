@@ -1,41 +1,41 @@
 //! Lifecycle stream-purity tests covering startup, steady-state, shutdown, and
 //! error paths.
 
-use std::sync::PoisonError;
-
 use bollard::container::LogOutput;
 use bollard::errors::Error as BollardError;
 use rstest::rstest;
 
 use super::*;
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "test helper needs all parameters to fully specify test case"
-)]
-fn run_stdout_purity_test(
+/// Fallible extractor: runs a lifecycle session over `output_chunks` and
+/// returns its outcome alongside the bytes captured on host stdout.
+fn stdout_purity_outcome(
     runtime: &Runtime,
     output_chunks: Vec<Result<LogOutput, BollardError>>,
-    expected_stdout: &[u8],
-    success_msg: &str,
-    stdout_msg: &str,
-) {
+) -> std::io::Result<(SessionOutcome, Vec<u8>)> {
     let output = make_output_stream(output_chunks);
-    let host_stdout = RecordingWriter::new();
-    let captured_stdout = host_stdout.bytes.clone();
-    let result = run_session(
-        runtime,
-        b"",
-        output,
-        Box::pin(RecordingInputWriter::new()),
-        host_stdout,
-        RecordingWriter::new(),
-    );
-    assert!(result.is_ok(), "{success_msg}");
-    let captured = captured_stdout
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-    assert_eq!(captured.as_slice(), expected_stdout, "{stdout_msg}");
+    let (result, captured_stdout) = run_lifecycle_session(runtime, b"", output)?;
+    Ok((result, captured_bytes(&captured_stdout)))
+}
+
+/// Asserts that a lifecycle session succeeds and writes exactly
+/// `$expected_stdout` to host stdout.
+///
+/// A macro rather than a function so failures report the calling test's line
+/// number, and so the assertions do not live in a `Result`-returning helper.
+macro_rules! assert_stdout_purity {
+    (
+        $runtime:expr,
+        $output_chunks:expr,
+        $expected_stdout:expr,
+        $success_msg:expr,
+        $stdout_msg:expr $(,)?
+    ) => {{
+        let (result, captured) =
+            stdout_purity_outcome($runtime, $output_chunks).expect("session harness should build");
+        assert!(result.is_ok(), "{}", $success_msg);
+        assert_eq!(captured.as_slice(), $expected_stdout, "{}", $stdout_msg);
+    }};
 }
 
 /// Single-chunk stdout purity: proxy delivers exactly one StdOut chunk's
@@ -60,7 +60,7 @@ fn single_chunk_stdout_purity(
     #[case] stdout_msg: &'static str,
 ) {
     let runtime_handle = runtime.expect("the runtime fixture initialises");
-    run_stdout_purity_test(
+    assert_stdout_purity!(
         &runtime_handle,
         vec![Ok(LogOutput::StdOut {
             message: payload.to_vec().into(),
@@ -77,7 +77,7 @@ fn single_chunk_stdout_purity(
 #[rstest]
 fn lifecycle_purity_no_stdout_bytes(runtime: RuntimeFixture) {
     let runtime_handle = runtime.expect("the runtime fixture initialises");
-    run_stdout_purity_test(
+    assert_stdout_purity!(
         &runtime_handle,
         Vec::new(),
         b"",
@@ -124,18 +124,19 @@ fn steady_state_purity_mixed_streams(runtime: RuntimeFixture) {
         Box::pin(RecordingInputWriter::new()),
         host_stdout,
         host_stderr,
-    );
+    )
+    .expect("session harness should build");
 
     assert!(result.is_ok(), "steady-state should succeed");
 
-    let stdout_data = captured_stdout.lock().expect("mutex should not poison");
+    let stdout_data = captured_bytes(&captured_stdout);
     assert_eq!(
         stdout_data.as_slice(),
         b"stdout-1console-1stdout-2",
         "host stdout must contain only stdout and console bytes in order"
     );
 
-    let stderr_data = captured_stderr.lock().expect("mutex should not poison");
+    let stderr_data = captured_bytes(&captured_stderr);
     assert_eq!(
         stderr_data.as_slice(),
         b"stderr-1stderr-2",
@@ -168,7 +169,8 @@ fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
         Box::pin(RecordingInputWriter::new()),
         host_stdout,
         RecordingWriter::new(),
-    );
+    )
+    .expect("session harness should build");
 
     assert!(
         result.is_err(),
@@ -176,9 +178,7 @@ fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
     );
     assert_exec_failed_message(result, "exec stream failed");
 
-    let captured = captured_stdout
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let captured = captured_bytes(&captured_stdout);
     assert_eq!(
         captured.as_slice(),
         b"output-before-error",
@@ -199,16 +199,15 @@ fn regression_zero_bytes_before_first_and_after_last_proxied_byte(runtime: Runti
     })];
     let output = make_output_stream(output_chunks);
 
-    let (result, captured_stdout) = run_lifecycle_session(&runtime_handle, b"", output);
+    let (result, captured_stdout) =
+        run_lifecycle_session(&runtime_handle, b"", output).expect("session harness should build");
 
     assert!(
         result.is_ok(),
         "regression test session should complete successfully"
     );
 
-    let captured = captured_stdout
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let captured = captured_bytes(&captured_stdout);
     assert_eq!(
         captured.as_slice(),
         known_output,
@@ -266,7 +265,8 @@ fn regression_stdout_bounded_buffering_preserves_all_bytes(runtime: RuntimeFixtu
 
     let output = make_output_stream(output_chunks);
 
-    let (result, captured_stdout) = run_lifecycle_session(&runtime_handle, b"", output);
+    let (result, captured_stdout) =
+        run_lifecycle_session(&runtime_handle, b"", output).expect("session harness should build");
 
     assert!(
         result.is_ok(),
@@ -275,9 +275,7 @@ fn regression_stdout_bounded_buffering_preserves_all_bytes(runtime: RuntimeFixtu
 
     // The host stdout must exactly equal the concatenation of all stdout chunks,
     // with no extra or missing bytes.
-    let captured = captured_stdout
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let captured = captured_bytes(&captured_stdout);
     assert_eq!(
         captured.as_slice(),
         expected.as_slice(),

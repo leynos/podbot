@@ -6,14 +6,14 @@
 
 use std::io;
 
-use tokio::io::{AsyncWriteExt, DuplexStream};
-
 use super::*;
 use crate::engine::connection::exec::acp_helpers::{
     ACP_FILE_SYSTEM_CAPABILITY, ACP_TERMINAL_CAPABILITY, MAX_FIRST_FRAME_BYTES,
     forward_initial_acp_frame_async, mask_acp_initialize_frame, split_frame_line_ending,
 };
-use crate::engine::connection::exec::acp_test_support::RecordingWriter as RecordingInputWriter;
+use crate::engine::connection::exec::acp_test_support::{
+    RecordingWriter as RecordingInputWriter, build_host_stdin,
+};
 
 fn initialize_frame_with_capabilities(
     capabilities: &serde_json::Value,
@@ -128,14 +128,6 @@ fn client_capabilities(
 
 fn params(message: &serde_json::Value) -> Option<&serde_json::Map<String, serde_json::Value>> {
     message.get("params").and_then(serde_json::Value::as_object)
-}
-
-async fn build_host_stdin(bytes: &[u8]) -> io::Result<DuplexStream> {
-    let capacity = bytes.len().max(1);
-    let (mut writer, reader) = tokio::io::duplex(capacity);
-    writer.write_all(bytes).await?;
-    drop(writer);
-    Ok(reader)
 }
 
 /// Runs ACP stdin forwarding synchronously with `rewrite_acp_initialize =

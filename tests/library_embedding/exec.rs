@@ -1,33 +1,21 @@
-//! Internal-feature integration suite for embedding and compatibility paths.
+//! Exec-focused support and boundary tests for library embedding.
 //!
-//! These tests run only with `feature = "internal"` because they exercise
-//! internal shims such as `podbot::engine`. The stable public embedding
-//! boundary remains `podbot::api`, `podbot::config`, and `podbot::error`;
-//! `podbot::engine` and `podbot::github` are internal compatibility modules,
-//! while `podbot::cli` visibility is controlled by the `cli` feature.
-
-#![cfg(feature = "internal")]
-
-mod test_utils;
+//! This module owns the mock container-exec client and the tests that use it,
+//! keeping the parent embedding suite below the repository file-size limit.
 
 use bollard::container::LogOutput;
 use bollard::exec::{CreateExecOptions, CreateExecResults, StartExecOptions, StartExecResults};
 use bollard::models::ExecInspectResponse;
 use futures_util::stream;
 use mockall::mock;
-use rstest::{fixture, rstest};
-
-use podbot::api::{CommandOutcome, ExecMode, ExecRequest, RunRequest};
-#[cfg(feature = "experimental")]
-use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
-#[cfg(feature = "experimental")]
-use podbot::config::AppConfig;
-use podbot::config::{CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
+use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
 use podbot::engine::{
     ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
 };
-use podbot::error::{ConfigError, ContainerError, PodbotError};
-use test_utils::exec_outcome_with_client;
+use podbot::error::{ContainerError, PodbotError};
+use rstest::{fixture, rstest};
+
+use super::test_utils::exec_outcome_with_client;
 
 mock! {
     #[derive(Debug)]
@@ -59,39 +47,40 @@ fn runtime() -> Result<tokio::runtime::Runtime, std::io::Error> {
     tokio::runtime::Runtime::new()
 }
 
-// -------------------------------------------------------------------------
-// Configuration loading from host-style call path
-// -------------------------------------------------------------------------
-
-#[rstest]
-fn load_config_without_cli_types() {
-    let options = ConfigLoadOptions {
-        config_path_hint: None,
-        discover_config: false,
-        overrides: ConfigOverrides {
-            engine_socket: Some(String::from("unix:///test/embed.sock")),
-            image: Some(String::from("test-image:latest")),
-            agent_kind: None,
-            agent_mode: None,
-        },
-        command_intent: CommandIntent::Any,
-    };
-
-    let config = load_config(&options);
-    assert!(config.is_ok(), "config loading should succeed");
-
-    if let Ok(ref cfg) = config {
-        assert_eq!(
-            cfg.engine_socket.as_deref(),
-            Some("unix:///test/embed.sock")
-        );
-        assert_eq!(cfg.image.as_deref(), Some("test-image:latest"));
-    }
+/// Asserts that an exec result satisfies `check`, reporting `description` on
+/// failure.
+///
+/// A macro rather than a function so the panic is raised inside the calling
+/// test, keeping failure line numbers at the call site.
+macro_rules! assert_exec_outcome_matches {
+    ($result:expr, $check:expr, $description:expr $(,)?) => {{
+        let result = $result;
+        assert!(($check)(&result), "{}, got: {result:?}", $description);
+    }};
 }
 
-// -------------------------------------------------------------------------
-// Exec orchestration through library API
-// -------------------------------------------------------------------------
+/// Asserts that an exec result failed with `ContainerError::ExecFailed` for the
+/// container under test.
+///
+/// A macro rather than a function so the panic is raised inside the calling
+/// test; `exec_failure` must be in scope at the call site.
+macro_rules! assert_exec_failed_with_container_error {
+    ($result:expr, $fail_at:expr $(,)?) => {{
+        let fail_at = $fail_at;
+        let failure = exec_failure($result).unwrap_or_else(|actual| {
+            panic!("error should be ContainerError::ExecFailed for {fail_at:?}, got: {actual}")
+        });
+
+        assert_eq!(
+            failure.container_id, "embed-sandbox",
+            "exec failure for {fail_at:?} should name the container under test"
+        );
+        assert!(
+            !failure.message.is_empty(),
+            "exec failure for {fail_at:?} should carry a message"
+        );
+    }};
+}
 
 struct LibraryApiExecTestCase {
     exit_code: i64,
@@ -119,121 +108,19 @@ struct LibraryApiExecTestCase {
 fn exec_via_library_api_returns_expected_outcome(
     runtime: Result<tokio::runtime::Runtime, std::io::Error>,
     #[case] test_case: LibraryApiExecTestCase,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let rt = runtime?;
+) {
+    let rt = runtime.expect("tokio runtime should be created");
     let mut client = MockEmbedClient::new();
-    configure_successful_exec(&mut client, test_case.exit_code, test_case.mode);
+    configure_successful_exec(&mut client, test_case.exit_code, test_case.mode)
+        .expect("mock exec expectations should be configurable for the requested mode");
 
-    let request = ExecRequest::new("embed-sandbox", test_case.command)?
+    let request = ExecRequest::new("embed-sandbox", test_case.command)
+        .expect("exec request should be valid")
         .with_mode(test_case.mode)
         .with_tty(false);
     let result = exec_outcome_with_client(&client, rt.handle(), &request);
 
-    assert_exec_outcome_matches(&result, test_case.check, test_case.description);
-    Ok(())
-}
-
-// -------------------------------------------------------------------------
-// Error type contract
-// -------------------------------------------------------------------------
-
-#[rstest]
-#[case::create(FailAt::Create)]
-#[case::start(FailAt::Start)]
-#[case::inspect(FailAt::Inspect)]
-#[case::missing_exit_code(FailAt::InspectMissingExitCode)]
-fn exec_failure_returns_container_error(
-    runtime: Result<tokio::runtime::Runtime, std::io::Error>,
-    #[case] fail_at: FailAt,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let rt = runtime?;
-    let mut client = MockEmbedClient::new();
-    let mode = configure_failing_exec(&mut client, fail_at);
-
-    let request = ExecRequest::new(
-        "embed-sandbox",
-        vec![String::from("echo"), String::from("fail")],
-    )?
-    .with_mode(mode)
-    .with_tty(false);
-    let result = exec_outcome_with_client(&client, rt.handle(), &request);
-
-    assert_exec_failed_with_container_error(&result, fail_at);
-    Ok(())
-}
-
-// Note: resize_exec failure testing is omitted from library boundary tests because:
-// 1. resize_exec is only called when both tty=true AND stdio is a terminal, which requires
-//    complex mocking of the terminal size provider infrastructure.
-// 2. This failure path is already comprehensively tested in the unit tests at
-//    src/engine/connection/exec/tests.rs (see setup_resize_exec_failure test helper).
-// 3. The library boundary tests focus on API-level error propagation, and resize failures
-//    propagate the same ContainerError::ExecFailed variant as other exec failures.
-
-#[rstest]
-fn error_types_are_matchable() {
-    let config_err: PodbotError = ConfigError::MissingRequired {
-        field: String::from("image"),
-    }
-    .into();
-
-    assert!(
-        matches!(
-            config_err,
-            PodbotError::Config(ConfigError::MissingRequired { .. })
-        ),
-        "PodbotError::Config should be matchable"
-    );
-
-    let container_err: PodbotError = ContainerError::ConnectionFailed {
-        message: String::from("refused"),
-    }
-    .into();
-
-    assert!(
-        matches!(
-            container_err,
-            PodbotError::Container(ContainerError::ConnectionFailed { .. })
-        ),
-        "PodbotError::Container should be matchable"
-    );
-}
-
-// -------------------------------------------------------------------------
-// Stub orchestration functions
-// -------------------------------------------------------------------------
-
-#[rstest]
-fn run_request_can_be_constructed_without_cli_types() {
-    let request =
-        RunRequest::new("owner/name", "main").expect("library run request should be valid");
-
-    assert_eq!(request.repository(), "owner/name");
-    assert_eq!(request.branch(), "main");
-}
-
-#[rstest]
-#[cfg(feature = "experimental")]
-fn stub_orchestration_functions_return_success() {
-    let config = AppConfig::default();
-    let request = RunRequest::new("owner/name", "main").expect("run request should be valid");
-
-    assert!(
-        matches!(run_agent(&config, &request), Ok(CommandOutcome::Success)),
-        "run_agent should return Success"
-    );
-    assert!(
-        matches!(list_containers(), Ok(CommandOutcome::Success)),
-        "list_containers should return Success"
-    );
-    assert!(
-        matches!(stop_container("test-ctr"), Ok(CommandOutcome::Success)),
-        "stop_container should return Success"
-    );
-    assert!(
-        matches!(run_token_daemon("test-ctr"), Ok(CommandOutcome::Success)),
-        "run_token_daemon should return Success"
-    );
+    assert_exec_outcome_matches!(result, test_case.check, test_case.description);
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -243,6 +130,35 @@ enum FailAt {
     Inspect,
     InspectMissingExitCode,
 }
+
+#[rstest]
+#[case::create(FailAt::Create)]
+#[case::start(FailAt::Start)]
+#[case::inspect(FailAt::Inspect)]
+#[case::missing_exit_code(FailAt::InspectMissingExitCode)]
+fn exec_failure_returns_container_error(
+    runtime: Result<tokio::runtime::Runtime, std::io::Error>,
+    #[case] fail_at: FailAt,
+) {
+    let rt = runtime.expect("tokio runtime should be created");
+    let mut client = MockEmbedClient::new();
+    let mode = configure_failing_exec(&mut client, fail_at);
+
+    let request = ExecRequest::new(
+        "embed-sandbox",
+        vec![String::from("echo"), String::from("fail")],
+    )
+    .expect("exec request should be valid")
+    .with_mode(mode)
+    .with_tty(false);
+    let result = exec_outcome_with_client(&client, rt.handle(), &request);
+
+    assert_exec_failed_with_container_error!(result, fail_at);
+}
+
+// Resize failures need a terminal-size provider, and the unit suite already
+// verifies that path. These boundary tests cover the shared `ExecFailed`
+// result exposed to library embedders instead.
 
 fn expect_create_exec_ok(client: &mut MockEmbedClient) {
     client.expect_create_exec().times(1).returning(|_, _| {
@@ -315,29 +231,41 @@ fn configure_failing_exec(client: &mut MockEmbedClient, fail_at: FailAt) -> Exec
     }
 }
 
-fn assert_exec_outcome_matches(
-    result: &Result<CommandOutcome, PodbotError>,
-    check: fn(&Result<CommandOutcome, PodbotError>) -> bool,
-    description: &str,
-) {
-    assert!(check(result), "{description}, got: {result:?}");
+/// The payload of a `ContainerError::ExecFailed` error, extracted for
+/// assertion.
+#[derive(Debug)]
+struct ExecFailure {
+    container_id: String,
+    message: String,
 }
 
-fn assert_exec_failed_with_container_error(
-    result: &Result<CommandOutcome, PodbotError>,
-    fail_at: FailAt,
-) {
-    assert!(result.is_err(), "exec should return an error");
-    assert!(
-        matches!(
-            result,
-            Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
-        ),
-        "error should be ContainerError::ExecFailed for {fail_at:?}, got: {result:?}"
-    );
+/// Extracts the `ExecFailed` payload from an exec result.
+///
+/// Returns the debug rendering of the actual result in the error case so the
+/// caller can report the mismatch; this helper never panics.
+fn exec_failure(result: Result<CommandOutcome, PodbotError>) -> Result<ExecFailure, String> {
+    match result {
+        Err(PodbotError::Container(ContainerError::ExecFailed {
+            container_id,
+            message,
+        })) => Ok(ExecFailure {
+            container_id,
+            message,
+        }),
+        other => Err(format!("{other:?}")),
+    }
 }
 
-fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode: ExecMode) {
+/// Configures the mock client for a successful exec in `mode`.
+///
+/// `ExecMode` is `#[non_exhaustive]`, so unsupported future variants are
+/// reported as an error for the calling test to surface rather than panicking
+/// here.
+fn configure_successful_exec(
+    client: &mut MockEmbedClient,
+    exit_code: i64,
+    mode: ExecMode,
+) -> Result<(), String> {
     client.expect_create_exec().times(1).returning(|_, _| {
         Box::pin(async {
             Ok(CreateExecResults {
@@ -346,7 +274,7 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         })
     });
 
-    // ExecMode is marked #[non_exhaustive], so we must handle the wildcard pattern.
+    // ExecMode is marked #[non_exhaustive], so the wildcard arm must remain.
     // If new variants are added, this match will need updating.
     match mode {
         ExecMode::Attached | ExecMode::Protocol => {
@@ -375,10 +303,13 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         _ => {
             // Fallback for future ExecMode variants that haven't been explicitly handled.
             // Tests using unsupported modes will fail with a clear error message.
-            panic!(
-                "configure_successful_exec does not support ExecMode::{mode:?}. \
-                 Please add explicit handling for this variant."
-            );
+            return Err(format!(
+                concat!(
+                    "configure_successful_exec does not support ExecMode::{mode:?}. ",
+                    "Please add explicit handling for this variant."
+                ),
+                mode = mode,
+            ));
         }
     }
 
@@ -390,4 +321,6 @@ fn configure_successful_exec(client: &mut MockEmbedClient, exit_code: i64, mode:
         };
         Box::pin(async move { Ok(inspect) })
     });
+
+    Ok(())
 }

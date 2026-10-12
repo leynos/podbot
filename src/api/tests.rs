@@ -222,47 +222,15 @@ fn run_agent_rejects_invalid_request_values(
 #[cfg(feature = "experimental")]
 #[case::feature_branch("owner/feature", "feature/run-request")]
 #[case::release_branch("team/service", "release-2026")]
-fn run_agent_accepts_distinct_run_requests(
-    #[case] repository: &str,
-    #[case] branch: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn run_agent_accepts_distinct_run_requests(#[case] repository: &str, #[case] branch: &str) {
     let config = AppConfig::default();
-    let request = RunRequest::new(repository, branch)?;
+    let request = RunRequest::new(repository, branch).expect("valid request should be created");
 
-    let command_outcome = run_agent(&config, &request)
-        .map_err(|error| Box::new(error) as Box<dyn std::error::Error + Send + Sync>)?;
+    let command_outcome = run_agent(&config, &request).expect("valid request should be accepted");
 
-    require_outcome(command_outcome, CommandOutcome::Success)?;
-    require_equal(request.repository(), repository, "repository")?;
-    require_equal(request.branch(), branch, "branch")?;
-    Ok(())
-}
-
-#[cfg(feature = "experimental")]
-fn require_equal(
-    actual: &str,
-    expected: &str,
-    field: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(format!("expected {field} {expected:?}, got {actual:?}").into())
-    }
-}
-
-#[cfg(feature = "experimental")]
-fn require_outcome(
-    actual: CommandOutcome,
-    expected: CommandOutcome,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(Box::new(std::io::Error::other(format!(
-            "expected outcome {expected:?}, got {actual:?}"
-        ))))
-    }
+    assert_eq!(command_outcome, CommandOutcome::Success);
+    assert_eq!(request.repository(), repository);
+    assert_eq!(request.branch(), branch);
 }
 
 #[rstest]

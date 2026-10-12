@@ -6,6 +6,10 @@ use ortho_config::MergeComposer;
 use rstest::fixture;
 use std::sync::Arc;
 
+/// Convenience alias for the fallible `serde_json` result produced when
+/// building a `MergeComposer` fixture.
+type ComposerResult = Result<MergeComposer, serde_json::Error>;
+
 /// Fixture providing an `AppConfig` parsed from a full TOML example.
 ///
 /// A fixture arranges state and arrangement can fail, so the parse result is
@@ -59,8 +63,13 @@ pub fn github_config_complete() -> GitHubConfig {
     }
 }
 
-/// Helper: Creates a `MergeComposer` with defaults layer already pushed.
-pub fn create_composer_with_defaults() -> Result<MergeComposer, serde_json::Error> {
+/// Fixture providing a `MergeComposer` with the defaults layer already
+/// pushed.
+///
+/// Returns a `Result` so callers report construction failures with
+/// test-specific context via `.expect(...)`.
+#[fixture]
+pub fn create_composer_with_defaults() -> ComposerResult {
     let mut composer = MergeComposer::new();
     let defaults = ortho_config::serde_json::to_value(AppConfig::default())?;
     composer.push_defaults(defaults);
@@ -121,11 +130,14 @@ pub fn assert_config_has_defaults(config: &AppConfig) {
     assert_creds_defaults(config);
 }
 
-/// Helper: Creates a `MergeComposer` with defaults, file, and env layers for testing layer precedence.
+/// Fixture providing a `MergeComposer` with defaults, file, and env layers
+/// for testing layer precedence.
 ///
-/// This builder pattern reduces duplication in tests that verify environment and CLI layer
-/// precedence by providing pre-configured file and environment layers.
-pub fn create_composer_with_file_and_env() -> Result<MergeComposer, serde_json::Error> {
+/// This builder pattern reduces duplication in tests that verify environment
+/// and CLI layer precedence by providing pre-configured file and environment
+/// layers. Returns a `Result`; see [`create_composer_with_defaults`] for rationale.
+#[fixture]
+pub fn create_composer_with_file_and_env() -> ComposerResult {
     use ortho_config::serde_json::json;
 
     let mut composer = create_composer_with_defaults()?;

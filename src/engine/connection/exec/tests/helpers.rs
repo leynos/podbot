@@ -11,8 +11,7 @@ use super::super::*;
 use crate::error::PodbotError;
 
 pub(super) use super::detached_helpers::{
-    DetachedExecExpectation, assert_detached_exec_expectation,
-    assert_exec_failed_for_container_with_message, assert_exec_failed_with_message,
+    DetachedExecExpectation, assert_detached_exec_expectation, assert_exec_failed, exec_failure,
     execute_detached_and_assert_result, setup_start_exec_detached,
     setup_start_exec_returns_detached,
 };
@@ -40,7 +39,6 @@ impl TerminalSizeProvider for StubTerminalSizeProvider {
 }
 
 pub(super) type RuntimeFixture = std::io::Result<tokio::runtime::Runtime>;
-pub(super) type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[fixture]
 pub(super) fn runtime() -> RuntimeFixture {

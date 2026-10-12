@@ -89,21 +89,11 @@ fn assert_protocol_start_options(options: &StartExecOptions) {
     );
 }
 
-/// Asserts an exec result carries the expected exit code.
-///
-/// The helper takes the value rather than the `Result`, so deciding that an
-/// exec failure is the verdict stays with the test. The assertion itself
-/// stays in a helper because these tests return `TestResult`, and
-/// `clippy::panic_in_result_fn` denies an assertion in the body of one.
-fn assert_exit_code(exec_result: &ExecResult, expected: i64, context: &str) {
-    assert_eq!(exec_result.exit_code(), expected, "{context}");
-}
-
 #[rstest]
-fn protocol_mode_enforces_tty_false_in_constructor() -> TestResult {
-    let request = make_protocol_exec_request("sandbox", default_protocol_command())?;
+fn protocol_mode_enforces_tty_false_in_constructor() {
+    let request = make_protocol_exec_request("sandbox", default_protocol_command())
+        .expect("protocol exec request should build");
     assert_protocol_request_properties(&request);
-    Ok(())
 }
 
 #[rstest]
@@ -119,26 +109,27 @@ fn assert_tty_override_rejected(request: &ExecRequest) {
 }
 
 #[rstest]
-fn protocol_mode_rejects_tty_override() -> TestResult {
-    let request = make_protocol_exec_request("sandbox", default_protocol_command())?.with_tty(true);
+fn protocol_mode_rejects_tty_override() {
+    let request = make_protocol_exec_request("sandbox", default_protocol_command())
+        .expect("protocol exec request should build")
+        .with_tty(true);
     assert_tty_override_rejected(&request);
-    Ok(())
 }
 
 #[rstest]
-fn protocol_mode_create_options_have_correct_flags() -> TestResult {
-    let request = make_protocol_exec_request("sandbox", default_protocol_command())?;
+fn protocol_mode_create_options_have_correct_flags() {
+    let request = make_protocol_exec_request("sandbox", default_protocol_command())
+        .expect("protocol exec request should build");
     let options = build_create_exec_options(&request);
     assert_protocol_create_options(&options);
-    Ok(())
 }
 
 #[rstest]
-fn protocol_mode_start_options_have_correct_flags() -> TestResult {
-    let request = make_protocol_exec_request("sandbox", default_protocol_command())?;
+fn protocol_mode_start_options_have_correct_flags() {
+    let request = make_protocol_exec_request("sandbox", default_protocol_command())
+        .expect("protocol exec request should build");
     let options = build_start_exec_options(&request);
     assert_protocol_start_options(&options);
-    Ok(())
 }
 
 struct ProtocolExecCase {
@@ -165,40 +156,41 @@ struct ProtocolExecCase {
     context: "protocol exec should return non-zero exit code",
 })]
 #[serial]
-fn protocol_exec_maps_exit_code(
-    runtime: RuntimeFixture,
-    #[case] case: ProtocolExecCase,
-) -> TestResult {
-    let runtime_handle = runtime?;
+fn protocol_exec_maps_exit_code(runtime: RuntimeFixture, #[case] case: ProtocolExecCase) {
+    let runtime_handle = runtime.expect("runtime fixture should initialize");
     let mut client = MockExecClient::new();
     setup_create_exec_expectation(&mut client, case.exec_id, false);
     setup_start_exec_protocol(&mut client, case.output_messages);
     client.expect_resize_exec().never();
     setup_inspect_exec_once(&mut client, Some(case.inspect_exit_code));
 
-    let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
-    let exec_result = runtime_handle.block_on(
-        EngineConnector::exec_async_without_protocol_stdin_forwarding(&client, &request),
-    )?;
-    assert_exit_code(&exec_result, case.expected_exit_code, case.context);
-    Ok(())
+    let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())
+        .expect("protocol exec request should build");
+    let exec_result = runtime_handle
+        .block_on(EngineConnector::exec_async_without_protocol_stdin_forwarding(&client, &request))
+        .expect(case.context);
+    assert_eq!(
+        exec_result.exit_code(),
+        case.expected_exit_code,
+        "exit code should match"
+    );
 }
 
 #[rstest]
-fn protocol_mode_rejects_detached_daemon_response(runtime: RuntimeFixture) -> TestResult {
-    let runtime_handle = runtime?;
+fn protocol_mode_rejects_detached_daemon_response(runtime: RuntimeFixture) {
+    let runtime_handle = runtime.expect("runtime fixture should initialize");
     let mut client = MockExecClient::new();
     setup_create_exec_simple(&mut client, "proto-exec-3");
     setup_start_exec_protocol_detached_response(&mut client);
 
-    let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())?;
+    let request = make_protocol_exec_request("sandbox-proto", default_protocol_command())
+        .expect("protocol exec request should build");
     let result = runtime_handle.block_on(EngineConnector::exec_async(&client, &request));
-    detached_helpers::assert_exec_failed_with_message(
+    assert_exec_failed!(
         result,
         "detached start result",
-        "protocol mode should reject detached daemon response",
+        "protocol mode should reject detached daemon response"
     );
-    Ok(())
 }
 
 fn setup_start_exec_protocol_detached_response(client: &mut MockExecClient) {

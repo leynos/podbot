@@ -67,6 +67,8 @@ fn uploader_with_result(
         .expect_upload_to_container()
         .returning(move |container_id, options, archive_bytes| {
             {
+                // Recovering the guard keeps the captured call readable after a
+                // panicking test; the data remains structurally valid.
                 let mut captured_lock = captured_for_closure
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner);
@@ -76,6 +78,8 @@ fn uploader_with_result(
                 captured_lock.archive_bytes = archive_bytes;
             }
 
+            // Surface an unexpected second call through the mock's own error
+            // channel so the test fails on its assertions, not inside the mock.
             let response = response_state_for_closure
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)

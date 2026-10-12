@@ -12,6 +12,9 @@ use rstest_bdd_macros::{ScenarioState, given, scenario, then};
 #[cfg(feature = "experimental")]
 use std::process::Command;
 
+/// Convenience alias for step outcomes.
+type StepResult<T> = Result<T, String>;
+
 /// State shared across CLI test scenarios.
 #[derive(Default, ScenarioState)]
 struct CliState {
@@ -27,6 +30,25 @@ struct CliState {
 #[fixture]
 fn cli_state() -> CliState {
     CliState::default()
+}
+
+/// Records the outcome of a `Cli::try_parse_from` attempt into scenario state.
+///
+/// Successful parses set the success flag; failures record the rendered clap
+/// error alongside a cleared success flag so the `then` steps can inspect both.
+fn record_parse_result(cli_state: &CliState, result: Result<Cli, clap::Error>) {
+    match result {
+        Ok(_) => cli_state.success.set(true),
+        Err(error) => {
+            cli_state.error.set(error.to_string());
+            cli_state.success.set(false);
+        }
+    }
+}
+
+/// Reads a slot, reporting a step error when the scenario left it unset.
+fn required_slot<T>(value: Option<T>, description: &str) -> StepResult<T> {
+    value.ok_or_else(|| format!("{description} should be set before checking"))
 }
 
 // Step definitions
@@ -63,15 +85,7 @@ fn invoke_run_with_help(cli_state: &CliState) {
 fn invoke_run_without_args(cli_state: &CliState) {
     // Try to parse "run" without required arguments
     let result: Result<Cli, clap::Error> = Cli::try_parse_from(["podbot", "run"]);
-    match result {
-        Ok(_) => {
-            cli_state.success.set(true);
-        }
-        Err(e) => {
-            cli_state.error.set(e.to_string());
-            cli_state.success.set(false);
-        }
-    }
+    record_parse_result(cli_state, result);
 }
 
 #[given("the CLI is invoked with run --repo owner/name")]
@@ -79,109 +93,73 @@ fn invoke_run_with_repo(cli_state: &CliState) {
     // Try to parse "run --repo owner/name" without branch
     let result: Result<Cli, clap::Error> =
         Cli::try_parse_from(["podbot", "run", "--repo", "owner/name"]);
-    match result {
-        Ok(_) => {
-            cli_state.success.set(true);
-        }
-        Err(e) => {
-            cli_state.error.set(e.to_string());
-            cli_state.success.set(false);
-        }
-    }
+    record_parse_result(cli_state, result);
 }
 
 #[then("the output contains {text}")]
-fn output_contains(cli_state: &CliState, text: String) {
-    stdout_contains(cli_state, text);
+fn output_contains(cli_state: &CliState, text: String) -> StepResult<()> {
+    stdout_contains(cli_state, text)
 }
 
 #[then("stdout contains {text}")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn stdout_contains(cli_state: &CliState, text: String) {
-    let output = cli_state
-        .output
-        .get()
-        .expect("output should be set before checking");
-    assert!(
-        output.contains(&text),
+fn stdout_contains(cli_state: &CliState, text: String) -> StepResult<()> {
+    let output = required_slot(cli_state.output.get(), "output")?;
+    if output.contains(&text) {
+        return Ok(());
+    }
+
+    Err(format!(
         "Expected output to contain '{text}', but got:\n{output}"
-    );
+    ))
 }
 
 #[then("stderr is empty")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn stderr_is_empty(cli_state: &CliState) {
-    let error = cli_state.error.get().expect("stderr was not captured");
-    assert!(
-        error.is_empty(),
-        "Expected stderr to be empty, but got:\n{error}"
-    );
+fn stderr_is_empty(cli_state: &CliState) -> StepResult<()> {
+    let error = required_slot(cli_state.error.get(), "stderr")?;
+    if error.is_empty() {
+        return Ok(());
+    }
+
+    Err(format!("Expected stderr to be empty, but got:\n{error}"))
 }
 
 #[then("an error is returned")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn error_is_returned(cli_state: &CliState) {
-    let success = cli_state
-        .success
-        .get()
-        .expect("success should be set before checking");
-    assert!(!success, "Expected an error to be returned");
+fn error_is_returned(cli_state: &CliState) -> StepResult<()> {
+    let success = required_slot(cli_state.success.get(), "success")?;
+    if success {
+        return Err(String::from("Expected an error to be returned"));
+    }
+
+    Ok(())
+}
+
+/// Checks that the recorded clap error mentions `flag`.
+fn assert_error_mentions(cli_state: &CliState, flag: &str) -> StepResult<()> {
+    let error = required_slot(cli_state.error.get(), "error")?;
+    if error.contains(flag) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "Expected error to mention '{flag}', but got:\n{error}"
+    ))
 }
 
 #[then("the error mentions --repo")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn error_mentions_repo(cli_state: &CliState) {
-    let error = cli_state
-        .error
-        .get()
-        .expect("error should be set before checking");
-    assert!(
-        error.contains("--repo"),
-        "Expected error to mention '--repo', but got:\n{error}"
-    );
+fn error_mentions_repo(cli_state: &CliState) -> StepResult<()> {
+    assert_error_mentions(cli_state, "--repo")
 }
 
 #[then("the error mentions --branch")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn error_mentions_branch(cli_state: &CliState) {
-    let error = cli_state
-        .error
-        .get()
-        .expect("error should be set before checking");
-    assert!(
-        error.contains("--branch"),
-        "Expected error to mention '--branch', but got:\n{error}"
-    );
+fn error_mentions_branch(cli_state: &CliState) -> StepResult<()> {
+    assert_error_mentions(cli_state, "--branch")
 }
 
 #[given("the CLI is invoked with run --repo owner/name --branch main")]
 fn invoke_run_with_all_args(cli_state: &CliState) {
     let result: Result<Cli, clap::Error> =
         Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", "main"]);
-    match result {
-        Ok(_) => {
-            cli_state.success.set(true);
-        }
-        Err(e) => {
-            cli_state.error.set(e.to_string());
-            cli_state.success.set(false);
-        }
-    }
+    record_parse_result(cli_state, result);
 }
 
 #[given("the CLI run command is executed with repository owner/name and branch main")]
@@ -205,45 +183,21 @@ fn execute_run_with_all_args(cli_state: &CliState) -> Result<(), String> {
 #[given("the CLI is invoked with ps")]
 fn invoke_ps(cli_state: &CliState) {
     let result: Result<Cli, clap::Error> = Cli::try_parse_from(["podbot", "ps"]);
-    match result {
-        Ok(_) => {
-            cli_state.success.set(true);
-        }
-        Err(e) => {
-            cli_state.error.set(e.to_string());
-            cli_state.success.set(false);
-        }
-    }
+    record_parse_result(cli_state, result);
 }
 
 #[given("the CLI is invoked with token-daemon abc123")]
 fn invoke_token_daemon(cli_state: &CliState) {
     let result: Result<Cli, clap::Error> =
         Cli::try_parse_from(["podbot", "token-daemon", "abc123"]);
-    match result {
-        Ok(_) => {
-            cli_state.success.set(true);
-        }
-        Err(e) => {
-            cli_state.error.set(e.to_string());
-            cli_state.success.set(false);
-        }
-    }
+    record_parse_result(cli_state, result);
 }
 
 #[given("the CLI is invoked with exec my-container -- echo hello")]
 fn invoke_exec(cli_state: &CliState) {
     let result: Result<Cli, clap::Error> =
         Cli::try_parse_from(["podbot", "exec", "my-container", "--", "echo", "hello"]);
-    match result {
-        Ok(_) => {
-            cli_state.success.set(true);
-        }
-        Err(e) => {
-            cli_state.error.set(e.to_string());
-            cli_state.success.set(false);
-        }
-    }
+    record_parse_result(cli_state, result);
 }
 
 #[given("the CLI is invoked with exec --detach my-container -- echo hello")]
@@ -257,28 +211,17 @@ fn invoke_exec_detached(cli_state: &CliState) {
         "echo",
         "hello",
     ]);
-    match result {
-        Ok(_) => {
-            cli_state.success.set(true);
-        }
-        Err(e) => {
-            cli_state.error.set(e.to_string());
-            cli_state.success.set(false);
-        }
-    }
+    record_parse_result(cli_state, result);
 }
 
 #[then("the invocation succeeds")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn invocation_succeeds(cli_state: &CliState) {
-    let success = cli_state
-        .success
-        .get()
-        .expect("success should be set before checking");
-    assert!(success, "Expected invocation to succeed");
+fn invocation_succeeds(cli_state: &CliState) -> StepResult<()> {
+    let success = required_slot(cli_state.success.get(), "success")?;
+    if success {
+        return Ok(());
+    }
+
+    Err(String::from("Expected invocation to succeed"))
 }
 
 // Scenario bindings

@@ -269,20 +269,31 @@ fn github_validation_succeeds(config_state: &ConfigState) {
     );
 }
 
-#[then("GitHub validation fails")]
-#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
-fn github_validation_fails(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    let result = config.github.validate();
-    assert!(result.is_err(), "Expected GitHub validation to fail");
-    let error = result.expect_err("validation should fail");
-    // Extract the field value from the error variant rather than relying on Display
+/// Extracts the missing-field list from a validation error.
+///
+/// The field value is read from the error variant rather than from `Display`
+/// so the assertion stays insensitive to message formatting.
+fn extract_missing_required(error: PodbotError) -> Result<String, String> {
     match error {
-        PodbotError::Config(ConfigError::MissingRequired { field }) => {
-            config_state.missing_fields.set(field);
-        }
-        other => panic!("Expected ConfigError::MissingRequired, got: {other:?}"),
+        PodbotError::Config(ConfigError::MissingRequired { field }) => Ok(field),
+        other => Err(format!(
+            "Expected ConfigError::MissingRequired, got: {other:?}"
+        )),
     }
+}
+
+#[then("GitHub validation fails")]
+fn github_validation_fails(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state);
+    let error = config
+        .github
+        .validate()
+        .err()
+        .ok_or_else(|| String::from("Expected GitHub validation to fail"))?;
+    config_state
+        .missing_fields
+        .set(extract_missing_required(error)?);
+    Ok(())
 }
 
 #[then("the validation error mentions \"github.app_id\"")]

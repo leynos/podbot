@@ -57,6 +57,8 @@ impl AsyncWrite for RecordingWriter {
             return Poll::Ready(Err(io::Error::other("writer failure")));
         }
 
+        // Recovering the guard keeps the recorded bytes readable after a
+        // panicking test; the buffer remains structurally valid.
         self.bytes
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -107,6 +109,7 @@ impl AsyncWrite for RecordingInputWriter {
         _cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        // See `RecordingWriter::poll_write` for why a poisoned lock is recovered.
         self.bytes
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -123,6 +126,7 @@ impl AsyncWrite for RecordingInputWriter {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        // See `RecordingWriter::poll_write` for why a poisoned lock is recovered.
         *self
             .shutdown_called
             .lock()
@@ -163,6 +167,24 @@ pub(super) fn assert_exec_failed_message(result: Result<(), PodbotError>, expect
     }
 }
 
+/// Outcome of a protocol session run by the shared harness.
+pub(super) type SessionOutcome = Result<(), PodbotError>;
+
+/// Reads a recording writer's captured bytes, recovering from a poisoned lock
+/// because the buffer stays structurally valid when a test panics.
+pub(super) fn captured_bytes(buffer: &Arc<Mutex<Vec<u8>>>) -> Vec<u8> {
+    buffer
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
+/// Runs a protocol proxy session over the supplied streams.
+///
+/// The outer `io::Result` reports a harness set-up failure (request
+/// construction), kept apart from the inner [`SessionOutcome`] so a broken
+/// arrangement cannot pose as the session failure an error-mapping test
+/// expects. The test body owns the runtime fixture's verdict.
 #[expect(
     clippy::too_many_arguments,
     reason = "test helper wires protocol sessions with explicit stream handles"
@@ -174,16 +196,17 @@ pub(super) fn run_session(
     container_input: Pin<Box<dyn AsyncWrite + Send>>,
     host_stdout: RecordingWriter,
     host_stderr: RecordingWriter,
-) -> Result<(), PodbotError> {
-    let request = make_protocol_request()?;
+) -> io::Result<SessionOutcome> {
+    let request = make_protocol_request()
+        .map_err(|error| io::Error::other(format!("protocol request should build: {error}")))?;
     let host_stdin = make_host_stdin(stdin_bytes);
 
-    runtime.block_on(run_protocol_session_with_io_async(
+    Ok(runtime.block_on(run_protocol_session_with_io_async(
         &request,
         output,
         container_input,
         ProtocolProxyIo::new(host_stdin, host_stdout, host_stderr),
-    ))
+    )))
 }
 
 #[expect(
@@ -193,11 +216,7 @@ pub(super) fn run_session(
 pub(super) fn run_routing_session(
     runtime: &Runtime,
     output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
-) -> (
-    Result<(), PodbotError>,
-    Arc<Mutex<Vec<u8>>>,
-    Arc<Mutex<Vec<u8>>>,
-) {
+) -> io::Result<(SessionOutcome, Arc<Mutex<Vec<u8>>>, Arc<Mutex<Vec<u8>>>)> {
     let host_stdout = RecordingWriter::new();
     let host_stderr = RecordingWriter::new();
     let stdout_bytes = host_stdout.bytes.clone();
@@ -209,8 +228,8 @@ pub(super) fn run_routing_session(
         Box::pin(RecordingInputWriter::new()),
         host_stdout,
         host_stderr,
-    );
-    (result, stdout_bytes, stderr_bytes)
+    )?;
+    Ok((result, stdout_bytes, stderr_bytes))
 }
 
 /// Helper for lifecycle purity tests that only need to inspect stdout.
@@ -220,7 +239,7 @@ pub(super) fn run_lifecycle_session(
     runtime: &Runtime,
     stdin_bytes: &[u8],
     output: Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, BollardError>> + Send>>,
-) -> (Result<(), PodbotError>, Arc<Mutex<Vec<u8>>>) {
+) -> io::Result<(SessionOutcome, Arc<Mutex<Vec<u8>>>)> {
     let host_stdout = RecordingWriter::new();
     let stdout_bytes = host_stdout.bytes.clone();
     let result = run_session(
@@ -230,6 +249,6 @@ pub(super) fn run_lifecycle_session(
         Box::pin(RecordingInputWriter::new()),
         host_stdout,
         RecordingWriter::new(),
-    );
-    (result, stdout_bytes)
+    )?;
+    Ok((result, stdout_bytes))
 }
