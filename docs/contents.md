@@ -29,6 +29,9 @@ guide.
 
 - [Podbot design](podbot-design.md) describes the architecture, boundaries,
   crate choices, and design rationale for Podbot.
+- [Supervised Cargo test runner design](cargo-test-runner-design.md) records
+  the phase, process-ownership, timeout, diagnostics, and coverage boundaries
+  for repository test execution.
 - [Podbot roadmap](roadmap.md) tracks planned delivery work and the
   staged implementation sequence.
 - [MCP server hosting design](mcp-server-hosting-design.md) describes the

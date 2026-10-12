@@ -47,6 +47,9 @@ tool dependency graph or if Podbot adds a MySQL runtime integration.
 
 ### 2.2. Private Cargo test-runner process supervision
 
+The runner's architecture and constraints are recorded in the
+[supervised Cargo test-runner design](cargo-test-runner-design.md).
+
 The private process supervisor owns only the subprocess tree launched by one
 `scripts/test_runner.py` invocation. Reuse it only for metadata and Cargo
 phases and direct test harnesses; it is not a general process manager. It

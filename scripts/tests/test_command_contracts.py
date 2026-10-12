@@ -140,6 +140,34 @@ def test_make_test_uses_runner_and_preserves_overrides(
     )
 
 
+@pytest.mark.parametrize(
+    ("timeout_environment", "expected_timeout"),
+    (
+        pytest.param({"PODBOT_TEST_TIMEOUT": "11"}, "11", id="fallback"),
+        pytest.param(
+            {"PODBOT_TEST_TIMEOUT": "11", "TEST_TIMEOUT": "42"},
+            "42",
+            id="explicit-test-timeout-wins",
+        ),
+    ),
+)
+def test_make_test_resolves_timeout_environment(
+    timeout_environment: dict[str, str],
+    expected_timeout: str,
+) -> None:
+    """The environment fallback applies unless TEST_TIMEOUT is set."""
+    make_environment = os.environ.copy()
+    make_environment.pop("TEST_TIMEOUT", None)
+    make_environment.pop("PODBOT_TEST_TIMEOUT", None)
+    make_environment.update(timeout_environment)
+
+    command = _dry_run_test_recipe(make_environment)
+
+    assert f'--timeout "{expected_timeout}" --' in command, (
+        "the runner must receive the resolved test timeout"
+    )
+
+
 @pytest.fixture(scope="module")
 def _workflow_gate_commands() -> tuple[str, ...]:
     """Return the normalized commands Make would run for workflow-contracts."""
