@@ -82,6 +82,7 @@ def test_reporter_cli_prints_bounded_sanitized_output_and_succeeds(
         capture_output=True,
         check=False,
         text=True,
+        timeout=60,
     )
 
     lines = result.stdout.splitlines()

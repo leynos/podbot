@@ -81,7 +81,17 @@ def _decode_metadata(stdout: str) -> dict[str, typ.Any]:
 
 
 class RunnerCommandFailure(RunnerError):
-    """Carry command status and unrendered diagnostics to the runner boundary."""
+    """Carry command status and unrendered diagnostics to the runner boundary.
+
+    Parameters
+    ----------
+    status : int
+        Exit status selected for the runner's outer reporting boundary.
+    diagnostic : str, default ""
+        Captured command output that must be redacted before it is rendered.
+    summary : str or None, default None
+        Optional concise failure summary for the runner's stderr output.
+    """
 
     def __init__(
         self,

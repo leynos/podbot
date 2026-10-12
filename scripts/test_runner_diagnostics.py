@@ -85,6 +85,29 @@ def redact_diagnostic_text(
     'cargo --token <redacted>'
     """
     env = environment or {}
+    safe = _DIAGNOSTIC_CONTROL.sub("?", _redact_environment_secret_values(text, env))
+    safe = _DIAGNOSTIC_URL.sub(_redact_diagnostic_url, safe)
+    safe = _DIAGNOSTIC_BEARER.sub(r"\1 <redacted>", safe)
+    safe = _DIAGNOSTIC_SECRET_OPTION.sub(r"\1<redacted>", safe)
+    safe = _DIAGNOSTIC_SECRET_FIELD.sub(r"\1<redacted>", safe)
+    safe = _DIAGNOSTIC_GITHUB_TOKEN.sub("<redacted>", safe)
+    if len(safe) > _DIAGNOSTIC_TEXT_LIMIT:
+        suffix = "... [truncated]"
+        safe = f"{safe[: _DIAGNOSTIC_TEXT_LIMIT - len(suffix)]}{suffix}"
+    return safe
+
+
+def _redact_environment_secret_values(
+    text: str, environment: Mapping[str, str] | None = None
+) -> str:
+    """Replace known environment secrets while preserving line boundaries.
+
+    Examples
+    --------
+    >>> _redact_environment_secret_values("key=value", {"API_TOKEN": "value"})
+    'key=<redacted>'
+    """
+    env = environment or {}
     secrets = sorted(
         {
             value
@@ -94,17 +117,10 @@ def redact_diagnostic_text(
         key=len,
         reverse=True,
     )
-    safe = _DIAGNOSTIC_CONTROL.sub("?", text)
+    safe = text
     for secret in secrets:
-        safe = safe.replace(secret, "<redacted>")
-    safe = _DIAGNOSTIC_URL.sub(_redact_diagnostic_url, safe)
-    safe = _DIAGNOSTIC_BEARER.sub(r"\1 <redacted>", safe)
-    safe = _DIAGNOSTIC_SECRET_OPTION.sub(r"\1<redacted>", safe)
-    safe = _DIAGNOSTIC_SECRET_FIELD.sub(r"\1<redacted>", safe)
-    safe = _DIAGNOSTIC_GITHUB_TOKEN.sub("<redacted>", safe)
-    if len(safe) > _DIAGNOSTIC_TEXT_LIMIT:
-        suffix = "... [truncated]"
-        safe = f"{safe[: _DIAGNOSTIC_TEXT_LIMIT - len(suffix)]}{suffix}"
+        redacted_secret = re.sub(r"[^\r\n]+", "<redacted>", secret)
+        safe = safe.replace(secret, redacted_secret)
     return safe
 
 

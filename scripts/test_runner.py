@@ -26,7 +26,10 @@ from typing import NoReturn
 
 from test_runner_cargo import RunnerCommandFailure, load_cargo_metadata
 from test_runner_context import TestRunnerContext
-from test_runner_diagnostics import redact_diagnostic_text
+from test_runner_diagnostics import (
+    _redact_environment_secret_values,
+    redact_diagnostic_text,
+)
 from test_runner_models import RunnerError
 from test_runner_options import parse_cargo_test_options
 from test_runner_phases import run_test_plan
@@ -73,6 +76,7 @@ def _redact_attached_unknown_argument_values(message: str) -> str:
 
 def _redact_captured_diagnostic(message: str) -> str:
     """Sanitize captured stderr line by line while preserving its boundaries."""
+    message = _redact_environment_secret_values(message, os.environ)
     return re.sub(
         r"[^\r\n]+",
         lambda line: redact_diagnostic_text(line.group(), os.environ),

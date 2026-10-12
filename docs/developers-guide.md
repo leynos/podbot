@@ -67,8 +67,11 @@ values from secret-named environment entries, credential fields, and URL paths,
 then bounds each value. Keep it composed at these runner-controlled print
 boundaries; it is not a general logging filter or a filter for forwarded Cargo
 and test-process output. Raw lock paths remain available for filesystem
-observation and lock matching. The sccache log reader retains its separate
-selection and sanitization contract in `report_sccache_errors.py`.
+observation and lock matching. Captured stderr first has complete environment
+secret values removed before per-line normalization, so multiline values cannot
+leak fragments while the original line boundaries remain available to the
+reporter. The sccache log reader retains its separate selection and
+sanitization contract in `report_sccache_errors.py`.
 
 `OwnedProcessTree.refresh()` explicitly reads procfs and updates tracked state,
 returning an immutable `ProcessTreeSnapshot`. Snapshot queries use only that
