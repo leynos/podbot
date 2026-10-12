@@ -29,6 +29,9 @@ guide.
 
 - [Podbot design](podbot-design.md) describes the architecture, boundaries,
   crate choices, and design rationale for Podbot.
+- [Supervised Cargo test runner design](cargo-test-runner-design.md) records
+  the phase, process-ownership, timeout, diagnostics, and coverage boundaries
+  for repository test execution.
 - [Podbot roadmap](roadmap.md) tracks planned delivery work and the
   staged implementation sequence.
 - [MCP server hosting design](mcp-server-hosting-design.md) describes the
@@ -59,6 +62,9 @@ guide.
 
 ## Reference material
 
+- [Cargo package-cache investigation for issue 188](cargo-package-cache-investigation.md)
+  records the observed lock cycle, bounded Rust 1.88 attempt, and unresolved
+  cause.
 - [Complexity antipatterns and refactoring strategies](complexity-antipatterns-and-refactoring-strategies.md)
   explains code-health smells and refactoring approaches.
 - [Reliable testing in Rust via dependency injection](reliable-testing-in-rust-via-dependency-injection.md)
