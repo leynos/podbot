@@ -151,6 +151,7 @@ mod tests {
     use super::*;
     use crate::engine::{CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture};
     use bollard::exec::{CreateExecOptions, ResizeExecOptions, StartExecOptions};
+    use eyre::ensure;
     use mockall::{mock, predicate::eq};
     use rstest::{fixture, rstest};
 
@@ -275,10 +276,9 @@ mod tests {
     fn clones_repository_and_verifies_branch(
         runtime: io::Result<(tokio::runtime::Runtime, tokio::runtime::Handle)>,
         typed_values: Result<(RepositoryRef, BranchName, WorkspacePath, AskpassPath), PodbotError>,
-    ) {
-        let (_rt, handle) = runtime.expect("test requires a Tokio runtime");
-        let (repository, branch, workspace, askpass) =
-            typed_values.expect("test typed values should parse");
+    ) -> eyre::Result<()> {
+        let (_rt, handle) = runtime?;
+        let (repository, branch, workspace, askpass) = typed_values?;
         let mut client = MockExecClient::new();
         let clone_request = request(&repository, &branch, &workspace, &askpass);
         arrange_successful_clone(&mut client);
@@ -295,21 +295,28 @@ mod tests {
             0,
         );
 
-        let result = clone_repository_into_workspace(&handle, &client, &clone_request)
-            .expect("clone should succeed");
+        let result = clone_repository_into_workspace(&handle, &client, &clone_request)?;
 
-        assert_eq!(result.workspace_path, "/work");
-        assert_eq!(result.checked_out_branch, "main");
+        ensure!(
+            result.workspace_path == "/work",
+            "expected workspace path /work, got {}",
+            result.workspace_path
+        );
+        ensure!(
+            result.checked_out_branch == "main",
+            "expected checked-out branch main, got {}",
+            result.checked_out_branch
+        );
+        Ok(())
     }
 
     #[rstest]
     fn clone_failure_returns_exec_error(
         runtime: io::Result<(tokio::runtime::Runtime, tokio::runtime::Handle)>,
         typed_values: Result<(RepositoryRef, BranchName, WorkspacePath, AskpassPath), PodbotError>,
-    ) {
-        let (_rt, handle) = runtime.expect("test requires a Tokio runtime");
-        let (repository, branch, workspace, askpass) =
-            typed_values.expect("test typed values should parse");
+    ) -> eyre::Result<()> {
+        let (_rt, handle) = runtime?;
+        let (repository, branch, workspace, askpass) = typed_values?;
         let mut client = MockExecClient::new();
         let clone_request = request(&repository, &branch, &workspace, &askpass);
         expect_exec(
@@ -328,20 +335,23 @@ mod tests {
 
         let result = clone_repository_into_workspace(&handle, &client, &clone_request);
 
-        assert!(matches!(
-            result,
-            Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
-        ));
+        ensure!(
+            matches!(
+                &result,
+                Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
+            ),
+            "expected ExecFailed on clone failure, got {result:?}"
+        );
+        Ok(())
     }
 
     #[rstest]
     fn branch_verification_failure_returns_exec_error(
         runtime: io::Result<(tokio::runtime::Runtime, tokio::runtime::Handle)>,
         typed_values: Result<(RepositoryRef, BranchName, WorkspacePath, AskpassPath), PodbotError>,
-    ) {
-        let (_rt, handle) = runtime.expect("test requires a Tokio runtime");
-        let (repository, branch, workspace, askpass) =
-            typed_values.expect("test typed values should parse");
+    ) -> eyre::Result<()> {
+        let (_rt, handle) = runtime?;
+        let (repository, branch, workspace, askpass) = typed_values?;
         let mut client = MockExecClient::new();
         let clone_request = request(&repository, &branch, &workspace, &askpass);
         arrange_successful_clone(&mut client);
@@ -361,12 +371,13 @@ mod tests {
 
         let result = clone_repository_into_workspace(&handle, &client, &clone_request);
 
-        assert!(
+        ensure!(
             matches!(
-                result,
+                &result,
                 Err(PodbotError::Container(ContainerError::ExecFailed { .. }))
             ),
             "expected ExecFailed on branch verification failure, got {result:?}"
         );
+        Ok(())
     }
 }

@@ -579,6 +579,22 @@ When adding a new execution mode:
   `io::Result<CapturedSessionIo>`, where `CapturedSessionIo` contains the
   captured host-stdout and container-stdin bytes. Setup and session failures
   are propagated as `io::Error` values.
+- `run_session`: runs one protocol session with the runtime, stdin bytes,
+  output stream, container input, and stdout and stderr writers. It returns
+  `io::Result<SessionOutcome>`. The outer `io::Error` reports harness setup or
+  protocol-request construction failure; `SessionOutcome` remains the inner
+  session result.
+- `run_routing_session(runtime, output)`: routing-test wrapper around
+  `run_session` that returns
+  `io::Result<(SessionOutcome, Arc<Mutex<Vec<u8>>>, Arc<Mutex<Vec<u8>>>)>` for
+  the session outcome and captured stdout and stderr bytes.
+- `run_lifecycle_session(runtime, stdin_bytes, output)`: convenience wrapper
+  around `run_session` for protocol-proxy lifecycle tests that only inspect
+  stdout. It borrows a `Runtime` whose fixture verdict the test body owns, and
+  returns `io::Result<(SessionOutcome, Arc<Mutex<Vec<u8>>>)>` for the session
+  outcome and captured stdout bytes. The outer `io::Error` reports harness
+  setup or protocol-request construction failure, kept apart from the session
+  result so a broken arrangement cannot pose as an expected session failure.
 - `ContainerExecClient` mock implementations for unit testing without a
   live daemon.
 
