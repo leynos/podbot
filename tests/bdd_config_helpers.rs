@@ -11,14 +11,25 @@ use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, then};
 
-// Helper functions to reduce duplication in step definitions
-
 /// Retrieves configuration or reports that scenario setup has not provided it.
 fn get_config(config_state: &ConfigState) -> Result<AppConfig, String> {
     config_state
         .config
         .get()
         .ok_or_else(|| String::from("configuration should be set"))
+}
+
+/// Captures a TOML rejection for invalid-agent setup without changing config.
+fn capture_parse_error(
+    config_state: &ConfigState,
+    toml: &str,
+    failure_message: &str,
+) -> Result<(), String> {
+    let error = toml::from_str::<AppConfig>(toml)
+        .err()
+        .ok_or_else(|| String::from(failure_message))?;
+    config_state.parse_error.set(error.to_string());
+    Ok(())
 }
 
 /// Creates and sets an `AppConfig` with a custom `GitHubConfig`.
@@ -96,15 +107,7 @@ fn no_configuration_provided(config_state: &ConfigState) {
 
 #[given("a configuration file with privileged mode enabled")]
 fn config_with_privileged_mode(config_state: &ConfigState) {
-    let config = AppConfig {
-        sandbox: SandboxConfig {
-            privileged: true,
-            mount_dev_fuse: true,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    config_state.config.set(config);
+    set_sandbox_config(config_state, true, true);
 }
 
 #[given("no GitHub configuration is provided")]
@@ -119,11 +122,11 @@ fn config_with_invalid_agent_kind(config_state: &ConfigState) -> Result<(), Stri
         [agent]
         kind = "unknown"
     "#;
-    let error = toml::from_str::<AppConfig>(toml)
-        .err()
-        .ok_or_else(|| String::from("TOML parsing should fail for an invalid agent kind"))?;
-    config_state.parse_error.set(error.to_string());
-    Ok(())
+    capture_parse_error(
+        config_state,
+        toml,
+        "TOML parsing should fail for an invalid agent kind",
+    )
 }
 
 #[given("a configuration file with an invalid agent mode")]
@@ -132,11 +135,11 @@ fn config_with_invalid_agent_mode(config_state: &ConfigState) -> Result<(), Stri
         [agent]
         mode = "unknown"
     "#;
-    let error = toml::from_str::<AppConfig>(toml)
-        .err()
-        .ok_or_else(|| String::from("TOML parsing should fail for an invalid agent mode"))?;
-    config_state.parse_error.set(error.to_string());
-    Ok(())
+    capture_parse_error(
+        config_state,
+        toml,
+        "TOML parsing should fail for an invalid agent mode",
+    )
 }
 
 #[given("a configuration file with workspace base directory set to {base_dir}")]

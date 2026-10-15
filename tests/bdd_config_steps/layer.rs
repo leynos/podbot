@@ -148,30 +148,27 @@ fn configuration_is_merged(config_state: &ConfigState) -> Result<(), String> {
     Ok(())
 }
 
-#[then("the engine socket is {socket}")]
-fn engine_socket_is(config_state: &ConfigState, socket: String) -> Result<(), String> {
-    let config = get_config(config_state)?;
-    if config.engine_socket.as_deref() == Some(socket.as_str()) {
+/// Compares one optional string field and reports only that field on mismatch.
+fn string_field_is(field: &str, actual: Option<&str>, expected: &str) -> Result<(), String> {
+    if actual == Some(expected) {
         Ok(())
     } else {
         Err(format!(
-            "Expected engine_socket to be {socket}, got: {:?}",
-            config.engine_socket
+            "Expected {field} to be {expected}, got: {actual:?}"
         ))
     }
+}
+
+#[then("the engine socket is {socket}")]
+fn engine_socket_is(config_state: &ConfigState, socket: String) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    string_field_is("engine_socket", config.engine_socket.as_deref(), &socket)
 }
 
 #[then("the image is {image}")]
 fn image_is(config_state: &ConfigState, image: String) -> Result<(), String> {
     let config = get_config(config_state)?;
-    if config.image.as_deref() == Some(image.as_str()) {
-        Ok(())
-    } else {
-        Err(format!(
-            "Expected image to be {image}, got: {:?}",
-            config.image
-        ))
-    }
+    string_field_is("image", config.image.as_deref(), &image)
 }
 
 #[cfg(test)]
@@ -180,7 +177,9 @@ mod tests {
 
     use rstest::rstest;
 
-    use super::{ConfigState, configuration_is_merged, json};
+    use super::{
+        AppConfig, ConfigState, configuration_is_merged, engine_socket_is, image_is, json,
+    };
 
     #[rstest]
     fn invalid_layer_returns_a_merge_error() {
@@ -195,6 +194,59 @@ mod tests {
         assert!(
             state.config.get().is_none(),
             "failed merge must not populate configuration"
+        );
+    }
+
+    #[rstest]
+    #[case::socket_match(engine_socket_is, Some("desired"), Ok(()))]
+    #[case::socket_missing(
+        engine_socket_is,
+        None,
+        Err("Expected engine_socket to be desired, got: None")
+    )]
+    #[case::socket_mismatch(
+        engine_socket_is,
+        Some("other"),
+        Err("Expected engine_socket to be desired, got: Some(\"other\")")
+    )]
+    #[case::image_match(image_is, Some("desired"), Ok(()))]
+    #[case::image_missing(image_is, None, Err("Expected image to be desired, got: None"))]
+    #[case::image_mismatch(
+        image_is,
+        Some("other"),
+        Err("Expected image to be desired, got: Some(\"other\")")
+    )]
+    fn string_verdict_preserves_field_diagnostics(
+        #[case] step: fn(&ConfigState, String) -> Result<(), String>,
+        #[case] actual: Option<&str>,
+        #[case] expected: Result<(), &str>,
+    ) {
+        let state = ConfigState::default();
+        state.config.set(AppConfig {
+            engine_socket: actual.map(String::from),
+            image: actual.map(String::from),
+            ..Default::default()
+        });
+        let result = step(&state, String::from("desired"));
+        assert_eq!(
+            result.as_ref().map_err(String::as_str),
+            expected.as_ref().map_err(|error| *error),
+            "the verdict should describe only the selected field",
+        );
+    }
+
+    #[rstest]
+    #[case::socket(engine_socket_is)]
+    #[case::image(image_is)]
+    fn string_verdict_requires_configuration(
+        #[case] step: fn(&ConfigState, String) -> Result<(), String>,
+    ) {
+        let state = ConfigState::default();
+        let result = step(&state, String::from("desired"));
+        let error = result.expect_err("the step must propagate missing configuration");
+        assert_eq!(
+            error, "configuration should be set",
+            "lookup must fail before comparing a field",
         );
     }
 }

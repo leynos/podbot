@@ -1264,6 +1264,14 @@ observed values and return an error for a failed verdict, avoiding panics inside
 Ordinary regression test bodies may use `.expect("reason")` after the fallible
 operation has been evaluated separately.
 
+Configuration Given steps reuse `set_sandbox_config` for sandbox defaults and
+`capture_parse_error` for invalid-agent TOML. The latter records only parsing
+failures; unexpected success returns the caller's context without changing
+state. Layer Then steps share `string_field_is` for optional string comparisons
+after `get_config` succeeds. These private helpers belong to configuration BDD
+setup and verdicts; keep step registration and scenario-specific inputs in the
+wrappers.
+
 Module docs should be concise (2–4 lines) and focus on what the module does,
 not how it works. Implementation details belong in function-level `///` docs.
 
