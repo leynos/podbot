@@ -151,8 +151,14 @@ share only the synchronous boundary in
 `tests/test_utils/ui_verification/mod.rs`. This helper owns compiler selection
 and verification flags; it must not become a general environment or process
 API. Its private option-specific parser helpers are used only within this
-boundary to preserve argument consumption order and reject unknown values. Its
-private profile-key predicate belongs only to the same environment boundary; it
+boundary to preserve argument consumption order and reject unknown values.
+`flags.rs` owns `FlagToken`, which validates literal syntax when each caller
+option or split value is consumed; compact suffixes inherit that validation. Its
+`CompactOption` enum names the finite compact-option grammar, keeping prefix
+recognition separate from value policy. Only the verification flag parser may
+construct or consume these types; they must not become general CLI parsers or
+bypass first-error ordering by validating all tokens in advance. Its private
+profile-key predicate belongs only to the same environment boundary; it
 recognizes Cargo's exact profile prefix and backend suffix. Callers register
 fixtures inside its closure, and the helper constructs and drops
 `trybuild::TestCases` before restoring the environment. The private

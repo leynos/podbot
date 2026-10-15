@@ -202,8 +202,34 @@ proptest! {
     }
 }
 
-/// Split options must preserve missing-value and rejected-value diagnostics.
+/// Preserve option spelling, value diagnostics, and first-error precedence.
 #[rstest]
+#[case::compact_allow_value("-Aunused", "-Aunused")]
+#[case::compact_deny_value("-Ddead_code", "-Ddead_code")]
+#[case::compact_unstable_value("-Zcodegen-backend=llvm", "-Zcodegen-backend=llvm")]
+#[case::compact_width_value("--diagnostic-width=120", "--diagnostic-width=120")]
+#[case::cfg_prefix_must_be_exact("--cfg-extra=coverage", "--cfg-extra=coverage")]
+#[case::remap_prefix_must_be_exact(
+    "--remap-path-prefix-extra=src=/workspace",
+    "--remap-path-prefix-extra=src=/workspace"
+)]
+#[case::policy_value_must_be_exact("-Adead_code_extra", "-Adead_code_extra")]
+#[case::compact_cfg_value("--cfg=unknown", "unknown")]
+#[case::compact_codegen_value("-Ccodegen-units=2", "codegen-units=2")]
+#[case::empty_compact_cfg_value("--cfg=", "")]
+#[case::dynamic_compact_value("--cfg=$VAR", "--cfg=$VAR")]
+#[case::dynamic_split_value("--cfg\u{1f}$VAR", "$VAR")]
+#[case::early_compact_error_before_later_dynamic_text(
+    "--cfg=coverage\u{1f}-Aunused\u{1f}--cfg=$BAD",
+    "-Aunused"
+)]
+#[case::early_split_error_before_later_dynamic_text(
+    "--cfg=coverage\u{1f}-A\u{1f}unused\u{1f}--cfg=$BAD",
+    "unused"
+)]
+#[case::encoded_shape_error_precedes_token_policy("-Aunused\u{1f}", "empty encoded flag")]
+#[case::dynamic_split_remap_value("--remap-path-prefix\u{1f}src=$WORKSPACE", "src=$WORKSPACE")]
+#[case::missing_unstable("-Z", "-Z")]
 #[case::missing_allow("-A", "-A")]
 #[case::wrong_allow("-A\u{1f}unused", "unused")]
 #[case::missing_deny("-D", "-D")]
@@ -212,7 +238,7 @@ proptest! {
 #[case::missing_width("--diagnostic-width", "--diagnostic-width")]
 #[case::wrong_width("--diagnostic-width\u{1f}120", "120")]
 #[case::first_error_wins("-A\u{1f}unused\u{1f}--unknown", "unused")]
-fn rejected_split_values_preserve_the_first_error(#[case] encoded: &str, #[case] rejected: &str) {
+fn rejected_values_preserve_the_first_error(#[case] encoded: &str, #[case] rejected: &str) {
     let error = verification_flags(Some(encoded), None).expect_err("invalid option must fail");
     assert!(
         matches!(error, VerificationError::UnsupportedFlags(detail)
