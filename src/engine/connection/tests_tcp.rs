@@ -45,7 +45,8 @@ fn connect_http_compatible_endpoints_creates_client(#[case] endpoint: &str) {
     // Docker::connect_with_http which is synchronous and does not
     // validate connectivity at construction time.
     let result = EngineConnector::connect(endpoint);
-    result.unwrap_or_else(|_| panic!("connect {endpoint} should create client"));
+    let error_context = format!("connect {endpoint} should create client");
+    result.expect(&error_context);
 }
 
 #[rstest]

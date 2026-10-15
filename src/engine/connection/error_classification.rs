@@ -233,12 +233,10 @@ mod tests {
     #[case::https("https://docker.example.com:2376", None)]
     fn extract_socket_path_parses_correctly(#[case] uri: &str, #[case] expected: Option<&str>) {
         let result = extract_socket_path(uri);
-        assert_eq!(
-            result
-                .as_ref()
-                .map(|path| path.to_str().expect("valid UTF-8")),
-            expected
-        );
+        let socket_path = result
+            .as_ref()
+            .map(|path| path.to_str().expect("valid UTF-8"));
+        assert_eq!(socket_path, expected);
     }
 
     #[rstest]

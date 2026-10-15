@@ -22,17 +22,6 @@ mod exec;
 mod repository;
 
 #[rstest]
-fn command_outcome_success_equals_itself() {
-    assert_eq!(CommandOutcome::Success, CommandOutcome::Success);
-}
-
-#[rstest]
-fn command_outcome_exit_preserves_code() {
-    let outcome = CommandOutcome::CommandExit { code: 42 };
-    assert_eq!(outcome, CommandOutcome::CommandExit { code: 42 });
-}
-
-#[rstest]
 fn command_outcome_success_differs_from_exit_zero() {
     assert_ne!(
         CommandOutcome::Success,

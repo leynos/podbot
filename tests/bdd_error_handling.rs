@@ -33,7 +33,7 @@ impl ErrorSnapshot {
 }
 
 /// State shared across error handling scenarios.
-#[derive(ScenarioState)]
+#[derive(Default, ScenarioState)]
 struct ErrorState {
     /// The last error captured during a scenario.
     error: Slot<ErrorSnapshot>,
@@ -41,20 +41,6 @@ struct ErrorState {
     message: Slot<String>,
     /// Whether the operation succeeded.
     success: Slot<bool>,
-}
-
-#[expect(
-    clippy::derivable_impls,
-    reason = "ScenarioState guidance discourages deriving Default in this module"
-)]
-impl Default for ErrorState {
-    fn default() -> Self {
-        Self {
-            error: Slot::default(),
-            message: Slot::default(),
-            success: Slot::default(),
-        }
-    }
 }
 
 /// Fixture providing a fresh error state.
@@ -102,53 +88,59 @@ fn result_is_inspected(error_state: &ErrorState) {
 }
 
 #[when("the error is formatted")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn error_is_formatted(error_state: &ErrorState) {
-    let error = error_state.error.get().expect("error should be set");
+fn error_is_formatted(error_state: &ErrorState) -> Result<(), String> {
+    let error = error_state
+        .error
+        .get()
+        .ok_or_else(|| String::from("error should be set"))?;
     error_state.message.set(error.to_error().to_string());
+    Ok(())
 }
 
 #[when("the error is reported")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn error_is_reported(error_state: &ErrorState) {
-    let error = error_state.error.get().expect("error should be set");
+fn error_is_reported(error_state: &ErrorState) -> Result<(), String> {
+    let error = error_state
+        .error
+        .get()
+        .ok_or_else(|| String::from("error should be set"))?;
     let report = Report::from(error.to_error());
     error_state.message.set(report.to_string());
+    Ok(())
 }
 
 #[then("the outcome is ok")]
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn outcome_is_ok(error_state: &ErrorState) {
-    let success = error_state.success.get().expect("success should be set");
-    assert!(success, "expected the operation to succeed");
+fn outcome_is_ok(error_state: &ErrorState) -> Result<(), String> {
+    let success = error_state
+        .success
+        .get()
+        .ok_or_else(|| String::from("success should be set"))?;
+    if success {
+        Ok(())
+    } else {
+        Err(String::from("expected the operation to succeed"))
+    }
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "test assertion - panic on missing state is intentional"
-)]
-fn assert_message_is(error_state: &ErrorState, expected: &str) {
-    let message = error_state.message.get().expect("message should be set");
-    assert_eq!(message, expected);
+fn assert_message_is(error_state: &ErrorState, expected: &str) -> Result<(), String> {
+    let message = error_state
+        .message
+        .get()
+        .ok_or_else(|| String::from("message should be set"))?;
+    if message == expected {
+        Ok(())
+    } else {
+        Err(format!("Expected message {expected:?}, got: {message:?}"))
+    }
 }
 
 #[then("the error message is {expected}")]
-fn error_message_is(error_state: &ErrorState, expected: String) {
-    assert_message_is(error_state, &expected);
+fn error_message_is(error_state: &ErrorState, expected: String) -> Result<(), String> {
+    assert_message_is(error_state, &expected)
 }
 
 #[then("the report message is {expected}")]
-fn report_message_is(error_state: &ErrorState, expected: String) {
-    assert_message_is(error_state, &expected);
+fn report_message_is(error_state: &ErrorState, expected: String) -> Result<(), String> {
+    assert_message_is(error_state, &expected)
 }
 
 #[scenario(
@@ -189,4 +181,67 @@ fn container_start_failures_include_ids(error_state: ErrorState) {
 )]
 fn token_expiry_is_reported_via_eyre(error_state: ErrorState) {
     let _ = error_state;
+}
+
+#[cfg(test)]
+mod tests {
+    //! Regression tests for missing error state and mismatched verdicts.
+
+    use rstest::rstest;
+
+    use super::{
+        ErrorState, assert_message_is, error_is_formatted, error_is_reported, outcome_is_ok,
+    };
+
+    #[rstest]
+    #[case::format_error(error_is_formatted, "error should be set")]
+    #[case::report_error(error_is_reported, "error should be set")]
+    #[case::inspect_outcome(outcome_is_ok, "success should be set")]
+    fn missing_state_returns_a_setup_error(
+        #[case] step: fn(&ErrorState) -> Result<(), String>,
+        #[case] expected: &str,
+    ) {
+        let state = ErrorState::default();
+        let result = step(&state);
+        let error = result.expect_err("missing scenario state must return an error");
+        assert_eq!(
+            error, expected,
+            "missing state should identify the unset slot"
+        );
+    }
+
+    #[rstest]
+    fn missing_message_returns_a_setup_error() {
+        let state = ErrorState::default();
+        let result = assert_message_is(&state, "expected");
+        let error = result.expect_err("missing message must return an error");
+        assert_eq!(
+            error, "message should be set",
+            "lookup should identify the missing message"
+        );
+    }
+
+    #[rstest]
+    fn mismatched_message_returns_a_verdict_error() {
+        let state = ErrorState::default();
+        state.message.set(String::from("actual"));
+        let result = assert_message_is(&state, "expected");
+        let error = result.expect_err("a mismatched message must fail the verdict");
+        assert_eq!(
+            error, "Expected message \"expected\", got: \"actual\"",
+            "a mismatched message should report both values",
+        );
+    }
+
+    #[rstest]
+    fn unsuccessful_outcome_returns_a_verdict_error() {
+        let state = ErrorState::default();
+        state.success.set(false);
+        let result = outcome_is_ok(&state);
+        let error = result.expect_err("an unsuccessful outcome must fail the verdict");
+        assert_eq!(
+            error, "expected the operation to succeed",
+            "a failed outcome should explain the verdict",
+        );
+    }
 }

@@ -32,17 +32,16 @@ fn protocol_proxy_forwards_stdin_bytes_and_shuts_down_input(runtime: RuntimeFixt
     .expect("session harness should build");
 
     assert!(result.is_ok(), "protocol proxy should succeed: {result:?}");
-    assert_eq!(
-        expected_bytes
-            .lock()
-            .expect("writer mutex should not poison")
-            .clone(),
-        b"input payload"
-    );
+    let captured_bytes = expected_bytes
+        .lock()
+        .expect("writer mutex should not poison")
+        .clone();
+    let shutdown_observed = *expected_shutdown
+        .lock()
+        .expect("shutdown mutex should not poison");
+    assert_eq!(captured_bytes, b"input payload");
     assert!(
-        *expected_shutdown
-            .lock()
-            .expect("shutdown mutex should not poison"),
+        shutdown_observed,
         "container stdin should be shut down after EOF"
     );
 }
