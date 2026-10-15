@@ -13,13 +13,12 @@ use rstest_bdd_macros::{ScenarioState, given, then};
 
 // Helper functions to reduce duplication in step definitions
 
-/// Extracts the configuration from state with consistent error handling.
-#[expect(clippy::expect_used, reason = "test helper - panics are acceptable")]
-fn get_config(config_state: &ConfigState) -> AppConfig {
+/// Retrieves configuration or reports that scenario setup has not provided it.
+fn get_config(config_state: &ConfigState) -> Result<AppConfig, String> {
     config_state
         .config
         .get()
-        .expect("configuration should be set")
+        .ok_or_else(|| String::from("configuration should be set"))
 }
 
 /// Creates and sets an `AppConfig` with a custom `GitHubConfig`.
@@ -38,11 +37,6 @@ fn set_github_config(
         ..Default::default()
     };
     config_state.config.set(config);
-}
-
-/// Asserts that an optional GitHub field is absent.
-fn assert_github_field_absent<T>(field: Option<&T>, field_name: &str) {
-    assert!(field.is_none(), "Expected {field_name} to be absent");
 }
 
 /// Creates and sets an `AppConfig` with a custom `SandboxConfig`.
@@ -120,27 +114,29 @@ fn no_github_configuration(config_state: &ConfigState) {
 }
 
 #[given("a configuration file with an invalid agent kind")]
-#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
-fn config_with_invalid_agent_kind(config_state: &ConfigState) {
+fn config_with_invalid_agent_kind(config_state: &ConfigState) -> Result<(), String> {
     let toml = r#"
         [agent]
         kind = "unknown"
     "#;
     let error = toml::from_str::<AppConfig>(toml)
-        .expect_err("TOML parsing should fail for an invalid agent kind");
+        .err()
+        .ok_or_else(|| String::from("TOML parsing should fail for an invalid agent kind"))?;
     config_state.parse_error.set(error.to_string());
+    Ok(())
 }
 
 #[given("a configuration file with an invalid agent mode")]
-#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
-fn config_with_invalid_agent_mode(config_state: &ConfigState) {
+fn config_with_invalid_agent_mode(config_state: &ConfigState) -> Result<(), String> {
     let toml = r#"
         [agent]
         mode = "unknown"
     "#;
     let error = toml::from_str::<AppConfig>(toml)
-        .expect_err("TOML parsing should fail for an invalid agent mode");
+        .err()
+        .ok_or_else(|| String::from("TOML parsing should fail for an invalid agent mode"))?;
     config_state.parse_error.set(error.to_string());
+    Ok(())
 }
 
 #[given("a configuration file with workspace base directory set to {base_dir}")]
@@ -149,92 +145,109 @@ fn config_with_workspace_base_dir(config_state: &ConfigState, base_dir: String) 
 }
 
 #[then("the sandbox is not privileged")]
-fn sandbox_is_not_privileged(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert!(
-        !config.sandbox.privileged,
-        "Expected sandbox to not be privileged"
-    );
+fn sandbox_is_not_privileged(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.sandbox.privileged {
+        Err(String::from("Expected sandbox to not be privileged"))
+    } else {
+        Ok(())
+    }
 }
 
 #[then("the sandbox is privileged")]
-fn sandbox_is_privileged(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert!(
-        config.sandbox.privileged,
-        "Expected sandbox to be privileged"
-    );
+fn sandbox_is_privileged(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.sandbox.privileged {
+        Ok(())
+    } else {
+        Err(String::from("Expected sandbox to be privileged"))
+    }
 }
 
 #[then("dev/fuse mounting is enabled")]
-fn dev_fuse_mounting_enabled(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert!(
-        config.sandbox.mount_dev_fuse,
-        "Expected dev/fuse mounting to be enabled"
-    );
+fn dev_fuse_mounting_enabled(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.sandbox.mount_dev_fuse {
+        Ok(())
+    } else {
+        Err(String::from("Expected dev/fuse mounting to be enabled"))
+    }
 }
 
 #[then("the agent kind is Claude")]
-fn agent_kind_is_claude(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert_eq!(
-        config.agent.kind,
-        AgentKind::Claude,
-        "Expected agent kind to be Claude"
-    );
+fn agent_kind_is_claude(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.agent.kind == AgentKind::Claude {
+        Ok(())
+    } else {
+        Err(String::from("Expected agent kind to be Claude"))
+    }
 }
 
 #[then("the agent mode is podbot")]
-fn agent_mode_is_podbot(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert_eq!(
-        config.agent.mode,
-        AgentMode::Podbot,
-        "Expected agent mode to be podbot"
-    );
+fn agent_mode_is_podbot(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.agent.mode == AgentMode::Podbot {
+        Ok(())
+    } else {
+        Err(String::from("Expected agent mode to be podbot"))
+    }
 }
 
 #[then("the workspace base directory is {base_dir}")]
-fn workspace_base_dir_is(config_state: &ConfigState, base_dir: String) {
-    let config = get_config(config_state);
-    assert_eq!(
-        config.workspace.base_dir.as_str(),
-        base_dir.as_str(),
-        "Expected workspace base directory to be {}",
-        base_dir
-    );
+fn workspace_base_dir_is(config_state: &ConfigState, base_dir: String) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.workspace.base_dir.as_str() == base_dir.as_str() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Expected workspace base directory to be {base_dir}, got: {:?}",
+            config.workspace.base_dir
+        ))
+    }
 }
 
 #[then("the app ID is absent")]
-fn app_id_is_absent(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert_github_field_absent(config.github.app_id.as_ref(), "app ID");
+fn app_id_is_absent(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.github.app_id.is_none() {
+        Ok(())
+    } else {
+        Err(String::from("Expected app ID to be absent"))
+    }
 }
 
 #[then("the installation ID is absent")]
-fn installation_id_is_absent(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert_github_field_absent(config.github.installation_id.as_ref(), "installation ID");
+fn installation_id_is_absent(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.github.installation_id.is_none() {
+        Ok(())
+    } else {
+        Err(String::from("Expected installation ID to be absent"))
+    }
 }
 
 #[then("the private key path is absent")]
-fn private_key_path_is_absent(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert_github_field_absent(config.github.private_key_path.as_ref(), "private key path");
+fn private_key_path_is_absent(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.github.private_key_path.is_none() {
+        Ok(())
+    } else {
+        Err(String::from("Expected private key path to be absent"))
+    }
 }
 
 #[then("the configuration load fails")]
-#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
-fn configuration_load_fails(config_state: &ConfigState) {
+fn configuration_load_fails(config_state: &ConfigState) -> Result<(), String> {
     let error = config_state
         .parse_error
         .get()
-        .expect("parse error should be set");
-    assert!(
-        error.contains("unknown variant"),
-        "Expected unknown-variant error, got: {error}"
-    );
+        .ok_or_else(|| String::from("parse error should be set"))?;
+    if error.contains("unknown variant") {
+        Ok(())
+    } else {
+        Err(format!("Expected unknown-variant error, got: {error}"))
+    }
 }
 
 // GitHub configuration validation step definitions
@@ -260,13 +273,12 @@ fn github_config_all_fields_missing(config_state: &ConfigState) {
 }
 
 #[then("GitHub validation succeeds")]
-fn github_validation_succeeds(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    let result = config.github.validate();
-    assert!(
-        result.is_ok(),
-        "Expected GitHub validation to succeed: {result:?}"
-    );
+fn github_validation_succeeds(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    config
+        .github
+        .validate()
+        .map_err(|error| format!("Expected GitHub validation to succeed: {error:?}"))
 }
 
 /// Extracts the missing-field list from a validation error.
@@ -284,7 +296,7 @@ fn extract_missing_required(error: PodbotError) -> Result<String, String> {
 
 #[then("GitHub validation fails")]
 fn github_validation_fails(config_state: &ConfigState) -> Result<(), String> {
-    let config = get_config(config_state);
+    let config = get_config(config_state)?;
     let error = config
         .github
         .validate()
@@ -297,37 +309,36 @@ fn github_validation_fails(config_state: &ConfigState) -> Result<(), String> {
 }
 
 #[then("the validation error mentions \"github.app_id\"")]
-#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
-fn validation_error_mentions_app_id(config_state: &ConfigState) {
+fn validation_error_mentions_app_id(config_state: &ConfigState) -> Result<(), String> {
     let missing = config_state
         .missing_fields
         .get()
-        .expect("missing fields should be set");
-    assert!(
-        missing.contains("github.app_id"),
-        "Expected missing fields to contain 'github.app_id', got: {missing}"
-    );
+        .ok_or_else(|| String::from("missing fields should be set"))?;
+    if missing.contains("github.app_id") {
+        Ok(())
+    } else {
+        Err(format!(
+            "Expected missing fields to contain 'github.app_id', got: {missing}"
+        ))
+    }
 }
 
 #[then("the validation error mentions all missing GitHub fields")]
-#[expect(clippy::expect_used, reason = "test step - panics are acceptable")]
-fn validation_error_mentions_all_github_fields(config_state: &ConfigState) {
+fn validation_error_mentions_all_github_fields(config_state: &ConfigState) -> Result<(), String> {
     let missing = config_state
         .missing_fields
         .get()
-        .expect("missing fields should be set");
-    assert!(
-        missing.contains("github.app_id"),
-        "Missing fields should contain app_id: {missing}"
-    );
-    assert!(
-        missing.contains("github.installation_id"),
-        "Missing fields should contain installation_id: {missing}"
-    );
-    assert!(
-        missing.contains("github.private_key_path"),
-        "Missing fields should contain private_key_path: {missing}"
-    );
+        .ok_or_else(|| String::from("missing fields should be set"))?;
+    for field in [
+        "github.app_id",
+        "github.installation_id",
+        "github.private_key_path",
+    ] {
+        if !missing.contains(field) {
+            return Err(format!("Missing fields should contain {field}: {missing}"));
+        }
+    }
+    Ok(())
 }
 
 #[then("the configuration loads successfully")]
@@ -339,12 +350,13 @@ fn configuration_loads_successfully(config_state: &ConfigState) {
 }
 
 #[then("GitHub is not configured")]
-fn github_is_not_configured(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert!(
-        !config.github.is_configured(),
-        "GitHub should not be configured"
-    );
+fn github_is_not_configured(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.github.is_configured() {
+        Err(String::from("GitHub should not be configured"))
+    } else {
+        Ok(())
+    }
 }
 
 // Sandbox configuration step definitions
@@ -365,15 +377,20 @@ fn config_with_privileged_and_no_fuse(config_state: &ConfigState) {
 }
 
 #[then("dev/fuse mounting is disabled")]
-fn dev_fuse_mounting_disabled(config_state: &ConfigState) {
-    let config = get_config(config_state);
-    assert!(
-        !config.sandbox.mount_dev_fuse,
-        "Expected dev/fuse mounting to be disabled"
-    );
+fn dev_fuse_mounting_disabled(config_state: &ConfigState) -> Result<(), String> {
+    let config = get_config(config_state)?;
+    if config.sandbox.mount_dev_fuse {
+        Err(String::from("Expected dev/fuse mounting to be disabled"))
+    } else {
+        Ok(())
+    }
 }
 
 // Layer precedence step definitions live in a sibling submodule to keep this
 // module within the 400-line limit.
 #[path = "bdd_config_steps/layer.rs"]
 mod layer_steps;
+
+#[cfg(test)]
+#[path = "bdd_config_steps/fallibility_tests.rs"]
+mod fallibility_tests;

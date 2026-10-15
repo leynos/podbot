@@ -1257,6 +1257,13 @@ tests/bdd_<domain>_helpers/
 Every test module and helper file must begin with a module-level (`//!`) doc
 comment explaining its purpose.
 
+Configuration and error-handling steps that perform fallible state lookups or
+setup propagate failures as `Result<(), String>`. Their Then steps compare the
+observed values and return an error for a failed verdict, avoiding panics inside
+`Result`-returning functions. Pure Then steps may retain direct assertions.
+Ordinary regression test bodies may use `.expect("reason")` after the fallible
+operation has been evaluated separately.
+
 Module docs should be concise (2–4 lines) and focus on what the module does,
 not how it works. Implementation details belong in function-level `///` docs.
 

@@ -239,12 +239,11 @@ async fn spawn_stdin_forwarding_task_forwards_bytes_and_returns_ok() {
         .expect("forwarding task should join successfully")
         .expect("forwarding task should return Ok");
 
-    assert_eq!(
-        *captured
-            .lock()
-            .expect("writer buffer mutex should not be poisoned"),
-        b"forwarded bytes",
-    );
+    let captured_bytes = captured
+        .lock()
+        .expect("writer buffer mutex should not be poisoned")
+        .clone();
+    assert_eq!(captured_bytes, b"forwarded bytes");
 }
 
 fn rejects_as_missing_required_command(err: &crate::error::PodbotError) -> bool {

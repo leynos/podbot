@@ -150,10 +150,8 @@ mod tests {
         let result: Result<u32, crate::error::PodbotError> =
             block_on_runtime(&handle, async { Ok(99_u32) });
 
-        assert_eq!(
-            result.expect("future should resolve to Ok(99) inside Tokio"),
-            99,
-        );
+        let resolved_value = result.expect("future should resolve to Ok(99) inside Tokio");
+        assert_eq!(resolved_value, 99);
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -163,9 +161,8 @@ mod tests {
         let result: Result<u32, crate::error::PodbotError> =
             block_on_runtime(&handle, async { Ok(42_u32) });
 
-        assert_eq!(
-            result.expect("future should resolve to Ok(42) inside current-thread Tokio"),
-            42,
-        );
+        let resolved_value =
+            result.expect("future should resolve to Ok(42) inside current-thread Tokio");
+        assert_eq!(resolved_value, 42);
     }
 }

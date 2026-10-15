@@ -138,7 +138,8 @@ async fn acquire_with_client_returns_token(acquired_at: SystemTime, expiry_buffe
     let result =
         acquire_installation_token_with_client(&mock, INSTALLATION_ID, expiry_buffer).await;
 
-    assert_eq!(result.expect("mocked acquisition should succeed"), expected);
+    let acquired_token = result.expect("mocked acquisition should succeed");
+    assert_eq!(acquired_token, expected);
 }
 
 #[rstest]
@@ -300,11 +301,9 @@ fn warn_token_acquisition_failure_timeout_counter_matches_error_kind(
             timeout_counter.is_some(),
             "expected timeout counter for {error_kind:?}: {events:?}"
         );
+        let recorded_counter = timeout_counter.expect("timeout counter checked above");
         assert_eq!(
-            timeout_counter
-                .expect("timeout counter checked above")
-                .value,
-            1,
+            recorded_counter.value, 1,
             "timeout counter should be incremented once"
         );
     } else {
