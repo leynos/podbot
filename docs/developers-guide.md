@@ -146,6 +146,41 @@ of the parent build process, including the no-default-features CLI boundary
 test. Doctests remain a separate phase, and empty phases are reported as
 skipped.
 
+The two UI verification consumers, `compile_contract` and `cli_feature_gating`,
+share only the synchronous boundary in
+`tests/test_utils/ui_verification/mod.rs`. This helper owns compiler selection
+and verification flags; it must not become a general environment or process
+API. Its private option-specific parser helpers are used only within this
+boundary to preserve argument consumption order and reject unknown values. Its
+private profile-key predicate belongs only to the same environment boundary; it
+recognizes Cargo's exact profile prefix and backend suffix. Callers register
+fixtures inside its closure, and the helper constructs and drops
+`trybuild::TestCases` before restoring the environment. The private
+fixed-executable constructor in `scope_tests.rs` supplies test data only to its
+two environment-lifetime tests; it must not resolve tooling or absorb their
+assertions.
+
+UI children use the package minimum supported Rust version (MSRV), currently
+1.88, and LLVM, even when the parent harness uses a development nightly.
+Install the compatibility toolchain before running either consumer with
+`rustup toolchain install 1.88`, matching `Cargo.toml`'s `rust-version`. The
+boundary resolves Cargo and rustc through Rustup and explicitly replaces the
+parent's `CARGO`, `RUSTC` and `RUSTUP_TOOLCHAIN` selections. Unit-separated
+encoded flags override Cargo's ambient configuration, retaining trybuild's
+diagnostic flags. Only the known development acceleration flags and warning
+policy are removed; compatible coverage instrumentation, coverage configuration
+and path remapping are retained. Unknown or unstable flag forms fail with an
+actionable error.
+
+The coverage wrapper, its private context, admission wrapper and
+`LLVM_PROFILE_FILE` remain unchanged. The boundary also supports the known
+legacy non-wrapper LLVM coverage flags. It rejects non-LLVM profile backend
+overrides rather than silently accepting a conflicting route. An injected
+workspace compiler wrapper is refused until its compiler-selection topology is
+qualified; the existing coverage and admission wrapper chain is preserved.
+Authored UI fixtures and diagnostic expectations are byte-exact; toolchain
+migration must not regenerate them to conceal a routing regression.
+
 Default and plural target selection respects each target's `required-features`
 against the package defaults and requested feature flags. Explicitly named
 targets retain Cargo's own missing-feature error. Feature resolution is private
