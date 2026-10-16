@@ -78,6 +78,62 @@ Doctests remain an ordinary Cargo phase because Cargo owns their harness
 generation and execution. The runner does not translate them into registered
 test executables.
 
+### 3.1. Synchronous UI verification
+
+The registered nested targets `compile_contract` and `cli_feature_gating` share
+`tests/test_utils/ui_verification/mod.rs`. The runner still selects and
+launches each harness after its outer Cargo build exits; inside that harness,
+`run_cases` owns the synchronous trybuild lifetime and the MSRV/LLVM route. The
+helper converts the package MSRV to its exact minimum toolchain selector:
+`1.88` means `1.88.0`, while a declared patch remains exact. It never chooses
+an ambient nightly or the newest installed patch. Both Rustup executable
+lookups, the Cargo version check, and nested `RUSTUP_TOOLCHAIN` use this same
+selector. Already provisioned tooling can therefore resolve without refreshing
+a partial tracking channel. Missing tooling fails with an explicit installation
+hint.
+
+The boundary captures inputs under temp-env's shared lock, selects compatible
+encoded flags, resolves Cargo and rustc from the same provisioned toolchain,
+and replaces `CARGO`, `RUSTC`, and `RUSTUP_TOOLCHAIN` only for the verification
+scope. It constructs `trybuild::TestCases`, invokes the caller's registration
+callback, and drops the cases before restoring the environment. Trybuild
+launches its nested compilation during destruction, so registration must stay
+synchronous and must not retain the cases. Restoration also runs when
+registration or trybuild panics; the failure still propagates.
+
+Encoded flags take precedence over ordinary flags. The private parser removes
+only recognized development backend, frontend, linker and warning-policy
+options; it retains compatible coverage instrumentation and path remapping,
+plus trybuild's diagnostic flags. Unsupported or dynamic flag forms fail before
+registration. Non-LLVM profile backend overrides and unqualified workspace
+wrappers are rejected rather than silently bypassed. The coverage wrapper, its
+private context, compiler-admission wrapper, target context and profiling path
+remain intact. The [developer's guide](developers-guide.md) records the
+supported option forms and provisioning commands.
+
+`VerificationRoute::run_registration` is a private composition seam used by
+`run_cases`: its factory, registration callback and explicit destruction all
+run inside `VerificationRoute::run`. The generic factory exists only to let the
+sibling boundary contracts observe the same composition with a destructor
+probe; consumers must not call it directly or retain factory output. The real
+trybuild sentinel still exercises the public boundary, so the probe does not
+replace actual fixture execution.
+
+This boundary and its private helpers belong only to the two UI consumers; they
+are not general process or environment APIs. `scope_tests.rs` isolates all
+matching profile-backend keys under the same lock when testing
+workspace-wrapper rejection, including custom and empty profile segments. Its
+callback fixture restores those keys after completion or unwinding. Only the
+sibling scope and boundary contracts may use that fixture, the fixed-executable
+constructor and the destructor observation probe. `boundary_tests.rs` checks
+profile policy through the environment-reading boundary and observes
+construction, registration and destruction inside the selected scope.
+`toolchain_tests.rs` owns exact-selector and actual offline Rustup resolution
+contracts. The compile-contract orchestration sentinel deliberately registers
+an existing known passing fixture as compile-fail, requiring both callback
+invocation and the destructor's failure; no-op orchestration cannot satisfy
+that contract.
+
 ## 4. Process ownership and terminal outcomes
 
 The supervisor records the pre-existing child-process snapshot before launch

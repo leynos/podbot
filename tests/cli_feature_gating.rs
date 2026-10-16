@@ -20,8 +20,5 @@ fn cli_module_unavailable_without_feature() {
     ui_verification::run_cases(|test_cases| {
         test_cases.compile_fail("tests/cli_feature_gating/no_cli_feature.rs");
     })
-    .expect(concat!(
-        "UI verification requires the provisioned MSRV/LLVM route; run rustup toolchain install ",
-        env!("CARGO_PKG_RUST_VERSION")
-    ));
+    .expect("UI verification requires the provisioned exact MSRV/LLVM route; see resolver error");
 }

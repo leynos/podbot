@@ -1,7 +1,7 @@
 //! Contracts for compatibility selection and synchronous environment lifetimes.
 
 use std::{
-    cell::Cell,
+    cell::RefCell,
     ffi::OsString,
     panic::{AssertUnwindSafe, catch_unwind},
 };
@@ -42,36 +42,34 @@ const PARENT_ENVIRONMENT: [(&str, Option<&str>); 9] = [
     ("LLVM_PROFILE_FILE", Some("preserved-%p.profraw")),
 ];
 
-/// Construct fixed executable paths only for the two environment scope tests.
+/// Construct fixed executable paths only for the UI scope and lifecycle tests.
 ///
 /// These paths are test data, not provisioned compiler lookup; callers retain
 /// all observations and assertions in their recognized test bodies.
-fn compatibility_executables() -> CompatibilityExecutables {
+pub(super) fn compatibility_executables() -> CompatibilityExecutables {
     CompatibilityExecutables {
+        toolchain: "1.88.0".into(),
         cargo: "/compatibility/cargo".into(),
         rustc: "/compatibility/rustc".into(),
     }
 }
 
 /// Observe the route during destruction without retaining any runner object.
-struct DropObservation<'a> {
-    /// Whether the destructor saw the still-active compatibility environment.
-    observed: &'a Cell<bool>,
+pub(super) struct DropObservation<'a> {
+    /// Toolchain selector present when this value was destroyed.
+    pub(super) observed: &'a RefCell<Option<String>>,
 }
 
 impl Drop for DropObservation<'_> {
     fn drop(&mut self) {
-        self.observed.set(
-            std::env::var("RUSTUP_TOOLCHAIN").ok().as_deref()
-                == Some(env!("CARGO_PKG_RUST_VERSION")),
-        );
+        *self.observed.borrow_mut() = std::env::var("RUSTUP_TOOLCHAIN").ok();
     }
 }
 
 #[test]
 fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
     temp_env::with_vars(PARENT_ENVIRONMENT, || {
-        let observed = Cell::new(false);
+        let observed = RefCell::new(None);
         let route = VerificationRoute {
             encoded_flags: String::from("verification-flags"),
         };
@@ -115,7 +113,7 @@ fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
                 "coverage profile path must be preserved"
             );
         });
-        assert!(observed.get(), "destruction must precede restoration");
+        assert_eq!(observed.borrow().as_deref(), Some("1.88.0"));
         assert_eq!(
             std::env::var("RUSTC").expect("parent compiler restored"),
             "/parent/nightly/rustc",
@@ -142,7 +140,7 @@ fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
 #[test]
 fn verification_scope_restores_the_parent_when_registration_panics() {
     temp_env::with_vars([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
-        let observed = Cell::new(false);
+        let observed = RefCell::new(None);
         let route = VerificationRoute {
             encoded_flags: String::new(),
         };
@@ -158,8 +156,9 @@ fn verification_scope_restores_the_parent_when_registration_panics() {
             panic_result.is_err(),
             "the registration panic must propagate"
         );
-        assert!(
-            observed.get(),
+        assert_eq!(
+            observed.borrow().as_deref(),
+            Some("1.88.0"),
             "unwinding destruction must see compatibility selection"
         );
         assert_eq!(
@@ -208,6 +207,7 @@ fn profile_backend_key_shape_is_preserved(#[case] name: &str, #[case] rejected: 
 #[case::current(true, b"cargo 1.88.0 (873a06493 2025-05-10)\n".as_slice(), true)]
 #[case::nightly(true, b"cargo 1.88.0-nightly (abcdef 2025-05-10)\n".as_slice(), false)]
 #[case::newer(true, b"cargo 1.99.0\n".as_slice(), false)]
+#[case::different_patch(true, b"cargo 1.88.1\n".as_slice(), false)]
 #[case::failed(false, b"cargo 1.88.0\n".as_slice(), false)]
 fn cargo_resolution_requires_the_compatibility_version(
     #[case] success: bool,
@@ -215,7 +215,7 @@ fn cargo_resolution_requires_the_compatibility_version(
     #[case] accepted: bool,
 ) {
     assert_eq!(
-        validate_version(success, output, "1.88").is_ok(),
+        validate_version(success, output, "1.88.0").is_ok(),
         accepted,
         "wrong Cargo must fail before registration"
     );
@@ -266,36 +266,73 @@ fn non_unicode_flags_are_rejected_without_lossy_conversion() {
     use std::os::unix::ffi::OsStringExt;
 
     let non_unicode = OsString::from_vec(vec![0xff]);
-    temp_env::with_vars([("CARGO_ENCODED_RUSTFLAGS", Some(non_unicode))], || {
-        assert!(
-            matches!(
-                super::unicode_variable("CARGO_ENCODED_RUSTFLAGS"),
-                Err(VerificationError::NonUnicode("CARGO_ENCODED_RUSTFLAGS"))
-            ),
-            "invalid Unicode must not silently disappear"
+    with_isolated_profile_backends(|| {
+        temp_env::with_vars(
+            [
+                ("CARGO_ENCODED_RUSTFLAGS", Some(non_unicode)),
+                ("RUSTFLAGS", None),
+                ("RUSTC_WORKSPACE_WRAPPER", None),
+            ],
+            || {
+                assert!(
+                    matches!(
+                        VerificationRoute::from_environment(),
+                        Err(VerificationError::NonUnicode("CARGO_ENCODED_RUSTFLAGS"))
+                    ),
+                    "invalid Unicode must not silently disappear"
+                );
+            },
         );
     });
 }
 
-#[test]
-fn unknown_workspace_wrapper_is_refused_without_silently_bypassing_it() {
+/// Clear all profile-backend inputs only while exercising environment selection.
+///
+/// Only sibling UI scope/boundary tests use this fixture. It snapshots keys under
+/// temp-env's shared lock, including custom profiles, and restores them on unwind.
+pub(super) fn with_isolated_profile_backends(body: impl FnOnce()) {
+    temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
+        let overrides = std::env::vars_os()
+            .filter(|(key, _)| key.to_str().is_some_and(super::is_profile_backend_key))
+            .map(|(key, _)| (key, None::<OsString>))
+            .collect::<Vec<_>>();
+        temp_env::with_vars(overrides, body);
+    });
+}
+
+#[rstest]
+#[case::development("CARGO_PROFILE_DEV_CODEGEN_BACKEND")]
+#[case::tests("CARGO_PROFILE_TEST_CODEGEN_BACKEND")]
+#[case::custom("CARGO_PROFILE_CUSTOM_CODEGEN_BACKEND")]
+#[case::empty_segment("CARGO_PROFILE__CODEGEN_BACKEND")]
+fn unknown_workspace_wrapper_is_refused_without_silently_bypassing_it(#[case] backend_key: &str) {
     temp_env::with_vars(
-        [(
-            "RUSTC_WORKSPACE_WRAPPER",
-            Some("unqualified-workspace-wrapper"),
-        )],
+        [
+            (backend_key, Some("cranelift")),
+            (
+                "RUSTC_WORKSPACE_WRAPPER",
+                Some("unqualified-workspace-wrapper"),
+            ),
+        ],
         || {
-            assert!(
-                matches!(
-                    VerificationRoute::from_environment(),
-                    Err(VerificationError::WorkspaceWrapper)
-                ),
-                "an unknown wrapper must not defeat compiler selection"
-            );
+            with_isolated_profile_backends(|| {
+                assert!(
+                    matches!(
+                        VerificationRoute::from_environment(),
+                        Err(VerificationError::WorkspaceWrapper)
+                    ),
+                    "an unknown wrapper must not defeat compiler selection"
+                );
+                assert_eq!(
+                    std::env::var("RUSTC_WORKSPACE_WRAPPER").expect("wrapper remains present"),
+                    "unqualified-workspace-wrapper",
+                    "refusal must preserve the caller's topology"
+                );
+            });
             assert_eq!(
-                std::env::var("RUSTC_WORKSPACE_WRAPPER").expect("wrapper remains present"),
-                "unqualified-workspace-wrapper",
-                "refusal must preserve the caller's topology"
+                std::env::var(backend_key).expect("profile backend restored"),
+                "cranelift",
+                "profile isolation must restore every inherited matching key"
             );
         },
     );

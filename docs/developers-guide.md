@@ -162,16 +162,26 @@ profile-key predicate belongs only to the same environment boundary; it
 recognizes Cargo's exact profile prefix and backend suffix. Callers register
 fixtures inside its closure, and the helper constructs and drops
 `trybuild::TestCases` before restoring the environment. The private
-fixed-executable constructor in `scope_tests.rs` supplies test data only to its
-two environment-lifetime tests; it must not resolve tooling or absorb their
-assertions.
+fixed-executable constructor, profile-isolation fixture and destructor probe in
+`scope_tests.rs` serve only the sibling UI scope and boundary contracts; they
+must not resolve tooling or absorb assertions. The private `run_registration`
+composition seam is used by `run_cases` and those lifecycle contracts only; its
+factory, registration callback and explicit destruction must all remain inside
+the selected scope.
 
 UI children use the package minimum supported Rust version (MSRV), currently
-1.88, and LLVM, even when the parent harness uses a development nightly.
-Install the compatibility toolchain before running either consumer with
-`rustup toolchain install 1.88`, matching `Cargo.toml`'s `rust-version`. The
-boundary resolves Cargo and rustc through Rustup and explicitly replaces the
-parent's `CARGO`, `RUSTC` and `RUSTUP_TOOLCHAIN` selections. Unit-separated
+1.88, and LLVM, even when the parent harness uses a development nightly. The
+root toolchain file pins the same concrete minimum for ordinary setup,
+including CI, coverage and audit. Install it before running either consumer with
+`rustup toolchain install 1.88.0`. The private UI boundary converts a two-part
+`Cargo.toml` MSRV to its minimum patch (`1.88` becomes `1.88.0`); an explicit
+patch stays unchanged. It does not select the caller's toolchain or the latest
+installed patch. The same exact selector drives Rustup executable resolution,
+Cargo validation, and nested `RUSTUP_TOOLCHAIN`, avoiding tracking-channel
+refreshes when the toolchain is already installed. This conversion belongs only
+to the two UI consumers and must not become a general toolchain-selection API.
+The boundary resolves Cargo and rustc through Rustup and explicitly replaces
+the parent's `CARGO`, `RUSTC` and `RUSTUP_TOOLCHAIN` selections. Unit-separated
 encoded flags override Cargo's ambient configuration, retaining trybuild's
 diagnostic flags. Only the known development acceleration flags and warning
 policy are removed; compatible coverage instrumentation, coverage configuration

@@ -13,6 +13,14 @@ mod flags;
 #[path = "scope_tests.rs"]
 mod tests;
 
+/// Exact selector and real offline provisioning contracts.
+#[cfg(test)]
+mod toolchain_tests;
+
+/// Public profile selection and composed lifecycle contracts.
+#[cfg(test)]
+mod boundary_tests;
+
 /// Errors selecting a provisioned, compatible nested Cargo verification route.
 #[derive(Debug, Error)]
 pub enum VerificationError {
@@ -33,7 +41,7 @@ pub enum VerificationError {
     /// Rustup could not resolve the compatibility Cargo executable.
     #[error(
         "cannot resolve compatibility tooling: {0}; run rustup toolchain install {toolchain}",
-        toolchain = env!("CARGO_PKG_RUST_VERSION")
+        toolchain = compatibility_toolchain(env!("CARGO_PKG_RUST_VERSION"))
     )]
     Provisioning(String),
 }
@@ -62,11 +70,7 @@ pub fn run_cases(register: impl FnOnce(&trybuild::TestCases)) -> Result<(), Veri
     temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
         let route = VerificationRoute::from_environment()?;
         let executables = resolve_executables(env!("CARGO_PKG_RUST_VERSION"))?;
-        route.run(&executables, || {
-            let cases = trybuild::TestCases::new();
-            register(&cases);
-            drop(cases);
-        });
+        route.run_registration(&executables, trybuild::TestCases::new, register);
         Ok(())
     })
 }
@@ -91,12 +95,29 @@ impl VerificationRoute {
         })
     }
 
+    /// Compose construction, registration and destruction within the UI scope.
+    ///
+    /// Only `run_cases` and its sibling lifecycle contracts use this seam; the
+    /// factory must not return cases that escape this synchronous lifetime.
+    fn run_registration<T>(
+        &self,
+        executables: &CompatibilityExecutables,
+        create: impl FnOnce() -> T,
+        register: impl FnOnce(&T),
+    ) {
+        self.run(executables, || {
+            let cases = create();
+            register(&cases);
+            drop(cases);
+        });
+    }
+
     /// Retain wrapper, profiling and target context while selecting the UI route.
     fn run(&self, executables: &CompatibilityExecutables, body: impl FnOnce()) {
         temp_env::with_vars(
             [
                 ("CARGO_ENCODED_RUSTFLAGS", Some(self.encoded_flags.as_str())),
-                ("RUSTUP_TOOLCHAIN", Some(env!("CARGO_PKG_RUST_VERSION"))),
+                ("RUSTUP_TOOLCHAIN", Some(executables.toolchain.as_str())),
                 ("CARGO", Some(executables.cargo.as_str())),
                 ("RUSTC", Some(executables.rustc.as_str())),
             ],
@@ -139,6 +160,8 @@ fn is_profile_backend_key(name: &str) -> bool {
 
 /// Executables resolved from the same provisioned compatibility toolchain.
 struct CompatibilityExecutables {
+    /// Concrete minimum version shared by lookup and the nested environment.
+    toolchain: String,
     /// Cargo must not inherit an absolute development-toolchain override.
     cargo: Utf8PathBuf,
     /// Explicit rustc selection retains existing coverage/admission wrappers.
@@ -146,9 +169,10 @@ struct CompatibilityExecutables {
 }
 
 /// Resolve both executables, then verify Cargo without invoking rustc directly.
-fn resolve_executables(toolchain: &str) -> Result<CompatibilityExecutables, VerificationError> {
-    let cargo = resolve_executable(toolchain, "cargo")?;
-    let rustc = resolve_executable(toolchain, "rustc")?;
+fn resolve_executables(msrv: &str) -> Result<CompatibilityExecutables, VerificationError> {
+    let toolchain = compatibility_toolchain(msrv);
+    let cargo = resolve_executable(&toolchain, "cargo")?;
+    let rustc = resolve_executable(&toolchain, "rustc")?;
     if cargo.parent() != rustc.parent() {
         return Err(VerificationError::Provisioning(
             "Cargo and rustc resolve to different toolchains".into(),
@@ -156,11 +180,27 @@ fn resolve_executables(toolchain: &str) -> Result<CompatibilityExecutables, Veri
     }
     let version = Command::new(cargo.as_str())
         .arg("--version")
-        .env("RUSTUP_TOOLCHAIN", toolchain)
+        .env("RUSTUP_TOOLCHAIN", &toolchain)
         .output()
         .map_err(|error| VerificationError::Provisioning(error.to_string()))?;
-    validate_version(version.status.success(), &version.stdout, toolchain)?;
-    Ok(CompatibilityExecutables { cargo, rustc })
+    validate_version(version.status.success(), &version.stdout, &toolchain)?;
+    Ok(CompatibilityExecutables {
+        toolchain,
+        cargo,
+        rustc,
+    })
+}
+
+/// Convert the declared MSRV to its exact minimum Rustup selector.
+///
+/// Only this UI boundary owns the conversion: `1.88` selects `1.88.0`, while
+/// `1.88.1` remains exact. This avoids refreshing a partial tracking channel.
+fn compatibility_toolchain(msrv: &str) -> String {
+    if msrv.split('.').count() == 2 {
+        format!("{msrv}.0")
+    } else {
+        msrv.to_owned()
+    }
 }
 
 /// Resolve one trusted Rustup toolchain executable without executing a compiler.
@@ -210,7 +250,7 @@ fn is_single_absolute_path(path: &Utf8Path) -> bool {
     path.is_absolute() && !path.as_str().contains(['\n', '\r'])
 }
 
-/// Compare the executable version with the package's compatibility major/minor.
+/// Require the exact stable minimum selected for the compatibility route.
 fn validate_version(
     success: bool,
     output: &[u8],
@@ -218,12 +258,10 @@ fn validate_version(
 ) -> Result<(), VerificationError> {
     let version = std::str::from_utf8(output)
         .map_err(|_| VerificationError::Provisioning("non-Unicode Cargo version".into()))?;
-    let prefix = format!("cargo {toolchain}.");
-    let compatible = version.strip_prefix(&prefix).is_some_and(|suffix| {
-        suffix.split_whitespace().next().is_some_and(|patch| {
-            !patch.is_empty() && patch.chars().all(|character| character.is_ascii_digit())
-        })
-    });
+    let compatible = version
+        .strip_prefix("cargo ")
+        .and_then(|value| value.split_whitespace().next())
+        == Some(toolchain);
     if !success || !compatible {
         return Err(VerificationError::Provisioning(format!(
             "expected Cargo {toolchain}, got {}",
