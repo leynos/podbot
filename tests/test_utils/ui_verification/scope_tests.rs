@@ -241,23 +241,24 @@ fn failed_or_ambiguous_provisioning_is_refused(
 
 #[test]
 fn unsupported_caller_flags_fail_before_registration() {
-    temp_env::with_vars(
-        [
-            ("CARGO_ENCODED_RUSTFLAGS", Some("--unknown-ui-route")),
-            ("CARGO_PROFILE_DEV_CODEGEN_BACKEND", None),
-            ("CARGO_PROFILE_TEST_CODEGEN_BACKEND", None),
-            ("RUSTC_WORKSPACE_WRAPPER", None),
-        ],
-        || {
-            assert!(
-                matches!(
-                    VerificationRoute::from_environment(),
-                    Err(VerificationError::UnsupportedFlags(_))
-                ),
-                "unrecognized input must not be silently discarded"
-            );
-        },
-    );
+    with_isolated_profile_backends(|| {
+        temp_env::with_vars(
+            [
+                ("CARGO_ENCODED_RUSTFLAGS", Some("--unknown-ui-route")),
+                ("RUSTFLAGS", None),
+                ("RUSTC_WORKSPACE_WRAPPER", None),
+            ],
+            || {
+                assert!(
+                    matches!(
+                        VerificationRoute::from_environment(),
+                        Err(VerificationError::UnsupportedFlags(_))
+                    ),
+                    "unrecognized input must not be silently discarded"
+                );
+            },
+        );
+    });
 }
 
 #[cfg(unix)]
