@@ -5,6 +5,9 @@
 //! `src/lib.rs` actually prevents `podbot::cli` from being accessible to
 //! embedders that set `default-features = false`.
 
+#[path = "test_utils/ui_verification/mod.rs"]
+mod ui_verification;
+
 #[test]
 fn cli_module_unavailable_without_feature() {
     // This assertion is only meaningful under `cargo test --no-default-features`.
@@ -14,6 +17,8 @@ fn cli_module_unavailable_without_feature() {
         return;
     }
 
-    let t = trybuild::TestCases::new();
-    t.compile_fail("tests/cli_feature_gating/no_cli_feature.rs");
+    ui_verification::run_cases(|test_cases| {
+        test_cases.compile_fail("tests/cli_feature_gating/no_cli_feature.rs");
+    })
+    .expect("UI verification requires the provisioned exact MSRV/LLVM route; see resolver error");
 }
