@@ -56,6 +56,7 @@ pub(crate) const DEFAULT_BLOCKED_FAMILIES: &[MethodFamily] = &[
 /// A static set of [`MethodFamily`] values that Podbot refuses to forward.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MethodDenylist {
+    /// Static capability families checked against each outbound method.
     families: &'static [MethodFamily],
 }
 

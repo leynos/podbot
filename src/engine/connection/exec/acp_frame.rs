@@ -61,10 +61,15 @@ pub(crate) enum FrameOutput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DeniedFrameDecision {
     /// Drop a blocked notification without generating a response.
-    BlockNotification { method: String },
+    BlockNotification {
+        /// Blocked method retained for the denial diagnostic.
+        method: String,
+    },
     /// Generate a JSON-RPC error response for a blocked request.
     BlockRequest {
+        /// Original JSON-RPC identifier echoed in the denial response.
         id: serde_json::Value,
+        /// Blocked method named in the synthesized error and diagnostic.
         method: String,
     },
 }
@@ -90,8 +95,11 @@ pub(crate) enum FallbackReason {
 /// and applies the supplied [`MethodDenylist`].
 #[derive(Debug)]
 pub(crate) struct OutboundFrameAssembler {
+    /// Unterminated frame bytes retained until classification or overflow.
     buffer: Vec<u8>,
+    /// Method families whose completed frames must not reach host stdout.
     denylist: MethodDenylist,
+    /// Whether overflow has permanently disabled framing for this session.
     raw_fallback: bool,
 }
 
@@ -174,6 +182,9 @@ impl OutboundFrameAssembler {
         (outputs, fallback)
     }
 
+    /// Classify the completed frame, consuming any previously buffered prefix.
+    /// For example, a prefix from the previous chunk is joined before policy
+    /// checks.
     fn complete_frame(&mut self, fresh_bytes: &[u8]) -> FrameOutput {
         if self.buffer.is_empty() {
             return classify_frame(fresh_bytes, &self.denylist);
@@ -183,6 +194,9 @@ impl OutboundFrameAssembler {
         classify_frame(&frame, &self.denylist)
     }
 
+    /// Drain the buffered prefix and pending tail into one verbatim output.
+    /// For example, overflow preserves both byte slices in their original
+    /// order.
     fn flush_buffer_for_overflow(&mut self, pending: &[u8]) -> FrameOutput {
         let mut bytes = std::mem::take(&mut self.buffer);
         bytes.extend_from_slice(pending);
@@ -212,6 +226,8 @@ impl OutboundFrameAssembler {
     }
 }
 
+/// Preserve allowed bytes or retain a denial with its original line ending.
+/// For example, a blocked CRLF request retains CRLF for the error response.
 fn classify_frame(frame_bytes: &[u8], denylist: &MethodDenylist) -> FrameOutput {
     let decision = evaluate_agent_outbound_frame(frame_bytes, denylist);
     match decision {
@@ -233,6 +249,9 @@ fn classify_frame(frame_bytes: &[u8], denylist: &MethodDenylist) -> FrameOutput 
     }
 }
 
+/// Borrow the original newline suffix without normalizing frame bytes.
+/// For example, `b"{}\r\n"` yields `b"\r\n"`; an unterminated frame yields
+/// `b""`.
 fn trailing_line_ending(frame: &[u8]) -> &[u8] {
     if frame.ends_with(b"\r\n") {
         b"\r\n"

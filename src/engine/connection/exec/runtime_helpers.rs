@@ -4,6 +4,9 @@ use tokio::runtime::RuntimeFlavor;
 
 use crate::error::{ContainerError, PodbotError};
 
+/// Run a fallible exec future synchronously without nesting a Tokio runtime.
+/// For example, a current-thread caller uses a scoped thread with its own
+/// runtime.
 pub(super) fn block_on_runtime<F, T>(
     runtime: &tokio::runtime::Handle,
     future: F,
@@ -33,6 +36,8 @@ where
     }
 }
 
+/// Build the thread-local runtime used to bridge synchronous exec calls.
+/// For example, runtime initialization failure becomes `RuntimeCreationFailed`.
 fn create_blocking_exec_runtime() -> Result<tokio::runtime::Runtime, PodbotError> {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -44,6 +49,9 @@ fn create_blocking_exec_runtime() -> Result<tokio::runtime::Runtime, PodbotError
         })
 }
 
+/// Construct a typed exec failure with its target container context.
+/// For example, `exec_failed("c", "lost stream")` retains both diagnostic
+/// values.
 pub(super) fn exec_failed(container_id: &str, message: impl Into<String>) -> PodbotError {
     PodbotError::from(ContainerError::ExecFailed {
         container_id: String::from(container_id),

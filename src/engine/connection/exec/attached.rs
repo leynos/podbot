@@ -59,6 +59,10 @@ pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: Termin
     .await
 }
 
+/// Coordinate attached output and resize handling with an injected stdin
+/// reader.
+/// For example, output completion stops stdin forwarding before returning its
+/// result.
 #[expect(
     clippy::too_many_arguments,
     reason = "attached-session orchestration needs stream, IO, and resize state together"
@@ -95,6 +99,9 @@ where
     session_result
 }
 
+/// Observe a finished stdin task or abort it without awaiting blocked host
+/// input.
+/// For example, an unfinished terminal read cannot delay session shutdown here.
 fn stop_stdin_forwarding_task(mut stdin_task: JoinHandle<io::Result<()>>) {
     if let Some(result) = (&mut stdin_task).now_or_never() {
         log_completed_stdin_forwarding_task(result);
@@ -108,6 +115,8 @@ fn stop_stdin_forwarding_task(mut stdin_task: JoinHandle<io::Result<()>>) {
     drop(stdin_task);
 }
 
+/// Route a completed stdin task result to its I/O or join-error diagnostic.
+/// For example, successful task completion with `Ok(())` emits no warning.
 fn log_completed_stdin_forwarding_task(result: Result<io::Result<()>, tokio::task::JoinError>) {
     match result {
         Ok(io_result) => log_stdin_forwarding_io_result(io_result),
@@ -115,6 +124,8 @@ fn log_completed_stdin_forwarding_task(result: Result<io::Result<()>, tokio::tas
     }
 }
 
+/// Warn when completed stdin forwarding returned an I/O failure.
+/// For example, `Ok(())` leaves session diagnostics unchanged.
 fn log_stdin_forwarding_io_result(result: io::Result<()>) {
     if let Err(error) = result {
         tracing::warn!(
@@ -124,6 +135,8 @@ fn log_stdin_forwarding_io_result(result: io::Result<()>) {
     }
 }
 
+/// Report a stdin task join failure during attached-session shutdown.
+/// For example, a task panic is recorded with its join error.
 fn log_stdin_forwarding_join_error(error: &tokio::task::JoinError) {
     tracing::error!(
         error = %error,
@@ -131,6 +144,8 @@ fn log_stdin_forwarding_join_error(error: &tokio::task::JoinError) {
     );
 }
 
+/// Initialize resizing before entering the platform-specific output loop.
+/// For example, Unix sessions also listen for subsequent terminal-size changes.
 #[expect(
     clippy::too_many_arguments,
     reason = "platform-specific session loop needs stream, IO, and resize dependencies"
@@ -203,6 +218,8 @@ pub(super) async fn wait_for_exit_code_async<C: ContainerExecClient>(
     }
 }
 
+/// Write and flush one daemon chunk to its corresponding host stream.
+/// For example, EOF yields `Ok(false)` and stderr records stay on host stderr.
 async fn write_exec_output_chunk(
     container_id: &str,
     maybe_chunk: Option<Result<LogOutput, BollardError>>,
@@ -253,6 +270,8 @@ async fn write_exec_output_chunk(
     Ok(true)
 }
 
+/// Copy host input into exec stdin, then flush and shut down the input writer.
+/// For example, host EOF closes exec stdin after all copied bytes are flushed.
 async fn forward_host_stdin_to_exec_async<HostStdin>(
     mut host_stdin: HostStdin,
     mut input: Pin<Box<dyn AsyncWrite + Send>>,
@@ -265,6 +284,9 @@ where
     input.shutdown().await
 }
 
+/// Prepare the resize signal listener before applying the initial terminal
+/// size.
+/// For example, a Unix TTY session returns its listener after initial resizing.
 #[cfg(unix)]
 async fn initialize_resize_handling_async<C: ContainerExecClient, P: TerminalSizeProvider>(
     client: &C,
@@ -287,6 +309,8 @@ async fn initialize_resize_handling_async<C: ContainerExecClient, P: TerminalSiz
     maybe_resize_exec_async(client, request, exec_id, size_provider).await
 }
 
+/// Apply the current host size only when the request allocates a TTY.
+/// For example, a non-TTY request succeeds without calling the resize client.
 async fn maybe_resize_exec_async<C: ContainerExecClient, P: TerminalSizeProvider>(
     client: &C,
     request: &ExecRequest,
@@ -306,6 +330,9 @@ async fn maybe_resize_exec_async<C: ContainerExecClient, P: TerminalSizeProvider
     Ok(())
 }
 
+/// Drain output while responding to terminal-resize notifications.
+/// For example, daemon EOF completes the loop even when a resize listener
+/// exists.
 #[cfg(unix)]
 #[expect(
     clippy::too_many_arguments,

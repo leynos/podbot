@@ -90,12 +90,16 @@ pub(super) async fn run_container_stdin_sink(
     Ok(())
 }
 
+/// Consume either command variant without altering its payload bytes.
+/// For example, `WriteCmd::Synthesized(bytes)` yields the same owned `bytes`.
 fn command_bytes(command: WriteCmd) -> Vec<u8> {
     match command {
         WriteCmd::Forward(bytes) | WriteCmd::Synthesized(bytes) => bytes,
     }
 }
 
+/// Shut down a live sink after the command channel has drained.
+/// For example, a sink already closed by `BrokenPipe` skips shutdown.
 async fn finalize_sink_writer(input: &mut Pin<Box<dyn AsyncWrite + Send>>, input_alive: bool) {
     if !input_alive {
         return;
@@ -104,12 +108,16 @@ async fn finalize_sink_writer(input: &mut Pin<Box<dyn AsyncWrite + Send>>, input
     log_shutdown_outcome(outcome);
 }
 
+/// Report shutdown failure without replacing the session exit-code result.
+/// For example, `Ok(())` emits no warning.
 fn log_shutdown_outcome(outcome: io::Result<()>) {
     if let Err(error) = outcome {
         tracing::warn!(%error, "container stdin shutdown failed");
     }
 }
 
+/// Write and flush one command, reporting whether stdin remains usable.
+/// For example, a broken pipe yields `Ok(false)` so later commands are drained.
 async fn write_command_bytes(
     input: &mut Pin<Box<dyn AsyncWrite + Send>>,
     bytes: &[u8],
@@ -120,6 +128,8 @@ async fn write_command_bytes(
     classify_pipe_outcome(input.flush().await)
 }
 
+/// Treat a broken pipe as closed stdin while preserving other I/O errors.
+/// For example, a successful write yields `Ok(true)`.
 fn classify_pipe_outcome(result: io::Result<()>) -> io::Result<bool> {
     match result {
         Ok(()) => Ok(true),
@@ -131,6 +141,8 @@ fn classify_pipe_outcome(result: io::Result<()>) -> io::Result<bool> {
     }
 }
 
+/// Warn once when the sink stops writing after the agent closes stdin.
+/// For example, the caller logs the first broken pipe before draining commands.
 fn report_broken_pipe(error: &io::Error) {
     tracing::warn!(%error, "container stdin closed; subsequent writes dropped");
 }
@@ -138,9 +150,14 @@ fn report_broken_pipe(error: &io::Error) {
 /// Adapter that turns assembler outputs into host-stdout writes and
 /// container-stdin commands.
 pub(super) struct OutboundPolicyAdapter {
+    /// Per-session framer that classifies complete agent-output frames.
     assembler: OutboundFrameAssembler,
+    /// Bounded queue shared with the host-input forwarder for ordered stdin
+    /// writes.
     sender: mpsc::Sender<WriteCmd>,
+    /// Container identifier attached to policy diagnostics for correlation.
     container_id: String,
+    /// Whether this adapter has already emitted its single fallback warning.
     fallback_logged: bool,
 }
 
@@ -188,6 +205,9 @@ impl OutboundPolicyAdapter {
         }
     }
 
+    /// Write allowed output verbatim or handle a denial without exposing its
+    /// frame.
+    /// For example, a blocked notification produces no host-stdout bytes.
     async fn dispatch_output<W>(
         &mut self,
         output: FrameOutput,
@@ -208,6 +228,10 @@ impl OutboundPolicyAdapter {
         }
     }
 
+    /// Log a denial and queue an error only for requests with response
+    /// identifiers.
+    /// For example, a blocked notification is logged and dropped without a
+    /// reply.
     async fn handle_decision(&self, decision: DeniedFrameDecision, line_ending: &[u8]) {
         match decision {
             DeniedFrameDecision::BlockNotification { method } => {
@@ -221,6 +245,8 @@ impl OutboundPolicyAdapter {
         }
     }
 
+    /// Serialize a method-blocked response with the original frame line ending.
+    /// For example, a CRLF request receives an error ending in CRLF.
     async fn queue_synthesized_error(&self, id: &Value, method: &str, line_ending: &[u8]) {
         match build_method_blocked_error(id, method, line_ending) {
             Ok(bytes) => self.send_synthesized_or_log(bytes, method).await,
@@ -228,6 +254,10 @@ impl OutboundPolicyAdapter {
         }
     }
 
+    /// Queue denial bytes through the single stdin owner, logging a closed
+    /// sink.
+    /// For example, a disconnected receiver causes a warning rather than a
+    /// panic.
     async fn send_synthesized_or_log(&self, bytes: Vec<u8>, method: &str) {
         let outcome = self.sender.send(WriteCmd::Synthesized(bytes)).await;
         if let Err(error) = outcome {
@@ -235,6 +265,9 @@ impl OutboundPolicyAdapter {
         }
     }
 
+    /// Correlate a failed denial enqueue with the container and blocked method.
+    /// For example, a closed sink records the send error for the affected
+    /// method.
     fn log_send_failure(&self, method: &str, error: &mpsc::error::SendError<WriteCmd>) {
         tracing::warn!(
             target = "podbot::acp::policy",
@@ -245,6 +278,8 @@ impl OutboundPolicyAdapter {
         );
     }
 
+    /// Report serialization failure while leaving the agent to time out.
+    /// For example, a failed denial response records the method and JSON error.
     fn log_synthesis_failure(&self, method: &str, error: &serde_json::Error) {
         tracing::warn!(
             target = "podbot::acp::policy",
@@ -255,6 +290,10 @@ impl OutboundPolicyAdapter {
         );
     }
 
+    /// Record the blocked method and request identifier without forwarding
+    /// bytes.
+    /// For example, a notification uses `Value::Null` as its diagnostic
+    /// identifier.
     fn log_denial(&self, method: &str, id: &Value, message: &'static str) {
         tracing::warn!(
             target = "podbot::acp::policy",
@@ -265,6 +304,9 @@ impl OutboundPolicyAdapter {
         );
     }
 
+    /// Emit at most one fallback diagnostic during the adapter lifetime.
+    /// For example, a second fallback reason is ignored after the first
+    /// warning.
     fn log_fallback_once(&mut self, reason: FallbackReason) {
         if self.fallback_logged {
             return;
@@ -273,6 +315,8 @@ impl OutboundPolicyAdapter {
         self.emit_fallback_warning(reason);
     }
 
+    /// Select the warning matching the framing fallback reason.
+    /// For example, a dropped partial frame records its discarded byte count.
     fn emit_fallback_warning(&self, reason: FallbackReason) {
         match reason {
             FallbackReason::BufferOverflow => self.warn_buffer_overflow(),
@@ -282,6 +326,10 @@ impl OutboundPolicyAdapter {
         }
     }
 
+    /// Warn that overflow has switched the rest of the session to raw
+    /// forwarding.
+    /// For example, the warning identifies the container whose frame exceeded
+    /// the limit.
     fn warn_buffer_overflow(&self) {
         tracing::warn!(
             target = "podbot::acp::policy",
@@ -290,6 +338,9 @@ impl OutboundPolicyAdapter {
         );
     }
 
+    /// Warn about unclassified bytes discarded at the end of the output stream.
+    /// For example, `byte_count = 5` records five dropped bytes without their
+    /// contents.
     fn warn_partial_frame_drop(&self, byte_count: usize) {
         tracing::warn!(
             target = "podbot::acp::policy",
