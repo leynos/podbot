@@ -41,18 +41,27 @@ impl From<ExecMode> for crate::engine::ExecMode {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "ExecRequestDef")]
 pub struct ExecRequest {
+    /// Non-blank container identifier retained after request validation.
     container: String,
+    /// Argument vector with a non-blank executable as its first element.
     command: Vec<String>,
+    /// Stream attachment policy used when starting the container process.
     mode: ExecMode,
+    /// TTY preference normalized to false outside attached mode.
     tty: bool,
 }
 
+/// Deserialization input routed through the validated request constructor.
 #[derive(Debug, Deserialize)]
 struct ExecRequestDef {
+    /// Unvalidated container identifier; blank values fail conversion.
     container: String,
+    /// Unvalidated argv; conversion rejects an empty vector or executable.
     command: Vec<String>,
+    /// Attachment policy, defaulting to attached when absent from the input.
     #[serde(default = "default_exec_mode")]
     mode: ExecMode,
+    /// TTY preference, defaulting to false and normalized during conversion.
     #[serde(default)]
     tty: bool,
 }
@@ -132,6 +141,7 @@ impl ExecRequest {
         self
     }
 
+    /// Reject missing execution inputs before engine calls; an empty argv fails.
     fn validate(&self) -> Result<(), PodbotError> {
         if self.container.trim().is_empty() {
             return Err(PodbotError::from(ConfigError::MissingRequired {
@@ -166,17 +176,21 @@ impl TryFrom<ExecRequestDef> for ExecRequest {
     }
 }
 
+/// Keep modes omitted from deserialized input aligned with the attached constructor default.
 const fn default_exec_mode() -> ExecMode {
     ExecMode::Attached
 }
 
+/// Permit TTY only for attached streams; protocol mode always yields false.
 const fn normalized_tty(mode: ExecMode, tty: bool) -> bool {
     matches!(mode, ExecMode::Attached) && tty
 }
 
 /// Reusable exec context for embedders that want to cache engine state.
 pub struct ExecContext {
+    /// Reusable engine connection so callers avoid reconnecting for each command.
     connector: Docker,
+    /// Caller-owned runtime handle used to drive asynchronous engine operations.
     runtime_handle: tokio::runtime::Handle,
 }
 

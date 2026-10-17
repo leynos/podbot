@@ -51,6 +51,7 @@ impl AppConfig {
         self.validate_command_intent(intent)
     }
 
+    /// Default host mounts to `/workspace` without replacing an explicit target path.
     fn apply_dependent_defaults(&mut self) {
         if self.workspace.source == WorkspaceSource::HostMount
             && self.workspace.container_path.is_none()
@@ -59,6 +60,8 @@ impl AppConfig {
         }
     }
 
+    /// Validate environment entries and the command policy for the selected agent kind.
+    /// For example, a custom agent without a command returns an `agent.command` error.
     fn validate_agent_config(&self) -> Result<()> {
         validate_env_allowlist(&self.agent.env_allowlist)?;
 
@@ -68,6 +71,8 @@ impl AppConfig {
         }
     }
 
+    /// Require an absolute workspace base and source-specific mount invariants.
+    /// For example, a relative `base_dir` returns a `workspace.base_dir` error.
     fn validate_workspace_config(&self) -> Result<()> {
         if !self.workspace.base_dir.is_absolute() {
             return invalid_value(
@@ -82,6 +87,7 @@ impl AppConfig {
         }
     }
 
+    /// Reject mode/command mismatches; hosted modes cannot service a run request.
     fn validate_command_intent(&self, intent: CommandIntent) -> Result<()> {
         if is_intent_legal(intent, self.agent.mode) {
             Ok(())
@@ -107,6 +113,7 @@ impl AppConfig {
     }
 }
 
+/// Match command families to modes; `Any` permits every mode.
 fn is_intent_legal(intent: CommandIntent, mode: AgentMode) -> bool {
     match intent {
         CommandIntent::Any => true,
@@ -115,6 +122,8 @@ fn is_intent_legal(intent: CommandIntent, mode: AgentMode) -> bool {
     }
 }
 
+/// Reject blank allowlist entries rather than forwarding meaningless variable names.
+/// For example, a spaces-only entry returns an `agent.env_allowlist` error.
 fn validate_env_allowlist(values: &[String]) -> Result<()> {
     for value in values {
         if value.trim().is_empty() {
@@ -128,6 +137,7 @@ fn validate_env_allowlist(values: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Require a usable custom command; a whitespace-only command fails.
 fn validate_custom_agent(config: &AppConfig) -> Result<()> {
     match config.agent.command.as_deref().map(str::trim) {
         Some(command) if !command.is_empty() => Ok(()),
@@ -138,6 +148,8 @@ fn validate_custom_agent(config: &AppConfig) -> Result<()> {
     }
 }
 
+/// Reject custom command overrides for built-in agents to avoid ambiguous startup.
+/// For example, a Claude agent with custom arguments returns an `agent.args` error.
 fn validate_builtin_agent(config: &AppConfig) -> Result<()> {
     if config.agent.command.is_some() {
         return invalid_value(
@@ -156,6 +168,8 @@ fn validate_builtin_agent(config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
+/// Reject host-mount paths for cloned workspaces rather than ignoring them.
+/// For example, a supplied `host_path` returns a `workspace.host_path` error.
 fn validate_github_clone_workspace(config: &AppConfig) -> Result<()> {
     if config.workspace.host_path.is_some() {
         return invalid_value(
@@ -174,6 +188,8 @@ fn validate_github_clone_workspace(config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
+/// Require absolute host and container mount paths before engine operations.
+/// For example, a relative `host_path` returns a `workspace.host_path` error.
 fn validate_host_mount_workspace(config: &AppConfig) -> Result<()> {
     let Some(host_path) = config.workspace.host_path.as_ref() else {
         return invalid_value(
@@ -205,6 +221,8 @@ fn validate_host_mount_workspace(config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
+/// Preserve the invalid field and reason in a typed configuration error.
+/// For example, an invalid `agent.command` is reported with that field and supplied reason.
 fn invalid_value<T>(field: &str, reason: impl Into<String>) -> Result<T> {
     Err(ConfigError::InvalidValue {
         field: field.to_owned(),

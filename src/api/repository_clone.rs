@@ -8,7 +8,9 @@ use crate::error::{ConfigError, Result as PodbotResult};
 /// A GitHub repository in `owner/name` form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepositoryRef {
+    /// Non-empty owner segment without surrounding whitespace.
     owner: String,
+    /// Non-empty repository segment without slashes or surrounding whitespace.
     name: String,
 }
 
@@ -59,6 +61,7 @@ impl RepositoryRef {
     }
 }
 
+/// For invalid `owner/name/extra` input, report an invalid-value error for `repo`.
 fn invalid_repository_ref() -> crate::error::PodbotError {
     ConfigError::InvalidValue {
         field: String::from("repo"),
@@ -67,6 +70,7 @@ fn invalid_repository_ref() -> crate::error::PodbotError {
     .into()
 }
 
+/// Reject malformed owner/name segments; `owner/name/extra` is invalid.
 fn has_invalid_segments(owner: &str, name: &str) -> bool {
     owner.is_empty()
         || name.is_empty()

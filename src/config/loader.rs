@@ -160,6 +160,8 @@ pub fn load_config_with_env<E: mockable::Env>(
     Ok(config)
 }
 
+/// Choose an existing hint before discovery; without a hint, try the environment.
+/// For example, an existing explicit hint wins over `PODBOT_CONFIG_PATH`.
 fn resolve_config_path<E: mockable::Env>(
     env: &E,
     options: &ConfigLoadOptions,
@@ -174,6 +176,8 @@ fn resolve_config_path<E: mockable::Env>(
     )
 }
 
+/// Use `PODBOT_CONFIG_PATH` only when its injected value names an existing path.
+/// For example, `PODBOT_CONFIG_PATH` naming a missing file yields `None`.
 fn env_path<E: mockable::Env>(env: &E) -> Option<Utf8PathBuf> {
     env.string("PODBOT_CONFIG_PATH").and_then(|raw| {
         let path = Utf8PathBuf::from(raw);
@@ -181,6 +185,8 @@ fn env_path<E: mockable::Env>(env: &E) -> Option<Utf8PathBuf> {
     })
 }
 
+/// Select the first existing UTF-8 discovery candidate when discovery is enabled.
+/// For example, disabled discovery yields `None` without probing candidates.
 fn discover_config_path(enabled: bool) -> Option<Utf8PathBuf> {
     if !enabled {
         return None;
