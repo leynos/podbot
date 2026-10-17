@@ -84,6 +84,16 @@ captured state; they perform no further I/O or mutation. The private
 supervisor retains signal-before-deadline-before-descendant-cleanup precedence
 when combining them.
 
+The private `test_runner_cargo_messages.py` module owns Cargo JSON-line
+decoding. `test_runner_cargo.py` re-exports its parser for existing runner
+callers and retains executable selection and runtime-environment restoration.
+The parser remains a runner-local helper rather than a general Cargo API.
+
+The workflow concurrency suite keeps its discovery and expression queries in
+`tests/workflow_contracts/concurrency_rules.py`, composed with the existing
+strict workflow reader. The test module retains workflow discovery execution
+and every parametrized assertion; these queries remain local to that suite.
+
 Windows has no standard-library binding for Job Objects, so the required
 `ctypes` interop is confined to `scripts/test_runner_windows_process.py`. The
 module remains importable across platforms; `create()` loads Windows libraries
