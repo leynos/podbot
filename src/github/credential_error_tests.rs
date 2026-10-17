@@ -142,8 +142,18 @@ fn classify_network_error_mentions_connectivity() {
         source: boxed,
         backtrace: snafu::Backtrace::generate(),
     };
-    let classified = classify_github_api_error(error);
+    let raw = error.to_string();
+    let classified = classify_github_api_error(&error);
     let message = classified.to_string();
+    assert!(
+        message.contains(&raw),
+        "complete transport error display must survive classification: {message}"
+    );
+    assert_eq!(
+        error.to_string(),
+        raw,
+        "classification must leave the original error context intact"
+    );
     assert!(
         message.contains("connectivity") || message.contains("network"),
         "expected connectivity/network hint in: {message}"
