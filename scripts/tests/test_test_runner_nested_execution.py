@@ -18,7 +18,7 @@ import test_runner_nested
 from test_runner_context import TestRunnerContext
 from test_runner_fixtures import (
     FakeCargoConfiguration,
-    cargo_artifact_message,
+    cargo_artefact_message,
     fake_cargo_environment as _fake_cargo_environment,
     package_document,
 )
@@ -78,7 +78,7 @@ def test_cargo_build_exits_before_nested_test_process_starts(
     ), "no trybuild target may execute inside an outer Cargo test process"
 
 
-def test_filters_and_harness_arguments_reach_the_current_artifact(
+def test_filters_and_harness_arguments_reach_the_current_artefact(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Cargo's positional test filter and post-separator flags reach libtest."""
@@ -110,46 +110,46 @@ def test_filters_and_harness_arguments_reach_the_current_artifact(
 @pytest.mark.parametrize(
     "case",
     [
-        pytest.param(("missing", "missing test executable"), id="missing-artifact"),
+        pytest.param(("missing", "missing test executable"), id="missing-artefact"),
         pytest.param(
-            ("non-executable", "not executable"), id="non-executable-artifact"
+            ("non-executable", "not executable"), id="non-executable-artefact"
         ),
     ],
 )
-def test_artifact_errors_redact_known_environment_secrets(
+def test_artefact_errors_redact_known_environment_secrets(
     runner_harness: RunnerExecutionHarness,
     capsys: pytest.CaptureFixture[str],
     tmp_path: pathlib.Path,
     case: tuple[str, str],
 ) -> None:
-    """Artifact-selection diagnostics must not disclose secret path segments."""
-    artifact_state, expected_message = case
-    if artifact_state == "non-executable" and os.name == "nt":
-        pytest.skip("non-executable artifact checks are POSIX-only")
+    """Artefact-selection diagnostics must not disclose secret path segments."""
+    artefact_state, expected_message = case
+    if artefact_state == "non-executable" and os.name == "nt":
+        pytest.skip("non-executable artefact checks are POSIX-only")
     environment = runner_harness.fake_environment()
-    secret = "artifact-path-secret"
-    artifact_path = tmp_path / secret / "compile_contract-current"
-    if artifact_state == "non-executable":
-        artifact_path.parent.mkdir(parents=True)
-        artifact_path.write_text("not executable", encoding="utf-8")
-        artifact_path.chmod(0o644)
+    secret = "artefact-path-secret"
+    artefact_path = tmp_path / secret / "compile_contract-current"
+    if artefact_state == "non-executable":
+        artefact_path.parent.mkdir(parents=True)
+        artefact_path.write_text("not executable", encoding="utf-8")
+        artefact_path.chmod(0o644)
     invocation_environment = dict(os.environ)
     invocation_environment.update(environment)
     invocation_environment["GITHUB_TOKEN"] = secret
     package_id = package_document(tmp_path)["packages"][0]["id"]
 
-    def report_artifact(
+    def report_artefact(
         context: TestRunnerContext,
         command: list[str],
         messages: list[dict[str, typ.Any]],
     ) -> int:
         messages.append(
-            cargo_artifact_message(package_id, "compile_contract", artifact_path)
+            cargo_artefact_message(package_id, "compile_contract", artefact_path)
         )
         return 0
 
     with (
-        patch.object(test_runner_nested, "_run_json_build", report_artifact),
+        patch.object(test_runner_nested, "_run_json_build", report_artefact),
         patch.object(
             test_runner, "os", SimpleNamespace(environ=invocation_environment)
         ),
@@ -165,9 +165,9 @@ def test_artifact_errors_redact_known_environment_secrets(
         )
 
     error = capsys.readouterr().err
-    assert status == 2, "invalid current artifacts must retain runner failure status"
-    assert expected_message in error, "safe artifact failure wording must be preserved"
-    assert secret not in error, "known artifact-path secrets must not reach stderr"
+    assert status == 2, "invalid current artefacts must retain runner failure status"
+    assert expected_message in error, "safe artefact failure wording must be preserved"
+    assert secret not in error, "known artefact-path secrets must not reach stderr"
 
 
 def test_tmpdir_errors_redact_invocation_environment_secrets(

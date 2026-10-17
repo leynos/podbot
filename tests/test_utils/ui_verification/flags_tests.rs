@@ -188,7 +188,7 @@ proptest! {
         }
     }
 
-    /// Reject every unrecognised UI flag in the generated lowercase corpus.
+    /// Reject every unrecognized UI flag in the generated lowercase corpus.
     #[test]
     fn unknown_ui_flags_are_unsupported(suffix in "[a-z]{1,20}") {
         let unknown = format!("--ui-unknown-{suffix}");

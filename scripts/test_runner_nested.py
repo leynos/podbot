@@ -23,7 +23,7 @@ def run_nested_target(
     plan: CargoTestPlan,
     target: Target,
 ) -> int:
-    """Build one registered test target, then invoke its current artifact."""
+    """Build one registered test target, then invoke its current artefact."""
     key = (target.package_id, target.name)
     status, messages = _build_nested_target(context, plan, target)
     if status != 0:
@@ -69,7 +69,7 @@ def _build_nested_target(
     plan: CargoTestPlan,
     target: Target,
 ) -> tuple[int, list[dict[str, typ.Any]]]:
-    """Run and reap Cargo's JSON build before returning artifact messages."""
+    """Run and reap Cargo's JSON build before returning artefact messages."""
     print(
         f"== Building nested-Cargo target {target.package_name}:{target.name} ==",
         flush=True,
@@ -122,7 +122,7 @@ def _run_json_build(
     command: list[str],
     messages: list[dict[str, typ.Any]],
 ) -> int:
-    """Stream a JSON-mode Cargo build and retain its current artifacts."""
+    """Stream a JSON-mode Cargo build and retain its current artefacts."""
 
     def emit_line(line: str) -> None:
         message = parse_cargo_json_message(line)

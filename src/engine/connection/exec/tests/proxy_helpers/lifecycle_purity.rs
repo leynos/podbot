@@ -59,7 +59,7 @@ fn single_chunk_stdout_purity(
     #[case] success_msg: &'static str,
     #[case] stdout_msg: &'static str,
 ) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     assert_stdout_purity!(
         &runtime_handle,
         vec![Ok(LogOutput::StdOut {
@@ -76,7 +76,7 @@ fn single_chunk_stdout_purity(
 /// diagnostic bytes are injected.
 #[rstest]
 fn lifecycle_purity_no_stdout_bytes(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     assert_stdout_purity!(
         &runtime_handle,
         Vec::new(),
@@ -90,7 +90,7 @@ fn lifecycle_purity_no_stdout_bytes(runtime: RuntimeFixture) {
 /// console bytes, routing stderr separately, and suppressing stdin echoes.
 #[rstest]
 fn steady_state_purity_mixed_streams(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     let output_chunks = vec![
         Ok(LogOutput::StdOut {
             message: b"stdout-1".to_vec().into(),
@@ -148,7 +148,7 @@ fn steady_state_purity_mixed_streams(runtime: RuntimeFixture) {
 /// when the daemon stream errors midway.
 #[rstest]
 fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     let output_chunks = vec![
         Ok(LogOutput::StdOut {
             message: b"output-before-error".to_vec().into(),
@@ -192,7 +192,7 @@ fn error_path_purity_no_error_bytes_to_stdout(runtime: RuntimeFixture) {
 /// adding banners, diagnostics, or framing bytes to the protocol stdout path.
 #[rstest]
 fn regression_zero_bytes_before_first_and_after_last_proxied_byte(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     let known_output = b"PROTOCOL_OUTPUT";
     let output_chunks = vec![Ok(LogOutput::StdOut {
         message: known_output.to_vec().into(),
@@ -236,7 +236,7 @@ fn regression_stdout_bounded_buffering_preserves_all_bytes(runtime: RuntimeFixtu
     const TOTAL_SIZE: usize = 70 * 1024; // 70 KiB
     const CHUNK_SIZE: usize = 8 * 1024 + 123; // ~8 KiB, intentionally non-power-of-two
 
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
 
     let mut expected = Vec::with_capacity(TOTAL_SIZE);
     let mut output_chunks = Vec::new();

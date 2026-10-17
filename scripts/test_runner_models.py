@@ -2,7 +2,7 @@
 
 These immutable records keep option parsing, workspace discovery, and process
 execution independent while carrying the package identity needed to select
-the exact artifacts from one Cargo build. For example, a target record maps a
+the exact artefacts from one Cargo build. For example, a target record maps a
 registered integration test to Cargo's ``--test`` selector:
 
 >>> target = Target(
