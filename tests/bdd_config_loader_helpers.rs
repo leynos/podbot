@@ -123,13 +123,7 @@ fn write_config_file(
 }
 
 #[given("no configuration sources are provided")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions return StepResult for consistency"
-)]
-fn no_configuration_sources_are_provided(
-    config_loader_state: &ConfigLoaderState,
-) -> StepResult<()> {
+fn no_configuration_sources_are_provided(config_loader_state: &ConfigLoaderState) {
     set_options(
         config_loader_state,
         ConfigLoadOptions {
@@ -137,7 +131,6 @@ fn no_configuration_sources_are_provided(
             ..ConfigLoadOptions::default()
         },
     );
-    Ok(())
 }
 
 #[given("a configuration file sets image to {image}")]

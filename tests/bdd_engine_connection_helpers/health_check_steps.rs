@@ -152,18 +152,11 @@ fn execute_health_check_and_record(
 /// Sets up state indicating that a real container daemon should be running.
 /// The actual connectivity check happens in the "When" step.
 #[given("a container engine is available")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-pub fn container_engine_is_available(
-    engine_connection_state: &EngineConnectionState,
-) -> StepResult<()> {
+pub fn container_engine_is_available(engine_connection_state: &EngineConnectionState) {
     // Mark that we expect a real daemon to be available.
     // The actual check happens in the "When" step.
     engine_connection_state.simulate_not_responding.set(false);
     engine_connection_state.simulate_slow_engine.set(false);
-    Ok(())
 }
 
 /// Mark the scenario as simulating a non-responding container engine.
@@ -171,15 +164,8 @@ pub fn container_engine_is_available(
 /// Sets up state indicating that connection attempts should fail because
 /// the daemon is not available (e.g., socket doesn't exist).
 #[given("the container engine is not responding")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-pub fn container_engine_is_not_responding(
-    engine_connection_state: &EngineConnectionState,
-) -> StepResult<()> {
+pub fn container_engine_is_not_responding(engine_connection_state: &EngineConnectionState) {
     engine_connection_state.simulate_not_responding.set(true);
-    Ok(())
 }
 
 /// Mark the scenario as simulating a slow container engine.
@@ -187,15 +173,8 @@ pub fn container_engine_is_not_responding(
 /// Sets up state indicating that the engine responds too slowly,
 /// causing health check timeouts.
 #[given("the container engine is slow to respond")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-pub fn container_engine_is_slow_to_respond(
-    engine_connection_state: &EngineConnectionState,
-) -> StepResult<()> {
+pub fn container_engine_is_slow_to_respond(engine_connection_state: &EngineConnectionState) {
     engine_connection_state.simulate_slow_engine.set(true);
-    Ok(())
 }
 
 // =============================================================================

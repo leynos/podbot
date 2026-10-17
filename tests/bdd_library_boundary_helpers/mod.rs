@@ -1,8 +1,8 @@
-//! Behavioural helpers for library boundary scenarios.
+//! Shared state and step definitions for library boundary BDD scenarios.
 //!
-//! This module re-exports step definitions, assertions, and scenario state
-//! used by the BDD tests in `tests/bdd_library_boundary.rs`. The helpers
-//! exercise Podbot's public library API without depending on CLI types.
+//! Private step and assertion modules contain annotated steps registered by
+//! `rstest-bdd`. This module re-exports the state and fixture used by the
+//! scenario tests.
 
 mod assertions;
 mod state;
@@ -10,14 +10,4 @@ mod steps;
 
 pub(crate) type StepResult<T> = Result<T, String>;
 
-#[expect(
-    unused_imports,
-    reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
-)]
-pub(crate) use assertions::*;
 pub(crate) use state::{LibraryBoundaryState, library_boundary_state};
-#[expect(
-    unused_imports,
-    reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
-)]
-pub(crate) use steps::*;

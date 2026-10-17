@@ -36,13 +36,8 @@ fn valid_rsa_key_file(github_app_client_state: &GitHubAppClientState) -> StepRes
 }
 
 #[given("the GitHub App ID is {app_id}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn set_app_id(github_app_client_state: &GitHubAppClientState, app_id: u64) -> StepResult<()> {
+fn set_app_id(github_app_client_state: &GitHubAppClientState, app_id: u64) {
     github_app_client_state.app_id.set(app_id);
-    Ok(())
 }
 
 #[when("the App client is built")]

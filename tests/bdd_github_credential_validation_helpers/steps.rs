@@ -152,45 +152,24 @@ fn set_mock_response(state: &GitHubCredentialValidationState, response: MockApiR
 }
 
 #[given("a mock GitHub API that accepts App credentials")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_accepts(
-    github_credential_validation_state: &GitHubCredentialValidationState,
-) -> StepResult<()> {
+fn mock_api_accepts(github_credential_validation_state: &GitHubCredentialValidationState) {
     set_mock_response(github_credential_validation_state, MockApiResponse::Success);
-    Ok(())
 }
 
 #[given("a mock GitHub API that rejects invalid App credentials")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_rejects(
-    github_credential_validation_state: &GitHubCredentialValidationState,
-) -> StepResult<()> {
+fn mock_api_rejects(github_credential_validation_state: &GitHubCredentialValidationState) {
     set_mock_response(
         github_credential_validation_state,
         MockApiResponse::InvalidCredentials,
     );
-    Ok(())
 }
 
 #[given("a mock GitHub API that returns a server error")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_server_error(
-    github_credential_validation_state: &GitHubCredentialValidationState,
-) -> StepResult<()> {
+fn mock_api_server_error(github_credential_validation_state: &GitHubCredentialValidationState) {
     set_mock_response(
         github_credential_validation_state,
         MockApiResponse::ServerError,
     );
-    Ok(())
 }
 
 #[given("a valid RSA private key file exists at the configured path")]
@@ -211,16 +190,8 @@ fn valid_rsa_key_file(
 }
 
 #[given("the GitHub App ID is {app_id}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn set_app_id(
-    github_credential_validation_state: &GitHubCredentialValidationState,
-    app_id: u64,
-) -> StepResult<()> {
+fn set_app_id(github_credential_validation_state: &GitHubCredentialValidationState, app_id: u64) {
     github_credential_validation_state.app_id.set(app_id);
-    Ok(())
 }
 
 #[when("credentials are validated")]
