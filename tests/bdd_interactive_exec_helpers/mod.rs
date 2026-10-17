@@ -2,6 +2,7 @@
 
 mod assertions;
 mod state;
+pub(crate) mod stdin_forwarding;
 mod steps;
 
 #[expect(
