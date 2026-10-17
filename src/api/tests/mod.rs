@@ -315,9 +315,9 @@ fn stub_returns_success(#[case] stub: &str) {
     let request = RunRequest::new("owner/name", "main").expect("request should be valid");
     let outcome = match stub {
         "run_agent" => run_agent(&config, &request),
-        "list_containers" => list_containers(),
-        "stop_container" => stop_container("test-container"),
-        "run_token_daemon" => run_token_daemon("test-container-id"),
+        "list_containers" => const { list_containers() },
+        "stop_container" => const { stop_container("test-container") },
+        "run_token_daemon" => const { run_token_daemon("test-container-id") },
         other => panic!("unknown stub: {other}"),
     }
     .expect("stub should return Ok");
