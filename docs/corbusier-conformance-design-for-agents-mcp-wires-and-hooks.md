@@ -214,7 +214,7 @@ persisted transport shapes to *source definitions*
 (stdio/stdio-container/streamable-http), leaving “agent-facing URL” as a
 per-workspace wire artefact rather than a global server attribute.
 
-### HookArtifact and HookSubscription
+### HookArtefact and HookSubscription
 
 Based on the user’s hook assumptions, Corbusier needs:
 
@@ -226,15 +226,15 @@ Based on the user’s hook assumptions, Corbusier needs:
 
 ```rust
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct HookArtifact {
-    pub kind: HookArtifactKind,           // script | tar
+pub struct HookArtefact {
+    pub kind: HookArtefactKind,           // script | tar
     pub digest: Option<String>,           // strongly recommended; sha256:...
     pub container_image: Option<String>,  // optional override for execution environment
     pub entrypoint: Option<String>,       // optional; tar needs some entrypoint (unspecified)
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub enum HookArtifactKind {
+pub enum HookArtefactKind {
     Script { path: String }, // workspace-relative or bundle-relative (policy decides)
     Tar { path: String },    // contains runnable content
 }
@@ -518,8 +518,8 @@ derived from the current repository tree.
 - `src/tool_registry/ports/host.rs`: defines the MCP server hosting port
   (`start`, `stop`, `health`, `list_tools`, `call_tool`). Proposed change:
   deprecate for Podbot-hosted agents, keep only for tests/local, and introduce
-  new ports `WorkspaceMcpWires` and optionally `McpCatalogReader` for registry
-  UI. Risk / effort: High.
+  new ports `WorkspaceMcpWires` and optionally `McpCatalogueReader` for
+  registry UI. Risk / effort: High.
 - `src/tool_registry/services/lifecycle/mod.rs`: service orchestration for MCP
   server lifecycle. Proposed change: split definition lifecycle from
   workspace-wire lifecycle, moving wire operations out of “server lifecycle”
@@ -702,7 +702,7 @@ mcp_servers:
 
 hooks:
   - id: pre-commit
-    artifact:
+    artefact:
       kind: script
       path: hooks/pre-commit.sh
       digest: "sha256:..."

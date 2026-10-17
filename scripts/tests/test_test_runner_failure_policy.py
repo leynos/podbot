@@ -1,4 +1,4 @@
-"""Verify runner exit propagation and Cargo fail-fast behavior."""
+"""Verify runner exit propagation and Cargo fail-fast behaviour."""
 
 from __future__ import annotations
 
@@ -44,25 +44,25 @@ def test_build_and_direct_test_failures_propagate(
     )
 
 
-def test_artifact_selection_error_returns_runner_failure(
+def test_artefact_selection_error_returns_runner_failure(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A malformed current-build artifact fails through the runner contract."""
+    """A malformed current-build artefact fails through the runner contract."""
     environment = _fake_cargo_environment(tmp_path, monkeypatch)
 
-    def reject_artifacts(*args: typ.Any, **kwargs: typ.Any) -> typ.NoReturn:
-        raise RunnerError("no current test artifact")
+    def reject_artefacts(*args: typ.Any, **kwargs: typ.Any) -> typ.NoReturn:
+        raise RunnerError("no current test artefact")
 
-    monkeypatch.setattr(test_runner_nested, "select_test_executables", reject_artifacts)
+    monkeypatch.setattr(test_runner_nested, "select_test_executables", reject_artefacts)
     status = test_runner.main(
         ["--cargo", environment["FAKE_CARGO"], "--", "--test", "compile_contract"]
     )
 
-    assert status == 2, "artifact selection errors must return the runner error status"
-    assert "no current test artifact" in capsys.readouterr().err, (
-        "artifact selection failures must be visible on stderr"
+    assert status == 2, "artefact selection errors must return the runner error status"
+    assert "no current test artefact" in capsys.readouterr().err, (
+        "artefact selection failures must be visible on stderr"
     )
 
 

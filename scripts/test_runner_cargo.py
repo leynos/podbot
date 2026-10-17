@@ -112,29 +112,29 @@ class RunnerCommandFailure(RunnerError):
 def select_test_executables(
     messages: list[dict[str, typ.Any]], expected_targets: tuple[Target, ...]
 ) -> dict[tuple[str, str], pathlib.Path]:
-    """Choose each nested test executable from this build's artifact messages.
+    """Choose each nested test executable from this build's artefact messages.
 
     Examples
     --------
-    An artifact for a same-named target in another package cannot satisfy a
+    An artefact for a same-named target in another package cannot satisfy a
     registered package and target pair.
     """
     selected: dict[tuple[str, str], pathlib.Path] = {}
     for expected in expected_targets:
         key = (expected.package_id, expected.name)
         candidates = tuple(
-            message for message in messages if _is_test_artifact(message, expected)
+            message for message in messages if _is_test_artefact(message, expected)
         )
         selected[key] = _current_executable(expected, candidates)
     return selected
 
 
-def _is_test_artifact(message: dict[str, typ.Any], expected: Target) -> bool:
+def _is_test_artefact(message: dict[str, typ.Any], expected: Target) -> bool:
     """Match one JSON message to the requested package's test executable."""
-    artifact_metadata = _artifact_target_and_profile(message)
-    if artifact_metadata is None:
+    artefact_metadata = _artefact_target_and_profile(message)
+    if artefact_metadata is None:
         return False
-    target, profile = artifact_metadata
+    target, profile = artefact_metadata
     kinds = target.get("kind")
     return (
         message.get("reason") == "compiler-artifact"
@@ -249,10 +249,10 @@ def _record_binary_executable(
     message: dict[str, typ.Any],
 ) -> None:
     """Restore a Cargo binary path for its owning package when available."""
-    artifact_metadata = _artifact_target_and_profile(message)
-    if artifact_metadata is None:
+    artefact_metadata = _artefact_target_and_profile(message)
+    if artefact_metadata is None:
         return
-    target, profile = artifact_metadata
+    target, profile = artefact_metadata
     kinds = target.get("kind")
     if message.get("package_id") != package.get("id"):
         return
@@ -266,7 +266,7 @@ def _record_binary_executable(
         environment[f"CARGO_BIN_EXE_{name}"] = executable
 
 
-def _artifact_target_and_profile(
+def _artefact_target_and_profile(
     message: dict[str, typ.Any],
 ) -> tuple[dict[str, typ.Any], dict[str, typ.Any]] | None:
     """Return Cargo target and profile mappings only when both are objects."""
@@ -282,7 +282,7 @@ def _set_executable_profile_environment(
     executable: pathlib.Path,
     messages: list[dict[str, typ.Any]],
 ) -> None:
-    """Restore debug-assertion metadata from the first matching artifact."""
+    """Restore debug-assertion metadata from the first matching artefact."""
     profile_message = next(
         (
             message
@@ -310,7 +310,7 @@ def _set_dynamic_library_environment(
     search_paths = [
         *_profile_library_paths(executable),
         *_build_script_library_paths(messages),
-        *_artifact_library_paths(messages),
+        *_artefact_library_paths(messages),
     ]
     combined = _unique_paths([*map(str, search_paths), *inherited_paths])
     if combined:
@@ -318,7 +318,7 @@ def _set_dynamic_library_environment(
 
 
 def _profile_library_paths(executable: pathlib.Path) -> tuple[pathlib.Path, ...]:
-    """Return the Cargo profile and dependency directories for one artifact."""
+    """Return the Cargo profile and dependency directories for one artefact."""
     profile_directory = executable.parent.parent
     return profile_directory / "deps", profile_directory
 
@@ -343,10 +343,10 @@ def _existing_linked_path(raw_path: typ.Any) -> pathlib.Path | None:
     return candidate if candidate.is_dir() else None
 
 
-def _artifact_library_paths(
+def _artefact_library_paths(
     messages: list[dict[str, typ.Any]],
 ) -> tuple[pathlib.Path, ...]:
-    """Collect parent directories for dynamic libraries in Cargo artifacts."""
+    """Collect parent directories for dynamic libraries in Cargo artefacts."""
     return tuple(
         path.parent
         for message in messages

@@ -11,7 +11,7 @@ use super::*;
 
 #[rstest]
 fn protocol_proxy_forwards_stdin_bytes_and_shuts_down_input(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     let host_stdout = RecordingWriter::new();
     let host_stderr = RecordingWriter::new();
     let container_input = RecordingInputWriter::new();

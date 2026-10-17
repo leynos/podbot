@@ -1,4 +1,4 @@
-"""Specify default and explicit Cargo target selection behavior."""
+"""Specify default and explicit Cargo target selection behaviour."""
 
 from __future__ import annotations
 

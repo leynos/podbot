@@ -1,4 +1,4 @@
-"""Specify artifact selection and reconstructed Cargo runtime environment."""
+"""Specify artefact selection and reconstructed Cargo runtime environment."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from test_runner_plan import create_test_plan
 from test_runner_context import TestRunnerContext
 from test_runner_supervisor import CommandRequest, ProcessSupervisor
 
-from test_runner_fixtures import cargo_artifact_message as _artifact
+from test_runner_fixtures import cargo_artefact_message as _artefact
 from test_runner_fixtures import executable_file as _executable
 from test_runner_fixtures import package_document
 
@@ -65,8 +65,8 @@ def runtime_environment_case(
         ProcessSupervisor(timeout_seconds=1800),
     )
     messages = [
-        _artifact(package["id"], "compile_contract", executable),
-        _artifact(package["id"], "podbot", binary, kind="bin"),
+        _artefact(package["id"], "compile_contract", executable),
+        _artefact(package["id"], "podbot", binary, kind="bin"),
         {"reason": "build-script-executed", "linked_paths": [f"native={linked}"]},
         {
             "reason": "compiler-artifact",
@@ -89,24 +89,24 @@ def runtime_environment_case(
     )
 
 
-def test_artifact_selection_matches_package_target_and_test_profile(
+def test_artefact_selection_matches_package_target_and_test_profile(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Same-named artifacts and non-test executables cannot satisfy selection."""
+    """Same-named artefacts and non-test executables cannot satisfy selection."""
     metadata = package_document(tmp_path)
     target = create_test_plan(
         metadata, parse_cargo_test_options(["--test", "compile_contract"])
     ).nested_targets[0]
     executable = _executable(tmp_path / "target/debug/deps/compile_contract-current")
-    other_package = _artifact("other-id", "compile_contract", executable)
-    wrong_kind = _artifact(target.package_id, "compile_contract", executable)
+    other_package = _artefact("other-id", "compile_contract", executable)
+    wrong_kind = _artefact(target.package_id, "compile_contract", executable)
     wrong_kind["target"]["kind"] = ["bin"]
-    right = _artifact(target.package_id, "compile_contract", executable)
+    right = _artefact(target.package_id, "compile_contract", executable)
 
     selected = select_test_executables([other_package, wrong_kind, right], (target,))
 
     assert selected[(target.package_id, "compile_contract")] == executable, (
-        "artifact selection must match the package, target, and test profile"
+        "artefact selection must match the package, target, and test profile"
     )
 
 
@@ -124,7 +124,7 @@ def test_artifact_selection_matches_package_target_and_test_profile(
         pytest.param("profile", [], id="non-object-profile"),
     ],
 )
-def test_artifact_selection_ignores_malformed_target_and_profile_values(
+def test_artefact_selection_ignores_malformed_target_and_profile_values(
     tmp_path: pathlib.Path, field: str, value: typ.Any
 ) -> None:
     """Malformed Cargo mappings cannot crash current-build selection."""
@@ -132,7 +132,7 @@ def test_artifact_selection_ignores_malformed_target_and_profile_values(
     target = create_test_plan(
         metadata, parse_cargo_test_options(["--test", "compile_contract"])
     ).nested_targets[0]
-    malformed = _artifact(
+    malformed = _artefact(
         target.package_id,
         target.name,
         _executable(tmp_path / "target/debug/deps/compile_contract"),
@@ -143,16 +143,16 @@ def test_artifact_selection_ignores_malformed_target_and_profile_values(
         select_test_executables([malformed], (target,))
 
 
-def test_artifact_selection_rejects_missing_and_duplicate_current_outputs(
+def test_artefact_selection_rejects_missing_and_duplicate_current_outputs(
     tmp_path: pathlib.Path,
 ) -> None:
-    """A stale file on disk cannot replace a current Cargo artifact message."""
+    """A stale file on disk cannot replace a current Cargo artefact message."""
     metadata = package_document(tmp_path)
     target = create_test_plan(
         metadata, parse_cargo_test_options(["--test", "compile_contract"])
     ).nested_targets[0]
     executable = _executable(tmp_path / "target/debug/deps/compile_contract")
-    right = _artifact(target.package_id, target.name, executable)
+    right = _artefact(target.package_id, target.name, executable)
 
     with pytest.raises(RunnerError, match="found 0"):
         select_test_executables([], (target,))
@@ -222,7 +222,7 @@ def test_runtime_environment_preserves_binary_and_native_paths(
     )
 
 
-def test_runtime_environment_ignores_malformed_artifact_mappings(
+def test_runtime_environment_ignores_malformed_artefact_mappings(
     runtime_environment_case: RuntimeEnvironmentCase,
 ) -> None:
     """Malformed target and profile objects do not break environment setup."""
