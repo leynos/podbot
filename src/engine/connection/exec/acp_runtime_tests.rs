@@ -191,7 +191,8 @@ async fn frame_split_across_chunks_is_classified_after_assembly() {
         .expect("second chunk");
     drop(adapter);
 
-    assert!(recorder.snapshot().is_empty());
+    let captured_stdout = recorder.snapshot();
+    assert_eq!(captured_stdout, Vec::<u8>::new());
     let received = drain_channel(rx).await;
     assert!(matches!(received.as_slice(), [WriteCmd::Synthesized(_)]));
 }

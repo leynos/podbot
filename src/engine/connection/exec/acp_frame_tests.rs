@@ -283,7 +283,7 @@ fn finish_returns_none_after_raw_fallback() {
 fn empty_chunk_produces_no_output() {
     let mut framer = assembler();
     let (outputs, fallback) = framer.ingest_chunk(b"");
-    assert!(outputs.is_empty());
+    assert_eq!(outputs, Vec::<FrameOutput>::new());
     assert!(fallback.is_none());
 }
 
