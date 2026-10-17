@@ -48,6 +48,6 @@ mod tests {
     #[cfg(feature = "cli")]
     #[test]
     fn cli_module_is_available_with_feature() {
-        assert!(!std::any::type_name::<crate::cli::Cli>().is_empty());
+        assert_ne!(std::any::type_name::<crate::cli::Cli>(), "");
     }
 }

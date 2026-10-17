@@ -38,7 +38,7 @@ macro_rules! assert_stdout_purity {
     }};
 }
 
-/// Single-chunk stdout purity: proxy delivers exactly one StdOut chunk's
+/// Single-chunk stdout purity: proxy delivers exactly one `StdOut` chunk's
 /// bytes to host stdout. Parametrized across startup and shutdown to
 /// confirm no prefix or suffix bytes are injected by session setup or
 /// teardown.

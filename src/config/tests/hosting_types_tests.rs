@@ -19,8 +19,8 @@ fn app_config_hosting_defaults_are_explicit() {
     assert!(config.workspace.host_path.is_none());
     assert!(config.workspace.container_path.is_none());
     assert!(config.agent.command.is_none());
-    assert!(config.agent.args.is_empty());
-    assert!(config.agent.env_allowlist.is_empty());
+    assert_eq!(config.agent.args, Vec::<String>::new());
+    assert_eq!(config.agent.env_allowlist, Vec::<String>::new());
     assert_eq!(config.mcp.bind_strategy, McpBindStrategy::HostGateway);
     assert_eq!(config.mcp.idle_timeout_secs, 900);
     assert_eq!(config.mcp.max_message_size_bytes, 1_048_576);
