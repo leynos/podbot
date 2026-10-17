@@ -1086,17 +1086,24 @@ Installation-token acquisition emits two additional metric shapes in
 
 ## 13. BDD testing patterns for credential validation
 
-Credential validation scenarios use the rstest-bdd framework with a four-file
-helper structure:
+Credential validation scenarios use the rstest-bdd framework with a scenario
+entry point and a four-file helper structure:
 
 - `tests/bdd_github_credential_errors.rs` — scenario entry points
-- `tests/bdd_github_credential_errors_helpers/mod.rs` — re-exports
+- `tests/bdd_github_credential_errors_helpers/mod.rs` — module declarations,
+  shared types and scenario-facing re-exports
 - `tests/bdd_github_credential_errors_helpers/state.rs` — scenario state with
   `Slot`-based fields
 - `tests/bdd_github_credential_errors_helpers/steps.rs` — Given and When step
   definitions
 - `tests/bdd_github_credential_errors_helpers/assertions.rs` — Then step
   assertions
+
+The step attributes register annotated functions through the inventory. Their
+`steps.rs` and `assertions.rs` child modules may remain private, provided the
+helper root declares them so their definitions are compiled. Re-export the
+state, types and fixtures that scenario entry points actually need; wildcard
+step-function re-exports are not required for registration.
 
 ### 13.1. Mock client construction
 
@@ -1108,20 +1115,23 @@ test expectations match production output exactly.
 
 ### 13.2. Step result pattern
 
-All step functions return `StepResult<()>` (a type alias for
-`Result<(), String>`) to satisfy clippy's `expect_used` lint. Use
-`.ok_or_else(|| String::from("error message"))` instead of `.expect()` when
-extracting `Slot` values from scenario state.
+Infallible step functions return unit. Steps with fallible setup or lookups
+return `StepResult<()>` (a type alias for `Result<(), String>`) and propagate
+errors. Use `.ok_or_else(|| String::from("error message"))` instead of
+`.expect()` when extracting `Slot` values from scenario state. A step that
+records an API error in scenario state can still be infallible: recording the
+outcome differs from failing the step.
 
 ### 13.3. Installation token testing conventions
 
 Installation-token behaviour follows the same helper layout as credential
 validation, with `tests/bdd_github_installation_token.rs` and the
 `tests/bdd_github_installation_token_helpers/` modules. Scenario entry-point
-parameters must keep the exact fixture name, such as
-`github_installation_token_state`; renaming them with an underscore prefix
-breaks rstest-bdd fixture matching even if the Rust compiler would otherwise
-accept the parameter as intentionally unused.
+parameters use the fixture name, such as `github_installation_token_state`, for
+implicit matching. When a parameter needs another name, retain the lookup with
+an explicit `#[from(fixture_name)]` alias. For example,
+`#[from(engine_connection_state)] _engine_connection_state` preserves the
+fixture requirement for a no-op step without an unused-variable suppression.
 
 Use a local `mockall::mock!` implementation of `GitHubInstallationTokenClient`
 in BDD helper code. Unit tests inside `src/github/installation_token_tests.rs`
@@ -1299,11 +1309,16 @@ The BDD helper module layout follows a consistent pattern:
 
 ```plaintext
 tests/bdd_<domain>_helpers/
-  mod.rs          -- re-exports and shared types
+  mod.rs          -- child modules, shared types and scenario-facing exports
   state.rs        -- ScenarioState struct and fixture
   steps.rs        -- Given/When step definitions
   assertions.rs   -- Then step definitions
 ```
+
+The helper root declares `steps` and `assertions`, which may be private child
+modules. Their annotated step definitions register through the inventory;
+scenario files do not need wildcard imports of those functions. Re-export only
+the state, types and fixtures needed by the scenario entry points.
 
 Every test module and helper file must begin with a module-level (`//!`) doc
 comment explaining its purpose.

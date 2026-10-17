@@ -74,32 +74,20 @@ fn has_remediation_guidance(message: &str) -> bool {
 /// Uses the system `Docker` socket which normally requires docker group
 /// membership or root access.
 #[given("a socket path that requires elevated permissions")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn socket_requires_elevated_permissions(
-    engine_connection_state: &EngineConnectionState,
-) -> StepResult<()> {
+fn socket_requires_elevated_permissions(engine_connection_state: &EngineConnectionState) {
     engine_connection_state
         .test_socket_path
         .set(restricted_socket_path());
-    Ok(())
 }
 
 /// Set up a socket path that does not exist.
 ///
 /// Uses a path that is guaranteed not to exist on any system.
 #[given("a socket path that does not exist")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn socket_does_not_exist(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+fn socket_does_not_exist(engine_connection_state: &EngineConnectionState) {
     engine_connection_state
         .test_socket_path
         .set(missing_socket_path());
-    Ok(())
 }
 
 // =============================================================================

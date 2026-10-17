@@ -1,4 +1,4 @@
-//! Compile-pass checks for the stable library boundary.
+//! Compile-pass checks for the library boundary and BDD step contracts.
 
 #[path = "test_utils/ui_verification/mod.rs"]
 mod ui_verification;
@@ -17,6 +17,14 @@ fn stable_exec_context_signatures_compile() {
 fn stable_repository_clone_signatures_compile() {
     ui_verification::run_cases(|test_cases| {
         test_cases.pass("tests/ui/stable_repository_clone_signatures.rs");
+    })
+    .expect("UI verification requires the provisioned exact MSRV/LLVM route; see resolver error");
+}
+
+#[test]
+fn bdd_step_return_signatures_compile() {
+    ui_verification::run_cases(|test_cases| {
+        test_cases.pass("tests/ui/bdd_step_return_signatures.rs");
     })
     .expect("UI verification requires the provisioned exact MSRV/LLVM route; see resolver error");
 }

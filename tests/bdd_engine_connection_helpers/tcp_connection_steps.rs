@@ -20,17 +20,10 @@ use super::{ConnectionOutcome, EngineConnectionState, StepResult};
 /// TCP connections via `Bollard`'s `connect_with_http` are lazy and do
 /// not validate connectivity at construction time.
 #[given("a TCP endpoint is configured")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-pub fn tcp_endpoint_is_configured(
-    engine_connection_state: &EngineConnectionState,
-) -> StepResult<()> {
+pub fn tcp_endpoint_is_configured(engine_connection_state: &EngineConnectionState) {
     engine_connection_state
         .test_socket_path
         .set(String::from("tcp://localhost:2375"));
-    Ok(())
 }
 
 /// Configure a TCP endpoint that will fail during health check.
@@ -39,17 +32,10 @@ pub fn tcp_endpoint_is_configured(
 /// to ensure connection failure during the health check phase without
 /// risk of accidentally connecting to a real service.
 #[given("a TCP endpoint that will fail health check")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-pub fn tcp_endpoint_will_fail_health_check(
-    engine_connection_state: &EngineConnectionState,
-) -> StepResult<()> {
+pub fn tcp_endpoint_will_fail_health_check(engine_connection_state: &EngineConnectionState) {
     engine_connection_state
         .test_socket_path
         .set(String::from("tcp://192.0.2.1:2375"));
-    Ok(())
 }
 
 // =============================================================================
