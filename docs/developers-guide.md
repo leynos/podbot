@@ -404,6 +404,36 @@ terminal framing.
   `with_protocol_stdin_forwarding_disabled(bool)`. Lives in
   `src/engine/connection/exec/session.rs`.
 
+The private `host_io::stdin_forwarding_disabled_with_env` query reads
+`PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS` through the existing
+`mockable::Env` dependency. The zero-argument production wrapper supplies
+`DefaultEnv`; only the exact ASCII value `1` disables forwarding. An absent
+key, a non-Unicode value, or any other value keeps forwarding enabled. The
+query runs at each existing decision point: attached-reader selection,
+protocol-reader selection, and protocol settle-timeout handling. Keep these
+reads per-call rather than caching the result. Unit-test builds retain the
+constant-false wrapper and empty default reader.
+
+This environment seam belongs only at the host-stdio boundary. Reuse the
+existing `Env` dependency there; do not introduce a generic engine-wide
+environment adapter or add callers without review. Lossless native `OsString`
+adapters remain a separate
+[Concordat #157](https://github.com/leynos/concordat/issues/157) concern; this
+seam does not waive that requirement.
+
+Production-path stdin regressions belong to the existing interactive-exec BDD
+test root and its private `stdin_forwarding` helper. Each attached or protocol
+case runs the same test executable as a child with the forwarding flag set to
+`1` or `0`; `Command.env` selects the child case and supplies the flag without
+mutating the parent process environment. The child receives piped marker input
+and end-of-file, then calls the non-test `EngineConnector::exec_async` path
+with the existing mocked daemon and captured input. Enabled forwarding must
+deliver the marker before the handshake completes; disabled forwarding must
+complete without waiting for it. Bound the child from the parent and fail if
+the selected case is ignored or runs zero tests. Keep this harness private to
+interactive-exec regressions, reusing its mock scaffolding and the existing
+`Env` boundary; do not add a production engine hook, public API, or runner.
+
 For screen readers: The following class diagram summarizes the stable exec
 Application Programming Interface (API) request and outcome types, the cached
 `ExecContext` embedding handle, and the internal test seam used to drive exec

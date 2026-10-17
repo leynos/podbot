@@ -9,7 +9,7 @@ use std::pin::Pin;
 
 use tokio::io::AsyncRead;
 
-#[cfg(not(test))]
+/// Fixed integration-test override read only through the injected environment.
 const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
 
 /// Returns `false` in test builds; stdin forwarding is always treated as
@@ -25,7 +25,17 @@ pub(super) const fn stdin_forwarding_disabled_for_tests() -> bool {
 /// suppress real stdin forwarding without a rebuild.
 #[cfg(not(test))]
 pub(super) fn stdin_forwarding_disabled_for_tests() -> bool {
-    std::env::var(DISABLE_STDIN_FORWARDING_ENV).is_ok_and(|value| value == "1")
+    stdin_forwarding_disabled_with_env(&mockable::DefaultEnv::new())
+}
+
+/// Query the existing environment reader without broadening the override syntax.
+///
+/// For example, a reader returning `Ok(String::from("1"))` disables forwarding;
+/// missing or non-Unicode values leave it enabled. Only the host-stdio boundary
+/// and its deterministic regressions use this uncached query.
+fn stdin_forwarding_disabled_with_env<E: mockable::Env>(env: &E) -> bool {
+    env.raw(DISABLE_STDIN_FORWARDING_ENV)
+        .is_ok_and(|value| value == "1")
 }
 
 /// Returns a deterministic empty stdin reader for unit tests.
@@ -52,6 +62,11 @@ pub(super) fn default_host_stdin() -> Pin<Box<dyn AsyncRead + Send>> {
 mod tests {
     //! Unit tests for host IO stdin-forwarding overrides.
 
+    use std::env::VarError;
+    use std::ffi::OsString;
+
+    use mockable::MockEnv;
+    use rstest::rstest;
     use tokio::io::AsyncReadExt;
 
     use super::*;
@@ -67,5 +82,68 @@ mod tests {
 
         assert_eq!(bytes_read, 0, "test stdin should be empty");
         assert!(bytes.is_empty(), "test stdin should not yield any bytes");
+    }
+
+    #[rstest]
+    #[case::exact_one(Ok(String::from("1")), true)]
+    #[case::absent(Err(VarError::NotPresent), false)]
+    #[case::empty(Ok(String::new()), false)]
+    #[case::zero(Ok(String::from("0")), false)]
+    #[case::boolean_word(Ok(String::from("true")), false)]
+    #[case::leading_zero(Ok(String::from("01")), false)]
+    #[case::leading_space(Ok(String::from(" 1")), false)]
+    #[case::trailing_space(Ok(String::from("1 ")), false)]
+    #[case::non_ascii_one(Ok(String::from("１")), false)]
+    #[case::native_error(
+        Err(VarError::NotUnicode(OsString::from("opaque native payload"))),
+        false
+    )]
+    fn only_exact_one_disables_forwarding(
+        #[case] value: Result<String, VarError>,
+        #[case] expected: bool,
+    ) {
+        let mut env = MockEnv::new();
+        env.expect_raw()
+            .withf(|key| key == "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS")
+            .times(1)
+            .return_once(move |_| value);
+
+        let disabled = stdin_forwarding_disabled_with_env(&env);
+
+        assert_eq!(
+            disabled, expected,
+            "only the exact Unicode value 1 disables stdin"
+        );
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn non_unicode_native_values_leave_forwarding_enabled() {
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStringExt;
+        #[cfg(windows)]
+        use std::os::windows::ffi::OsStringExt;
+
+        #[cfg(unix)]
+        let native_value = OsString::from_vec(vec![0xff]);
+        #[cfg(windows)]
+        let native_value = OsString::from_wide(&[0xd800]);
+
+        assert!(
+            native_value.to_str().is_none(),
+            "fixture must retain non-Unicode native data"
+        );
+        let mut env = MockEnv::new();
+        env.expect_raw()
+            .withf(|key| key == "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS")
+            .times(1)
+            .return_once(move |_| Err(VarError::NotUnicode(native_value)));
+
+        let disabled = stdin_forwarding_disabled_with_env(&env);
+
+        assert!(
+            !disabled,
+            "a native decoding error must preserve the default forwarding path"
+        );
     }
 }
