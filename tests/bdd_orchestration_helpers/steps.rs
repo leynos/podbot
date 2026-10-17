@@ -128,42 +128,21 @@ fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> 
 }
 
 #[when("stop orchestration is invoked with container {container}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
 #[cfg(feature = "experimental")]
-fn when_stop_invoked(
-    orchestration_state: &OrchestrationState,
-    container: String,
-) -> StepResult<()> {
+fn when_stop_invoked(orchestration_state: &OrchestrationState, container: String) {
     invoke_orchestration(orchestration_state, || stop_container(&container));
-    Ok(())
 }
 
 #[when("list containers orchestration is invoked")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
 #[cfg(feature = "experimental")]
-fn when_list_containers_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
+fn when_list_containers_invoked(orchestration_state: &OrchestrationState) {
     invoke_orchestration(orchestration_state, list_containers);
-    Ok(())
 }
 
 #[when("token daemon orchestration is invoked with container {container}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
 #[cfg(feature = "experimental")]
-fn when_token_daemon_invoked(
-    orchestration_state: &OrchestrationState,
-    container: String,
-) -> StepResult<()> {
+fn when_token_daemon_invoked(orchestration_state: &OrchestrationState, container: String) {
     invoke_orchestration(orchestration_state, || run_token_daemon(&container));
-    Ok(())
 }
 
 /// Expects a single start-exec call appropriate to `mode`.

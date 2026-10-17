@@ -114,73 +114,38 @@ fn open_temp_dir() -> StepResult<(tempfile::TempDir, Dir, Utf8PathBuf)> {
 }
 
 #[given("a mock GitHub API that rejects credentials with HTTP 401")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_rejects_401(
-    github_credential_errors_state: &GitHubCredentialErrorsState,
-) -> StepResult<()> {
+fn mock_api_rejects_401(github_credential_errors_state: &GitHubCredentialErrorsState) {
     github_credential_errors_state
         .mock_response
         .set(MockHttpResponse::Unauthorized401);
-    Ok(())
 }
 
 #[given("a mock GitHub API that returns HTTP 403")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_returns_403(
-    github_credential_errors_state: &GitHubCredentialErrorsState,
-) -> StepResult<()> {
+fn mock_api_returns_403(github_credential_errors_state: &GitHubCredentialErrorsState) {
     github_credential_errors_state
         .mock_response
         .set(MockHttpResponse::Forbidden403);
-    Ok(())
 }
 
 #[given("a mock GitHub API that returns HTTP 403 for rate limiting")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_rate_limits_403(
-    github_credential_errors_state: &GitHubCredentialErrorsState,
-) -> StepResult<()> {
+fn mock_api_rate_limits_403(github_credential_errors_state: &GitHubCredentialErrorsState) {
     github_credential_errors_state
         .mock_response
         .set(MockHttpResponse::RateLimited403);
-    Ok(())
 }
 
 #[given("a mock GitHub API that returns HTTP 404")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_returns_404(
-    github_credential_errors_state: &GitHubCredentialErrorsState,
-) -> StepResult<()> {
+fn mock_api_returns_404(github_credential_errors_state: &GitHubCredentialErrorsState) {
     github_credential_errors_state
         .mock_response
         .set(MockHttpResponse::NotFound404);
-    Ok(())
 }
 
 #[given("a mock GitHub API that returns HTTP 503")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_returns_503(
-    github_credential_errors_state: &GitHubCredentialErrorsState,
-) -> StepResult<()> {
+fn mock_api_returns_503(github_credential_errors_state: &GitHubCredentialErrorsState) {
     github_credential_errors_state
         .mock_response
         .set(MockHttpResponse::ServerError503);
-    Ok(())
 }
 
 #[given("a valid RSA private key file exists at the configured path")]
@@ -199,16 +164,8 @@ fn valid_rsa_key_file(
 }
 
 #[given("the GitHub App ID is {app_id}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn set_app_id(
-    github_credential_errors_state: &GitHubCredentialErrorsState,
-    app_id: u64,
-) -> StepResult<()> {
+fn set_app_id(github_credential_errors_state: &GitHubCredentialErrorsState, app_id: u64) {
     github_credential_errors_state.app_id.set(app_id);
-    Ok(())
 }
 
 #[when("credentials are validated")]

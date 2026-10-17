@@ -80,11 +80,7 @@ fn given_failing_mock_client(library_boundary_state: &LibraryBoundaryState) {
 }
 
 #[when("the library configuration loader is called")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn when_config_loader_called(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
+fn when_config_loader_called(library_boundary_state: &LibraryBoundaryState) {
     let socket = library_boundary_state.engine_socket_override.get();
 
     let mut mock_env = MockEnv::new();
@@ -110,7 +106,6 @@ fn when_config_loader_called(library_boundary_state: &LibraryBoundaryState) -> S
             .config_result
             .set(ConfigResult::Err(Arc::new(e))),
     }
-    Ok(())
 }
 
 #[when("the library exec function is called")]

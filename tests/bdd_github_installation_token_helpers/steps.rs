@@ -135,63 +135,36 @@ fn set_mock_response(
 }
 
 #[given("a mock GitHub installation token API that returns a scoped token")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_returns_token(
-    github_installation_token_state: &GitHubInstallationTokenState,
-) -> StepResult<()> {
+fn mock_api_returns_token(github_installation_token_state: &GitHubInstallationTokenState) {
     set_mock_response(github_installation_token_state, MockTokenResponse::Success);
-    Ok(())
 }
 
 #[given("a mock GitHub installation token API that rejects the installation")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn mock_api_rejects_installation(
-    github_installation_token_state: &GitHubInstallationTokenState,
-) -> StepResult<()> {
+fn mock_api_rejects_installation(github_installation_token_state: &GitHubInstallationTokenState) {
     set_mock_response(
         github_installation_token_state,
         MockTokenResponse::RejectedInstallation,
     );
-    Ok(())
 }
 
 #[given("the GitHub App installation ID is {installation_id}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
 fn set_installation_id(
     github_installation_token_state: &GitHubInstallationTokenState,
     installation_id: u64,
-) -> StepResult<()> {
+) {
     github_installation_token_state
         .installation_id
         .set(installation_id);
     github_installation_token_state
         .acquired_at
         .set(SystemTime::UNIX_EPOCH + Duration::from_secs(1_000));
-    Ok(())
 }
 
 #[given("the token expiry buffer is {seconds} seconds")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult"
-)]
-fn set_expiry_buffer(
-    github_installation_token_state: &GitHubInstallationTokenState,
-    seconds: u64,
-) -> StepResult<()> {
+fn set_expiry_buffer(github_installation_token_state: &GitHubInstallationTokenState, seconds: u64) {
     github_installation_token_state
         .expiry_buffer
         .set(Duration::from_secs(seconds));
-    Ok(())
 }
 
 #[when("an installation token is acquired")]

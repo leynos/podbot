@@ -22,15 +22,8 @@ pub fn hosting_config_state() -> HostingConfigState {
 }
 
 #[given("the default application configuration")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions return StepResult for consistency"
-)]
-fn the_default_application_configuration(
-    hosting_config_state: &HostingConfigState,
-) -> StepResult<()> {
+fn the_default_application_configuration(hosting_config_state: &HostingConfigState) {
     hosting_config_state.config.set(AppConfig::default());
-    Ok(())
 }
 
 #[derive(Default)]

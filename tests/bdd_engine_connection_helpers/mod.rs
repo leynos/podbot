@@ -16,23 +16,6 @@ use rstest::fixture;
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{ScenarioState, given, then, when};
 
-// Re-export step definitions so they are visible to rstest-bdd macros.
-#[expect(
-    unused_imports,
-    reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
-)]
-pub use health_check_steps::*;
-#[expect(
-    unused_imports,
-    reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
-)]
-pub use permission_error_steps::*;
-#[expect(
-    unused_imports,
-    reason = "rstest-bdd discovers step functions via attributes, not runtime usage"
-)]
-pub use tcp_connection_steps::*;
-
 /// Step result type for BDD tests.
 pub type StepResult<T> = Result<T, String>;
 
@@ -130,26 +113,13 @@ fn create_mock_env(state: &EngineConnectionState) -> StepResult<MockEnv> {
 // =============================================================================
 
 #[given("no engine socket is configured")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-fn no_engine_socket_configured(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+fn no_engine_socket_configured(engine_connection_state: &EngineConnectionState) {
     engine_connection_state.config_socket.set(None);
-    Ok(())
 }
 
 #[given("engine socket is configured as {socket}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-fn engine_socket_configured_as(
-    engine_connection_state: &EngineConnectionState,
-    socket: String,
-) -> StepResult<()> {
+fn engine_socket_configured_as(engine_connection_state: &EngineConnectionState, socket: String) {
     engine_connection_state.config_socket.set(Some(socket));
-    Ok(())
 }
 
 #[given("DOCKER_HOST is set to {value}")]
@@ -168,17 +138,10 @@ fn docker_host_is_empty(engine_connection_state: &EngineConnectionState) -> Step
 }
 
 #[given("DOCKER_HOST is not set")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-#[expect(
-    unused_variables,
-    reason = "rstest-bdd requires parameter to match fixture name"
-)]
-fn docker_host_is_not_set(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+fn docker_host_is_not_set(
+    #[from(engine_connection_state)] _engine_connection_state: &EngineConnectionState,
+) {
     // No-op: variables not in the map are treated as unset
-    Ok(())
 }
 
 #[given("CONTAINER_HOST is set to {value}")]
@@ -191,17 +154,10 @@ fn container_host_is_set_to(
 }
 
 #[given("CONTAINER_HOST is not set")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-#[expect(
-    unused_variables,
-    reason = "rstest-bdd requires parameter to match fixture name"
-)]
-fn container_host_is_not_set(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+fn container_host_is_not_set(
+    #[from(engine_connection_state)] _engine_connection_state: &EngineConnectionState,
+) {
     // No-op: variables not in the map are treated as unset
-    Ok(())
 }
 
 #[given("PODMAN_HOST is set to {value}")]
@@ -214,17 +170,10 @@ fn podman_host_is_set_to(
 }
 
 #[given("PODMAN_HOST is not set")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd step functions must return StepResult for consistency"
-)]
-#[expect(
-    unused_variables,
-    reason = "rstest-bdd requires parameter to match fixture name"
-)]
-fn podman_host_is_not_set(engine_connection_state: &EngineConnectionState) -> StepResult<()> {
+fn podman_host_is_not_set(
+    #[from(engine_connection_state)] _engine_connection_state: &EngineConnectionState,
+) {
     // No-op: variables not in the map are treated as unset
-    Ok(())
 }
 
 #[when("the socket is resolved")]

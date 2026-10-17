@@ -11,12 +11,6 @@ mod bdd_repository_cloning_e2e_helpers;
 pub use bdd_repository_cloning_e2e_helpers::{
     RepositoryCloningE2eState, repository_cloning_e2e_state,
 };
-#[expect(
-    unused_imports,
-    reason = "scenario macro discovers step functions via inventory, but the modules \
-              must be reachable from the test crate"
-)]
-use bdd_repository_cloning_e2e_helpers::{assertions, steps};
 use rstest_bdd_macros::scenario;
 
 #[scenario(
