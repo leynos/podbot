@@ -86,6 +86,8 @@ pub fn run_agent(config: &AppConfig, request: &RunRequest) -> PodbotResult<Comma
     Ok(CommandOutcome::Success)
 }
 
+/// Reject malformed repository and branch inputs for a run request.
+/// For example, `owner/name/extra` returns a `run.repository` error.
 #[cfg(feature = "experimental")]
 fn validate_run_request_for_agent(request: &RunRequest) -> PodbotResult<()> {
     if !is_owner_repository_name(request.repository()) {
@@ -114,6 +116,8 @@ fn validate_run_request_for_agent(request: &RunRequest) -> PodbotResult<()> {
     Ok(())
 }
 
+/// Correlate rejected branch whitespace with the originating run request.
+/// With a debug-enabled subscriber, a spaced branch emits request-labelled diagnostics.
 #[cfg(feature = "experimental")]
 fn debug_run_request_branch_validation_failed(request: &RunRequest) {
     tracing::debug!(
@@ -124,6 +128,7 @@ fn debug_run_request_branch_validation_failed(request: &RunRequest) {
     );
 }
 
+/// Require exactly two non-blank segments; `owner/name/extra` is rejected.
 #[cfg(feature = "experimental")]
 fn is_owner_repository_name(repository: &str) -> bool {
     let mut parts = repository.split('/');
@@ -134,11 +139,14 @@ fn is_owner_repository_name(repository: &str) -> bool {
     )
 }
 
+/// Reject empty or whitespace-bearing segments, such as `my owner`.
 #[cfg(feature = "experimental")]
 fn is_repository_segment(segment: &str) -> bool {
     !segment.is_empty() && !segment.chars().any(char::is_whitespace)
 }
 
+/// Require complete `GitHub` settings only when the caller supplies any settings.
+/// For example, setting only `app_id` returns an error for the missing settings.
 #[cfg(feature = "experimental")]
 fn validate_github_config_for_run(config: &AppConfig, request: &RunRequest) -> PodbotResult<()> {
     if config.github.is_partially_configured() {
@@ -150,6 +158,8 @@ fn validate_github_config_for_run(config: &AppConfig, request: &RunRequest) -> P
     Ok(())
 }
 
+/// Authenticate a supplied App/key pair; absent credentials skip this check.
+/// For example, no App/key pair returns `Ok(())` without credential authentication.
 #[cfg(feature = "experimental")]
 fn validate_configured_github_credentials(
     config: &AppConfig,
@@ -167,6 +177,8 @@ fn validate_configured_github_credentials(
     Ok(())
 }
 
+/// Correlate a required `GitHub` configuration check with its run request.
+/// With a debug-enabled subscriber, checking settings emits repository and branch fields.
 #[cfg(feature = "experimental")]
 fn debug_github_config_validation_performed(request: &RunRequest) {
     tracing::debug!(
@@ -177,6 +189,8 @@ fn debug_github_config_validation_performed(request: &RunRequest) {
     );
 }
 
+/// Record that absent `GitHub` settings bypass configuration validation.
+/// With a debug-enabled subscriber, absent settings emit a validation-skipped event.
 #[cfg(feature = "experimental")]
 fn debug_github_config_validation_skipped(request: &RunRequest) {
     tracing::debug!(
@@ -187,6 +201,8 @@ fn debug_github_config_validation_skipped(request: &RunRequest) {
     );
 }
 
+/// Correlate credential validation with its request and public App identifier.
+/// With a debug-enabled subscriber, validating App 42 emits `app_id = 42` and request fields.
 #[cfg(feature = "experimental")]
 fn debug_github_credential_validation_performed(request: &RunRequest, app_id: u64) {
     tracing::debug!(
@@ -198,6 +214,8 @@ fn debug_github_credential_validation_performed(request: &RunRequest, app_id: u6
     );
 }
 
+/// Record that an absent App/key pair bypasses credential validation.
+/// With a debug-enabled subscriber, no App/key pair emits a credential-check-skipped event.
 #[cfg(feature = "experimental")]
 fn debug_github_credential_validation_skipped(request: &RunRequest) {
     tracing::debug!(
@@ -250,6 +268,8 @@ pub fn run_token_daemon(_container_id: &str) -> PodbotResult<CommandOutcome> {
     Ok(CommandOutcome::Success)
 }
 
+/// Create an isolated runtime and map construction failures into domain errors.
+/// For example, failed runtime setup returns `RuntimeCreationFailed`.
 fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
     tokio::runtime::Runtime::new().map_err(|error| {
         crate::error::PodbotError::from(crate::error::ContainerError::RuntimeCreationFailed {
@@ -258,6 +278,8 @@ fn create_runtime() -> PodbotResult<tokio::runtime::Runtime> {
     })
 }
 
+/// Keep credential authentication off the caller runtime via a scoped thread.
+/// For example, authentication failure returns its error from the scoped thread.
 #[cfg(feature = "experimental")]
 fn validate_agent_github_credentials(
     app_id: u64,
@@ -319,6 +341,8 @@ where
     })
 }
 
+/// Drive credential authentication on the helper thread's independent runtime.
+/// For example, credential validation failure returns its error after blocking.
 #[cfg(feature = "experimental")]
 fn validate_agent_github_credentials_on_local_runtime(
     app_id: u64,
@@ -348,6 +372,8 @@ where
         .map_err(crate::error::PodbotError::from)
 }
 
+/// Convert a helper-thread panic into a recoverable authentication failure.
+/// For example, a failed thread join uses this `AuthenticationFailed` error.
 #[cfg(feature = "experimental")]
 fn credential_validation_thread_panicked() -> crate::error::PodbotError {
     crate::error::PodbotError::from(crate::error::GitHubError::AuthenticationFailed {

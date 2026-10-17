@@ -214,6 +214,8 @@ impl AppConfig {
     }
 }
 
+/// Reject empty defaults layers rather than silently accepting missing defaults.
+/// For example, a defaults layer containing an empty object returns `Validation`.
 fn ensure_defaults_layer_is_not_empty(layer: &MergeLayer<'_>) -> ortho_config::OrthoResult<()> {
     let defaults_value = layer.clone().into_value();
     let is_empty_object = matches!(
@@ -232,6 +234,8 @@ fn ensure_defaults_layer_is_not_empty(layer: &MergeLayer<'_>) -> ortho_config::O
     Ok(())
 }
 
+/// Require caller defaults to match application defaults before merging layers.
+/// For example, altered caller defaults return `Validation` instead of overriding defaults.
 fn ensure_defaults_layer_matches_expected(
     layer: &MergeLayer<'_>,
     expected_defaults_value: &ortho_config::serde_json::Value,
@@ -259,6 +263,8 @@ where
     AppConfig::merge_from_layers(layers)
 }
 
+/// Supply owned serialized defaults so missing fields retain application defaults.
+/// For example, this layer serializes `AppConfig::default()` into owned JSON.
 fn serialized_defaults_layer() -> ortho_config::OrthoResult<MergeLayer<'static>> {
     let value = ortho_config::serde_json::to_value(AppConfig::default()).map_err(|error| {
         Arc::new(ortho_config::OrthoError::Validation {

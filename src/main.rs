@@ -92,6 +92,8 @@ fn run_agent_cli(
     Ok(result)
 }
 
+/// Show the selected run settings to the operator before request validation.
+/// For example, a supplied image prints `Using image:` followed by its value.
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn print_run_agent_start(config: &AppConfig, request: &podbot::api::RunRequest) {
     println!(
@@ -109,11 +111,15 @@ fn print_run_agent_start(config: &AppConfig, request: &podbot::api::RunRequest) 
     }
 }
 
+/// Tell the operator that successful validation has not implemented orchestration.
+/// For example, validation success prints `Container orchestration not yet implemented.`
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn print_run_agent_placeholder() {
     println!("Container orchestration not yet implemented.");
 }
 
+/// Measure the API result with an injected clock; failed validation is recorded too.
+/// For example, failed validation increments the failure counter and returns its error.
 fn run_agent_api_with_observability(
     config: &AppConfig,
     request: &podbot::api::RunRequest,
@@ -134,6 +140,8 @@ fn run_agent_api_with_observability(
     Ok(outcome)
 }
 
+/// Correlate the start of run validation with its repository and branch.
+/// With a debug-enabled subscriber, a request emits repository and branch validation fields.
 fn debug_run_agent_validation_started(request: &podbot::api::RunRequest) {
     tracing::debug!(
         operation = "run_agent",
@@ -143,6 +151,8 @@ fn debug_run_agent_validation_started(request: &podbot::api::RunRequest) {
     );
 }
 
+/// Attach request context to a validation failure without changing its domain error.
+/// With a warning-enabled subscriber, an invalid branch emits its validation error.
 fn warn_run_agent_failed(request: &podbot::api::RunRequest, error: &podbot::error::PodbotError) {
     tracing::warn!(
         operation = "run_agent",
@@ -153,6 +163,8 @@ fn warn_run_agent_failed(request: &podbot::api::RunRequest, error: &podbot::erro
     );
 }
 
+/// Record successful API completion without implying an agent was started.
+/// With a debug-enabled subscriber, validation success emits `outcome = "success"`.
 fn debug_run_agent_completed(request: &podbot::api::RunRequest) {
     tracing::debug!(
         operation = "run_agent",
@@ -163,6 +175,8 @@ fn debug_run_agent_completed(request: &podbot::api::RunRequest) {
     );
 }
 
+/// Count run API outcomes, including validation and feature-gate failures.
+/// Record elapsed seconds; any `Err` uses failure labels. Pre-API request errors are excluded.
 fn record_run_agent_metrics(result: &PodbotResult<CommandOutcome>, elapsed: std::time::Duration) {
     let status = if result.is_ok() { "success" } else { "failure" };
     metrics::counter!(
@@ -267,6 +281,8 @@ fn experimental_only(command: &str) -> PodbotResult<CommandOutcome> {
     .into())
 }
 
+/// Delegate run-request validation to the experimental library API.
+/// For example, an `owner/name` request with default settings returns `Success`.
 #[cfg(feature = "experimental")]
 fn run_agent_api(
     config: &AppConfig,
@@ -275,6 +291,8 @@ fn run_agent_api(
     podbot::api::run_agent(config, request)
 }
 
+/// Reject run requests when experimental APIs are unavailable.
+/// For example, a run request returns an `InvalidValue` feature-gate error.
 #[cfg(not(feature = "experimental"))]
 fn run_agent_api(
     _config: &AppConfig,
@@ -283,31 +301,43 @@ fn run_agent_api(
     experimental_only("run")
 }
 
+/// Delegate token-daemon requests to the experimental library API.
+/// For example, container `sandbox` currently returns `Success` without refreshing tokens.
 #[cfg(feature = "experimental")]
 fn run_token_daemon_api(container_id: &str) -> PodbotResult<CommandOutcome> {
     podbot::api::run_token_daemon(container_id)
 }
 
+/// Reject token-daemon requests when experimental APIs are unavailable.
+/// For example, container `sandbox` returns an `InvalidValue` feature-gate error.
 #[cfg(not(feature = "experimental"))]
 fn run_token_daemon_api(_container_id: &str) -> PodbotResult<CommandOutcome> {
     experimental_only("token-daemon")
 }
 
+/// Delegate container-list requests to the experimental library API.
+/// For example, this placeholder returns `Success` without listing containers.
 #[cfg(feature = "experimental")]
 fn list_containers_api() -> PodbotResult<CommandOutcome> {
     podbot::api::list_containers()
 }
 
+/// Reject container-list requests when experimental APIs are unavailable.
+/// For example, a `ps` request returns an `InvalidValue` feature-gate error.
 #[cfg(not(feature = "experimental"))]
 fn list_containers_api() -> PodbotResult<CommandOutcome> {
     experimental_only("ps")
 }
 
+/// Delegate container-stop requests to the experimental library API.
+/// For example, container `sandbox` currently returns `Success` without stopping it.
 #[cfg(feature = "experimental")]
 fn stop_container_api(container: &str) -> PodbotResult<CommandOutcome> {
     podbot::api::stop_container(container)
 }
 
+/// Reject container-stop requests when experimental APIs are unavailable.
+/// For example, container `sandbox` returns an `InvalidValue` feature-gate error.
 #[cfg(not(feature = "experimental"))]
 fn stop_container_api(_container: &str) -> PodbotResult<CommandOutcome> {
     experimental_only("stop")

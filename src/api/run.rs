@@ -20,7 +20,9 @@ use crate::error::{ConfigError, Result as PodbotResult};
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunRequest {
+    /// Non-blank repository input whose owner/name shape is checked before running.
     repository: String,
+    /// Non-blank branch input whose whitespace is checked before running.
     branch: String,
 }
 
@@ -57,6 +59,7 @@ impl RunRequest {
     }
 }
 
+/// Reject blank required run inputs; whitespace-only branch values fail.
 fn validate_non_empty(field: &str, value: &str) -> PodbotResult<()> {
     if value.trim().is_empty() {
         tracing::debug!(
