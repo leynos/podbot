@@ -394,6 +394,23 @@ terminal framing.
   `with_protocol_stdin_forwarding_disabled(bool)`. Lives in
   `src/engine/connection/exec/session.rs`.
 
+The private `host_io::stdin_forwarding_disabled_with_env` query reads
+`PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS` through the existing
+`mockable::Env` dependency. The zero-argument production wrapper supplies
+`DefaultEnv`; only the exact ASCII value `1` disables forwarding. An absent
+key, a non-Unicode value, or any other value keeps forwarding enabled. The
+query runs at each existing decision point: attached-reader selection,
+protocol-reader selection, and protocol settle-timeout handling. Keep these
+reads per-call rather than caching the result. Unit-test builds retain the
+constant-false wrapper and empty default reader.
+
+This environment seam belongs only at the host-stdio boundary. Reuse the
+existing `Env` dependency there; do not introduce a generic engine-wide
+environment adapter or add callers without review. Lossless native `OsString`
+adapters remain a separate
+[Concordat #157](https://github.com/leynos/concordat/issues/157) concern; this
+seam does not waive that requirement.
+
 For screen readers: The following class diagram summarizes the stable exec
 Application Programming Interface (API) request and outcome types, the cached
 `ExecContext` embedding handle, and the internal test seam used to drive exec
