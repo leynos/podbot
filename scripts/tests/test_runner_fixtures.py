@@ -1,4 +1,4 @@
-"""Reusable Cargo metadata and artifact documents for runner tests."""
+"""Reusable Cargo metadata and artefact documents for runner tests."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ class FakeCargoConfiguration:
     metadata: dict[str, typ.Any] | None = None
 
 
-def cargo_artifact_message(
+def cargo_artefact_message(
     package_id: str,
     name: str,
     executable: pathlib.Path,
@@ -52,7 +52,7 @@ def cargo_artifact_message(
 
 
 def executable_file(path: pathlib.Path) -> pathlib.Path:
-    """Create an executable placeholder for artifact-selection tests."""
+    """Create an executable placeholder for artefact-selection tests."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     path.chmod(0o755)

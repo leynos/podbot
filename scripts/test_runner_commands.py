@@ -1,7 +1,7 @@
 """Build Cargo phase arguments and explain phases stopped by fail-fast.
 
-The runner uses these helpers to prepare artifact and ordinary test invocations.
-For example, it removes an inherited output mode before forcing JSON artifacts:
+The runner uses these helpers to prepare artefact and ordinary test invocations.
+For example, it removes an inherited output mode before forcing JSON artefacts:
 
 >>> without_message_format(("test", "--message-format", "human"))
 ('test',)
@@ -16,7 +16,7 @@ from test_runner_options import attached_package_value
 
 
 def without_message_format(arguments: tuple[str, ...]) -> tuple[str, ...]:
-    """Remove an output mode so an artifact build can force JSON messages."""
+    """Remove an output mode so an artefact build can force JSON messages."""
     result: list[str] = []
     index = 0
     while index < len(arguments):

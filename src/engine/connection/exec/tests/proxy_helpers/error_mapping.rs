@@ -35,7 +35,7 @@ fn protocol_proxy_maps_stdout_failures(
     #[case] failure_mode: WriterFailureMode,
     #[case] expected_fragment: &str,
 ) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     let output = make_output_stream(vec![Ok(LogOutput::StdOut {
         message: Vec::from(&b"broken"[..]).into(),
     })]);
@@ -61,7 +61,7 @@ fn protocol_proxy_maps_stderr_failures(
     #[case] failure_mode: WriterFailureMode,
     #[case] expected_fragment: &str,
 ) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     let output = make_output_stream(vec![Ok(LogOutput::StdErr {
         message: Vec::from(&b"broken"[..]).into(),
     })]);
@@ -81,7 +81,7 @@ fn protocol_proxy_maps_stderr_failures(
 
 #[rstest]
 fn protocol_proxy_maps_container_input_flush_failure(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     let output = make_output_stream(vec![Ok(LogOutput::StdOut {
         message: Vec::from(&b"out"[..]).into(),
     })]);
@@ -101,7 +101,7 @@ fn protocol_proxy_maps_container_input_flush_failure(runtime: RuntimeFixture) {
 
 #[rstest]
 fn protocol_proxy_maps_daemon_stream_errors(runtime: RuntimeFixture) {
-    let runtime_handle = runtime.expect("the runtime fixture initialises");
+    let runtime_handle = runtime.expect("the runtime fixture initializes");
     let output = make_output_stream(vec![Err(BollardError::RequestTimeoutError)]);
 
     let result = run_session(

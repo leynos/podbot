@@ -146,7 +146,7 @@ def reads_cache_statistics(command: str) -> bool:
         pytest.param("echo sccache is on", False, id="mention-only"),
     ],
 )
-def test_the_stray_reader_rule_recognises_statistics_commands(
+def test_the_stray_reader_rule_recognizes_statistics_commands(
     command: str, *, reads: bool
 ) -> None:
     """Hold the rule behind the stray-reader contract against spacing tricks.

@@ -15,7 +15,7 @@ def test_json_build_hides_messages_and_keeps_rendered_diagnostics(
     capsys: pytest.CaptureFixture[str], tmp_path: pathlib.Path
 ) -> None:
     """Cargo messages stay structured while human output remains readable."""
-    artifact = {
+    artefact = {
         "reason": "compiler-artifact",
         "package_id": "podbot 0.1.0",
         "target": {"name": "compile_contract"},
@@ -25,7 +25,7 @@ def test_json_build_hides_messages_and_keeps_rendered_diagnostics(
         "message": {"rendered": "warning: fixture warning\n"},
     }
     lines = [
-        json.dumps(artifact) + "\n",
+        json.dumps(artefact) + "\n",
         json.dumps(diagnostic) + "\n",
         "cargo wrapper notice\n",
     ]
@@ -51,7 +51,7 @@ def test_json_build_hides_messages_and_keeps_rendered_diagnostics(
 
     captured = capsys.readouterr()
     assert status == 7, "the nested Cargo exit status must be preserved"
-    assert messages == [artifact, diagnostic], (
+    assert messages == [artefact, diagnostic], (
         "Cargo JSON must remain available to the runner"
     )
     assert captured.out == "cargo wrapper notice\n", (

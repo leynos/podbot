@@ -78,7 +78,7 @@ class _Parser:
     """
 
     def __init__(self, expression: str, status: str) -> None:
-        """Tokenise `expression` and remember the status the context reads.
+        """Tokenize `expression` and remember the status the context reads.
 
         Parameters
         ----------
@@ -127,7 +127,7 @@ class _Parser:
         return self.status
 
     def group(self) -> str | bool:
-        """Read a parenthesised expression after its opening bracket."""
+        """Read a parenthesized expression after its opening bracket."""
         inner = self.disjunction()
         if self.take() != ("op", ")"):
             self.fail("unbalanced parenthesis")

@@ -42,7 +42,7 @@ trees: st.SearchStrategy[Tree] = st.recursive(
 
 
 def render(tree: Tree) -> str:
-    """Render a tree as fully parenthesised `if:` text.
+    """Render a tree as fully parenthesized `if:` text.
 
     Parameters
     ----------
