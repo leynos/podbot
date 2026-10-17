@@ -189,7 +189,12 @@ terminal-state precedence, and process cleanup. The Rust suite retains the
 compile-contract tests that exercise the nested-Cargo boundary.
 
 Implementation is grouped by responsibility under `scripts/test_runner*.py`.
-The process supervisor and its platform helpers own subprocess lifecycle; the
-planning and selection modules are value-oriented; the workflow contract tests
-enforce the Make and CI entry points. Update this document when those
-boundaries or their externally observable contracts change.
+The private `test_runner_cargo_messages.py` module decodes Cargo JSON lines;
+`test_runner_cargo.py` re-exports that parser and retains executable selection
+and runtime-environment restoration. The process supervisor and its platform
+helpers own subprocess lifecycle, while planning and selection modules remain
+value-oriented. Within the workflow contract suite, `concurrency_rules.py` owns
+workflow discovery and concurrency queries, and `concurrency_test.py` executes
+discovery and retains the assertions. The workflow contract tests enforce the
+Make and CI entry points. Update this document when those boundaries or their
+externally observable contracts change.

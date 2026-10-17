@@ -21,6 +21,9 @@ import typing as typ
 from test_runner_models import CargoTestOptions, RunnerError, Target
 from test_runner_context import TestRunnerContext
 from test_runner_supervisor import CommandRequest
+from test_runner_cargo_messages import (
+    parse_cargo_json_message as parse_cargo_json_message,
+)
 
 
 def load_cargo_metadata(
@@ -104,23 +107,6 @@ class RunnerCommandFailure(RunnerError):
         self.status = status
         self.diagnostic = diagnostic
         self.summary = summary
-
-
-def parse_cargo_json_message(line: str) -> dict[str, typ.Any] | None:
-    """Decode one Cargo JSON message, returning None for ordinary tool output.
-
-    Examples
-    --------
-    >>> parse_cargo_json_message('{"reason":"build-finished","success":true}')
-    {'reason': 'build-finished', 'success': True}
-    >>> parse_cargo_json_message('compiler says hello') is None
-    True
-    """
-    try:
-        value = json.loads(line)
-    except json.JSONDecodeError:
-        return None
-    return value if isinstance(value, dict) else None
 
 
 def select_test_executables(

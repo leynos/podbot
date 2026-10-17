@@ -50,6 +50,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/workflow_contracts.py scripts/workflow_commands.py \
 	scripts/workflow_condition.py scripts/workflow_coverage.py scripts/workflow_placement.py \
 	scripts/test_runner.py scripts/test_runner_cargo.py \
+	scripts/test_runner_cargo_messages.py \
 	scripts/test_runner_context.py \
 	scripts/test_runner_features.py scripts/test_runner_package_selection.py \
 	scripts/test_runner_nested.py scripts/test_runner_phases.py \
