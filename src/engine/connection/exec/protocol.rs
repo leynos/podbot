@@ -234,6 +234,9 @@ where
     }
 }
 
+/// Run the proxy without outbound enforcement, retaining optional init masking.
+/// For example, mask-only policy rewrites initialize while forwarding output
+/// verbatim.
 async fn run_session_without_runtime_enforcement<HostStdin, HostStdout, HostStderr>(
     request: &ExecRequest,
     mut output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
@@ -269,6 +272,8 @@ where
     stdin_result
 }
 
+/// Run policy framing with a single ordered container-stdin sink.
+/// For example, queued denial replies drain before the sink closes on success.
 async fn run_session_with_runtime_enforcement<HostStdin, HostStdout, HostStderr>(
     request: &ExecRequest,
     mut output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,

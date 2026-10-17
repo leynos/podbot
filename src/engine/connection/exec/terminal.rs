@@ -8,18 +8,30 @@ use bollard::exec::ResizeExecOptions;
 use super::{ContainerExecClient, ExecRequest, exec_failed};
 use crate::error::PodbotError;
 
+/// Host utility used to query terminal rows and columns when stdio is a
+/// terminal.
 const STTY_COMMAND: &str = "stty";
 
+/// Terminal dimensions passed to the daemon without swapping rows and columns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct TerminalSize {
+    /// Number of character columns expected by the daemon resize operation.
     pub(super) width: u16,
+    /// Number of character rows expected by the daemon resize operation.
     pub(super) height: u16,
 }
 
+/// Injectable source of terminal dimensions for attached-session resizing.
 pub(super) trait TerminalSizeProvider {
+    /// Return dimensions when available, or skip resizing when no size can be
+    /// read.
+    /// For example, a non-terminal input produces `None` in the system
+    /// provider.
     fn terminal_size(&self) -> Option<TerminalSize>;
 }
 
+/// Host terminal-size provider using `stty size` when stdin and stdout are
+/// terminals.
 pub(super) struct SystemTerminalSizeProvider;
 
 impl TerminalSizeProvider for SystemTerminalSizeProvider {
@@ -38,6 +50,9 @@ impl TerminalSizeProvider for SystemTerminalSizeProvider {
     }
 }
 
+/// Resize exec to the supplied terminal dimensions when a size is available.
+/// For example, `None` from the provider succeeds without contacting the
+/// daemon.
 pub(super) async fn resize_exec_to_current_terminal_async<
     C: ContainerExecClient,
     P: TerminalSizeProvider,
@@ -65,6 +80,8 @@ pub(super) async fn resize_exec_to_current_terminal_async<
     Ok(())
 }
 
+/// Parse `stty size` rows and columns into daemon width and height.
+/// For example, `"42 120\n"` yields width 120 and height 42.
 fn parse_stty_size(output: &str) -> Option<TerminalSize> {
     let mut parts = output.split_whitespace();
     let height = parts.next()?.parse::<u16>().ok()?;
@@ -72,10 +89,14 @@ fn parse_stty_size(output: &str) -> Option<TerminalSize> {
     Some(TerminalSize { width, height })
 }
 
+/// Require both local input and output to be terminals before querying `stty`.
+/// For example, redirected stdout yields `false` even with terminal input.
 fn local_stdio_is_terminal() -> bool {
     std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
 }
 
+/// Subscribe to Unix window changes only for requests that allocate a TTY.
+/// For example, a non-TTY request yields `Ok(None)` without a signal listener.
 #[cfg(unix)]
 pub(super) fn maybe_sigwinch_listener(
     request: &ExecRequest,
@@ -94,6 +115,9 @@ pub(super) fn maybe_sigwinch_listener(
         })
 }
 
+/// Await the next resize signal when a listener exists.
+/// For example, `None` completes immediately; callers disable that select
+/// branch.
 #[cfg(unix)]
 pub(super) async fn wait_for_sigwinch(signal: &mut Option<tokio::signal::unix::Signal>) {
     if let Some(listener) = signal.as_mut() {

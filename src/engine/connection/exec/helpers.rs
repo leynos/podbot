@@ -11,6 +11,8 @@ use tokio::task::JoinHandle;
 use super::{ExecRequest, exec_failed};
 use crate::error::{ConfigError, PodbotError};
 
+/// Translate an exec request into daemon create options without changing argv.
+/// For example, protocol mode attaches all streams while leaving TTY disabled.
 pub(super) fn build_create_exec_options(request: &ExecRequest) -> CreateExecOptions<String> {
     let attached = request.mode().is_attached();
     CreateExecOptions::<String> {
@@ -24,6 +26,8 @@ pub(super) fn build_create_exec_options(request: &ExecRequest) -> CreateExecOpti
     }
 }
 
+/// Choose attachment and output buffering for the requested exec mode.
+/// For example, protocol mode uses the bounded protocol output capacity.
 pub(super) const fn build_start_exec_options(request: &ExecRequest) -> StartExecOptions {
     let output_capacity = match request.mode() {
         super::ExecMode::Protocol => Some(super::PROTOCOL_OUTPUT_CAPACITY),
@@ -37,6 +41,9 @@ pub(super) const fn build_start_exec_options(request: &ExecRequest) -> StartExec
     }
 }
 
+/// Reject missing argv or a blank executable while preserving valid arguments.
+/// For example, `[String::from("git"), String::from("status")]` is returned
+/// unchanged.
 pub(super) fn validate_command(command: Vec<String>) -> Result<Vec<String>, PodbotError> {
     if command.is_empty() {
         return Err(PodbotError::from(ConfigError::MissingRequired {
@@ -55,6 +62,8 @@ pub(super) fn validate_command(command: Vec<String>) -> Result<Vec<String>, Podb
     Ok(command)
 }
 
+/// Trim a required value and identify its configuration field on failure.
+/// For example, `validate_required_field("container", " c ")` yields `Ok("c")`.
 pub(super) fn validate_required_field<'a>(
     field: &str,
     value: &'a str,
@@ -69,6 +78,9 @@ pub(super) fn validate_required_field<'a>(
     Ok(trimmed)
 }
 
+/// Attach container context to a daemon create-exec failure.
+/// For example, an error for `"c"` names that container and the create
+/// operation.
 pub(super) fn map_create_exec_error(
     container_id: &str,
     error: impl std::fmt::Display,
@@ -76,6 +88,9 @@ pub(super) fn map_create_exec_error(
     exec_failed(container_id, format!("create exec failed: {error}"))
 }
 
+/// Attach container context to a daemon start-exec failure.
+/// For example, an error for `"c"` names that container and the start
+/// operation.
 pub(super) fn map_start_exec_error(
     container_id: &str,
     error: impl std::fmt::Display,
@@ -83,6 +98,9 @@ pub(super) fn map_start_exec_error(
     exec_failed(container_id, format!("start exec failed: {error}"))
 }
 
+/// Give the forwarding future ownership of both stdin and the exec writer.
+/// For example, the returned task handle lets the session coordinator stop
+/// input.
 pub(super) fn spawn_stdin_forwarding_task<HostStdin, Forward, ForwardFuture>(
     host_stdin: HostStdin,
     input: Pin<Box<dyn AsyncWrite + Send>>,

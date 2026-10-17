@@ -68,6 +68,7 @@ pub(super) const fn protocol_session_options(
         .with_capability_policy(options.capability_policy)
 }
 
+/// Select whether ACP initialization masking and outbound denial are enabled.
 #[cfg_attr(
     not(test),
     expect(

@@ -9,6 +9,8 @@ use std::pin::Pin;
 
 use tokio::io::AsyncRead;
 
+/// Environment key whose value of `"1"` disables host stdin forwarding.
+/// Other or absent values leave forwarding enabled in non-test builds.
 #[cfg(not(test))]
 const DISABLE_STDIN_FORWARDING_ENV: &str = "PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS";
 

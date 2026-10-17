@@ -35,6 +35,7 @@ use self::terminal::{SystemTerminalSizeProvider, TerminalSizeProvider};
 use super::EngineConnector;
 use crate::error::PodbotError;
 
+/// Delay in milliseconds between daemon exec-inspect calls while still running.
 pub(super) const EXEC_INSPECT_POLL_INTERVAL_MS: u64 = 100;
 
 /// Maximum bytes per `LogOutput` chunk from the daemon for protocol-mode exec
@@ -123,6 +124,9 @@ pub enum ExecMode {
 }
 
 impl ExecMode {
+    /// Identify modes that require attached daemon streams.
+    /// For example, protocol mode yields `true` even though it never allocates
+    /// a TTY.
     #[must_use]
     const fn is_attached(self) -> bool {
         matches!(self, Self::Attached | Self::Protocol)
@@ -140,10 +144,19 @@ impl ExecMode {
 /// Parameters required to run a command in a running container.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecRequest {
+    /// Validated target container identifier used for daemon calls and error
+    /// context.
     container_id: String,
+    /// Validated argv, retaining argument order and caller-provided contents.
     command: Vec<String>,
+    /// Optional exec environment entries in the daemon-compatible `KEY=value`
+    /// form.
     env: Option<Vec<String>>,
+    /// Stream-attachment policy used when creating and starting the exec
+    /// session.
     mode: ExecMode,
+    /// Whether attached mode should allocate a pseudo-terminal; false for
+    /// protocol.
     tty: bool,
 }
 
@@ -223,7 +236,9 @@ impl ExecRequest {
 /// Outcome of a container command execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecResult {
+    /// Daemon-assigned identifier of the exec session that completed.
     exec_id: String,
+    /// Process exit status obtained after daemon inspect reports completion.
     exit_code: i64,
 }
 
@@ -320,6 +335,10 @@ impl EngineConnector {
         .await
     }
 
+    /// Create and start exec, dispatch its stream mode, then inspect its exit
+    /// status.
+    /// For example, a detached request waits for completion without proxying
+    /// streams.
     async fn exec_async_with_terminal_size_provider_and_options<
         C: ContainerExecClient,
         P: TerminalSizeProvider,
