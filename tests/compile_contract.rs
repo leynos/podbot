@@ -80,18 +80,22 @@ fn stable_api_without_cli_compiles() {
 /// A valid fixture registered as compile-fail must fail during trybuild's drop.
 #[test]
 fn ui_registration_runs_and_propagates_destructor_failure() {
+    use mockable::{DefaultEnv, Env};
     use std::{
         cell::Cell,
         panic::{AssertUnwindSafe, catch_unwind},
     };
 
     temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
-        let parent_selector = std::env::var_os("RUSTUP_TOOLCHAIN");
+        let reader = DefaultEnv::new();
+        let parent_selector = reader.raw("RUSTUP_TOOLCHAIN");
         let registered = Cell::new(false);
         let execution = catch_unwind(AssertUnwindSafe(|| {
             ui_verification::run_cases(|cases| {
                 assert_eq!(
-                    std::env::var("RUSTUP_TOOLCHAIN").expect("callback selector exists"),
+                    reader
+                        .raw("RUSTUP_TOOLCHAIN")
+                        .expect("callback selector exists"),
                     "1.88.0",
                     "the real registration callback must run inside the exact scope"
                 );
@@ -108,7 +112,7 @@ fn ui_registration_runs_and_propagates_destructor_failure() {
             "a passing fixture registered as compile-fail must propagate trybuild's destructor failure"
         );
         assert_eq!(
-            std::env::var_os("RUSTUP_TOOLCHAIN"),
+            reader.raw("RUSTUP_TOOLCHAIN"),
             parent_selector,
             "the parent toolchain must be restored after the sentinel unwinds"
         );

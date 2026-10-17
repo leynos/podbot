@@ -1,5 +1,6 @@
 //! Exact MSRV selector and real offline Rustup resolution contracts.
 
+use mockable::{DefaultEnv, Env};
 use rstest::rstest;
 
 use super::{VerificationRoute, compatibility_toolchain, resolve_executables};
@@ -31,6 +32,7 @@ fn provisioned_exact_minimum_resolves_without_distribution_access() {
             ("RUSTUP_TOOLCHAIN", Some("nightly-parent")),
         ],
         || {
+            let reader = DefaultEnv::new();
             let executables = resolve_executables(env!("CARGO_PKG_RUST_VERSION"))
                 .expect("the provisioned exact MSRV must resolve offline through Rustup");
             assert_eq!(executables.toolchain, "1.88.0", "resolve the exact minimum");
@@ -39,13 +41,17 @@ fn provisioned_exact_minimum_resolves_without_distribution_access() {
             };
             route.run(&executables, || {
                 assert_eq!(
-                    std::env::var("RUSTUP_TOOLCHAIN").expect("scoped selector exists"),
+                    reader
+                        .raw("RUSTUP_TOOLCHAIN")
+                        .expect("scoped selector exists"),
                     "1.88.0",
                     "nested Cargo must retain the exact resolved selector"
                 );
             });
             assert_eq!(
-                std::env::var("RUSTUP_TOOLCHAIN").expect("parent selector restored"),
+                reader
+                    .raw("RUSTUP_TOOLCHAIN")
+                    .expect("parent selector restored"),
                 "nightly-parent",
                 "resolution and scope must preserve the parent selector"
             );
