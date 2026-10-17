@@ -1825,7 +1825,8 @@ The modules that remain in `tests/workflow_contracts/` are:
 | Module                     | Subject                                                        |
 | -------------------------- | -------------------------------------------------------------- |
 | `workflow_reading.py`      | Strict parsing, trigger forms, push filters and workflow files |
-| `concurrency_test.py`      | Cancelling superseded pull-request runs only                   |
+| `concurrency_rules.py`     | Workflow discovery and concurrency rule queries                |
+| `concurrency_test.py`      | Executing discovery and asserting concurrency behaviour        |
 | `markdown_wiring_*.py`     | The Markdown gates' wiring into CI                             |
 | `gitignore_test.py`        | The ignored coverage file the spelling gate writes             |
 | `workflow_reading_test.py` | The reader, driven on documents this repository lacks          |
@@ -2087,13 +2088,16 @@ with no minutes to win.
 
 ### 21.1. The cancellation contract
 
-`tests/workflow_contracts/concurrency_test.py` reads `.github/workflows` and
-asserts, for every workflow declaring a `pull_request` trigger, that it
-declares a concurrency group, that the group names no per-run expression, that
-the group names something that varies per pull request, and that
-`cancel-in-progress` is exactly the expression above. A further test asserts
-that discovery still finds the workflows it is expected to, so a broken read
-cannot empty the list and turn the rest into a vacuous pass. Run it with
+`tests/workflow_contracts/concurrency_rules.py` reads `.github/workflows`
+through the existing strict reader and owns workflow discovery and the queries
+used to inspect concurrency settings.
+`tests/workflow_contracts/concurrency_test.py` executes discovery and asserts,
+for every workflow declaring a `pull_request` trigger, that it declares a
+concurrency group, that the group names no per-run expression, that the group
+names something that varies per pull request, and that `cancel-in-progress` is
+exactly the expression above. A further test asserts that discovery still finds
+the workflows it is expected to, so a broken read cannot empty the list and
+turn the rest into a vacuous pass. Run the binding contract with
 `make test-workflow-contracts`.
 
 ## Markdown formatting
