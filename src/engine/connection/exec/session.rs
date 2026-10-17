@@ -68,6 +68,38 @@ pub(super) const fn protocol_session_options(
         .with_capability_policy(options.capability_policy)
 }
 
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "MaskOnly and MaskAndDeny remain unused until podbot host wires the opt-in"
+    )
+)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum CapabilityPolicy {
+    /// Pure byte proxy; no ACP-specific behaviour.
+    #[default]
+    Disabled,
+    /// Init-time capability masking only (Step 2.6.1 behaviour).
+    MaskOnly,
+    /// Init-time masking plus runtime method denylist (Step 2.6.2 behaviour).
+    MaskAndDeny,
+}
+
+impl CapabilityPolicy {
+    /// Return `true` when the policy should rewrite the first ACP
+    /// `initialize` frame to mask blocked capabilities.
+    pub(crate) const fn rewrites_initialize(self) -> bool {
+        matches!(self, Self::MaskOnly | Self::MaskAndDeny)
+    }
+
+    /// Return `true` when the policy should enforce the runtime
+    /// method denylist on agent-emitted frames.
+    pub(crate) const fn allows_runtime_enforcement(self) -> bool {
+        matches!(self, Self::MaskAndDeny)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //! Unit tests for exec session capability policies.
@@ -157,37 +189,5 @@ mod tests {
         assert!(!CapabilityPolicy::Disabled.allows_runtime_enforcement());
         assert!(!CapabilityPolicy::MaskOnly.allows_runtime_enforcement());
         assert!(CapabilityPolicy::MaskAndDeny.allows_runtime_enforcement());
-    }
-}
-
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "MaskOnly and MaskAndDeny remain unused until podbot host wires the opt-in"
-    )
-)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) enum CapabilityPolicy {
-    /// Pure byte proxy; no ACP-specific behaviour.
-    #[default]
-    Disabled,
-    /// Init-time capability masking only (Step 2.6.1 behaviour).
-    MaskOnly,
-    /// Init-time masking plus runtime method denylist (Step 2.6.2 behaviour).
-    MaskAndDeny,
-}
-
-impl CapabilityPolicy {
-    /// Return `true` when the policy should rewrite the first ACP
-    /// `initialize` frame to mask blocked capabilities.
-    pub(crate) const fn rewrites_initialize(self) -> bool {
-        matches!(self, Self::MaskOnly | Self::MaskAndDeny)
-    }
-
-    /// Return `true` when the policy should enforce the runtime
-    /// method denylist on agent-emitted frames.
-    pub(crate) const fn allows_runtime_enforcement(self) -> bool {
-        matches!(self, Self::MaskAndDeny)
     }
 }

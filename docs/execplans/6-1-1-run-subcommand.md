@@ -176,7 +176,7 @@ right companions for the work:
    - `src/api/mod.rs`
    - a new `src/api/run.rs` if extracting the request and routing logic keeps
      modules smaller and clearer
-   - `src/api/tests.rs`
+   - `src/api/tests/mod.rs`
    - `tests/library_embedding.rs`
    - `tests/bdd_library_boundary.rs`
    - `tests/bdd_library_boundary_helpers/steps.rs`
