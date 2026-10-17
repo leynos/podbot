@@ -175,7 +175,8 @@ fn debug_run_agent_completed(request: &podbot::api::RunRequest) {
     );
 }
 
-/// Count validation outcomes and record elapsed seconds; `Err` uses failure labels.
+/// Count run API outcomes, including validation and feature-gate failures.
+/// Record elapsed seconds; any `Err` uses failure labels. Pre-API request errors are excluded.
 fn record_run_agent_metrics(result: &PodbotResult<CommandOutcome>, elapsed: std::time::Duration) {
     let status = if result.is_ok() { "success" } else { "failure" };
     metrics::counter!(
