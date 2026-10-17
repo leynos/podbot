@@ -769,9 +769,14 @@ during incident analysis.
 Reusable integration-test support has explicit ownership boundaries:
 
 - `tests/test_utils/mod.rs` owns cross-crate integration utilities, including
-  environment guards, the `clean_env` fixture, and the API-to-engine exec
-  bridge. An integration-test crate opts in by declaring `mod test_utils;`;
-  production modules must not depend on this directory.
+  the API-to-engine exec bridge. An integration-test crate opts in by declaring
+  `mod test_utils;`; production modules must not depend on this directory.
+- `tests/test_support/stdin_forwarding.rs` owns scoped stdin selection for
+  `bdd_interactive_exec` and `bdd_orchestration`. Only these two test roots
+  include it as a path module; general utilities must not import it. It
+  composes the shared environment boundary around the complete synchronous
+  operation, including any `block_on` call, without changing scenario
+  assertions.
 - `tests/test_utils/exec_client_mock.rs` owns the exported
   `define_exec_client_mock!` macro. The macro is for behavioural test crates
   under `tests/` that need contract-level `ContainerExecClient` doubles. It
@@ -795,6 +800,86 @@ Reusable integration-test support has explicit ownership boundaries:
 These helpers are test seams, not additional production APIs. New shared
 helpers should be added to the narrowest owning support module and composed by
 callers without moving domain-specific assertions into the shared layer.
+
+#### 8.2.5. Scoped test environment boundaries
+
+Prefer injected environment readers and explicit configuration in tests.
+`tests/test_support/environment.rs` owns the narrow ambient boundary needed by
+testcontainers startup and the integration suites' stdin forwarding knob. It
+delegates temporary values, the shared reentrant mutex, and restoration to
+`temp-env`; helpers must not call `std::env::set_var` or `remove_var` directly.
+The dependency is test-only and supports the repository's Rust 1.88 minimum.
+Private observation helpers in the boundary's regression module serve only its
+concurrency and runtime-lifetime tests. They keep assertions in test bodies and
+complete environment-dependent work before the scoped closure returns.
+
+Callers supply a synchronous closure that completes environment-dependent work,
+including any `Runtime::block_on` and spawned environment readers, before
+returning. Never return an environment-dependent future from the closure or
+hold this lock across an executor-level `.await`. Success, errors, cancellation
+within `block_on`, and unwinding restore the previous value, including an
+originally absent variable. The mutex only coordinates users of this boundary;
+it does not protect arbitrary concurrent readers, so new consumers need a
+reviewed isolation justification.
+
+The cloning harness selects one cached endpoint and scopes each testcontainers
+startup to that endpoint. The returned container retains its configured client;
+subsequent container operations use that client after `DOCKER_HOST` is
+restored. The exec suites scope `PODBOT_DISABLE_STDIN_FORWARDING_FOR_TESTS` to
+the complete mocked operation. Obsolete guard-returning environment fixtures
+have no callers and are removed rather than extending permanent process
+mutations.
+
+The cloning harness's `SandboxBundle::finish` is the fallible cleanup boundary
+for its two completed scenario test bodies and retained-client regression. It
+removes the exact container returned by testcontainers, then accepts only a
+server 404 from inspection of that same ID as evidence of absence. A remaining
+container, permission denial, or transport failure fails the test. Scenario
+state transfers the bundle through `Slot::take` and requires sole `Arc`
+ownership; missing or retained ownership is a setup error. These real cleanup
+operations justify fallible scenario test bodies without changing infallible
+step signatures. The existing `Drop` remains a non-panicking safety fallback
+for early errors and unwinding, rather than proof of successful cleanup.
+
+The private cleanup callbacks belong only to this harness and its regression
+modules. `remove_and_verify` orders removal and inspection of the captured
+owned ID within the existing runtime call; `finish_and_record` emits a removed
+receipt only after that call succeeds. Creation delegates to the same
+writer-backed receipt path tested with output failures. Controlled regressions
+inject operations and buffered writers, so synthetic IDs never enter lifecycle
+stdout. These seams are not general engine or logging interfaces; new callers
+require a reviewed harness-specific justification.
+
+Only this harness uses the private absence-classification helper. Its pure
+regressions distinguish server 404 from presence, other server errors, and
+transport failure. Sandbox creation adds `org.podbot.e2e.owner-pid` from the
+native test process ID without reading or modifying another environment
+variable.
+
+The cloning harness exposes a narrow machine-readable test-result interface on
+the test producer's captured stdout. Each newline-delimited JSON object has
+exactly these fields: `marker: "podbot.e2e.owned-container"`, `schema: 1`,
+`stage: "created"` or `"removed"`, `container_id`, and numeric `owner_pid`.
+Creation is recorded only after constructing the runtime-safe bundle. Removal
+is recorded only after successful `rm` and same-ID server 404 verification.
+Serialization, the single locked write, and flushing are fallible; output
+failure fails the enclosing test and retains cleanup safety. The private
+injected-writer helper and its regression double belong only to this receipt
+contract. They are not shared application output or diagnostic facilities.
+
+The exclusive gate runner executes the canonical Make E2E target with
+`--nocapture`, parses only these exact records from its own producer log, and
+independently inspects every created ID after termination. Only server 404
+proves absence. Before deleting any failure-path residual, verify that its
+owner-PID label matches the receipt; never delete an unverified container.
+Malformed, unmatched, conflicting, or missing lifecycle records remain an
+evidence failure. Image names and creation times alone do not establish
+ownership. These records avoid dependence on a logger, a subscriber, a guessed
+Cargo PID, or a separate native-binary controller. The label is test-resource
+accounting, not a security boundary against malicious engine clients. This
+explicit test-result interface grants no general exception for debug stdout.
+The missing canonical ambient-method policy remains unmeasured; the final lint
+and Whitaker gates must validate the actual output calls.
 
 ### 8.3. Parameterized tests
 
@@ -1386,9 +1471,12 @@ Required structure for testcontainers-backed BDD suites:
   must call `runtime.block_on(container.rm())` so the `testcontainers`
   async-drop helper has a live reactor.
 - Resolve the container socket through `DOCKER_HOST`, then
-  `/var/run/docker.sock`, then `$XDG_RUNTIME_DIR/podman/podman.sock`. Wrap any
-  `DOCKER_HOST` mutation in a `OnceLock` (or equivalent) so concurrent test
-  threads cannot race on the unsafe env write. Continuous integration runners
+  `/var/run/docker.sock`, then `$XDG_RUNTIME_DIR/podman/podman.sock`. Cache
+  only the selected endpoint in a `OnceLock`. Scope the temporary `DOCKER_HOST`
+  override through `environment::with_test_environment`, which delegates
+  locking and restoration to `temp-env` as described in §8.2.5. Complete the
+  environment-dependent work, including `block_on` and any spawned environment
+  readers, before its scoped closure returns. Continuous integration runners
   with Docker pre-installed and developers with rootless Podman both pick the
   right socket without manual configuration.
 - Construct the Bollard `Docker` client against the same socket the fixture
