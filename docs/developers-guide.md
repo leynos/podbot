@@ -276,6 +276,16 @@ to `test_sccache_diagnostic_contracts.py`. Only the paired setup and diagnostic
 contracts call it; it parses a selected workflow and returns its coverage job
 steps, rather than acting as a general workflow test helper.
 
+### 2.5. Dependabot updates
+
+The GitHub Actions entry in `.github/dependabot.yml` covers the repository root
+and tracked local composite actions through `/.github/actions/*`. It groups
+`leynos/shared-actions*` references separately, then groups other GitHub
+Actions updates for minor and patch releases. It opens at most five pull
+requests, applies the `dependencies` and `github-actions` labels, checks daily,
+and uses a seven-day default cooldown. Keep this file as the source of truth
+when changing the update scope or cadence.
+
 ## 3. Repository layout (exec subsystem)
 
 The exec subsystem lives under `src/engine/connection/exec/` and implements
