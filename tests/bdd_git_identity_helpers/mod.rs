@@ -6,14 +6,3 @@ pub mod steps;
 pub mod test_helpers;
 
 pub use state::{GitIdentityState, git_identity_state};
-
-#[expect(
-    unused_imports,
-    reason = "step definitions used via rstest-bdd macro expansion"
-)]
-pub use assertions::*;
-#[expect(
-    unused_imports,
-    reason = "step definitions used via rstest-bdd macro expansion"
-)]
-pub use steps::*;
