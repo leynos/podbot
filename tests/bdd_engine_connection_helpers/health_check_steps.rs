@@ -215,10 +215,10 @@ pub fn health_check_is_performed(
     // If no daemon is available, skip the scenario.
     let default_socket = SocketResolver::<MockEnv>::default_socket();
 
-    if let Some(msg) = execute_health_check_and_record(engine_connection_state, default_socket)? {
-        if is_daemon_unavailable(&msg) {
-            rstest_bdd::skip!("no container daemon available at {}", default_socket);
-        }
+    if let Some(msg) = execute_health_check_and_record(engine_connection_state, default_socket)?
+        && is_daemon_unavailable(&msg)
+    {
+        rstest_bdd::skip!("no container daemon available at {}", default_socket);
     }
     Ok(())
 }

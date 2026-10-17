@@ -78,9 +78,7 @@ fn ensure_docker_host() -> StepResult<DockerHostSocket> {
     static ENV_INIT: OnceLock<()> = OnceLock::new();
     let endpoint = resolve_docker_host_endpoint()?;
     ENV_INIT.get_or_init(|| {
-        let already_set = std::env::var("DOCKER_HOST")
-            .map(|existing| !existing.is_empty())
-            .unwrap_or(false);
+        let already_set = std::env::var("DOCKER_HOST").is_ok_and(|existing| !existing.is_empty());
         if !already_set {
             // SAFETY: The surrounding `OnceLock::get_or_init` guarantees that
             // this branch executes exactly once per process, serialized
