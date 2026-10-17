@@ -19,8 +19,6 @@ mod repository_clone;
 #[cfg(any(feature = "internal", test))]
 mod upload_credentials;
 
-use std::fmt;
-
 use bollard::Docker;
 use error_classification::classify_connection_error;
 
@@ -51,77 +49,6 @@ pub use repository_clone::{
 pub use upload_credentials::{
     ContainerUploader, CredentialUploadRequest, CredentialUploadResult, UploadToContainerFuture,
 };
-
-// =============================================================================
-// SocketPath newtype
-// =============================================================================
-
-/// A validated container engine socket endpoint path.
-///
-/// This newtype wraps a socket endpoint string, providing type safety and
-/// reducing the number of raw string arguments in function signatures.
-/// Socket paths can be Unix sockets (`unix:///path`), Windows named pipes
-/// (`npipe:////./pipe/name`), or HTTP endpoints (`http://host:port`).
-///
-/// # Examples
-///
-/// ```ignore
-/// use podbot::engine::SocketPath;
-///
-/// let socket = SocketPath::new("unix:///var/run/docker.sock");
-/// assert_eq!(socket.as_str(), "unix:///var/run/docker.sock");
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SocketPath(String);
-
-impl SocketPath {
-    /// Creates a new `SocketPath` from any string-like type.
-    #[must_use]
-    pub fn new(path: impl Into<String>) -> Self {
-        Self(path.into())
-    }
-
-    /// Returns the socket path as a string slice.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Consumes the `SocketPath` and returns the inner `String`.
-    #[expect(
-        dead_code,
-        reason = "public API for completeness; callers may need owned String; \
-                  see leynos/podbot#101"
-    )]
-    #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-}
-
-impl From<String> for SocketPath {
-    fn from(s: String) -> Self {
-        Self::new(s)
-    }
-}
-
-impl From<&str> for SocketPath {
-    fn from(s: &str) -> Self {
-        Self::new(s)
-    }
-}
-
-impl AsRef<str> for SocketPath {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl fmt::Display for SocketPath {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 // =============================================================================
 // Constants
