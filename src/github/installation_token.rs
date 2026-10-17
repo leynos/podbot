@@ -170,7 +170,7 @@ pub(super) async fn acquire_with_octocrab_installation(
         Err(error) => {
             record_token_acquisition_metrics("failure", elapsed);
             warn_token_acquisition_failure(installation_id, expiry_buffer, elapsed, &error);
-            return Err(classify_token_error(error));
+            return Err(classify_token_error(&error));
         }
     };
     let token = secret.expose_secret().to_owned();
@@ -227,8 +227,8 @@ fn is_timeout_error(error: &octocrab::Error) -> bool {
     }
 }
 
-fn classify_token_error(error: octocrab::Error) -> GitHubError {
-    let is_github_response = matches!(&error, octocrab::Error::GitHub { .. });
+fn classify_token_error(error: &octocrab::Error) -> GitHubError {
+    let is_github_response = matches!(error, octocrab::Error::GitHub { .. });
     let message = classify_github_api_error(error).to_string();
 
     if is_github_response {
