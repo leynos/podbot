@@ -6,6 +6,13 @@ Retrospective must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
+Retrospective note (17 October 2026): `SocketPath` was an internal wrapper and
+was never re-exported through the crate’s public API. Its public-interface
+description below was inaccurate, and the core-type list records the historical
+implementation. The Rust baseline source cleanup removed the unused wrapper
+without changing the exported API. The original decisions and test counts are
+retained.
+
 This document must be maintained in accordance with `AGENTS.md` at the
 repository root.
 
