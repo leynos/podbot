@@ -179,6 +179,21 @@ composition seam is used by `run_cases` and those lifecycle contracts only; its
 factory, registration callback and explicit destruction must all remain inside
 the selected scope.
 
+The boundary creates one `mockable::DefaultEnv` reader per synchronous run, and
+passes it by reference to its private routing and flag helpers. Fixed-key reads
+use `Env::raw`, preserving the distinction between a missing variable, a
+Unicode value, and a non-Unicode native value, including its payload; flag
+handling retains its existing named-error behaviour for the last case. The
+private `has_workspace_wrapper` query applies only the policy for
+`RUSTC_WORKSPACE_WRAPPER` and is used by this boundary and its sibling policy
+tests. It is not a general environment adapter. Lifecycle tests borrow the same
+reader for `DropObservation`, which reads `RUSTUP_TOOLCHAIN` when the
+observation is dropped so the real scoped restoration remains observable. These
+helpers follow the ownership limits for shared test utilities in
+[section 8.2.4](#824-shared-integration-test-utilities). Profile-backend
+rejection still enumerates inherited profile keys; the fixed-key reader does
+not replace that separate requirement.
+
 UI children use the package minimum supported Rust version (MSRV), currently
 1.88, and LLVM, even when the parent harness uses a development nightly. The
 root toolchain file pins the same concrete minimum for ordinary setup,
