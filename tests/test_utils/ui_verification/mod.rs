@@ -3,6 +3,7 @@
 use std::{ffi::OsString, process::Command};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use mockable::{DefaultEnv, Env};
 use thiserror::Error;
 
 /// Pure verification flag selection without ambient environment access.
@@ -68,7 +69,8 @@ pub enum VerificationError {
 pub fn run_cases(register: impl FnOnce(&trybuild::TestCases)) -> Result<(), VerificationError> {
     // Capture caller inputs under temp-env's same lock used for the later scope.
     temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
-        let route = VerificationRoute::from_environment()?;
+        let environment_reader = DefaultEnv::new();
+        let route = VerificationRoute::from_environment(&environment_reader)?;
         let executables = resolve_executables(env!("CARGO_PKG_RUST_VERSION"))?;
         route.run_registration(&executables, trybuild::TestCases::new, register);
         Ok(())
@@ -83,13 +85,13 @@ struct VerificationRoute {
 
 impl VerificationRoute {
     /// Read ambient flags once at the integration boundary.
-    fn from_environment() -> Result<Self, VerificationError> {
+    fn from_environment(environment_reader: &dyn Env) -> Result<Self, VerificationError> {
         reject_profile_backends(std::env::vars_os())?;
-        if std::env::var_os("RUSTC_WORKSPACE_WRAPPER").is_some_and(|value| !value.is_empty()) {
+        if has_workspace_wrapper(environment_reader) {
             return Err(VerificationError::WorkspaceWrapper);
         }
-        let encoded = unicode_variable("CARGO_ENCODED_RUSTFLAGS")?;
-        let ordinary = unicode_variable("RUSTFLAGS")?;
+        let encoded = unicode_variable(environment_reader, "CARGO_ENCODED_RUSTFLAGS")?;
+        let ordinary = unicode_variable(environment_reader, "RUSTFLAGS")?;
         Ok(Self {
             encoded_flags: flags::verification_flags(encoded.as_deref(), ordinary.as_deref())?,
         })
@@ -127,14 +129,24 @@ impl VerificationRoute {
 }
 
 /// Read one Unicode environment input without silently replacing invalid data.
-fn unicode_variable(name: &'static str) -> Result<Option<String>, VerificationError> {
-    std::env::var_os(name)
-        .map(|value| {
-            value
-                .into_string()
-                .map_err(|_| VerificationError::NonUnicode(name))
-        })
-        .transpose()
+fn unicode_variable(
+    environment_reader: &dyn Env,
+    name: &'static str,
+) -> Result<Option<String>, VerificationError> {
+    match environment_reader.raw(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => Err(VerificationError::NonUnicode(name)),
+    }
+}
+
+/// Preserve Cargo's wrapper rejection, including its native empty-value check.
+fn has_workspace_wrapper(environment_reader: &dyn Env) -> bool {
+    match environment_reader.raw("RUSTC_WORKSPACE_WRAPPER") {
+        Ok(value) => !value.is_empty(),
+        Err(std::env::VarError::NotPresent) => false,
+        Err(std::env::VarError::NotUnicode(value)) => !value.is_empty(),
+    }
 }
 
 /// Refuse profile overrides that encoded rustflags cannot reliably neutralize.
