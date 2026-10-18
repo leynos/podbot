@@ -1033,8 +1033,9 @@ Error classification logic is separated into `src/github/classify.rs` to keep
 the main `src/github/mod.rs` file under the 400-line budget. The classify
 module provides:
 
-- `classify_github_api_error(error: octocrab::Error) -> GitHubError` — entry
-  point called by `OctocrabAppClient::validate_credentials` via `map_err`
+- `classify_github_api_error(error: &octocrab::Error) -> GitHubError` — entry
+  point called by `OctocrabAppClient::validate_credentials` via a borrowing
+  `map_err` closure
 - `classify_by_status(code: u16, full_error: &str) -> String` — maps HTTP
   status codes to error messages with remediation hints
 - `is_rate_limited(message: &str) -> bool` — distinguishes rate-limit 403s
@@ -1064,8 +1065,10 @@ All classified error messages follow this template:
 <classification> (HTTP <code>). Hint: <remediation guidance>. Raw error: <original octocrab error>
 ```
 
-The raw error is always preserved to aid debugging. HTTP status codes map to
-classifications as follows:
+Classification borrows the original Octocrab error without modifying it. The
+complete error display is retained in the returned message; the semantic error
+does not store the original error as a structured source. HTTP status codes map
+to classifications as follows:
 
 - **401** — credentials rejected
 - **403** (rate limit) — rate limit exceeded

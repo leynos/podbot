@@ -180,10 +180,20 @@ fn token_error_mapping_preserves_transport_failure_context() {
         backtrace: snafu::Backtrace::generate(),
     };
 
-    let classified = classify_token_error(error);
+    let raw = error.to_string();
+    let classified = classify_token_error(&error);
 
     match classified {
         GitHubError::TokenAcquisitionFailed { message } => {
+            assert!(
+                message.contains(&raw),
+                "complete transport error display must survive token classification: {message}"
+            );
+            assert_eq!(
+                error.to_string(),
+                raw,
+                "token classification must leave the original error context intact"
+            );
             assert!(
                 message.contains("connectivity") || message.contains("network"),
                 "expected transport remediation context in: {message}"
