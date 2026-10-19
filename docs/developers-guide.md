@@ -1946,7 +1946,13 @@ fails that module until its expected inventory is updated in the same commit.
 `build-test`, on `ubicloud-standard-4`, and `coverage-upload`, main's only
 cache writer, on `ubicloud-standard-2`, run on Ubicloud, and a pull request
 from a fork falls back to `ubuntu-latest`, because a fork cannot obtain an
-Ubicloud runner. Ubicloud's cache proxy is scoped by ref, so a pull request's
+Ubicloud runner. A pull request Dependabot opened falls back too: hosted
+minutes cost nothing on a public repository, and Dependabot opens many pull
+requests, which therefore build cold. The condition,
+`(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]')`,
+tests the pull request's author, not `github.actor`, because the actor is
+whoever triggered the run, so a person pushing to a Dependabot branch would
+flip the runner. Ubicloud's cache proxy is scoped by ref, so a pull request's
 Ubicloud `build-test` reads a warm main scope only when a main job on Ubicloud
 writes it; a fork's pull request restores a hosted cache that main no longer
 refreshes, which is accepted because fork pull requests are rare here. An

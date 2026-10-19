@@ -55,14 +55,16 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
     (
         "ci.yml",
         "build-test",
-        "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
-        "|| 'ubicloud-standard-4' }}",
+        "${{ (github.event.pull_request.head.repo.fork "
+        "|| github.event.pull_request.user.login == 'dependabot[bot]') "
+        "&& 'ubuntu-latest' || 'ubicloud-standard-4' }}",
     ),
     (
         "coverage-main.yml",
         "coverage-upload",
-        "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
-        "|| 'ubicloud-standard-2' }}",
+        "${{ (github.event.pull_request.head.repo.fork "
+        "|| github.event.pull_request.user.login == 'dependabot[bot]') "
+        "&& 'ubuntu-latest' || 'ubicloud-standard-2' }}",
     ),
     # Hosted on purpose: about a minute of shell with nothing to compile.
     ("sccache-readers-e2e.yml", "readers", "ubuntu-latest"),
@@ -124,17 +126,27 @@ def test_every_coverage_step_has_its_cache_report_found(
     ]
 
 
+def _unfolded(raw: str) -> str:
+    """Return a declaration's source with its `>-` header and folding removed."""
+    body = raw.removeprefix(">-\n")
+    return " ".join(body.split())
+
+
 def test_every_runner_declaration_is_found_raw_and_parsed(
     workflow_texts: dict[str, str],
 ) -> None:
     """Each declaration's source text is kept beside its parsed value.
 
-    A single-line declaration reads the same both ways, so the raw text
-    must equal the value here; the folded-scalar case below is where they differ.
+    A single-line declaration reads the same both ways. A folded scalar
+    written correctly differs only by its `>-` header and its folding
+    whitespace, so unfolding the raw text must give the value; the case
+    below is where a misplaced continuation makes them differ for real.
     """
     declarations = runs_on_declarations(workflow_texts)
     assert [(d.workflow, d.job, d.value) for d in declarations] == RUNNERS
-    assert [d.raw for d in declarations] == [value for _, _, value in RUNNERS]
+    assert [_unfolded(d.raw) for d in declarations] == [
+        value for _, _, value in RUNNERS
+    ]
 
 
 def test_the_raw_declaration_keeps_a_folded_scalar_as_written() -> None:
@@ -212,3 +224,6 @@ def test_every_ubicloud_lane_places_each_kind_of_run_on_its_class(
     for lane, value in placed.items():
         assert selected_runner(value, is_fork=False) == CLASSES[lane], lane
         assert selected_runner(value, is_fork=True) == "ubuntu-latest", lane
+        assert (
+            selected_runner(value, is_fork=False, is_dependabot=True) == "ubuntu-latest"
+        ), lane

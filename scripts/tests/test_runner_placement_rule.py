@@ -31,7 +31,8 @@ from workflow_placement import (
 
 #: The fork-fallback expression, as the estate writes it.
 EXPRESSION: typ.Final[str] = (
-    "${{ github.event.pull_request.head.repo.fork\n"
+    "${{ (github.event.pull_request.head.repo.fork "
+    "|| github.event.pull_request.user.login == 'dependabot[bot]')\n"
     "&& 'ubuntu-latest' || 'ubicloud-standard-2' }}"
 )
 
@@ -178,42 +179,64 @@ def test_a_break_nested_in_a_shape_is_found(runs_on: str, expected: bool) -> Non
 
 
 @pytest.mark.parametrize(
-    ("value", "is_fork", "expected"),
+    ("value", "is_fork", "is_dependabot", "expected"),
     [
-        (EXPRESSION, False, "ubicloud-standard-2"),
-        (EXPRESSION, True, "ubuntu-latest"),
-        ("ubuntu-latest", False, None),
-        ("ubicloud-standard-2", True, None),
+        (EXPRESSION, False, False, "ubicloud-standard-2"),
+        (EXPRESSION, True, False, "ubuntu-latest"),
+        (EXPRESSION, False, True, "ubuntu-latest"),
+        ("ubuntu-latest", False, False, None),
+        ("ubicloud-standard-2", True, False, None),
         (
-            "${{ github.event.pull_request.head.repo.fork && 'ubicloud-standard-2' "
-            "|| 'ubuntu-latest' }}",
+            "${{ (github.event.pull_request.head.repo.fork "
+            "|| github.event.pull_request.user.login == 'dependabot[bot]') "
+            "&& 'ubicloud-standard-2' || 'ubuntu-latest' }}",
             True,
+            False,
             "ubicloud-standard-2",
         ),
         (
             "${{ github.event_name == 'pull_request' && 'ubuntu-latest' "
             "|| 'ubicloud-standard-2' }}",
             False,
+            False,
             None,
         ),
-        (["ubicloud-standard-2"], False, None),
+        (
+            "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
+            "|| 'ubicloud-standard-2' }}",
+            False,
+            True,
+            None,
+        ),
+        (
+            "${{ (github.event.pull_request.head.repo.fork "
+            "|| github.actor == 'dependabot[bot]') "
+            "&& 'ubuntu-latest' || 'ubicloud-standard-2' }}",
+            False,
+            True,
+            None,
+        ),
+        (["ubicloud-standard-2"], False, False, None),
     ],
     ids=[
         "estate-non-fork",
         "estate-fork",
+        "estate-dependabot",
         "literal-hosted",
         "literal-ubicloud",
         "inverted-arms-fork",
         "another-condition",
+        "dependabot-arm-missing",
+        "actor-instead-of-author",
         "sequence",
     ],
 )
 def test_the_runner_expression_is_evaluated_for_each_kind_of_run(
-    value: object, is_fork: bool, expected: str | None
+    value: object, is_fork: bool, is_dependabot: bool, expected: str | None
 ) -> None:
-    """The runner-selection expression places a fork on hosted and every other run on Ubicloud.
+    """The runner-selection expression places a fork or Dependabot on hosted, the rest on Ubicloud.
 
     Each departure from the shape is refused with None, and the inverted
     arms are read as written, so a swap is visible to the inventory below.
     """
-    assert selected_runner(value, is_fork) == expected
+    assert selected_runner(value, is_fork, is_dependabot) == expected

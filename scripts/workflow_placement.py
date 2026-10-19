@@ -204,18 +204,31 @@ def line_break_fault(value: object) -> str | None:
 #: The context value that is true only for a pull request from a fork.
 FORK_CONDITION: typ.Final[str] = "github.event.pull_request.head.repo.fork"
 
+#: The pull request's author, not `github.actor`: the actor is whoever
+#: triggered the run, so a person pushing to a Dependabot branch would flip
+#: the runner. Hosted minutes cost nothing on a public repository, so
+#: Dependabot's pull requests take the hosted arm too.
+DEPENDABOT_CONDITION: typ.Final[str] = (
+    "github.event.pull_request.user.login == 'dependabot[bot]'"
+)
+
+#: The exact condition under which a pull request takes the hosted arm.
+HOSTED_CONDITION: typ.Final[str] = f"({FORK_CONDITION} || {DEPENDABOT_CONDITION})"
+
 #: The estate shape: a condition, a quoted hosted arm and a quoted other arm.
 _ESTATE_SHAPE: typ.Final[re.Pattern[str]] = re.compile(
-    r"\$\{\{\s*(?P<condition>[^&|]+?)\s*&&\s*'(?P<hosted>[^']*)'"
+    r"\$\{\{\s*(?P<condition>\(.+?\))\s*&&\s*'(?P<hosted>[^']*)'"
     r"\s*\|\|\s*'(?P<other>[^']*)'\s*\}\}"
 )
 
 
-def selected_runner(value: object, is_fork: bool) -> str | None:
+def selected_runner(
+    value: object, is_fork: bool, is_dependabot: bool = False
+) -> str | None:
     """Return the label a `runs-on` value selects for a run.
 
     Returns None when the value is not the estate's
-    `<fork> && '<hosted>' || '<label>'` shape. A literal label is not the
+    `(<fork> || <dependabot>) && '<hosted>' || '<label>'` shape. A literal label is not the
     shape: a lane that never falls back cannot serve a fork, and a lane
     that never leaves the hosted pool is not placed at all.
 
@@ -226,7 +239,10 @@ def selected_runner(value: object, is_fork: bool) -> str | None:
     is_fork : bool
         True for a pull request from a fork; False for a push, a dispatch
         or a pull request from this repository, where the fork value is
-        null or false.
+        empty or false.
+    is_dependabot : bool
+        True for a pull request Dependabot opened, which takes the hosted
+        arm as a fork's does.
 
     Returns
     -------
@@ -236,10 +252,13 @@ def selected_runner(value: object, is_fork: bool) -> str | None:
     Examples
     --------
     >>> value = (
-    ...     "${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' "
-    ...     "|| 'ubicloud-standard-2' }}"
+    ...     "${{ (github.event.pull_request.head.repo.fork "
+    ...     "|| github.event.pull_request.user.login == 'dependabot[bot]') "
+    ...     "&& 'ubuntu-latest' || 'ubicloud-standard-2' }}"
     ... )
     >>> selected_runner(value, is_fork=True)
+    'ubuntu-latest'
+    >>> selected_runner(value, is_fork=False, is_dependabot=True)
     'ubuntu-latest'
     >>> selected_runner(value, is_fork=False)
     'ubicloud-standard-2'
@@ -247,6 +266,6 @@ def selected_runner(value: object, is_fork: bool) -> str | None:
     True
     """
     shape = _ESTATE_SHAPE.fullmatch(value.strip()) if isinstance(value, str) else None
-    if shape is None or shape["condition"] != FORK_CONDITION:
+    if shape is None or shape["condition"] != HOSTED_CONDITION:
         return None
-    return shape["hosted" if is_fork else "other"]
+    return shape["hosted" if is_fork or is_dependabot else "other"]
