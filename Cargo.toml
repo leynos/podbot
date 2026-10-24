@@ -150,3 +150,7 @@ missing_crate_level_docs            = "deny"
 name = "podbot"
 path = "src/main.rs"
 required-features = ["cli"]
+
+[profile.dev]
+incremental = false
+debug = 0
