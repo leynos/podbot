@@ -68,9 +68,9 @@ jobs:
           printf 'SCCACHE_ERROR_LOG=%s\n' "$SCCACHE_ERROR_LOG" >> "$GITHUB_ENV"
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@5a99aed78ce68dcebd3052b75c31e6f173162b1e
         with:
           features: internal
           output-path: lcov.info
@@ -108,7 +108,7 @@ jobs:
         # upload instead of failing the run.
         id: codescene-upload
         if: steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@5a99aed78ce68dcebd3052b75c31e6f173162b1e
         with:
           format: lcov
           mode: upload

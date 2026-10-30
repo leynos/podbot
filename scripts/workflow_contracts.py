@@ -71,6 +71,12 @@ WRAPPER_EXPORTING_PINS: typ.Final[frozenset[str]] = frozenset(
         # 28, behind by 0 on the GitHub compare API); it gives sccache's
         # server startup 60 s and fails open when it cannot start.
         "6cec89bac47a21cf756d68d638a9a510998e57f8",
+        # 5a99aed78ce68dcebd3052b75c31e6f173162b1e, 2026-10-30. Verified
+        # descendant of `6cec89ba` (ahead by 54, behind by 0 on the GitHub compare
+        # API); `install-whitaker`
+        # defaults to whitaker-installer 0.2.11 here, which builds the Dylint
+        # driver from a verified Clippy snapshot.
+        "5a99aed78ce68dcebd3052b75c31e6f173162b1e",
     }
 )
 
