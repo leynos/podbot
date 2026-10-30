@@ -111,7 +111,7 @@ jobs:
         if: github.actor != 'dependabot[bot]'
         run: make audit
       - name: Install Whitaker
-        uses: leynos/shared-actions/.github/actions/install-whitaker@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/install-whitaker@5a99aed78ce68dcebd3052b75c31e6f173162b1e
       - name: Lint
         run: make lint
       - name: No-CLI compile check
