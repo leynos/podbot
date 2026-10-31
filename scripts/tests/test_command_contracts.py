@@ -7,14 +7,13 @@ running a command is recognized, and which guards disqualify it.
 from __future__ import annotations
 
 import os
-import platform
 import re
 import subprocess
-import tomllib
 from pathlib import Path
 import typing as typ
 
 import pytest
+from make_dry_run import dry_run_recipe
 from workflow_commands import command_steps
 from workflow_contracts import of_type, parse as parse_workflow
 
@@ -24,28 +23,6 @@ TEST_COMMANDS: typ.Final[tuple[str, ...]] = (
     "make test TEST_FLAGS='--no-default-features --test cli_feature_gating --test compile_contract'",
     "make test TEST_FLAGS='--features internal'",
 )
-
-
-MOLD_FLAG: typ.Final[str] = "-Clink-arg=-fuse-ld=mold"
-LINUX_TABLE: typ.Final[str] = 'cfg(target_os = "linux")'
-
-
-def _dry_run_test_recipe(
-    environment: dict[str, str],
-    overrides: tuple[str, ...] = (),
-    target: str = "test",
-) -> str:
-    """Return normalized output from a dry-run of a Make gate target."""
-    repository_root = Path(__file__).resolve().parents[2]
-    output = subprocess.run(
-        ["make", "--no-print-directory", "--dry-run", target, *overrides],
-        cwd=repository_root,
-        env=environment,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout
-    return " ".join(output.replace("\\\n\t", " ").split())
 
 
 def test_ci_runs_each_test_lane_through_make(
@@ -110,8 +87,8 @@ def test_make_test_uses_runner_and_preserves_overrides(
     for name in inherited_make_variables:
         make_environment.pop(name, None)
 
-    default_command = _dry_run_test_recipe(make_environment)
-    override_command = _dry_run_test_recipe(
+    default_command = dry_run_recipe(make_environment)
+    override_command = dry_run_recipe(
         make_environment,
         (
             "TEST_FLAGS=--no-default-features --test cli_feature_gating -- --nocapture",
@@ -133,9 +110,6 @@ def test_make_test_uses_runner_and_preserves_overrides(
     assert 'RUSTFLAGS="-D warnings' in default_command, (
         "the default recipe must deny compiler warnings"
     )
-    assert ("-Clink-arg=-fuse-ld=mold" in default_command) == (
-        platform.system() == "Linux"
-    ), "the default recipe must restate the mold linker flag on Linux only"
     assert (
         '--timeout "42" -- -j 2 --no-default-features --test cli_feature_gating'
         in override_command
@@ -172,7 +146,7 @@ def test_make_test_resolves_timeout_environment(
     make_environment.pop("PODBOT_TEST_TIMEOUT", None)
     make_environment.update(timeout_environment)
 
-    command = _dry_run_test_recipe(make_environment)
+    command = dry_run_recipe(make_environment)
 
     assert f'--timeout "{expected_timeout}" --' in command, (
         "the runner must receive the resolved test timeout"
@@ -343,74 +317,3 @@ def test_two_contract_command_steps_are_both_reported() -> None:
     found = command_steps(parse_workflow("ci.yml", text), CONTRACT_COMMAND)
 
     assert [step.job for step in found] == ["lint", "check"]
-
-
-@pytest.mark.parametrize("target", ["test", "typecheck"])
-@pytest.mark.parametrize(
-    ("host_os", "expects_mold"),
-    [("Linux", True), ("Darwin", False), ("Windows_NT", False)],
-)
-def test_gate_recipes_restate_mold_on_linux_only(
-    target: str, host_os: str, expects_mold: bool
-) -> None:
-    """An assigned RUSTFLAGS replaces the configuration, so the gates add mold.
-
-    The host is controlled through `BUILD_HOST_OS`, so both branches run on any
-    machine, and the caller's `RUST_FLAGS` survive in either branch.
-    """
-    command = _dry_run_test_recipe(
-        os.environ.copy(),
-        (f"BUILD_HOST_OS={host_os}", "RUST_FLAGS=-D warnings -W unused"),
-        target,
-    )
-
-    assert 'RUSTFLAGS="-D warnings -W unused' in command, (
-        f"make {target} must preserve the caller's Rust flags"
-    )
-    assert (MOLD_FLAG in command) is expects_mold, (
-        f"make {target} on {host_os} must {'add' if expects_mold else 'omit'} mold"
-    )
-
-
-def test_cargo_configuration_scopes_mold_to_linux() -> None:
-    """The linker flag lives in the Linux table and in no platform-wide source."""
-    root = Path(__file__).resolve().parents[2]
-    config = tomllib.loads((root / ".cargo" / "config.toml").read_text("utf-8"))
-
-    assert MOLD_FLAG in config["target"][LINUX_TABLE]["rustflags"], (
-        "the Linux target table must select mold"
-    )
-    assert MOLD_FLAG not in config.get("build", {}).get("rustflags", []), (
-        "mold ships for Linux only, so [build] must not name it"
-    )
-    assert not config.get("profile"), (
-        "the stable pin cannot select a codegen backend, so no profile may"
-    )
-
-
-def test_ci_setup_rust_installs_mold_and_restates_the_linker(
-    workflow_texts: dict[str, str],
-) -> None:
-    """The hosted gate installs mold and keeps it beside the warning policy.
-
-    `setup-rust` exports its `rustflags` input as `RUSTFLAGS`, which replaces
-    `.cargo/config.toml`, so the input must carry the linker flag next to
-    `-D warnings` or `make lint`'s cargo doc and Clippy link without mold.
-    """
-    document = parse_workflow("ci.yml", workflow_texts["ci.yml"])
-    setup_steps = [
-        step_map
-        for job in of_type(document.get("jobs"), dict).values()
-        for step in of_type(of_type(job, dict).get("steps"), list)
-        for step_map in (of_type(step, dict),)
-        if "/setup-rust@" in str(step_map.get("uses", ""))
-    ]
-    assert len(setup_steps) == 1, "ci.yml must run exactly one setup-rust step"
-
-    inputs = of_type(setup_steps[0].get("with"), dict)
-    assert inputs.get("install-mold") == "true", (
-        "the setup-rust step must install the mold linker the configuration selects"
-    )
-    rustflags = str(inputs.get("rustflags"))
-    assert "-D warnings" in rustflags, "setup-rust must keep denying warnings"
-    assert MOLD_FLAG in rustflags, "setup-rust must restate the mold linker flag"

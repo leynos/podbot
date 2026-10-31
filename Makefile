@@ -83,6 +83,8 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_coverage_contracts.py \
 	scripts/tests/test_sccache_diagnostic_contracts.py \
 	scripts/tests/test_sccache_reporter_cli.py \
+	scripts/tests/make_dry_run.py \
+	scripts/tests/test_build_standard_contracts.py \
 	scripts/tests/test_workflow_inventory.py \
 	scripts/tests/test_runner_placement_rule.py \
 	scripts/tests/test_runner_fixtures.py \
