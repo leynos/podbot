@@ -10,6 +10,7 @@ import os
 import platform
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 import typing as typ
 
@@ -25,13 +26,19 @@ TEST_COMMANDS: typ.Final[tuple[str, ...]] = (
 )
 
 
+MOLD_FLAG: typ.Final[str] = "-Clink-arg=-fuse-ld=mold"
+LINUX_TABLE: typ.Final[str] = 'cfg(target_os = "linux")'
+
+
 def _dry_run_test_recipe(
-    environment: dict[str, str], overrides: tuple[str, ...] = ()
+    environment: dict[str, str],
+    overrides: tuple[str, ...] = (),
+    target: str = "test",
 ) -> str:
-    """Return normalized output from a dry-run of Make's test target."""
+    """Return normalized output from a dry-run of a Make gate target."""
     repository_root = Path(__file__).resolve().parents[2]
     output = subprocess.run(
-        ["make", "--no-print-directory", "--dry-run", "test", *overrides],
+        ["make", "--no-print-directory", "--dry-run", target, *overrides],
         cwd=repository_root,
         env=environment,
         capture_output=True,
@@ -336,3 +343,46 @@ def test_two_contract_command_steps_are_both_reported() -> None:
     found = command_steps(parse_workflow("ci.yml", text), CONTRACT_COMMAND)
 
     assert [step.job for step in found] == ["lint", "check"]
+
+
+@pytest.mark.parametrize("target", ["test", "typecheck"])
+@pytest.mark.parametrize(
+    ("host_os", "expects_mold"),
+    [("Linux", True), ("Darwin", False), ("Windows_NT", False)],
+)
+def test_gate_recipes_restate_mold_on_linux_only(
+    target: str, host_os: str, expects_mold: bool
+) -> None:
+    """An assigned RUSTFLAGS replaces the configuration, so the gates add mold.
+
+    The host is controlled through `BUILD_HOST_OS`, so both branches run on any
+    machine, and the caller's `RUST_FLAGS` survive in either branch.
+    """
+    command = _dry_run_test_recipe(
+        os.environ.copy(),
+        (f"BUILD_HOST_OS={host_os}", "RUST_FLAGS=-D warnings -W unused"),
+        target,
+    )
+
+    assert 'RUSTFLAGS="-D warnings -W unused' in command, (
+        f"make {target} must preserve the caller's Rust flags"
+    )
+    assert (MOLD_FLAG in command) is expects_mold, (
+        f"make {target} on {host_os} must {'add' if expects_mold else 'omit'} mold"
+    )
+
+
+def test_cargo_configuration_scopes_mold_to_linux() -> None:
+    """The linker flag lives in the Linux table and in no platform-wide source."""
+    root = Path(__file__).resolve().parents[2]
+    config = tomllib.loads((root / ".cargo" / "config.toml").read_text("utf-8"))
+
+    assert MOLD_FLAG in config["target"][LINUX_TABLE]["rustflags"], (
+        "the Linux target table must select mold"
+    )
+    assert MOLD_FLAG not in config.get("build", {}).get("rustflags", []), (
+        "mold ships for Linux only, so [build] must not name it"
+    )
+    assert not config.get("profile"), (
+        "the stable pin cannot select a codegen backend, so no profile may"
+    )

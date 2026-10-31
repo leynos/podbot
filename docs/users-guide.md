@@ -7,7 +7,9 @@ infrastructure while the agent container operates in a low-trust playpen.
 
 ## Installation
 
-Build and install from source:
+Build and install from source. On Linux, the repository's `.cargo/config.toml`
+selects the `mold` linker, so `mold` must be on `PATH` before you build from a
+checkout.
 
 ```bash
 cargo install --path .
