@@ -386,3 +386,31 @@ def test_cargo_configuration_scopes_mold_to_linux() -> None:
     assert not config.get("profile"), (
         "the stable pin cannot select a codegen backend, so no profile may"
     )
+
+
+def test_ci_setup_rust_installs_mold_and_restates_the_linker(
+    workflow_texts: dict[str, str],
+) -> None:
+    """The hosted gate installs mold and keeps it beside the warning policy.
+
+    `setup-rust` exports its `rustflags` input as `RUSTFLAGS`, which replaces
+    `.cargo/config.toml`, so the input must carry the linker flag next to
+    `-D warnings` or `make lint`'s cargo doc and Clippy link without mold.
+    """
+    document = parse_workflow("ci.yml", workflow_texts["ci.yml"])
+    setup_steps = [
+        step_map
+        for job in of_type(document.get("jobs"), dict).values()
+        for step in of_type(of_type(job, dict).get("steps"), list)
+        for step_map in (of_type(step, dict),)
+        if "/setup-rust@" in str(step_map.get("uses", ""))
+    ]
+    assert len(setup_steps) == 1, "ci.yml must run exactly one setup-rust step"
+
+    inputs = of_type(setup_steps[0].get("with"), dict)
+    assert inputs.get("install-mold") == "true", (
+        "the setup-rust step must install the mold linker the configuration selects"
+    )
+    rustflags = str(inputs.get("rustflags"))
+    assert "-D warnings" in rustflags, "setup-rust must keep denying warnings"
+    assert MOLD_FLAG in rustflags, "setup-rust must restate the mold linker flag"
