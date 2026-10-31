@@ -291,7 +291,7 @@ steps, rather than acting as a general workflow test helper.
 `.cargo/config.toml` holds the estate's development build defaults, so a bare
 `cargo build` gets them. The `mold` linker is the default on Linux, in a
 Linux-only target table; `mold` must be on `PATH` (CI installs it through
-`install-mold` on `setup-rust`). The repository pins stable `1.88.0`, so the
+`install-mold` on `setup-rust`). The repository pins stable `1.99.1`, so the
 parallel `rustc` frontend (`-Zthreads=8`) does not apply: it is a nightly flag.
 
 Assigning `RUSTFLAGS` replaces every `rustflags` source in the configuration, so
@@ -310,7 +310,7 @@ so the normalization stays in one place.
 #### 2.5.1. Cranelift
 
 Exception: Cranelift is not the development-profile backend, because Cranelift
-requires a nightly toolchain and this repository pins the stable `1.88.0`
+requires a nightly toolchain and this repository pins the stable `1.99.1`
 (recorded 2026-10-31; no measurement was taken, because a stable toolchain
 cannot select the backend). Revisit if the repository moves to a nightly pin,
 and re-measure the whole suite under Cranelift then.
