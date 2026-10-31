@@ -299,6 +299,14 @@ Assigning `RUSTFLAGS` replaces every `rustflags` source in the configuration, so
 `STANDARD_RUSTFLAGS`. Coverage builds take the platform linker. The Whitaker
 route takes no repository development flags.
 
+`scripts/tests/make_dry_run.py` owns `dry_run_recipe`, the one helper that
+dry-runs a Make gate target (`make --dry-run`) and normalizes its output.
+`test_command_contracts.py` calls it for the `make test` runner contract and
+`test_build_standard_contracts.py` calls it for the host-controlled `make test`
+and `make typecheck` contracts. A contract module that needs to read what
+another gate target would run should reuse it rather than spawn `make` itself,
+so the normalization stays in one place.
+
 #### 2.5.1. Cranelift
 
 Exception: Cranelift is not the development-profile backend, because Cranelift
