@@ -181,22 +181,22 @@ the selected scope.
 
 UI children use the package minimum supported Rust version (MSRV), currently
 1.88, and LLVM, even when the parent harness uses a development nightly. The
-root toolchain file pins the same concrete minimum for ordinary setup,
-including CI, coverage and audit. Install it before running either consumer with
-`rustup toolchain install 1.88.0`. The private UI boundary converts a two-part
-`Cargo.toml` MSRV to its minimum patch (`1.88` becomes `1.88.0`); an explicit
-patch stays unchanged. It does not select the caller's toolchain or the latest
-installed patch. The same exact selector drives Rustup executable resolution,
-Cargo validation, and nested `RUSTUP_TOOLCHAIN`, avoiding tracking-channel
-refreshes when the toolchain is already installed. This conversion belongs only
-to the two UI consumers and must not become a general toolchain-selection API.
-The boundary resolves Cargo and rustc through Rustup and explicitly replaces
-the parent's `CARGO`, `RUSTC` and `RUSTUP_TOOLCHAIN` selections. Unit-separated
-encoded flags override Cargo's ambient configuration, retaining trybuild's
-diagnostic flags. Only the known development acceleration flags and warning
-policy are removed; compatible coverage instrumentation, coverage configuration
-and path remapping are retained. Unknown or unstable flag forms fail with an
-actionable error.
+root toolchain file pins the stable `1.99.1` for ordinary setup, including CI,
+coverage and audit, so the minimum is a separate install: run
+`rustup toolchain install 1.88.0` before running either consumer. The private
+UI boundary converts a two-part `Cargo.toml` MSRV to its minimum patch (`1.88`
+becomes `1.88.0`); an explicit patch stays unchanged. It does not select the
+caller's toolchain or the latest installed patch. The same exact selector
+drives Rustup executable resolution, Cargo validation, and nested
+`RUSTUP_TOOLCHAIN`, avoiding tracking-channel refreshes when the toolchain is
+already installed. This conversion belongs only to the two UI consumers and
+must not become a general toolchain-selection API. The boundary resolves Cargo
+and rustc through Rustup and explicitly replaces the parent's `CARGO`, `RUSTC`
+and `RUSTUP_TOOLCHAIN` selections. Unit-separated encoded flags override
+Cargo's ambient configuration, retaining trybuild's diagnostic flags. Only the
+known development acceleration flags and warning policy are removed; compatible
+coverage instrumentation, coverage configuration and path remapping are
+retained. Unknown or unstable flag forms fail with an actionable error.
 
 The coverage wrapper, its private context, admission wrapper and
 `LLVM_PROFILE_FILE` remain unchanged. The boundary also supports the known
@@ -291,7 +291,7 @@ steps, rather than acting as a general workflow test helper.
 `.cargo/config.toml` holds the estate's development build defaults, so a bare
 `cargo build` gets them. The `mold` linker is the default on Linux, in a
 Linux-only target table; `mold` must be on `PATH` (CI installs it through
-`install-mold` on `setup-rust`). The repository pins stable `1.88.0`, so the
+`install-mold` on `setup-rust`). The repository pins stable `1.99.1`, so the
 parallel `rustc` frontend (`-Zthreads=8`) does not apply: it is a nightly flag.
 
 Assigning `RUSTFLAGS` replaces every `rustflags` source in the configuration, so
@@ -310,7 +310,7 @@ so the normalization stays in one place.
 #### 2.5.1. Cranelift
 
 Exception: Cranelift is not the development-profile backend, because Cranelift
-requires a nightly toolchain and this repository pins the stable `1.88.0`
+requires a nightly toolchain and this repository pins the stable `1.99.1`
 (recorded 2026-10-31; no measurement was taken, because a stable toolchain
 cannot select the backend). Revisit if the repository moves to a nightly pin,
 and re-measure the whole suite under Cranelift then.
