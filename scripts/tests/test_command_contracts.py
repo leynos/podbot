@@ -7,6 +7,7 @@ running a command is recognized, and which guards disqualify it.
 from __future__ import annotations
 
 import os
+import platform
 import re
 import subprocess
 from pathlib import Path
@@ -122,9 +123,12 @@ def test_make_test_uses_runner_and_preserves_overrides(
     assert '--timeout "1800" -- --all-targets --all-features' in default_command, (
         "the default recipe must preserve the full target and feature selection"
     )
-    assert 'RUSTFLAGS="-D warnings"' in default_command, (
+    assert 'RUSTFLAGS="-D warnings' in default_command, (
         "the default recipe must deny compiler warnings"
     )
+    assert ("-Clink-arg=-fuse-ld=mold" in default_command) == (
+        platform.system() == "Linux"
+    ), "the default recipe must restate the mold linker flag on Linux only"
     assert (
         '--timeout "42" -- -j 2 --no-default-features --test cli_feature_gating'
         in override_command
@@ -132,7 +136,7 @@ def test_make_test_uses_runner_and_preserves_overrides(
     assert "-- --nocapture" in override_command, (
         "the test recipe must forward harness arguments"
     )
-    assert 'RUSTFLAGS="-D warnings -W unused"' in override_command, (
+    assert 'RUSTFLAGS="-D warnings -W unused' in override_command, (
         "the test recipe must preserve the caller's Rust flags"
     )
     assert make_environment["UNRELATED_TEST_ENV"] == "preserve-me", (

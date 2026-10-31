@@ -1,0 +1,13 @@
+# Repository-wide Cargo defaults for the development build standard.
+#
+# The mold linker is the default on Linux. Cargo auto-discovers this file, so a
+# bare `cargo build` gets it. The toolchain is stable, so neither the parallel
+# `rustc` frontend nor the Cranelift backend applies (both need a nightly
+# `-Z` flag). Assigning `RUSTFLAGS` replaces every `rustflags` source below,
+# so the Makefile restates the linker flag where it assigns `RUSTFLAGS` for
+# the gate targets, and coverage takes the platform linker.
+
+# mold ships for Linux only, so the linker flag lives in a Linux-only table.
+# Other platforms fall through to their default linker.
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Clink-arg=-fuse-ld=mold"]
