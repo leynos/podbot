@@ -64,6 +64,12 @@ jobs:
       - name: Setup Rust
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+        with:
+          install-mold: 'true'
+          # setup-rust exports RUSTFLAGS, which replaces .cargo/config.toml, so
+          # restate the linker next to the warning policy for make lint's cargo
+          # doc and clippy.
+          rustflags: '-D warnings -Clink-arg=-fuse-ld=mold'
       - name: Setup uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       # The contracts read `.github/workflows` and need no Rust build, so

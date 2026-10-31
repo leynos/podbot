@@ -13,6 +13,7 @@ from pathlib import Path
 import typing as typ
 
 import pytest
+from make_dry_run import dry_run_recipe
 from workflow_commands import command_steps
 from workflow_contracts import of_type, parse as parse_workflow
 
@@ -22,22 +23,6 @@ TEST_COMMANDS: typ.Final[tuple[str, ...]] = (
     "make test TEST_FLAGS='--no-default-features --test cli_feature_gating --test compile_contract'",
     "make test TEST_FLAGS='--features internal'",
 )
-
-
-def _dry_run_test_recipe(
-    environment: dict[str, str], overrides: tuple[str, ...] = ()
-) -> str:
-    """Return normalized output from a dry-run of Make's test target."""
-    repository_root = Path(__file__).resolve().parents[2]
-    output = subprocess.run(
-        ["make", "--no-print-directory", "--dry-run", "test", *overrides],
-        cwd=repository_root,
-        env=environment,
-        capture_output=True,
-        check=True,
-        text=True,
-    ).stdout
-    return " ".join(output.replace("\\\n\t", " ").split())
 
 
 def test_ci_runs_each_test_lane_through_make(
@@ -102,8 +87,8 @@ def test_make_test_uses_runner_and_preserves_overrides(
     for name in inherited_make_variables:
         make_environment.pop(name, None)
 
-    default_command = _dry_run_test_recipe(make_environment)
-    override_command = _dry_run_test_recipe(
+    default_command = dry_run_recipe(make_environment)
+    override_command = dry_run_recipe(
         make_environment,
         (
             "TEST_FLAGS=--no-default-features --test cli_feature_gating -- --nocapture",
@@ -122,7 +107,7 @@ def test_make_test_uses_runner_and_preserves_overrides(
     assert '--timeout "1800" -- --all-targets --all-features' in default_command, (
         "the default recipe must preserve the full target and feature selection"
     )
-    assert 'RUSTFLAGS="-D warnings"' in default_command, (
+    assert 'RUSTFLAGS="-D warnings' in default_command, (
         "the default recipe must deny compiler warnings"
     )
     assert (
@@ -132,7 +117,7 @@ def test_make_test_uses_runner_and_preserves_overrides(
     assert "-- --nocapture" in override_command, (
         "the test recipe must forward harness arguments"
     )
-    assert 'RUSTFLAGS="-D warnings -W unused"' in override_command, (
+    assert 'RUSTFLAGS="-D warnings -W unused' in override_command, (
         "the test recipe must preserve the caller's Rust flags"
     )
     assert make_environment["UNRELATED_TEST_ENV"] == "preserve-me", (
@@ -161,7 +146,7 @@ def test_make_test_resolves_timeout_environment(
     make_environment.pop("PODBOT_TEST_TIMEOUT", None)
     make_environment.update(timeout_environment)
 
-    command = _dry_run_test_recipe(make_environment)
+    command = dry_run_recipe(make_environment)
 
     assert f'--timeout "{expected_timeout}" --' in command, (
         "the runner must receive the resolved test timeout"

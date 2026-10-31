@@ -55,6 +55,9 @@ See [docs/roadmap.md](docs/roadmap.md) for the complete implementation plan.
 
 ### Installation
 
+On Linux, the repository's `.cargo/config.toml` selects the `mold` linker, so
+`mold` must be on `PATH` before you build from a checkout.
+
 ```bash
 git clone https://github.com/leynos/podbot
 cd podbot

@@ -25,6 +25,12 @@ MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOM
 WHITAKER ?= whitaker
 NIXIE ?= nixie
 UV ?= uv
+# The development build standard (concordat rule `rust-build-defaults`): the
+# mold linker on Linux. An assigned RUSTFLAGS replaces every `rustflags` table
+# in .cargo/config.toml, so each gate recipe that sets it adds the linker flag.
+# The pinned stable toolchain has no parallel frontend or Cranelift backend.
+BUILD_HOST_OS := $(shell uname -s)
+STANDARD_RUSTFLAGS := $(if $(filter Linux,$(BUILD_HOST_OS)),-Clink-arg=-fuse-ld=mold)
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
 # The CV-005 CodeScene contracts live in shared-actions and run from a full
@@ -77,6 +83,8 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/test_coverage_contracts.py \
 	scripts/tests/test_sccache_diagnostic_contracts.py \
 	scripts/tests/test_sccache_reporter_cli.py \
+	scripts/tests/make_dry_run.py \
+	scripts/tests/test_build_standard_contracts.py \
 	scripts/tests/test_workflow_inventory.py \
 	scripts/tests/test_runner_placement_rule.py \
 	scripts/tests/test_runner_fixtures.py \
@@ -118,7 +126,7 @@ clean: ## Remove build artefacts
 	rm -rf .uv-cache .uv-tools
 
 test: ## Run tests with warnings treated as errors
-	RUSTFLAGS="$(RUST_FLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
+	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		python scripts/test_runner.py --cargo "$(CARGO)" \
 		--timeout "$(TEST_TIMEOUT)" -- \
 		$(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(TEST_FLAGS)
@@ -132,7 +140,7 @@ lint: ## Run Clippy and the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --all -- $(CARGO_FLAGS)
 
 typecheck: ## Type-check the workspace
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) check $(CARGO_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(CARGO) check $(CARGO_FLAGS) $(BUILD_JOBS)
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

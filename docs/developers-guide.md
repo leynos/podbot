@@ -286,6 +286,35 @@ to `test_sccache_diagnostic_contracts.py`. Only the paired setup and diagnostic
 contracts call it; it parses a selected workflow and returns its coverage job
 steps, rather than acting as a general workflow test helper.
 
+### 2.5. Development build standard
+
+`.cargo/config.toml` holds the estate's development build defaults, so a bare
+`cargo build` gets them. The `mold` linker is the default on Linux, in a
+Linux-only target table; `mold` must be on `PATH` (CI installs it through
+`install-mold` on `setup-rust`). The repository pins stable `1.88.0`, so the
+parallel `rustc` frontend (`-Zthreads=8`) does not apply: it is a nightly flag.
+
+Assigning `RUSTFLAGS` replaces every `rustflags` source in the configuration, so
+`make test` and `make typecheck` add the linker flag through
+`STANDARD_RUSTFLAGS`. Coverage builds take the platform linker. The Whitaker
+route takes no repository development flags.
+
+`scripts/tests/make_dry_run.py` owns `dry_run_recipe`, the one helper that
+dry-runs a Make gate target (`make --dry-run`) and normalizes its output.
+`test_command_contracts.py` calls it for the `make test` runner contract and
+`test_build_standard_contracts.py` calls it for the host-controlled `make test`
+and `make typecheck` contracts. A contract module that needs to read what
+another gate target would run should reuse it rather than spawn `make` itself,
+so the normalization stays in one place.
+
+#### 2.5.1. Cranelift
+
+Exception: Cranelift is not the development-profile backend, because Cranelift
+requires a nightly toolchain and this repository pins the stable `1.88.0`
+(recorded 2026-10-31; no measurement was taken, because a stable toolchain
+cannot select the backend). Revisit if the repository moves to a nightly pin,
+and re-measure the whole suite under Cranelift then.
+
 ## 3. Repository layout (exec subsystem)
 
 The exec subsystem lives under `src/engine/connection/exec/` and implements
