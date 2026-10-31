@@ -181,22 +181,22 @@ the selected scope.
 
 UI children use the package minimum supported Rust version (MSRV), currently
 1.88, and LLVM, even when the parent harness uses a development nightly. The
-root toolchain file pins the same concrete minimum for ordinary setup,
-including CI, coverage and audit. Install it before running either consumer with
-`rustup toolchain install 1.88.0`. The private UI boundary converts a two-part
-`Cargo.toml` MSRV to its minimum patch (`1.88` becomes `1.88.0`); an explicit
-patch stays unchanged. It does not select the caller's toolchain or the latest
-installed patch. The same exact selector drives Rustup executable resolution,
-Cargo validation, and nested `RUSTUP_TOOLCHAIN`, avoiding tracking-channel
-refreshes when the toolchain is already installed. This conversion belongs only
-to the two UI consumers and must not become a general toolchain-selection API.
-The boundary resolves Cargo and rustc through Rustup and explicitly replaces
-the parent's `CARGO`, `RUSTC` and `RUSTUP_TOOLCHAIN` selections. Unit-separated
-encoded flags override Cargo's ambient configuration, retaining trybuild's
-diagnostic flags. Only the known development acceleration flags and warning
-policy are removed; compatible coverage instrumentation, coverage configuration
-and path remapping are retained. Unknown or unstable flag forms fail with an
-actionable error.
+root toolchain file pins the stable `1.99.1` for ordinary setup, including CI,
+coverage and audit, so the minimum is a separate install: run
+`rustup toolchain install 1.88.0` before running either consumer. The private UI
+boundary converts a two-part `Cargo.toml` MSRV to its minimum patch (`1.88`
+becomes `1.88.0`); an explicit patch stays unchanged. It does not select the
+caller's toolchain or the latest installed patch. The same exact selector drives
+Rustup executable resolution, Cargo validation, and nested `RUSTUP_TOOLCHAIN`,
+avoiding tracking-channel refreshes when the toolchain is already installed.
+This conversion belongs only to the two UI consumers and must not become a
+general toolchain-selection API. The boundary resolves Cargo and rustc through
+Rustup and explicitly replaces the parent's `CARGO`, `RUSTC` and
+`RUSTUP_TOOLCHAIN` selections. Unit-separated encoded flags override Cargo's
+ambient configuration, retaining trybuild's diagnostic flags. Only the known
+development acceleration flags and warning policy are removed; compatible
+coverage instrumentation, coverage configuration and path remapping are
+retained. Unknown or unstable flag forms fail with an actionable error.
 
 The coverage wrapper, its private context, admission wrapper and
 `LLVM_PROFILE_FILE` remain unchanged. The boundary also supports the known
