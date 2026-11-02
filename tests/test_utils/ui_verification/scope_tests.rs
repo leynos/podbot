@@ -6,6 +6,7 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
 };
 
+use mockable::{DefaultEnv, Env};
 use rstest::rstest;
 
 use super::{
@@ -54,21 +55,24 @@ pub(super) fn compatibility_executables() -> CompatibilityExecutables {
     }
 }
 
-/// Observe the route during destruction without retaining any runner object.
+/// Observe the live route during destruction without caching its selector.
 pub(super) struct DropObservation<'a> {
     /// Toolchain selector present when this value was destroyed.
     pub(super) observed: &'a RefCell<Option<String>>,
+    /// Live reader used to observe the selector at destruction time.
+    pub(super) reader: &'a dyn Env,
 }
 
 impl Drop for DropObservation<'_> {
     fn drop(&mut self) {
-        *self.observed.borrow_mut() = std::env::var("RUSTUP_TOOLCHAIN").ok();
+        *self.observed.borrow_mut() = self.reader.raw("RUSTUP_TOOLCHAIN").ok();
     }
 }
 
 #[test]
 fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
     temp_env::with_vars(PARENT_ENVIRONMENT, || {
+        let reader = DefaultEnv::new();
         let observed = RefCell::new(None);
         let route = VerificationRoute {
             encoded_flags: String::from("verification-flags"),
@@ -76,62 +80,63 @@ fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
         route.run(&compatibility_executables(), || {
             let _drop_observation = DropObservation {
                 observed: &observed,
+                reader: &reader,
             };
             assert_eq!(
-                std::env::var("RUSTC").expect("scoped rustc exists"),
+                reader.raw("RUSTC").expect("scoped rustc exists"),
                 "/compatibility/rustc",
                 "absolute parent compiler must not leak"
             );
             assert_eq!(
-                std::env::var("CARGO").expect("scoped Cargo exists"),
+                reader.raw("CARGO").expect("scoped Cargo exists"),
                 "/compatibility/cargo",
                 "the compatibility Cargo override must be active"
             );
             assert_eq!(
-                std::env::var("CARGO_ENCODED_RUSTFLAGS").expect("scoped flags exist"),
-                "verification-flags",
+                reader.raw("CARGO_ENCODED_RUSTFLAGS").as_deref(),
+                Ok("verification-flags"),
                 "encoded verification flags must be active"
             );
             assert_eq!(
-                std::env::var("RUSTC_WRAPPER").expect("wrapper exists"),
+                reader.raw("RUSTC_WRAPPER").expect("wrapper exists"),
                 "coverage-wrapper",
                 "coverage wrapper selection must be preserved"
             );
             assert_eq!(
-                std::env::var(COVERAGE_FLAGS_KEY).expect("context exists"),
+                reader.raw(COVERAGE_FLAGS_KEY).expect("context exists"),
                 "instrumentation-context",
                 "coverage instrumentation context must be preserved"
             );
             assert_eq!(
-                std::env::var(ADMISSION_WRAPPER_KEY).expect("admission exists"),
+                reader.raw(ADMISSION_WRAPPER_KEY).expect("admission exists"),
                 "admission-wrapper",
                 "compiler admission wrapper must be preserved"
             );
             assert_eq!(
-                std::env::var("LLVM_PROFILE_FILE").expect("profiling exists"),
+                reader.raw("LLVM_PROFILE_FILE").expect("profiling exists"),
                 "preserved-%p.profraw",
                 "coverage profile path must be preserved"
             );
         });
         assert_eq!(observed.borrow().as_deref(), Some("1.88.0"));
         assert_eq!(
-            std::env::var("RUSTC").expect("parent compiler restored"),
+            reader.raw("RUSTC").expect("parent compiler restored"),
             "/parent/nightly/rustc",
             "parent compiler selection must be restored"
         );
         assert_eq!(
-            std::env::var("CARGO").expect("parent Cargo restored"),
+            reader.raw("CARGO").expect("parent Cargo restored"),
             "/parent/nightly/cargo",
             "parent Cargo selection must be restored"
         );
         assert_eq!(
-            std::env::var("RUSTUP_TOOLCHAIN").expect("parent toolchain restored"),
-            "nightly-parent",
+            reader.raw("RUSTUP_TOOLCHAIN").as_deref(),
+            Ok("nightly-parent"),
             "parent toolchain selection must be restored"
         );
         assert_eq!(
-            std::env::var("CARGO_ENCODED_RUSTFLAGS").expect("parent flags restored"),
-            "parent-flags",
+            reader.raw("CARGO_ENCODED_RUSTFLAGS").as_deref(),
+            Ok("parent-flags"),
             "parent encoded flags must be restored"
         );
     });
@@ -140,6 +145,7 @@ fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
 #[test]
 fn verification_scope_restores_the_parent_when_registration_panics() {
     temp_env::with_vars([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
+        let reader = DefaultEnv::new();
         let observed = RefCell::new(None);
         let route = VerificationRoute {
             encoded_flags: String::new(),
@@ -148,6 +154,7 @@ fn verification_scope_restores_the_parent_when_registration_panics() {
             route.run(&compatibility_executables(), || {
                 let _drop_observation = DropObservation {
                     observed: &observed,
+                    reader: &reader,
                 };
                 panic!("intentional registration failure");
             });
@@ -162,7 +169,9 @@ fn verification_scope_restores_the_parent_when_registration_panics() {
             "unwinding destruction must see compatibility selection"
         );
         assert_eq!(
-            std::env::var("RUSTUP_TOOLCHAIN").expect("parent toolchain restored"),
+            reader
+                .raw("RUSTUP_TOOLCHAIN")
+                .expect("parent toolchain restored"),
             "nightly-parent",
             "parent toolchain selection must be restored"
         );
@@ -249,9 +258,10 @@ fn unsupported_caller_flags_fail_before_registration() {
                 ("RUSTC_WORKSPACE_WRAPPER", None),
             ],
             || {
+                let reader = DefaultEnv::new();
                 assert!(
                     matches!(
-                        VerificationRoute::from_environment(),
+                        VerificationRoute::from_environment(&reader),
                         Err(VerificationError::UnsupportedFlags(_))
                     ),
                     "unrecognized input must not be silently discarded"
@@ -275,9 +285,10 @@ fn non_unicode_flags_are_rejected_without_lossy_conversion() {
                 ("RUSTC_WORKSPACE_WRAPPER", None),
             ],
             || {
+                let reader = DefaultEnv::new();
                 assert!(
                     matches!(
-                        VerificationRoute::from_environment(),
+                        VerificationRoute::from_environment(&reader),
                         Err(VerificationError::NonUnicode("CARGO_ENCODED_RUSTFLAGS"))
                     ),
                     "invalid Unicode must not silently disappear"
@@ -316,22 +327,25 @@ fn unknown_workspace_wrapper_is_refused_without_silently_bypassing_it(#[case] ba
             ),
         ],
         || {
+            let reader = DefaultEnv::new();
             with_isolated_profile_backends(|| {
                 assert!(
                     matches!(
-                        VerificationRoute::from_environment(),
+                        VerificationRoute::from_environment(&reader),
                         Err(VerificationError::WorkspaceWrapper)
                     ),
                     "an unknown wrapper must not defeat compiler selection"
                 );
                 assert_eq!(
-                    std::env::var("RUSTC_WORKSPACE_WRAPPER").expect("wrapper remains present"),
+                    reader
+                        .raw("RUSTC_WORKSPACE_WRAPPER")
+                        .expect("wrapper remains present"),
                     "unqualified-workspace-wrapper",
                     "refusal must preserve the caller's topology"
                 );
             });
             assert_eq!(
-                std::env::var(backend_key).expect("profile backend restored"),
+                reader.raw(backend_key).expect("profile backend restored"),
                 "cranelift",
                 "profile isolation must restore every inherited matching key"
             );
