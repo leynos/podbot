@@ -9,14 +9,12 @@ use crate::error::GitHubError;
 ///
 /// Extracts the HTTP status code from the Octocrab error (when available)
 /// and produces a targeted error message with remediation hints. The raw
-/// error is always preserved for debugging.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "required by map_err signature; error is consumed to extract status"
-)]
-pub(super) fn classify_github_api_error(error: octocrab::Error) -> GitHubError {
+/// error display is always preserved in the classified message for debugging.
+/// Classification borrows the original error without modifying it; the returned
+/// authentication failure stores the message rather than the error source.
+pub(super) fn classify_github_api_error(error: &octocrab::Error) -> GitHubError {
     match error {
-        octocrab::Error::GitHub { ref source, .. } => {
+        octocrab::Error::GitHub { source, .. } => {
             let code = source.status_code.as_u16();
             let raw = format!("{error}");
             let msg = classify_by_status(code, &raw);
