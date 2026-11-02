@@ -304,7 +304,7 @@ fn run_agent_api(
 /// Delegate token-daemon requests to the experimental library API.
 /// For example, container `sandbox` currently returns `Success` without refreshing tokens.
 #[cfg(feature = "experimental")]
-fn run_token_daemon_api(container_id: &str) -> PodbotResult<CommandOutcome> {
+const fn run_token_daemon_api(container_id: &str) -> PodbotResult<CommandOutcome> {
     podbot::api::run_token_daemon(container_id)
 }
 
@@ -318,7 +318,7 @@ fn run_token_daemon_api(_container_id: &str) -> PodbotResult<CommandOutcome> {
 /// Delegate container-list requests to the experimental library API.
 /// For example, this placeholder returns `Success` without listing containers.
 #[cfg(feature = "experimental")]
-fn list_containers_api() -> PodbotResult<CommandOutcome> {
+const fn list_containers_api() -> PodbotResult<CommandOutcome> {
     podbot::api::list_containers()
 }
 
@@ -332,7 +332,7 @@ fn list_containers_api() -> PodbotResult<CommandOutcome> {
 /// Delegate container-stop requests to the experimental library API.
 /// For example, container `sandbox` currently returns `Success` without stopping it.
 #[cfg(feature = "experimental")]
-fn stop_container_api(container: &str) -> PodbotResult<CommandOutcome> {
+const fn stop_container_api(container: &str) -> PodbotResult<CommandOutcome> {
     podbot::api::stop_container(container)
 }
 
