@@ -3,8 +3,8 @@
 //! Starts an alpine/git container via testcontainers, populates a local bare
 //! git server, and exposes a Bollard `Docker` handle that points at the same
 //! socket. The container is kept alive for the duration of the scenario by the
-//! shared scenario state, and is torn down explicitly through the
-//! [`SandboxBundle`] `Drop` implementation when the scenario completes.
+//! shared scenario state. Normal teardown uses [`SandboxBundle::finish`] and
+//! verifies same-ID absence; its `Drop` implementation provides fallback cleanup.
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -64,34 +64,9 @@ fn resolve_docker_host_endpoint() -> StepResult<String> {
         .clone()
 }
 
-/// Ensure `DOCKER_HOST` reflects the resolved socket so `testcontainers` can
-/// pick it up at client construction time.
-///
-/// `testcontainers` 0.27 has no programmatic API for injecting a Docker host;
-/// it reads `DOCKER_HOST` (or `tc.host` from `~/.testcontainers.properties`)
-/// during client init. When the surrounding test environment has not already
-/// set `DOCKER_HOST` but a Podman or Docker socket is present, this helper
-/// mirrors the resolved endpoint into the process environment exactly once,
-/// gated through a dedicated `OnceLock<()>` so the one-shot unsafe write is
-/// serialized across concurrent test threads.
-fn ensure_docker_host() -> StepResult<DockerHostSocket> {
-    static ENV_INIT: OnceLock<()> = OnceLock::new();
-    let endpoint = resolve_docker_host_endpoint()?;
-    ENV_INIT.get_or_init(|| {
-        let already_set = std::env::var("DOCKER_HOST").is_ok_and(|existing| !existing.is_empty());
-        if !already_set {
-            // SAFETY: The surrounding `OnceLock::get_or_init` guarantees that
-            // this branch executes exactly once per process, serialized
-            // against concurrent test threads. The write is required because
-            // `testcontainers` reads `DOCKER_HOST` during client construction
-            // and exposes no in-process alternative.
-            unsafe {
-                std::env::set_var("DOCKER_HOST", &endpoint);
-            }
-        }
-    });
-    Ok(DockerHostSocket { endpoint })
-}
+/// Shared scoped environment boundary for synchronous test operations.
+#[path = "../test_support/environment.rs"]
+mod environment;
 
 fn detect_local_socket() -> Option<String> {
     candidate_socket_paths()
@@ -131,28 +106,37 @@ fn connect_bollard(socket: &DockerHostSocket) -> StepResult<Docker> {
 /// Start the sandbox container, populate the in-container git server, and
 /// return the lifecycle handles bundled together.
 pub fn launch_sandbox_bundle() -> StepResult<SandboxBundle> {
-    let socket = ensure_docker_host()?;
+    let socket = DockerHostSocket {
+        endpoint: resolve_docker_host_endpoint()?,
+    };
     let runtime =
         Arc::new(Runtime::new().map_err(|err| format!("failed to create tokio runtime: {err}"))?);
     let docker = Arc::new(connect_bollard(&socket)?);
 
-    let container = runtime
-        .block_on(async { start_sandbox_container().await })
-        .map_err(|err| format!("failed to start sandbox container: {err}"))?;
+    // testcontainers has no host-injection API. Scope its lazy client creation
+    // and startup together, including all awaits, then restore the host value.
+    // The returned container retains the client and its parsed configuration.
+    let container = environment::with_test_environment("DOCKER_HOST", &socket.endpoint, || {
+        runtime.block_on(start_sandbox_container())
+    })
+    .map_err(|err| format!("failed to start sandbox container: {err}"))?;
     let container_id = container.id().to_owned();
 
-    Ok(SandboxBundle {
+    let bundle = SandboxBundle {
         runtime,
         container: Some(container),
         docker,
         container_id,
-    })
+    };
+    bundle.record_created()?;
+    Ok(bundle)
 }
 
 async fn start_sandbox_container() -> StepResult<ContainerAsync<GenericImage>> {
     GenericImage::new(SANDBOX_IMAGE, SANDBOX_TAG)
         .with_entrypoint("sh")
         .with_wait_for(WaitFor::message_on_stdout(READY_MARKER))
+        .with_label("org.podbot.e2e.owner-pid", std::process::id().to_string())
         .with_cmd(["-c", SETUP_SCRIPT])
         .start()
         .await
@@ -169,4 +153,44 @@ pub const fn askpass_path() -> &'static str {
 #[must_use]
 pub const fn workspace_path() -> &'static str {
     WORKSPACE_PATH
+}
+
+#[cfg(test)]
+mod tests {
+    //! Live-engine proof that scoped startup retains the configured client.
+
+    use super::launch_sandbox_bundle;
+
+    #[test]
+    fn container_client_remains_usable_after_host_environment_is_restored() {
+        temp_env::with_vars::<&str, &str, _, _>([], || {
+            let original_host = std::env::var_os("DOCKER_HOST");
+            let bundle = launch_sandbox_bundle().expect("sandbox container should start");
+            assert_eq!(
+                std::env::var_os("DOCKER_HOST"),
+                original_host,
+                "startup must restore the original Docker host"
+            );
+            let container = bundle
+                .container
+                .as_ref()
+                .expect("bundle should retain its container");
+            let running = bundle
+                .runtime
+                .block_on(container.is_running())
+                .expect("retained testcontainers client should inspect the container");
+            assert!(
+                running,
+                "sandbox should remain running after environment restoration"
+            );
+            bundle
+                .finish()
+                .expect("owned sandbox removal and absence should be confirmed");
+            assert_eq!(
+                std::env::var_os("DOCKER_HOST"),
+                original_host,
+                "teardown must leave the original Docker host unchanged"
+            );
+        });
+    }
 }

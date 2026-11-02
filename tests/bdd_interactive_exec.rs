@@ -3,6 +3,9 @@
 #![cfg(feature = "internal")]
 
 mod bdd_interactive_exec_helpers;
+/// Scoped stdin selection used only by this suite and orchestration/exec peers.
+#[path = "test_support/stdin_forwarding.rs"]
+mod stdin_forwarding;
 mod test_utils;
 
 use bdd_interactive_exec_helpers::{InteractiveExecState, interactive_exec_state};

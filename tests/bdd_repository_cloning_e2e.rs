@@ -19,8 +19,8 @@ use rstest_bdd_macros::scenario;
 )]
 fn repository_clone_succeeds_against_a_real_container(
     repository_cloning_e2e_state: RepositoryCloningE2eState,
-) {
-    let _ = repository_cloning_e2e_state;
+) -> Result<(), String> {
+    repository_cloning_e2e_state.finish()
 }
 
 #[scenario(
@@ -29,6 +29,6 @@ fn repository_clone_succeeds_against_a_real_container(
 )]
 fn clone_exec_failure_is_reported_against_a_real_container(
     repository_cloning_e2e_state: RepositoryCloningE2eState,
-) {
-    let _ = repository_cloning_e2e_state;
+) -> Result<(), String> {
+    repository_cloning_e2e_state.finish()
 }
