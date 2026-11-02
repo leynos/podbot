@@ -191,41 +191,61 @@ where
 /// `params.clientCapabilities`, then re-serializes the JSON preserving the
 /// original line ending. Returns the original frame unchanged on any parse or
 /// serialization failure, or if no capabilities were removed.
-#[expect(
-    clippy::cognitive_complexity,
-    reason = "inline parse and serialize fallback tracing keeps this review-required flow local"
-)]
 pub(super) fn mask_acp_initialize_frame(frame: &[u8]) -> Vec<u8> {
     let (payload, line_ending) = split_frame_line_ending(frame);
 
     let mut message: Value = match serde_json::from_slice(payload) {
         Ok(v) => v,
         Err(e) => {
-            tracing::debug!(
-                error = %e,
-                "ACP frame JSON deserialization failed; forwarding unchanged"
-            );
+            log_frame_deserialization_failure(&e);
             return frame.to_vec();
         }
     };
 
     if !remove_masked_acp_capabilities(&mut message) {
-        tracing::debug!("ACP frame is not a maskable initialize request; forwarding unchanged");
+        log_unmaskable_frame();
         return frame.to_vec();
     }
 
     let mut serialized = match serde_json::to_vec(&message) {
         Ok(v) => v,
         Err(e) => {
-            tracing::debug!(
-                error = %e,
-                "ACP frame JSON serialization failed after masking; forwarding unchanged"
-            );
+            log_frame_serialization_failure(&e);
             return frame.to_vec();
         }
     };
     serialized.extend_from_slice(line_ending);
     serialized
+}
+
+/// Records why JSON parsing left a frame unchanged, including the parse error.
+/// For example, call `log_frame_deserialization_failure(&error)` after parsing
+/// an incomplete object fails. A subscriber admitting this module's debug
+/// events receives the failure message and display-formatted `error` field.
+fn log_frame_deserialization_failure(error: &serde_json::Error) {
+    tracing::debug!(
+        error = %error,
+        "ACP frame JSON deserialization failed; forwarding unchanged"
+    );
+}
+
+/// Records an unchanged frame whose message has no blocked capabilities.
+/// For example, call `log_unmaskable_frame()` for a `session/new` request. A
+/// subscriber admitting this module's debug events receives the unchanged-frame
+/// message, with no error field.
+fn log_unmaskable_frame() {
+    tracing::debug!("ACP frame is not a maskable initialize request; forwarding unchanged");
+}
+
+/// Records why serialization left a frame unchanged, including the error.
+/// For example, call `log_frame_serialization_failure(&error)` after JSON
+/// serialization fails. A subscriber admitting this module's debug events
+/// receives the failure message and display-formatted `error` field.
+fn log_frame_serialization_failure(error: &serde_json::Error) {
+    tracing::debug!(
+        error = %error,
+        "ACP frame JSON serialization failed after masking; forwarding unchanged"
+    );
 }
 
 /// Splits a newline-delimited frame into its JSON payload and trailing line

@@ -217,6 +217,12 @@ ACP hosting defaults to sandbox-preserving capability masking:
 - An explicit operator override may allow ACP delegation when host-executed
   tools are intentionally desired.
 
+The private diagnostic helpers in `exec/acp_helpers.rs` belong solely to the
+initial-frame masker. Its parse, capability-removal and serialization branches
+call them to report unchanged forwarding; they retain debug-level events and
+error fields without changing the frame. These helpers are not a general JSON
+codec or logging interface and must not be reused by other protocol handlers.
+
 ACP masking is an implementation requirement, not a documentation preference:
 
 - Podbot must parse the ACP initialization handshake and remove blocked

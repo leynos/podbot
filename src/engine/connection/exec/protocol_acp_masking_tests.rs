@@ -2,6 +2,7 @@
 //! removal, preservation of unrelated capabilities, and pass-through of
 //! non-initialize or malformed frames.
 
+use proptest::prelude::*;
 use rstest::rstest;
 
 use super::{
@@ -139,4 +140,66 @@ fn mask_acp_initialize_frame_leaves_malformed_input_unchanged() {
     let frame = malformed_initialize_bytes();
 
     assert_eq!(mask_acp_initialize_frame(&frame), frame);
+}
+
+#[rstest]
+#[case::null(b"null\r\n")]
+#[case::array(b"[1, 2]\n")]
+#[case::scalar(b"true")]
+#[case::non_object_params(b"{ \"method\": \"initialize\", \"params\": [] }\n")]
+#[case::non_object_capabilities(
+    b"{\"method\":\"initialize\",\"params\":{\"clientCapabilities\":false}}\r\n"
+)]
+#[case::unblocked_capabilities(
+    b"{ \"method\": \"initialize\", \"params\": { \"clientCapabilities\": { \"other\": 1 } } }\n"
+)]
+#[case::invalid_utf8(b"\xff\n")]
+fn unmaskable_frames_remain_byte_exact(#[case] frame: &[u8]) {
+    let forwarded = mask_acp_initialize_frame(frame);
+    assert_eq!(
+        forwarded, frame,
+        "unmaskable bytes must be forwarded verbatim"
+    );
+}
+
+proptest! {
+    #[test]
+    fn masking_preserves_unknown_fields_and_line_endings(
+        text in ".{0,64}",
+        number in any::<i64>(),
+        terminal in any::<bool>(),
+        line_ending in prop::sample::select(vec!["", "\n", "\r\n"]),
+    ) {
+        let input = serde_json::json!({
+            "method": "initialize",
+            "extension": text,
+            "params": {
+                "extension": number,
+                "clientCapabilities": {
+                    "terminal": terminal,
+                    "fs": { "readTextFile": true },
+                    "extension": { "text": text, "number": number }
+                }
+            }
+        });
+        let expected = serde_json::json!({
+            "method": "initialize",
+            "extension": text,
+            "params": {
+                "extension": number,
+                "clientCapabilities": {
+                    "extension": { "text": text, "number": number }
+                }
+            }
+        });
+        let mut frame = serde_json::to_vec(&input)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        frame.extend_from_slice(line_ending.as_bytes());
+        let mut expected_frame = serde_json::to_vec(&expected)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        expected_frame.extend_from_slice(line_ending.as_bytes());
+
+        let masked = mask_acp_initialize_frame(&frame);
+        prop_assert_eq!(masked, expected_frame);
+    }
 }
