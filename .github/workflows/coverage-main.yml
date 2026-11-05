@@ -69,6 +69,15 @@ jobs:
       - name: Setup Rust
         id: setup-rust
         uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+      # The UI verification tests resolve the MSRV toolchain through Rustup
+      # and never install it. The pull-request lane happens to have it from
+      # an earlier step; this lane runs coverage alone, so provision it.
+      - name: Install the MSRV toolchain
+        run: |
+          msrv="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '[.packages[].rust_version | select(. != null)][0]')"
+          case "$msrv" in *.*.*) ;; *) msrv="$msrv.0" ;; esac
+          rustup toolchain install "$msrv" --profile minimal --no-self-update
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@5a99aed78ce68dcebd3052b75c31e6f173162b1e
         with:
