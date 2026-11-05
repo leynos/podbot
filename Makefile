@@ -81,6 +81,7 @@ WORKFLOW_PY_SRCS := \
 	scripts/tests/conftest.py scripts/tests/test_workflow_contracts.py \
 	scripts/tests/test_command_contracts.py \
 	scripts/tests/test_coverage_contracts.py \
+	scripts/tests/test_publisher_msrv.py \
 	scripts/tests/test_sccache_diagnostic_contracts.py \
 	scripts/tests/test_sccache_reporter_cli.py \
 	scripts/tests/make_dry_run.py \
