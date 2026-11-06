@@ -59,13 +59,8 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
         "|| github.event.pull_request.user.login == 'dependabot[bot]') "
         "&& 'ubuntu-latest' || 'ubicloud-standard-4' }}",
     ),
-    (
-        "coverage-main.yml",
-        "coverage-upload",
-        "${{ (github.event.pull_request.head.repo.fork "
-        "|| github.event.pull_request.user.login == 'dependabot[bot]') "
-        "&& 'ubuntu-latest' || 'ubicloud-standard-2' }}",
-    ),
+    # Hosted: a main coverage upload blocks no one's work.
+    ("coverage-main.yml", "coverage-upload", "ubuntu-latest"),
     # Hosted on purpose: about a minute of shell with nothing to compile.
     ("sccache-readers-e2e.yml", "readers", "ubuntu-latest"),
 ]
@@ -74,7 +69,6 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
 #: states in minutes.
 CEILINGS: typ.Final[list[tuple[str, str, object]]] = [
     ("ci.yml", "build-test", 55),
-    ("coverage-main.yml", "coverage-upload", 45),
 ]
 
 
@@ -203,7 +197,6 @@ def test_every_ubicloud_job_states_its_own_ceiling(
 #: The Ubicloud runner class each placed lane names.
 CLASSES: typ.Final[dict[tuple[str, str], str]] = {
     ("ci.yml", "build-test"): "ubicloud-standard-4",
-    ("coverage-main.yml", "coverage-upload"): "ubicloud-standard-2",
 }
 
 
