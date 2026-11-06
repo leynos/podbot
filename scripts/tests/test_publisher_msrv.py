@@ -42,4 +42,5 @@ def test_the_publisher_installs_the_msrv_before_measuring_coverage() -> None:
     assert install[0] < measure[0], "the MSRV must be installed before coverage"
     command = str(steps[install[0]]["run"])
     assert "rust_version" in command, "the MSRV must come from the manifest"
+    assert "pipefail" in command, "a failed cargo metadata must stop the step"
     assert not re.search(r"\b1\.\d+\.\d+\b", command), "no restated version"

@@ -74,8 +74,13 @@ jobs:
       # an earlier step; this lane runs coverage alone, so provision it.
       - name: Install the MSRV toolchain
         run: |
+          set -euo pipefail
           msrv="$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '[.packages[].rust_version | select(. != null)][0]')"
+            | jq -r '[.packages[].rust_version | select(. != null)][0] // empty')"
+          if [[ -z "$msrv" ]]; then
+            echo "::error::no package declares rust-version, so there is no MSRV to install" >&2
+            exit 1
+          fi
           case "$msrv" in *.*.*) ;; *) msrv="$msrv.0" ;; esac
           rustup toolchain install "$msrv" --profile minimal --no-self-update
       - name: Test and Measure Coverage
