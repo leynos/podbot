@@ -53,6 +53,7 @@ def test_artefact_selection_error_returns_runner_failure(
     environment = _fake_cargo_environment(tmp_path, monkeypatch)
 
     def reject_artefacts(*args: typ.Any, **kwargs: typ.Any) -> typ.NoReturn:
+        """Raise a RunnerError as if no current test artefact existed."""
         raise RunnerError("no current test artefact")
 
     monkeypatch.setattr(test_runner_nested, "select_test_executables", reject_artefacts)
@@ -91,6 +92,7 @@ def test_main_redacts_and_bounds_runner_errors(
     )
 
     def fail_dispatch(*args: typ.Any, **kwargs: typ.Any) -> typ.NoReturn:
+        """Raise a RunnerError carrying the test's message."""
         raise RunnerError(message)
 
     monkeypatch.setattr(test_runner, "_run_parsed_arguments", fail_dispatch)

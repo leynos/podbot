@@ -71,10 +71,12 @@ def test_subreaper_snapshot_precedes_runner_child_launch(
     order: list[str] = []
 
     def snapshot() -> frozenset[tuple[int, int]]:
+        """Record the snapshot step and return no child identities."""
         order.append("snapshot")
         return frozenset()
 
     def fail_to_start(*_args: object, **_kwargs: object) -> None:
+        """Record the start step, then fail with a controlled spawn error."""
         order.append("start")
         raise OSError("controlled spawn failure")
 
@@ -107,6 +109,7 @@ def test_pidfd_signal_failure_falls_back_to_identity_checked_kill(
     closed: list[int] = []
 
     def fail_pidfd_signal(_descriptor: int, _signum: int) -> None:
+        """Raise a controlled pidfd signal failure."""
         raise OSError("controlled pidfd signal failure")
 
     monkeypatch.setattr(process_tree, "_read_process", lambda _pid: process)
@@ -179,6 +182,7 @@ def test_read_process_replaces_invalid_utf8_in_stat_command_name(
     real_read_bytes = pathlib.Path.read_bytes
 
     def read_bytes(path: pathlib.Path) -> bytes:
+        """Return the prepared stat and command bytes, and read other paths for real."""
         if path == stat_path:
             return stat
         if path == command_path:
@@ -311,6 +315,7 @@ def test_snapshot_queries_do_not_refresh_or_mutate_tree(
     reads = 0
 
     def read_table() -> dict[int, process_tree.ProcessInfo]:
+        """Count the read and return the root and child process entries."""
         nonlocal reads
         reads += 1
         return {root.pid: root, child.pid: child}

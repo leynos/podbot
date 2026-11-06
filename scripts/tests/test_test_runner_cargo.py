@@ -342,10 +342,13 @@ def test_relative_manifest_is_anchored_to_caller_directory(
     observed: dict[str, typ.Any] = {}
 
     class FakeSupervisor:
+        """Supervisor stub that records the request it is asked to run."""
+
         def run_capture(
             self,
             request: CommandRequest,
         ) -> tuple[int, str, str]:
+            """Record the command, working directory and purpose, and report success."""
             observed["command"] = request.command
             observed["cwd"] = request.cwd
             observed["purpose"] = request.purpose

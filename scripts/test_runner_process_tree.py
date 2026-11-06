@@ -102,6 +102,7 @@ class OwnedProcessTree:
     """Track a child and its descendants without addressing unrelated PIDs."""
 
     def __init__(self, root: ProcessTreeRoot) -> None:
+        """Start tracking the tree below the given root with nothing owned yet."""
         self.root_pid = root.pid
         self.root_command = root.command
         self.started_at = root.started_at

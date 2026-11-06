@@ -19,6 +19,8 @@ _JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION = 1
 
 
 class _BasicLimitInformation(ctypes.Structure):
+    """ctypes mirror of the Windows JOBOBJECT_BASIC_LIMIT_INFORMATION structure."""
+
     _fields_ = [
         ("PerProcessUserTimeLimit", ctypes.c_longlong),
         ("PerJobUserTimeLimit", ctypes.c_longlong),
@@ -33,6 +35,8 @@ class _BasicLimitInformation(ctypes.Structure):
 
 
 class _IoCounters(ctypes.Structure):
+    """ctypes mirror of the Windows IO_COUNTERS structure."""
+
     _fields_ = [
         (name, ctypes.c_ulonglong)
         for name in (
@@ -47,6 +51,8 @@ class _IoCounters(ctypes.Structure):
 
 
 class _ExtendedLimitInformation(ctypes.Structure):
+    """ctypes mirror of the Windows JOBOBJECT_EXTENDED_LIMIT_INFORMATION structure."""
+
     _fields_ = [
         ("BasicLimitInformation", _BasicLimitInformation),
         ("IoInfo", _IoCounters),
@@ -58,6 +64,8 @@ class _ExtendedLimitInformation(ctypes.Structure):
 
 
 class _BasicAccountingInformation(ctypes.Structure):
+    """ctypes mirror of the Windows JOBOBJECT_BASIC_ACCOUNTING_INFORMATION structure."""
+
     _fields_ = [
         ("TotalUserTime", ctypes.c_longlong),
         ("TotalKernelTime", ctypes.c_longlong),
@@ -74,6 +82,7 @@ class WindowsProcessJob:
     """Keep a supervised process and all descendants in one killable job."""
 
     def __init__(self, handle: int, kernel32: ctypes.CDLL, ntdll: ctypes.CDLL) -> None:
+        """Hold the job handle and the libraries that operate on it."""
         self.handle = handle
         self.kernel32 = kernel32
         self.ntdll = ntdll

@@ -220,6 +220,7 @@ def test_configured_cargo_home_does_not_resolve_user_home(
     cache_lock.touch()
 
     def reject_home_lookup(_path_type: type[pathlib.Path]) -> pathlib.Path:
+        """Fail the test if the home directory is looked up."""
         raise AssertionError("configured Cargo home should bypass Path.home")
 
     monkeypatch.setattr(pathlib.Path, "home", reject_home_lookup)

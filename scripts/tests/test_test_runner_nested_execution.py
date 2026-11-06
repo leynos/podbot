@@ -46,6 +46,7 @@ def test_cargo_build_exits_before_nested_test_process_starts(
     real_build = test_runner_nested._run_json_build
 
     def mark_build_complete(*args: typ.Any, **kwargs: typ.Any) -> int:
+        """Run the real build, then touch the marker file that records its return."""
         status = real_build(*args, **kwargs)
         pathlib.Path(environment["FAKE_BUILD_RETURNED"]).touch()
         return status
@@ -143,6 +144,7 @@ def test_artefact_errors_redact_known_environment_secrets(
         command: list[str],
         messages: list[dict[str, typ.Any]],
     ) -> int:
+        """Append the compile-contract artefact message and return status 0."""
         messages.append(
             cargo_artefact_message(package_id, "compile_contract", artefact_path)
         )
@@ -196,6 +198,7 @@ def test_tmpdir_errors_redact_invocation_environment_secrets(
     )
 
     def reject_tmpdir(runtime_environment: dict[str, str]) -> None:
+        """Raise a permission error naming the Cargo target temporary directory."""
         raise OSError(
             errno.EACCES,
             "Permission denied",

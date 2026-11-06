@@ -124,6 +124,8 @@ def test_process_tree_discovery_matches_reachable_children(
 
 @dataclasses.dataclass(frozen=True)
 class _ProcessTreeIdentities:
+    """Process identifiers used to build one process-tree transition case."""
+
     runner_pid: int
     root_pid: int
     tracked_pid: int
@@ -135,6 +137,8 @@ class _ProcessTreeIdentities:
 
 @dataclasses.dataclass(frozen=True)
 class _ProcessTreeTransitionCase:
+    """A tree, its snapshot and the identifiers a transition test checks."""
+
     tree: OwnedProcessTree
     snapshot: ProcessTreeSnapshot
     identities: _ProcessTreeIdentities
