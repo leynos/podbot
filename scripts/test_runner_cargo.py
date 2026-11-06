@@ -103,6 +103,7 @@ class RunnerCommandFailure(RunnerError):
         diagnostic: str = "",
         summary: str | None = None,
     ) -> None:
+        """Record the status, diagnostic and summary of a failed runner command."""
         super().__init__(summary or f"test runner stopped with status {status}")
         self.status = status
         self.diagnostic = diagnostic

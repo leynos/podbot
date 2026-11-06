@@ -44,16 +44,22 @@ def test_supervise_banner_redacts_credentials_and_bounds_command(
     monkeypatch.setenv("AWS_SESSION_TOKEN", "environment-secret-value")
 
     class FakeSupervisor:
+        """Supervisor stub that accepts any arguments and reports success."""
+
         def __init__(self, *_args: object, **_kwargs: object) -> None:
+            """Accept and ignore any arguments."""
             pass
 
         def __enter__(self) -> FakeSupervisor:
+            """Return the supervisor itself as the context."""
             return self
 
         def __exit__(self, *_args: object) -> None:
+            """Leave the context without suppressing any exception."""
             return None
 
         def run_inherited(self, _request: object) -> int:
+            """Report success without running anything."""
             return 0
 
     monkeypatch.setattr(supervise_module, "start_configured_sccache", lambda _env: None)
@@ -108,22 +114,29 @@ def test_supervise_mode_prestarts_sccache_before_process_supervisor(
     requests: list[test_runner_supervisor.CommandRequest] = []
 
     def prestart(environment: dict[str, str]) -> None:
+        """Record the sccache prestart and mark the environment it received."""
         events.append("prestart")
         environment["SCCACHE_IDLE_TIMEOUT"] = "0"
         started_environments.append(environment)
 
     class FakeSupervisor:
+        """Supervisor stub that records its construction, entry, run and exit."""
+
         def __init__(self, *_args: object, **_kwargs: object) -> None:
+            """Record that the supervisor was constructed."""
             events.append("construct")
 
         def __enter__(self) -> FakeSupervisor:
+            """Record entry and return the supervisor itself."""
             events.append("enter")
             return self
 
         def __exit__(self, *_args: object) -> None:
+            """Record exit without suppressing any exception."""
             events.append("exit")
 
         def run_inherited(self, request: test_runner_supervisor.CommandRequest) -> int:
+            """Record the run and the request, and return status 29."""
             events.append("run")
             requests.append(request)
             return 29
@@ -156,6 +169,7 @@ def test_process_tree_refresh_is_throttled_and_refreshed_on_exit(
     real_refresh = test_runner_supervisor.OwnedProcessTree.refresh
 
     def count_refreshes(tree: test_runner_supervisor.OwnedProcessTree) -> dict:
+        """Count each refresh and delegate to the real refresh."""
         nonlocal refresh_count
         refresh_count += 1
         return real_refresh(tree)

@@ -75,6 +75,7 @@ def test_sccache_start_disables_server_idle_shutdown(
     captured: dict[str, object] = {}
 
     def capture_run(command: tuple[str, ...], **kwargs: object) -> None:
+        """Capture the command, environment and idle timeout the runner passes."""
         captured["command"] = command
         captured["environment"] = kwargs["env"]
         captured["idle_timeout"] = environment.get("SCCACHE_IDLE_TIMEOUT")
@@ -155,6 +156,7 @@ def test_sccache_start_failures_are_best_effort(
     """Missing or unresponsive sccache startup never blocks the test runner."""
 
     def raise_failure(*_args: object, **_kwargs: object) -> None:
+        """Raise the failure under test in place of running sccache."""
         raise failure
 
     monkeypatch.setattr(sccache_module.subprocess, "run", raise_failure)

@@ -82,6 +82,7 @@ def test_cargo_phase_preserves_planned_process_inputs(
     captured_requests = []
 
     def run_inherited(request: typ.Any) -> int:
+        """Record the request and return the configured supervisor status."""
         captured_requests.append(request)
         return supervisor_status
 

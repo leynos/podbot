@@ -125,6 +125,7 @@ def _run_json_build(
     """Stream a JSON-mode Cargo build and retain its current artefacts."""
 
     def emit_line(line: str) -> None:
+        """Collect a Cargo JSON message, or pass a non-JSON line straight through."""
         message = parse_cargo_json_message(line)
         if message is None:
             sys.stdout.write(line)

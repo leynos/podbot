@@ -23,6 +23,7 @@ def test_stall_report_formatting_uses_only_supplied_observations(
     """Formatting does not read time, toolchain files, procfs, or lock paths."""
 
     def unexpected_observation(*args: object, **kwargs: object) -> None:
+        """Fail the test if report formatting collects external state."""
         raise AssertionError("report formatting must not collect external state")
 
     fail_path = types.SimpleNamespace(
@@ -239,6 +240,7 @@ def test_collection_failure_redacts_and_bounds_exception_text(
     environment = {"API_TOKEN": secret}
 
     def fail_collection(*_args: object, **_kwargs: object) -> StallReportContext:
+        """Raise an error whose text carries a secret, a URL credential and bulk."""
         raise RuntimeError(
             f"failed with {secret} "
             "https://user:password@cache.example/private?token=url-secret "

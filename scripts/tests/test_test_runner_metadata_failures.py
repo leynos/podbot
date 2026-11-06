@@ -21,16 +21,20 @@ class FailedMetadataSupervisor:
     """Return a captured metadata failure without rendering it."""
 
     def __init__(self, terminal_status: int | None, diagnostic: str) -> None:
+        """Store the terminal status and diagnostic the supervisor will report."""
         self.terminal_status = terminal_status
         self.diagnostic = diagnostic
 
     def __enter__(self) -> FailedMetadataSupervisor:
+        """Return the supervisor itself as the context."""
         return self
 
     def __exit__(self, *_args: object) -> None:
+        """Leave the context without suppressing any exception."""
         return None
 
     def run_capture(self, request: CommandRequest) -> tuple[int, str, str]:
+        """Report status 17 with the stored diagnostic on stderr."""
         del request
         return 17, "", self.diagnostic
 
@@ -80,6 +84,7 @@ def test_runner_renders_structured_metadata_failure_once(
     )
 
     def make_supervisor(*_args: object, **_kwargs: object) -> FailedMetadataSupervisor:
+        """Return the prepared supervisor whatever arguments the runner passes."""
         return supervisor
 
     monkeypatch.setattr(test_runner, "ProcessSupervisor", make_supervisor)
@@ -106,6 +111,7 @@ def test_runner_redacts_multiline_environment_secrets_before_line_filtering(
     )
 
     def make_supervisor(*_args: object, **_kwargs: object) -> FailedMetadataSupervisor:
+        """Return the prepared supervisor whatever arguments the runner passes."""
         return supervisor
 
     monkeypatch.setenv("API_TOKEN", secret)

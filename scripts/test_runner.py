@@ -48,6 +48,7 @@ class _RedactingArgumentParser(argparse.ArgumentParser):
     """Redact runner errors without changing arguments forwarded to Cargo."""
 
     def __init__(self, diagnostic_environment: Mapping[str, str]) -> None:
+        """Store the environment used to redact diagnostics, and set the description."""
         self._diagnostic_environment = diagnostic_environment
         super().__init__(description=__doc__)
 

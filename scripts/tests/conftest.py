@@ -53,6 +53,7 @@ def cargo_command_reader(tmp_path: Path) -> typ.Callable[[], list[list[str]]]:
     command_file = tmp_path / "commands.jsonl"
 
     def read_commands() -> list[list[str]]:
+        """Return the recorded Cargo commands, or an empty list when none exist."""
         if not command_file.exists():
             return []
         return [json.loads(line) for line in command_file.read_text().splitlines()]

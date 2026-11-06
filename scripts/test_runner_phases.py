@@ -69,6 +69,7 @@ def _run_ordinary_phase(
     def run_package(
         selection: tuple[str, tuple[str, ...]],
     ) -> int:
+        """Run the ordinary Cargo test targets for one package and return the status."""
         package_name, target_arguments = selection
         print(
             f"== Running ordinary Cargo test targets for {package_name} ==",

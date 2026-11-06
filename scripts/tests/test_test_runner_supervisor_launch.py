@@ -15,14 +15,17 @@ class FakeProcess:
     """Record cleanup calls made to a launched process."""
 
     def __init__(self, calls: list[str]) -> None:
+        """Create a process stub with fixed identifiers that records into calls."""
         self.pid = 101
         self._handle = 202
         self.calls = calls
 
     def kill(self) -> None:
+        """Record that the process was killed."""
         self.calls.append("kill")
 
     def wait(self) -> None:
+        """Record that the process was awaited."""
         self.calls.append("wait")
 
 
@@ -36,17 +39,20 @@ class FakeWindowsJob:
         assigned: bool = True,
         assignment_error: OSError | None = None,
     ) -> None:
+        """Configure whether assignment succeeds or raises, recording into calls."""
         self.calls = calls
         self.assigned = assigned
         self.assignment_error = assignment_error
 
     def assign_and_resume(self, process_handle: int) -> bool:
+        """Record the assignment, then raise the configured error or return."""
         self.calls.append(f"assign:{process_handle}")
         if self.assignment_error is not None:
             raise self.assignment_error
         return self.assigned
 
     def close(self) -> None:
+        """Record that the job was closed."""
         self.calls.append("close")
 
 
@@ -72,10 +78,12 @@ def _install_launcher(
     launch_requests: list[ProcessLaunchRequest] = []
 
     def create_job(_job_type: type[object]) -> FakeWindowsJob | None:
+        """Record the creation and return the prepared job."""
         calls.append("create")
         return job
 
     def start(request: ProcessLaunchRequest) -> FakeProcess:
+        """Record the launch and return the prepared process, or raise the error."""
         calls.append("start")
         launch_requests.append(request)
         if start_error is not None:
@@ -274,6 +282,7 @@ def test_windows_job_creation_oserror_keeps_existing_failure_policy(
     _, launch_requests = _install_launcher(monkeypatch, calls, None)
 
     def fail_create(_job_type: type[object]) -> FakeWindowsJob | None:
+        """Record the attempt, then raise a job-creation error."""
         calls.append("create")
         raise OSError("job creation failed")
 
@@ -300,6 +309,7 @@ def test_run_maps_handled_launch_failure_to_status_127(
         stdout_pipe: bool,
         stderr_pipe: bool,
     ) -> None:
+        """Record the launch arguments and report a handled launch failure."""
         launch_calls.append((selected_request, stdout_pipe, stderr_pipe))
         return None
 
@@ -339,6 +349,7 @@ def test_successful_job_closes_after_monitoring(
         stderr_pipe: bool,
         stdout_handler: object,
     ) -> tuple[queue.Queue[tuple[str, str | object]], list[object], StreamCapture]:
+        """Check the process and pipe arguments, then return empty reader state."""
         assert selected_process is process, "reader setup must use the launched process"
         assert stdout_pipe is True, "run_capture must pipe stdout"
         assert stderr_pipe is True, "run_capture must pipe stderr"
@@ -350,6 +361,7 @@ def test_successful_job_closes_after_monitoring(
         _supervisor: ProcessSupervisor,
         _run: supervisor_module._ProcessRun,
     ) -> tuple[int, str, str]:
+        """Record the monitoring, then fail or return a successful capture."""
         calls.append("monitor")
         if monitor_error:
             raise RuntimeError("monitor failed")
@@ -381,10 +393,12 @@ def test_existing_terminal_status_prevents_job_creation_and_launch(
     supervisor.terminal_status = 143
 
     def create_job(_job_type: type[object]) -> FakeWindowsJob | None:
+        """Record the creation and return a fresh job stub."""
         calls.append("create")
         return FakeWindowsJob(calls)
 
     def start(_request: ProcessLaunchRequest) -> FakeProcess:
+        """Record the launch and return a fresh process stub."""
         calls.append("start")
         return FakeProcess(calls)
 

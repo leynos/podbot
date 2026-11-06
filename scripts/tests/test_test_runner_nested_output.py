@@ -36,6 +36,7 @@ def test_json_build_hides_messages_and_keeps_rendered_diagnostics(
         def run_lines(
             self, _request: object, emit_line: typ.Callable[[str], None]
         ) -> int:
+            """Emit each prepared line and return status 7."""
             for line in lines:
                 emit_line(line)
             return 7

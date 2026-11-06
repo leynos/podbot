@@ -75,6 +75,7 @@ class ProcessSupervisor:
         *,
         enable_subreaper: bool = False,
     ) -> None:
+        """Configure the timeout, watch interval and optional subreaper mode."""
         if timeout_seconds <= 0:
             raise ValueError("test-runner timeout must be greater than zero")
         if watch_interval_seconds <= 0:

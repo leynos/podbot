@@ -8,7 +8,7 @@ MDTABLEFIX_SELECT = --git --include-untracked
 MDTABLEFIX_RULES = --wrap --renumber --breaks --ellipsis --fences
 
 .PHONY: help all clean test build release lint typecheck fmt check-fmt audit rust-audit \
-        markdownlint nixie spelling test-workflow-contracts workflow-contracts
+        markdownlint nixie spelling test-workflow-contracts workflow-contracts interrogate
 
 SHELL := bash
 
@@ -135,7 +135,30 @@ test: ## Run tests with warnings treated as errors
 target/%/$(TARGET): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(TARGET)
 
-lint: ## Run Clippy and the Whitaker Dylint suite with warnings denied
+# Interrogate measures docstring presence over every Python file the repository
+# owns. Add a new Python directory to INTERROGATE_TARGETS. No `--python` pin: a
+# managed interpreter would be downloaded, and a PyO3 build could link it.
+INTERROGATE_VERSION ?= 1.7.0
+INTERROGATE_TARGETS ?= scripts tests
+# Level 2 prints a MISSED row per undocumented definition, which the
+# `interrogate` target fails on: the rounded percentage alone passes a lone gap.
+INTERROGATE_FLAGS ?= -vv --fail-under 100
+INTERROGATE = $(UV) tool run \
+	--from 'interrogate==$(INTERROGATE_VERSION)' interrogate
+
+# Interrogate rounds its percentage to one decimal, so `--fail-under 100` alone
+# passes a lone gap in a large repository; fail on any MISSED row as well.
+interrogate: ## Enforce complete Python docstring coverage
+	@report="$$($(INTERROGATE) $(INTERROGATE_FLAGS) $(INTERROGATE_TARGETS))"; \
+	  status=$$?; \
+	  printf '%s\n' "$$report"; \
+	  test "$$status" -eq 0 || exit "$$status"; \
+	  if printf '%s\n' "$$report" | grep -q '| *MISSED *|'; then \
+	    printf '%s\n' 'interrogate: undocumented definitions remain; see the MISSED rows above' >&2; \
+	    exit 1; \
+	  fi
+
+lint: interrogate ## Run Clippy and the Whitaker Dylint suite with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --no-deps
 	$(CARGO) clippy $(CLIPPY_FLAGS)
 	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --all -- $(CARGO_FLAGS)
