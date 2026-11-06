@@ -23,6 +23,11 @@ concurrency:
 
 jobs:
   coverage-upload:
+    # Stays on Ubicloud for now. A trial on ubuntu-latest (6 November) failed in
+    # "Read the compiler cache": setup-rust gives a hosted runner sccache's
+    # local-disk backend, and this job's cache health check demands the `ghac`
+    # backend. Moving it means rebuilding the job's cache steps, which was out
+    # of scope for the hosted-runner change.
     # Ubicloud's cache proxy is scoped by ref, so a pull request's Ubicloud
     # build-test reads a warm main scope only if a main job on Ubicloud
     # writes it. This is that writer. The fork arm never applies on push or
