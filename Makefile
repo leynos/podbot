@@ -127,6 +127,7 @@ clean: ## Remove build artefacts
 	rm -rf .uv-cache .uv-tools
 
 test: ## Run tests with warnings treated as errors
+	$(CARGO) fetch --locked
 	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		python scripts/test_runner.py --cargo "$(CARGO)" \
 		--timeout "$(TEST_TIMEOUT)" -- \

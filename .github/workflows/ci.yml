@@ -122,6 +122,8 @@ jobs:
         run: make lint
       - name: No-CLI compile check
         run: cargo check --no-default-features
+      - name: Fetch dependencies
+        run: cargo fetch --locked
       - name: No-CLI boundary tests
         run: make test TEST_FLAGS='--no-default-features --test cli_feature_gating --test compile_contract'
       - name: Internal compatibility tests
