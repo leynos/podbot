@@ -179,6 +179,11 @@ part of that coverage run. The developer's guide records the active action pin
 and inputs. Reassess this boundary when the action version or workflow inputs
 change.
 
+The runner does not fetch dependencies. CI runs `cargo fetch --locked` in a
+step of its own before the runner, so that the tests' nested Cargo calls find
+every locked dependency cached; the fetch is outside the runner's deadline and
+process supervision, and the CI job's time limit bounds it.
+
 ## 7. Validation and implementation map
 
 The Make dry-run contract tests verify runner invocation, timeout resolution,
