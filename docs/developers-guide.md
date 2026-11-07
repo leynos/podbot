@@ -258,6 +258,17 @@ directly; it does not split Cargo test phases. See
 [the issue 188 investigation](cargo-package-cache-investigation.md) for the
 bounded Rust 1.88 attempt and its limitations.
 
+CI runs `cargo fetch --locked` as its own step after the lint steps and before
+the `make test` steps. Its purpose is to prepare every locked dependency for
+the tests that start their own nested Cargo. A nested Cargo that resolves cold
+can wait on another repository's build for the package-cache lock, so the fetch
+moves every download into one step with no test waiting. It needs a valid,
+committed `Cargo.lock` and network access to any dependency the runner has not
+cached. `make test` does not fetch: the runner honours `--offline` and
+`--frozen` in `TEST_FLAGS`, and a bare fetch before it would ignore both. The
+fetch sits outside `TEST_TIMEOUT` and is bounded by the CI job's own time
+limit. The estate lint rule `nested-cargo-offline-tests` checks the step.
+
 ### 2.4. Coverage action boundary
 
 The pull-request coverage step pins shared-actions

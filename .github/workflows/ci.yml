@@ -123,6 +123,9 @@ jobs:
       - name: No-CLI compile check
         run: cargo check --no-default-features
       - name: Fetch dependencies
+        # Prepares every locked dependency for the tests that start their own
+        # cargo, so none resolves cold. Needs a committed Cargo.lock. See
+        # docs/developers-guide.md, "Supported test orchestration".
         run: cargo fetch --locked
       - name: No-CLI boundary tests
         run: make test TEST_FLAGS='--no-default-features --test cli_feature_gating --test compile_contract'
