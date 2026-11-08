@@ -16,6 +16,12 @@ Podbot is delivered through two first-class surfaces: a Command-Line Interface
 (CLI) for terminal operators, and a Rust library for embedding in larger
 agent-hosting tools. Roadmap work must preserve that dual-delivery model.
 
+Kubernetes backend work is proposed in
+[RFC 0001](rfcs/0001-kubernetes-execution-backend.md) and tracked in phase 10.
+The new phase preserves existing numbering and completed work. Its runtime
+abstraction precedes the unfinished launch tasks; it does not wait for deferred
+phase 9 extensions. Proposed tasks require the ratification gate in 10.1.1.
+
 ## 1. Foundation and configuration
 
 Idea: if Podbot settles its dependency spine, error model, configuration
@@ -427,13 +433,17 @@ without duplicating orchestration. The result informs launch normalization and
 CLI command boundaries. See podbot-design.md §Execution flow.
 
 - [ ] 4.3.1. Launch interactive agents in permissive terminal-attached mode.
-  - Requires 2.4.1, 2.3.1, and 4.2.1 or 4.2.2.
+  - Requires 2.4.1, 2.3.1, 4.4.2, 10.2.2, and 4.2.1 or 4.2.2.
+  - Use the normalized launch plan and neutral runtime boundary; this task
+    preserves the container backend and does not require Kubernetes parity.
   - Start Claude Code and Codex with their documented permissive flags, attach
     the terminal, and clean up on agent exit.
   - Success: `agent.mode = "podbot"` starts an interactive session and does
     not accept hosting-only modes.
 - [ ] 4.3.2. Launch app-server and ACP sessions through protocol-safe hosting.
-  - Requires 2.5.3, 2.6.3, and 4.2.1 or 4.2.2.
+  - Requires 2.5.3, 2.6.3, 4.4.2, 10.2.3, and 4.2.1 or 4.2.2.
+  - Route through the shared runtime and transport contracts so Kubernetes
+    reuses the same hosted-session policy rather than a second implementation.
   - Support Codex App Server over `stdio://`, generic ACP command execution,
     library/proxy launch behaviour, legal `(agent.kind, agent.mode)`
     validation, and clean shutdown on stdin close or termination signals.
@@ -447,7 +457,9 @@ using typed, inspectable library values. The result informs public API
 stabilization and artefact staging. See ADR 001; ADR 007.
 
 - [ ] 4.4.1. Define the library-level `LaunchRequest` model.
-  - Requires 4.3.2.
+  - Requires 1.4.1, 5.2.1, and 10.2.1.
+  - Define the model before concrete launch implementation; include required
+    runtime capabilities without exposing provider-specific API types.
   - Include agent kind, mode, workspace source, credential policy, prompt
     references, bundle references, skill selection, hook subscriptions, and
     MCP wire definitions.
@@ -622,8 +634,9 @@ mcp-server-hosting-design.md §9; ADR 009.
   - Requires 4.11.1, 4.6.3, and 4.10.2.
   - Cover host-mounted workspaces with multiple MCP wires and restart during a
     hosted hook acknowledgement.
-  - Success: injected wire metadata is sufficient for agent startup and hook
-    acknowledgement effects remain exactly-once after recovery.
+  - Success: injected wire metadata is sufficient for agent startup,
+    duplicate hook acknowledgements are idempotent, and recovery never blindly
+    replays a hook whose execution outcome is unknown.
 - [ ] 4.11.4. Wire e2e execution into explicit CI triggers and artefacts.
   - Requires 4.11.1-4.11.3.
   - Run e2e only on manual dispatch or explicit workflow call, enforce
@@ -926,6 +939,11 @@ These items are intentionally deferred from the core roadmap. They should not
 block the phases above unless a later design document explicitly promotes one
 of them into required v1 scope.
 
+These deferrals do not include phase 10's Kubernetes security baseline or
+controller-restart recovery. Task 9.1.1 remains a broader container-backend
+policy evaluation; task 9.2.2 concerns agent persistence across container
+restarts, not reconnection to a still-running agent after controller restart.
+
 ### 9.1. Reassess stronger isolation after the container path is stable
 
 This step captures isolation enhancements that are valuable but not necessary
@@ -956,3 +974,266 @@ foundation. See podbot-design.md §§Execution flow, Security model.
   - Requires: 8.3.1.
   - Success: the project has a documented persistence model or a clear
     decision to keep sessions ephemeral.
+
+## 10. Kubernetes execution backend
+
+Goal: run Corbusier's agent sandboxes as Kubernetes-managed workloads through
+Podbot's existing library boundary, while preserving standalone Docker/Podman
+operation and honest lifecycle guarantees.
+
+Idea: if sandbox intent, protocol policy, and recovery semantics are independent
+of the engine API, a second provider can realize the same agent contract without
+moving runtime ownership back into Corbusier or weakening sandbox isolation.
+
+This phase implements the proposal in
+[RFC 0001](rfcs/0001-kubernetes-execution-backend.md). It is not deferred behind
+phase 9: numbering preserves published task references, while dependencies
+determine delivery order. Tasks 10.1 and 10.2 precede unfinished launch work.
+K0 proves non-resumable execution, K1 adds integrated hosted capabilities, and
+K2 proves restart-safe control ownership. All new tasks remain incomplete until
+their stated evidence exists; accepting the RFC does not complete them.
+
+### 10.1. Ratify the backend contract and compatibility policy
+
+This step tests whether Kubernetes can fit the existing ownership and public
+API boundaries without a second hosted runtime. Its output constrains all new
+provider work. See RFC 0001 §§2-4, 10, and 12.
+
+- [ ] 10.1.1. Ratify the backend RFC and record the architecture decision.
+  - Requires 5.3.1.
+  - Review the capability matrix, public/internal boundary, K0/K1/K2 gates,
+    and Corbusier ownership split. Record an ADR and reconcile the primary
+    design and ADRs 001, 002, 007, 008, and 009 without implying that proposed
+    contracts are already implemented.
+  - Success: one reviewed contract identifies accepted capabilities, explicit
+    exclusions, and the changes required to local-file recovery assumptions.
+- [ ] 10.1.2. Add explicit runtime selection and optional provider features.
+  - Requires 10.1.1 and 5.2.1.
+  - Preserve container defaults and legacy engine configuration; introduce
+    validated Kubernetes connection, namespace, execution-profile, and
+    capability settings. Select compatible `kube`/`k8s-openapi` versions and
+    document the supported Kubernetes API matrix.
+  - Success: precedence and negative tests reject absent features, unsupported
+    combinations, and implicit backend fallback before any resource mutation.
+
+### 10.2. Extract backend-neutral execution without regressions
+
+This step tests the proposed abstraction against the existing implementation
+before a second provider depends on it. It unblocks backend-neutral launch
+planning and both execution adapters. See RFC 0001 §§4.1-4.3 and 7.1.
+
+- [ ] 10.2.1. Define runtime identities, capabilities, and narrow internal
+  ports.
+  - Requires 10.1.2.
+  - Separate logical session/workspace identity from physical runtime identity;
+    define versioned handles, execution generations, a minimal intent/cleanup
+    store, lifecycle states, semantic errors, and capability requirements.
+    Keep provider types out
+    of public requests and preserve the existing stable exec API.
+  - Success: serialization, compatibility, and contract tests prove that the
+    new boundary can represent both providers without Docker-shaped fields.
+- [ ] 10.2.2. Adapt existing Bollard execution to the neutral runtime boundary.
+  - Requires 10.2.1 and 2.5.3.
+  - Preserve socket resolution, security profiles, credential upload, terminal
+    behaviour, and semantic outcomes. Keep Bollard-specific test seams inside
+    the adapter rather than duplicating orchestration above it.
+  - Success: existing container tests and new shared contract tests pass with
+    unchanged default behaviour and no Kubernetes dependency requirement.
+- [ ] 10.2.3. Extract shared protocol policy from Bollard stream handling.
+  - Requires 10.2.2 and 2.6.2.
+  - Reuse ACP masking, method denial, bounded byte proxying, cancellation, and
+    stdout purity through transport-neutral streams owned by the caller's
+    asynchronous runtime.
+  - Success: both fake transports pass identical framing, backpressure,
+    capability-denial, and zero-extra-stdout tests.
+
+### 10.3. Implement restricted Kubernetes lifecycle and observation
+
+This step tests whether Kubernetes can realize and clean up an owned sandbox
+with bounded control-plane work. It unblocks real execution and cluster
+preflight. See RFC 0001 §§5 and 8.2-8.3.
+
+- [ ] 10.3.1. Add the namespaced Kubernetes client and authorization preflight.
+  - Requires 10.2.1.
+  - Support explicit kubeconfig and in-cluster credentials; classify connection,
+    authentication, authorization, throttling, and unsupported API failures.
+    Restrict contexts and namespaces to trusted operator configuration.
+  - Success: mock API tests distinguish each failure and never select another
+    backend or cluster after a failed request.
+- [ ] 10.3.2. Build typed restricted Pod plans with idempotent creation.
+  - Requires 10.3.1 and 4.4.2.
+  - Generate session/generation names, `restartPolicy: Never`, explicit
+    containers, resource budgets, security contexts, and ownership metadata.
+    Use a local single-controller intent ledger for K0 and reconcile lost create
+    responses or partial creation; this ledger does not provide K2 recovery.
+  - Success: snapshots and property tests reject unsafe specifications and
+    conflicting idempotency keys without creating duplicate sandboxes.
+- [ ] 10.3.3. Observe, stop, and clean up owned resources safely.
+  - Requires 10.3.2.
+  - Add bounded namespace watches, relisting, retry budgets, pending/failure
+    diagnostics, UID-aware discovery, UID-preconditioned deletion, a cleanup
+    ledger, and expiry sweeping. Preserve operator-owned storage.
+  - Success: injected watch gaps, stale identities, API outages, and partial
+    deletion leave explicit outcomes rather than false success or busy loops.
+- [ ] 10.3.4. Provide platform policy examples and enforcement preflight.
+  - Requires 10.3.2.
+  - Document separate controller/agent identities, namespaced RBAC, admission
+    restrictions, execution namespaces, quotas, and enforced network policy.
+    Verify the chosen client's stream-subresource verbs and negative access
+    tests; exclude cluster-wide bootstrap permissions from runtime roles.
+  - Success: the test cluster rejects forbidden service accounts, host access,
+    cross-tenant traffic, and unauthorized credential references.
+
+### 10.4. Materialize workspaces and scoped credentials
+
+This step tests whether repository and credential contracts survive remote
+scheduling without exposing host state. It supplies K0 workspace preparation
+and K1 credential support. See RFC 0001 §6.
+
+- [ ] 10.4.1. Build a restricted test image and clone-backed ephemeral
+  workspace.
+  - Requires 10.3.3 and 4.2.1.
+  - Use an initialization container and `emptyDir`, explicit Git identity,
+    bounded startup, and a pinned mock agent. Reject `host_mount` rather than
+    translating it to `hostPath`; do not require nested Podman from phase 7.
+  - Success: a public fixture repository reaches the requested revision in a
+    restricted Pod, and failed initialization leaves a classified outcome.
+- [ ] 10.4.2. Add Secret-backed credentials and a rotating delivery sink.
+  - Requires 10.4.1, 3.2.1, and 3.3.2.
+  - Reuse token issuance and refresh scheduling with a Kubernetes publication
+    sink. Project scoped credentials only where needed, avoid `subPath`, handle
+    propagation delay/expiry, and redact failures. Define writable credential
+    scratch separately from read-only projections.
+  - Success: rotation tests preserve Git authentication without exposing App
+    signing keys or cluster credentials, and expired credentials fail closed.
+- [ ] 10.4.3. Add explicit retained-workspace and cache policies.
+  - Requires 10.4.1.
+  - Separate source from PVC allocation/retention; authorize existing claims,
+    record access/topology/size constraints, initialize idempotently, and keep
+    build-cache scope separate from mutable repository storage.
+  - Success: retained work survives Pod replacement without claiming process
+    recovery, and cleanup never deletes supplied claims or another tenant's
+    cache/workspace.
+
+### 10.5. Prove non-resumable protocol execution through both surfaces
+
+This step tests the smallest useful Kubernetes vertical slice before durable
+hosting adds complexity. It establishes K0, not reconnect guarantees. See
+RFC 0001 §§3.3 and 7.1.
+
+- [ ] 10.5.1. Implement Kubernetes protocol attachment and process outcomes.
+  - Requires 10.2.3, 10.3.3, and 4.5.1.
+  - Adapt non-TTY streams to the shared proxy; read stdout/stderr concurrently,
+    decode remote status, bound buffers, and distinguish launch via exec from
+    attachment to an existing process. Never retry an uncertain exec launch.
+  - Success: mock transport tests cover partial frames, missing exit status,
+    cancellation, disconnect, and explicit remote termination verification.
+- [ ] 10.5.2. Route library and CLI operations through runtime selection.
+  - Requires 10.5.1, 4.3.2, 6.3.1, and 6.5.1.
+  - Reuse the existing `HostedSession`, `host`, `ps`, `stop`, and `exec`
+    surfaces with runtime-aware identities and an advertised non-resumable
+    capability. Preserve legacy container command behaviour.
+  - Success: a library caller and CLI caller can launch, observe, execute in,
+    and stop the same Kubernetes sandbox without parsing human-readable text.
+- [ ] 10.5.3. Pass the K0 real-cluster acceptance gate.
+  - Requires 10.5.2, 10.4.1, and 10.3.4.
+  - Add an explicitly invoked k3d/kind suite with a mock ACP agent, run-scoped
+    resources, strict preflight, failure injection, and bounded cleanup.
+  - Success: exact protocol exchange, capability masking, non-zero outcomes,
+    interruption reporting, and resource cleanup pass without paid inference
+    or private credentials; default unit tests remain cluster-free.
+
+### 10.6. Integrate hosted MCP, artefacts, and hook governance
+
+This step tests whether Kubernetes realizes the existing hosted contract rather
+than inventing a parallel tool plane. It establishes K1. See RFC 0001 §§6-8.
+
+- [ ] 10.6.1. Provision predeclared Kubernetes MCP helpers and wire endpoints.
+  - Requires 10.5.3, 10.4.2, and 4.6.3.
+  - Map stdio sources to an explicit sandbox/helper locus, use authorized
+    Pod-local or Service endpoints, and enforce per-helper credentials and
+    `RepoAccess`. Reject late container additions and host-gateway assumptions.
+  - Success: multiple wires work with default no-repository access and explicit
+    read-only/read-write grants, without arbitrary controller-side processes.
+- [ ] 10.6.2. Stage artefacts and execute supported hooks through shared
+  control.
+  - Requires 10.6.1, 4.7.2, 4.8.1, and 4.9.3.
+  - Reuse prompt validation, read-only artefact staging, hook identities,
+    suspend/acknowledge semantics, and separate output capture. Reject
+    unsupported
+    hook-image/storage combinations before resource mutation.
+  - Success: allow, deny, timeout, and unsupported-capability scenarios preserve
+    policy and stdout purity without silently changing execution images.
+- [ ] 10.6.3. Pass the K1 hosted-contract acceptance gate.
+  - Requires 10.6.2 and 8.4.1.
+  - Run shared wire, validation, credential-rotation, hook, and cleanup
+    scenarios against both providers with explicit capability expectations.
+  - Success: Kubernetes satisfies its declared hosted profile and still reports
+    reconnect as unsupported until the K2 gate passes.
+
+### 10.7. Establish fenced ownership and restart-safe hosting
+
+This step tests whether a controller restart can preserve supported sessions
+without duplicate side effects or competing owners. It establishes K2, while
+agent-process and node-loss recovery remain explicitly qualified. See RFC 0001
+§§7.2 and 9; ADR 009.
+
+- [ ] 10.7.1. Add shared runtime state and caller-supervised reconciliation.
+  - Requires 10.6.3 and 4.10.2.
+  - Extend the state-store port for shared intent, runtime identities,
+    generations, event cursors, pending hooks, ownership, and cleanup. Support
+    shared-store compare-and-set semantics without a Corbusier database
+    dependency; distinguish local-file recovery from multi-replica recovery.
+  - Success: restart rediscovery preserves the same UID or reports explicit
+    interruption, and unknown outcomes never trigger automatic agent replay.
+- [ ] 10.7.2. Ratify the bridge transport, authentication, and fencing protocol.
+  - Requires 10.7.1.
+  - Specify protocol/control separation, bounded replay, controller ownership
+    generations, credential rotation, disconnect policy, and agent-specific
+    continuity limits. Reconcile ADRs 002 and 009 before implementing the wire.
+  - Success: the protocol prevents stale-controller mutations and explicitly
+    distinguishes reconnecting transport from replaying agent operations.
+- [ ] 10.7.3. Implement the session supervisor and fenced reconnection.
+  - Requires 10.7.2.
+  - Keep the agent process under a Pod-local supervisor without cluster or
+    signing authority. Expose the same library handle, enforce current-owner
+    generations, and preserve hook/event identity across supported reconnects.
+  - Success: a replacement controller attaches to a supported live session,
+    while stale owners and ambiguous pending operations receive typed refusals.
+- [ ] 10.7.4. Pass the K2 failure and recovery acceptance gate.
+  - Requires 10.7.3 and 10.4.3.
+  - Inject controller death, partitions, competing owners, lease expiry, stale
+    fencing, lost acknowledgements, Secret rotation, eviction, node loss, UID
+    replacement, and partial cleanup. Measure buffers and API-server load.
+  - Success: supported continuity works, unsupported recovery is explicit,
+    uncertain actions are not replayed, and retained workspaces remain safe.
+
+### 10.8. Publish conformance evidence and enable Corbusier adoption
+
+This step tests whether the backend is supportable outside its own harness and
+whether it restores the intended application-plus-agents deployment model.
+See RFC 0001 §10.
+
+- [ ] 10.8.1. Add provider feature-matrix CI and gated cluster evidence.
+  - Requires 10.5.3 and 10.2.2.
+  - Test default, container-only, Kubernetes-only library, and combined builds;
+    check dependency isolation and run real-cluster scenarios only on explicit
+    dispatch/workflow calls. Publish redacted diagnostics and pinned versions.
+  - Success: container consumers do not compile Kubernetes unnecessarily and
+    each supported provider has reproducible contract and cluster evidence.
+- [ ] 10.8.2. Document operations, compatibility, and rollout/rollback gates.
+  - Requires 10.8.1, 10.6.3, and 10.7.4.
+  - Update user/developer guides with supported capabilities, platform setup,
+    observability, limits, recovery, retention, and draining. Keep new admission
+    independently disableable while existing sessions reconcile or terminate.
+  - Success: release review can trace every advertised guarantee to a passing
+    gate, and rollback does not strand resources or erase durable state.
+- [ ] 10.8.3. Verify Corbusier's Kubernetes-native hosted-agent integration.
+  - Requires 10.8.2.
+  - Track a separate linked Corbusier change for runtime selection, durable
+    state/ownership, deployment RBAC, and end-to-end adoption. Record exact
+    Podbot/Corbusier revisions; do not mark external integration complete from
+    a Podbot-only mock.
+  - Success: the Kubernetes-deployed application launches and supervises agent
+    Pods through the Podbot library, exercises recovery and cleanup, and never
+    requires a node Docker/Podman socket.
