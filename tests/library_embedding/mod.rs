@@ -17,7 +17,7 @@ use rstest::rstest;
 
 use podbot::api::{CommandOutcome, RunRequest};
 #[cfg(feature = "experimental")]
-use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
+use podbot::api::{DaemonShutdown, run_agent, run_token_daemon};
 #[cfg(feature = "experimental")]
 use podbot::config::AppConfig;
 use podbot::config::{CommandIntent, ConfigLoadOptions, ConfigOverrides, load_config};
@@ -87,7 +87,7 @@ fn error_types_are_matchable() {
 }
 
 // -------------------------------------------------------------------------
-// Stub orchestration functions
+// Orchestration functions
 // -------------------------------------------------------------------------
 
 #[rstest]
@@ -101,24 +101,16 @@ fn run_request_can_be_constructed_without_cli_types() {
 
 #[rstest]
 #[cfg(feature = "experimental")]
-fn stub_orchestration_functions_return_success() {
+fn orchestration_functions_reject_incomplete_configuration() {
     let config = AppConfig::default();
     let request = RunRequest::new("owner/name", "main").expect("run request should be valid");
 
     assert!(
-        matches!(run_agent(&config, &request), Ok(CommandOutcome::Success)),
-        "run_agent should return Success"
+        run_agent(&config, &request).is_err(),
+        "run_agent should reject incomplete GitHub configuration"
     );
     assert!(
-        matches!(list_containers(), Ok(CommandOutcome::Success)),
-        "list_containers should return Success"
-    );
-    assert!(
-        matches!(stop_container("test-ctr"), Ok(CommandOutcome::Success)),
-        "stop_container should return Success"
-    );
-    assert!(
-        matches!(run_token_daemon("test-ctr"), Ok(CommandOutcome::Success)),
-        "run_token_daemon should return Success"
+        run_token_daemon(&config, "   ", DaemonShutdown::new()).is_err(),
+        "run_token_daemon should reject a blank container identifier"
     );
 }

@@ -10,7 +10,7 @@ use bollard::Docker;
 use serde::{Deserialize, Serialize};
 
 use crate::config::AppConfig;
-use crate::engine::{ContainerExecClient, EngineConnector, SocketResolver};
+use crate::engine::{ContainerExecClient, EngineConnector};
 use crate::error::{ConfigError, PodbotError, Result as PodbotResult};
 
 use super::CommandOutcome;
@@ -204,13 +204,8 @@ impl ExecContext {
         config: &AppConfig,
         runtime_handle: &tokio::runtime::Handle,
     ) -> PodbotResult<Self> {
-        let env = mockable::DefaultEnv::new();
-        let resolver = SocketResolver::new(&env);
-        let connector =
-            EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;
-
         Ok(Self {
-            connector,
+            connector: super::connect_engine(config)?,
             runtime_handle: runtime_handle.clone(),
         })
     }

@@ -341,19 +341,23 @@ continues to read a stable in-container secret path. The result informs
 `GIT_ASKPASS` and long-lived sessions. See podbot-design.md §§Execution flow,
 Token management.
 
-- [ ] 3.3.1. Implement the token daemon runtime directory and atomic token
+- [x] 3.3.1. Implement the token daemon runtime directory and atomic token
   writer.
   - Requires 3.2.1 and 2.2.5.
   - Create `$XDG_RUNTIME_DIR/podbot/<container_id>/`, set directory mode
     `0700`, set token file mode `0600`, and write by rename from a temporary
     file.
   - Success: readers never observe partial token contents.
-- [ ] 3.3.2. Implement the refresh loop and retry policy.
+- [x] 3.3.2. Implement the refresh loop and retry policy.
   - Requires 3.3.1.
   - Refresh before expiry with a five-minute buffer and retry transient
     failures without widening token exposure.
   - Success: a long-running session continues to authenticate after token
     refresh.
+  - Implemented scope: the shared daemon in `src/github/token_daemon` refreshes
+    five minutes before expiry, backs off exponentially for up to five
+    attempts, fails closed, and stops on `SIGINT` or `SIGTERM` through
+    `DaemonShutdown`; token values are never logged.
 
 ### 3.4. Authenticate Git through `GIT_ASKPASS`
 
@@ -426,12 +430,16 @@ This step proves that launch mode determines stream policy and command shape
 without duplicating orchestration. The result informs launch normalization and
 CLI command boundaries. See podbot-design.md §Execution flow.
 
-- [ ] 4.3.1. Launch interactive agents in permissive terminal-attached mode.
+- [x] 4.3.1. Launch interactive agents in permissive terminal-attached mode.
   - Requires 2.4.1, 2.3.1, and 4.2.1 or 4.2.2.
   - Start Claude Code and Codex with their documented permissive flags, attach
     the terminal, and clean up on agent exit.
   - Success: `agent.mode = "podbot"` starts an interactive session and does
     not accept hosting-only modes.
+  - Implemented scope: `podbot::api::run_agent` builds the permissive Claude
+    Code and Codex argv, rejects non-`podbot` modes, execs with an attached
+    TTY, maps the exit code, and stops and removes the container on every
+    exit path.
 - [ ] 4.3.2. Launch app-server and ACP sessions through protocol-safe hosting.
   - Requires 2.5.3, 2.6.3, and 4.2.1 or 4.2.2.
   - Support Codex App Server over `stdio://`, generic ACP command execution,
@@ -710,9 +718,12 @@ specific work. See podbot-design.md §Dual delivery model.
     - [x] `run` dispatch is implemented through the library-owned request
       boundary in docs/execplans/6-1-1-run-subcommand.md.
     - [ ] `host` dispatch remains pending.
-    - [ ] `token-daemon` dispatch remains pending.
-    - [ ] `ps` dispatch remains pending.
-    - [ ] `stop` dispatch remains pending.
+    - [x] `token-daemon` dispatch is implemented through
+      `podbot::api::run_token_daemon`.
+    - [x] `ps` dispatch is implemented through
+      `podbot::api::list_containers`.
+    - [x] `stop` dispatch is implemented through
+      `podbot::api::stop_container`.
     - [ ] `exec` dispatch remains pending.
   - Success: help text describes each command, invalid arguments produce clear
     errors, and dispatch does not duplicate library orchestration.
@@ -749,10 +760,12 @@ This step proves that token refresh can be supervised independently of an agent
 session. The result informs systemd integration and long-lived clone flows. See
 podbot-design.md §Token management.
 
-- [ ] 6.4.1. Implement the `token-daemon` subcommand.
+- [x] 6.4.1. Implement the `token-daemon` subcommand.
   - Requires 3.3.2 and 6.1.1.
   - Accept container ID, support user systemd execution, handle `SIGTERM`
     gracefully, and log refresh events without token values.
+  - Implemented scope: container ID validation, `SIGINT` and `SIGTERM`
+    shutdown through `DaemonShutdown`, and token-free refresh logging.
   - Success: the daemon can run independently and shut down cleanly.
 
 ### 6.5. Host protocol sessions through `podbot host`

@@ -6,17 +6,21 @@
 //! credential-upload utilities are available only when the `internal` feature
 //! or test builds are enabled.
 
-#[cfg(any(feature = "internal", test))]
+#[cfg(any(feature = "internal", feature = "experimental", test))]
 mod create_container;
 mod error_classification;
 mod exec;
-#[cfg(any(feature = "internal", test))]
+#[cfg(any(feature = "internal", feature = "experimental", test))]
 mod git_identity;
 #[cfg(any(feature = "internal", test))]
 mod health_check;
-#[cfg(any(feature = "internal", test))]
+#[cfg(any(feature = "internal", feature = "experimental", test))]
+mod labels;
+#[cfg(any(feature = "internal", feature = "experimental", test))]
+mod lifecycle;
+#[cfg(any(feature = "internal", feature = "experimental", test))]
 mod repository_clone;
-#[cfg(any(feature = "internal", test))]
+#[cfg(any(feature = "internal", feature = "experimental", test))]
 mod upload_credentials;
 
 use std::fmt;
@@ -26,11 +30,13 @@ use error_classification::classify_connection_error;
 
 use crate::error::PodbotError;
 
-#[cfg(any(feature = "internal", test))]
+#[cfg(any(feature = "internal", feature = "experimental", test))]
 pub use create_container::{
-    ContainerCreator, ContainerSecurityOptions, CreateContainerFuture, CreateContainerRequest,
-    SelinuxLabelMode,
+    BindMount, ContainerCreator, ContainerSecurityOptions, CreateContainerFuture,
+    CreateContainerRequest, SelinuxLabelMode,
 };
+#[cfg(feature = "experimental")]
+pub(crate) use exec::block_on_runtime_handle;
 #[cfg(any(feature = "internal", test))]
 pub use exec::{
     ContainerExecClient, CreateExecFuture, ExecMode, ExecRequest, ExecResult, InspectExecFuture,
@@ -38,16 +44,27 @@ pub use exec::{
 };
 #[cfg(not(any(feature = "internal", test)))]
 pub(crate) use exec::{ContainerExecClient, ExecMode, ExecRequest};
-#[cfg(any(feature = "internal", test))]
+#[cfg(any(feature = "internal", feature = "experimental", test))]
 pub use git_identity::{
     GitIdentityResult, HostCommandRunner, HostGitIdentity, SystemCommandRunner,
     configure_git_identity, read_host_git_identity,
 };
-#[cfg(any(feature = "internal", test))]
+#[cfg(any(feature = "internal", feature = "experimental", test))]
+pub use labels::{
+    BRANCH_LABEL_KEY, MANAGED_LABEL_KEY, MANAGED_LABEL_VALUE, REPOSITORY_LABEL_KEY,
+    SESSION_LABEL_KEY, is_managed, label_value, managed_label, managed_label_filter,
+    ownership_labels,
+};
+#[cfg(any(feature = "internal", feature = "experimental", test))]
+pub use lifecycle::{
+    ContainerLifecycleClient, InspectContainerFuture, ListContainersFuture, RemoveContainerFuture,
+    StartContainerFuture, StopContainerFuture, StopOutcome,
+};
+#[cfg(any(feature = "internal", feature = "experimental", test))]
 pub use repository_clone::{
     RepositoryCloneRequest, RepositoryCloneResult, clone_repository_into_workspace,
 };
-#[cfg(any(feature = "internal", test))]
+#[cfg(any(feature = "internal", feature = "experimental", test))]
 pub use upload_credentials::{
     ContainerUploader, CredentialUploadRequest, CredentialUploadResult, UploadToContainerFuture,
 };

@@ -42,14 +42,14 @@ pub struct HostGitIdentity {
 ///
 /// Returns `None` values for fields that are not configured rather
 /// than failing. The caller decides how to handle missing fields.
-pub fn read_host_git_identity(runner: &impl HostCommandRunner) -> HostGitIdentity {
+pub fn read_host_git_identity(runner: &dyn HostCommandRunner) -> HostGitIdentity {
     HostGitIdentity {
         name: read_git_config_value(runner, "user.name"),
         email: read_git_config_value(runner, "user.email"),
     }
 }
 
-fn read_git_config_value(runner: &impl HostCommandRunner, key: &str) -> Option<String> {
+fn read_git_config_value(runner: &dyn HostCommandRunner, key: &str) -> Option<String> {
     let output = runner.run_command("git", &["config", "--get", key]).ok()?;
 
     if !output.status.success() {

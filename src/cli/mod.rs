@@ -7,6 +7,11 @@
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 
+#[cfg(feature = "experimental")]
+mod containers;
+#[cfg(feature = "experimental")]
+pub use containers::render_container_table;
+
 use crate::api::RunRequest;
 use crate::config::{AgentKind, AgentMode, CommandIntent, ConfigLoadOptions, ConfigOverrides};
 use crate::error::Result as PodbotResult;

@@ -9,6 +9,7 @@
 use std::io;
 
 use super::*;
+use cap_std::ambient_authority;
 use cap_std::fs_utf8::Dir as Utf8Dir;
 use rstest::{fixture, rstest};
 use tempfile::TempDir;

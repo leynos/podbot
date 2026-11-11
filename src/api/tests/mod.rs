@@ -2,14 +2,10 @@
 
 use proptest::prelude::*;
 use rstest::rstest;
-#[cfg(feature = "experimental")]
-use std::sync::Arc;
-#[cfg(feature = "experimental")]
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::{CommandOutcome, RunRequest};
 #[cfg(feature = "experimental")]
-use super::{list_containers, run_agent, run_token_daemon, stop_container};
+use super::{validate_github_config_for_run, validate_run_request_for_agent};
 #[cfg(feature = "experimental")]
 use crate::config::{AppConfig, GitHubConfig};
 #[cfg(feature = "experimental")]
@@ -93,10 +89,7 @@ proptest! {
         let request = RunRequest::new(repository, branch)
             .unwrap_or_else(|error| panic!("valid request should be constructed: {error}"));
 
-        let outcome = run_agent(&AppConfig::default(), &request)
-            .unwrap_or_else(|error| panic!("valid request should be accepted: {error}"));
-
-        prop_assert_eq!(outcome, CommandOutcome::Success);
+        prop_assert!(validate_run_request_for_agent(&request).is_ok());
     }
 
     #[test]
@@ -118,7 +111,7 @@ proptest! {
         let request = RunRequest::new(repository, "main")
             .unwrap_or_else(|error| panic!("non-empty request should be constructed: {error}"));
 
-        let error = run_agent(&AppConfig::default(), &request)
+        let error = validate_run_request_for_agent(&request)
             .expect_err("repository whitespace should be rejected");
 
         let is_repository_error = matches!(
@@ -144,7 +137,7 @@ proptest! {
         let request = RunRequest::new(repository, branch)
             .unwrap_or_else(|error| panic!("non-empty request should be constructed: {error}"));
 
-        let error = run_agent(&AppConfig::default(), &request)
+        let error = validate_run_request_for_agent(&request)
             .expect_err("branch whitespace should be rejected");
 
         let is_branch_error = matches!(
@@ -154,7 +147,6 @@ proptest! {
         );
         prop_assert!(is_branch_error);
     }
-
 }
 
 #[rstest]
@@ -171,8 +163,8 @@ fn run_agent_requires_complete_github_config() {
 
     let request = RunRequest::new("owner/name", "main").expect("request should be valid");
 
-    let error =
-        run_agent(&config, &request).expect_err("incomplete GitHub config should be rejected");
+    let error = validate_github_config_for_run(&config, &request)
+        .expect_err("incomplete GitHub config should be rejected");
 
     assert!(matches!(
         error,
@@ -194,11 +186,11 @@ fn run_agent_rejects_invalid_request_values(
     #[case] branch: &str,
     #[case] expected_field: &str,
 ) {
-    let config = AppConfig::default();
     let request = RunRequest::new(repository, branch)
         .expect("request constructor should accept non-empty values");
 
-    let error = run_agent(&config, &request).expect_err("run_agent should validate request values");
+    let error = validate_run_request_for_agent(&request)
+        .expect_err("run_agent should validate request values");
 
     assert!(matches!(
         error,
@@ -212,114 +204,10 @@ fn run_agent_rejects_invalid_request_values(
 #[case::feature_branch("owner/feature", "feature/run-request")]
 #[case::release_branch("team/service", "release-2026")]
 fn run_agent_accepts_distinct_run_requests(#[case] repository: &str, #[case] branch: &str) {
-    let config = AppConfig::default();
     let request = RunRequest::new(repository, branch).expect("valid request should be created");
 
-    let command_outcome = run_agent(&config, &request).expect("valid request should be accepted");
+    validate_run_request_for_agent(&request).expect("valid request should be accepted");
 
-    assert_eq!(command_outcome, CommandOutcome::Success);
     assert_eq!(request.repository(), repository);
     assert_eq!(request.branch(), branch);
-}
-
-#[rstest]
-#[cfg(feature = "experimental")]
-fn credential_validation_thread_panic_maps_to_github_error() {
-    let error = super::credential_validation_thread_panicked();
-
-    assert!(matches!(
-        error,
-        PodbotError::GitHub(crate::error::GitHubError::AuthenticationFailed { message })
-            if message == "GitHub credential validation thread panicked"
-    ));
-}
-
-#[rstest]
-#[cfg(feature = "experimental")]
-fn credential_validation_uses_injected_test_validator() {
-    let calls = AtomicUsize::new(0);
-    let private_key_path = Utf8PathBuf::from("/tmp/test-key.pem");
-
-    super::validate_agent_github_credentials_with(1, &private_key_path, |_, _| {
-        calls.fetch_add(1, Ordering::SeqCst);
-        Box::pin(async { Ok(()) })
-    })
-    .expect("credential validation should succeed");
-
-    assert_eq!(calls.load(Ordering::SeqCst), 1);
-}
-
-#[rstest]
-#[cfg(feature = "experimental")]
-fn credential_validation_supports_concurrent_calls_inside_current_runtime() {
-    let calls = Arc::new(AtomicUsize::new(0));
-    let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
-
-    runtime.block_on(async {
-        let tasks = (0..4)
-            .map(|index| {
-                let task_calls = Arc::clone(&calls);
-                tokio::spawn(async move {
-                    let private_key_path = Utf8PathBuf::from(format!("/tmp/test-key-{index}.pem"));
-                    super::validate_agent_github_credentials_with(
-                        1,
-                        &private_key_path,
-                        move |_, _| {
-                            task_calls.fetch_add(1, Ordering::SeqCst);
-                            Box::pin(async { Ok(()) })
-                        },
-                    )
-                })
-            })
-            .collect::<Vec<_>>();
-
-        for task in tasks {
-            task.await
-                .expect("credential validation task should join")
-                .expect("concurrent credential validation should succeed");
-        }
-    });
-
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
-}
-
-#[rstest]
-#[cfg(feature = "experimental")]
-fn credential_validation_scoped_thread_panic_maps_to_github_error() {
-    let private_key_path = Utf8PathBuf::from("/tmp/test-key.pem");
-    let runtime = tokio::runtime::Runtime::new().expect("runtime should be created");
-
-    let error = runtime
-        .block_on(async {
-            super::validate_agent_github_credentials_with(1, &private_key_path, |_, _| {
-                Box::pin(async { panic!("credential validation panic") })
-            })
-        })
-        .expect_err("scoped-thread panic should be mapped to an error");
-
-    assert!(matches!(
-        error,
-        PodbotError::GitHub(crate::error::GitHubError::AuthenticationFailed { message })
-            if message == "GitHub credential validation thread panicked"
-    ));
-}
-
-#[rstest]
-#[case::run_agent("run_agent")]
-#[case::list_containers("list_containers")]
-#[case::stop_container("stop_container")]
-#[case::run_token_daemon("run_token_daemon")]
-#[cfg(feature = "experimental")]
-fn stub_returns_success(#[case] stub: &str) {
-    let config = AppConfig::default();
-    let request = RunRequest::new("owner/name", "main").expect("request should be valid");
-    let outcome = match stub {
-        "run_agent" => run_agent(&config, &request),
-        "list_containers" => list_containers(),
-        "stop_container" => stop_container("test-container"),
-        "run_token_daemon" => run_token_daemon("test-container-id"),
-        other => panic!("unknown stub: {other}"),
-    }
-    .expect("stub should return Ok");
-    assert_eq!(outcome, CommandOutcome::Success);
 }

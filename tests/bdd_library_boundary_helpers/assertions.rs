@@ -1,8 +1,8 @@
 //! Assertion helpers for library boundary behavioural tests.
 //!
 //! Provides `then` step definitions that verify configuration loading
-//! outcomes, exec orchestration results, error type matching, and stub
-//! function return values across the library API surface.
+//! outcomes, exec orchestration results, error type matching, and incomplete
+//! orchestration configuration across the library API surface.
 
 use podbot::api::CommandOutcome;
 use podbot::error::{ContainerError, PodbotError};
@@ -93,29 +93,28 @@ fn error_is_container_error(library_boundary_state: &LibraryBoundaryState) -> St
     }
 }
 
-#[then("all outcomes are success")]
-fn all_stubs_succeed(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
+#[then("every outcome is an error")]
+fn every_outcome_is_an_error(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
     let outcomes = library_boundary_state
         .stub_outcomes
         .get()
         .ok_or_else(|| String::from("stub_outcomes should be set"))?;
 
-    const EXPECTED_STUB_COUNT: usize = 4;
-    if outcomes.results.len() != EXPECTED_STUB_COUNT {
+    const EXPECTED_OUTCOME_COUNT: usize = 2;
+    if outcomes.results.len() != EXPECTED_OUTCOME_COUNT {
         return Err(format!(
-            "expected {EXPECTED_STUB_COUNT} stub outcomes but found {}",
+            "expected {EXPECTED_OUTCOME_COUNT} outcomes but found {}",
             outcomes.results.len()
         ));
     }
 
-    for (i, result) in outcomes.results.iter().enumerate() {
+    for (index, result) in outcomes.results.iter().enumerate() {
         match result {
-            LibraryResult::Ok(CommandOutcome::Success) => {}
-            LibraryResult::Ok(CommandOutcome::CommandExit { code }) => {
-                return Err(format!("stub {i} returned CommandExit {{ code: {code} }}"));
-            }
-            LibraryResult::Err(err) => {
-                return Err(format!("stub {i} returned error: {err:?}"));
+            LibraryResult::Err(_) => {}
+            LibraryResult::Ok(outcome) => {
+                return Err(format!(
+                    "outcome {index} should be an error, got {outcome:?}"
+                ));
             }
         }
     }

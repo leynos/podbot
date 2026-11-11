@@ -29,6 +29,14 @@ pub(crate) struct OrchestrationState {
     pub(crate) exit_code: Slot<i64>,
     pub(crate) create_exec_should_fail: Slot<bool>,
     pub(crate) result: Slot<OrchestrationResult>,
+    /// Whether the inspected container carries the podbot managed label.
+    pub(crate) managed: Slot<bool>,
+    /// Whether the inspected container is running.
+    pub(crate) running: Slot<bool>,
+    /// Number of managed containers the engine reports when listing.
+    pub(crate) list_count: Slot<usize>,
+    /// Number of containers returned by the last listing call.
+    pub(crate) listed: Slot<usize>,
 }
 
 #[fixture]
@@ -41,5 +49,8 @@ pub(crate) fn orchestration_state() -> OrchestrationState {
         .set(vec![String::from("echo"), String::from("hello")]);
     state.exit_code.set(0);
     state.create_exec_should_fail.set(false);
+    state.managed.set(true);
+    state.running.set(true);
+    state.list_count.set(0);
     state
 }

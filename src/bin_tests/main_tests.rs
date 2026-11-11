@@ -3,8 +3,6 @@
 #[cfg(feature = "experimental")]
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
-#[cfg(feature = "experimental")]
-use podbot::api::CommandOutcome;
 use podbot::cli::{Cli, Commands, HostArgs};
 use podbot::config::AppConfig;
 use podbot::error::{ConfigError, PodbotError};
@@ -64,9 +62,16 @@ fn run_dispatches_cli_request_to_run_agent_api() {
     let cli = Cli::try_parse_from(["podbot", "run", "--repo", "owner/name", "--branch", "main"])
         .expect("run command should parse");
 
-    let outcome = run(&cli, &AppConfig::default()).expect("run dispatch should succeed");
+    // Dispatch reaches the orchestration API, which rejects the default
+    // configuration before touching the engine: a clone workspace needs
+    // GitHub App credentials.
+    let error =
+        run(&cli, &AppConfig::default()).expect_err("run should require GitHub credentials");
 
-    assert_eq!(outcome, CommandOutcome::Success);
+    assert!(
+        error.to_string().contains("github.app_id"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
@@ -124,33 +129,29 @@ fn run_validation_error_matches_snapshot() {
 
 #[rstest]
 #[cfg(feature = "experimental")]
-#[case::success(RunObservabilityCase {
+#[case::missing_github_config(RunObservabilityCase {
     repo: "team/service",
     branch: "feature/observability",
-    expect_success: true,
-    expected_log_substring: "run_agent completed successfully",
+    expected_log_substring: "github.app_id",
 })]
-#[case::failure(RunObservabilityCase {
-    repo: "owner/failing-service",
+#[case::invalid_repository(RunObservabilityCase {
+    repo: "owner/name/extra",
     branch: "release/failed-validation",
-    expect_success: false,
-    expected_log_substring: "run_agent validation failed for run request",
+    expected_log_substring: "run.repository must use owner/name format",
 })]
 fn run_observability_logs_distinct_cli_request_values(
     capture_run_dispatch: impl Fn(
         &str,
         &str,
-        bool,
     ) -> Result<
         CapturedRunDispatch,
         Box<dyn std::error::Error + Send + Sync>,
     >,
     #[case] test_case: RunObservabilityCase,
 ) {
-    let captured = capture_run_dispatch(test_case.repo, test_case.branch, test_case.expect_success)
+    let captured = capture_run_dispatch(test_case.repo, test_case.branch)
         .expect("run logs should be captured");
 
-    assert_eq!(captured.succeeded, test_case.expect_success);
     assert_log_contains(&captured.logs, test_case.expected_log_substring);
     assert_log_contains(&captured.logs, test_case.repo);
     assert_log_contains(&captured.logs, test_case.branch);
@@ -159,7 +160,7 @@ fn run_observability_logs_distinct_cli_request_values(
 #[test]
 #[cfg(feature = "experimental")]
 fn run_observability_logs_match_snapshot() {
-    let logs = capture_run_logs(|| {
+    let (logs, ()) = capture_run_logs(|| {
         let cli = Cli::try_parse_from([
             "podbot",
             "run",
@@ -170,15 +171,14 @@ fn run_observability_logs_match_snapshot() {
         ])
         .expect("run command should parse");
 
-        run(&cli, &AppConfig::default()).expect("run dispatch should succeed");
+        run(&cli, &AppConfig::default()).expect_err("default config should fail validation");
     })
     .expect("run logs should be captured");
 
     insta::assert_snapshot!(logs, @r#"
 DEBUG podbot: validating run request before agent orchestration operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
 DEBUG podbot::api: GitHub configuration validation skipped for run request operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
-DEBUG podbot::api: GitHub credential validation skipped for run request operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot"
-DEBUG podbot: run_agent completed successfully operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot" outcome="success"
+ WARN podbot: run_agent validation failed for run request operation="run_agent" repository="team/snapshot-service" branch="feature/snapshot" error=missing required configuration: github.app_id, github.installation_id, github.private_key_path
 "#);
 }
 
@@ -199,10 +199,15 @@ fn run_observability_uses_injected_clock() {
 
     let request =
         podbot::api::RunRequest::new("owner/name", "main").expect("run request should be valid");
-    let outcome = run_agent_api_with_observability(&AppConfig::default(), &request, &clock)
-        .expect("run dispatch should succeed");
+    // The clock expectations above still prove the injected clock is used
+    // even when validation fails before any engine work.
+    let error = run_agent_api_with_observability(&AppConfig::default(), &request, &clock)
+        .expect_err("default config should fail validation");
 
-    assert_eq!(outcome, CommandOutcome::Success);
+    assert!(
+        error.to_string().contains("github.app_id"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
@@ -242,11 +247,16 @@ fn non_experimental_stubs_report_command_names() {
     let request =
         podbot::api::RunRequest::new("owner/name", "main").expect("run request should be valid");
 
+    // `ps` and `stop` dispatch straight to the feature-gate helper, so the
+    // cases mirror the dispatch arms rather than calling absent adapters.
     let cases = [
         ("run", super::run_agent_api(&config, &request)),
-        ("token-daemon", super::run_token_daemon_api("test-ctr")),
-        ("ps", super::list_containers_api()),
-        ("stop", super::stop_container_api("test-ctr")),
+        (
+            "token-daemon",
+            super::run_token_daemon_api(&config, "test-ctr"),
+        ),
+        ("ps", super::experimental_only("ps")),
+        ("stop", super::experimental_only("stop")),
     ];
 
     for (command, result) in cases {

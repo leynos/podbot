@@ -4,7 +4,7 @@ use tokio::runtime::RuntimeFlavor;
 
 use crate::error::{ContainerError, PodbotError};
 
-pub(super) fn block_on_runtime<F, T>(
+pub(crate) fn block_on_runtime<F, T>(
     runtime: &tokio::runtime::Handle,
     future: F,
 ) -> Result<T, PodbotError>

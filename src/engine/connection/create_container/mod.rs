@@ -2,24 +2,25 @@
 //!
 //! This module translates high-level security settings into `Bollard`
 //! container-create payloads and provides async/sync helpers for creating
-//! containers.
+//! containers. Requests may also carry ownership labels, bind mounts, and a
+//! working directory so orchestration can describe the full sandbox.
+
+mod body;
+mod request;
 
 use std::future::Future;
 use std::pin::Pin;
 
 use bollard::Docker;
-use bollard::models::{ContainerCreateBody, ContainerCreateResponse, DeviceMapping, HostConfig};
-use bollard::query_parameters::{CreateContainerOptions, CreateContainerOptionsBuilder};
+use bollard::models::{ContainerCreateBody, ContainerCreateResponse};
+use bollard::query_parameters::CreateContainerOptions;
 
+use self::body::{build_create_body, build_create_options};
 use super::EngineConnector;
+use crate::config::SandboxConfig;
 pub use crate::config::SelinuxLabelMode;
-use crate::config::{AppConfig, SandboxConfig};
-use crate::error::{ConfigError, ContainerError, PodbotError};
-
-const DEV_FUSE_PATH: &str = "/dev/fuse";
-const FUSE_DEVICE_PERMISSIONS: &str = "rwm";
-const CAP_SYS_ADMIN: &str = "SYS_ADMIN";
-const SELINUX_LABEL_DISABLE: &str = "label=disable";
+use crate::error::{ContainerError, PodbotError};
+pub use request::{BindMount, CreateContainerRequest};
 
 /// Boxed future type returned by [`ContainerCreator`] implementors.
 pub type CreateContainerFuture<'a> = Pin<
@@ -84,127 +85,6 @@ impl Default for ContainerSecurityOptions {
     }
 }
 
-/// Container-creation request parameters.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateContainerRequest {
-    /// The container image to create from.
-    image: String,
-
-    /// Optional container name.
-    name: Option<String>,
-
-    /// Optional command to run in the container.
-    cmd: Option<Vec<String>>,
-
-    /// Optional environment variables in `KEY=value` form.
-    env: Option<Vec<String>>,
-
-    /// Security profile to apply.
-    security: ContainerSecurityOptions,
-}
-
-impl CreateContainerRequest {
-    /// Create a request with image and security settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns `ConfigError::MissingRequired` when `image` is empty or
-    /// whitespace-only.
-    pub fn new(
-        image: impl Into<String>,
-        security: ContainerSecurityOptions,
-    ) -> Result<Self, PodbotError> {
-        let image_value = image.into();
-        let validated_image = String::from(validate_image(&image_value)?);
-
-        Ok(Self {
-            image: validated_image,
-            name: None,
-            cmd: None,
-            env: None,
-            security,
-        })
-    }
-
-    /// Create a request from a resolved application configuration.
-    ///
-    /// This helper sources the image from `config.image` and security options
-    /// from `config.sandbox`.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// use podbot::config::AppConfig;
-    /// use podbot::engine::CreateContainerRequest;
-    ///
-    /// let mut config = AppConfig::default();
-    /// config.image = Some(String::from("ghcr.io/example/sandbox:latest"));
-    ///
-    /// let request = CreateContainerRequest::from_app_config(&config);
-    /// assert!(request.is_ok());
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// Returns `ConfigError::MissingRequired` when `config.image` is missing,
-    /// empty, or whitespace-only.
-    pub fn from_app_config(config: &AppConfig) -> Result<Self, PodbotError> {
-        let security = ContainerSecurityOptions::from_sandbox_config(&config.sandbox);
-        Self::new(config.image.as_deref().unwrap_or_default(), security)
-    }
-
-    /// Attach an optional container name.
-    #[must_use]
-    pub fn with_name(mut self, name: Option<String>) -> Self {
-        self.name = name.filter(|value| !value.trim().is_empty());
-        self
-    }
-
-    /// Attach an optional command vector.
-    #[must_use]
-    pub fn with_cmd(mut self, cmd: Option<Vec<String>>) -> Self {
-        self.cmd = cmd;
-        self
-    }
-
-    /// Attach optional environment entries.
-    #[must_use]
-    pub fn with_env(mut self, env: Option<Vec<String>>) -> Self {
-        self.env = env;
-        self
-    }
-
-    /// Return the configured image.
-    #[must_use]
-    pub fn image(&self) -> &str {
-        &self.image
-    }
-
-    /// Return the optional configured name.
-    #[must_use]
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    /// Return the optional configured command.
-    #[must_use]
-    pub fn cmd(&self) -> Option<&[String]> {
-        self.cmd.as_deref()
-    }
-
-    /// Return the optional configured environment list.
-    #[must_use]
-    pub fn env(&self) -> Option<&[String]> {
-        self.env.as_deref()
-    }
-
-    /// Return the configured security options.
-    #[must_use]
-    pub const fn security(&self) -> &ContainerSecurityOptions {
-        &self.security
-    }
-}
-
 impl EngineConnector {
     /// Create a container using a provided client abstraction (async version).
     ///
@@ -246,70 +126,6 @@ impl EngineConnector {
         request: &CreateContainerRequest,
     ) -> Result<String, PodbotError> {
         runtime.block_on(Self::create_container_async(creator, request))
-    }
-}
-
-fn validate_image(image: &str) -> Result<&str, PodbotError> {
-    let trimmed = image.trim();
-
-    if trimmed.is_empty() {
-        return Err(PodbotError::from(ConfigError::MissingRequired {
-            field: String::from("image"),
-        }));
-    }
-
-    Ok(trimmed)
-}
-
-fn build_create_options(name: Option<&str>) -> Option<CreateContainerOptions> {
-    name.filter(|value| !value.trim().is_empty())
-        .map(|container_name| {
-            CreateContainerOptionsBuilder::new()
-                .name(container_name)
-                .build()
-        })
-}
-
-fn build_create_body(request: &CreateContainerRequest) -> ContainerCreateBody {
-    ContainerCreateBody {
-        image: Some(String::from(request.image())),
-        cmd: request.cmd().map(<[String]>::to_vec),
-        env: request.env().map(<[String]>::to_vec),
-        host_config: Some(build_host_config(request.security())),
-        ..ContainerCreateBody::default()
-    }
-}
-
-fn build_host_config(security: &ContainerSecurityOptions) -> HostConfig {
-    if security.privileged {
-        // In privileged mode, the engine host profile governs SELinux labelling
-        // and device access; these minimal-mode toggles are intentionally
-        // ignored.
-        return HostConfig {
-            privileged: Some(true),
-            ..HostConfig::default()
-        };
-    }
-
-    HostConfig {
-        privileged: Some(false),
-        cap_add: security
-            .mount_dev_fuse
-            .then(|| vec![String::from(CAP_SYS_ADMIN)]),
-        devices: security.mount_dev_fuse.then(|| vec![fuse_device_mapping()]),
-        security_opt: security
-            .selinux_label_mode
-            .requires_label_disable()
-            .then(|| vec![String::from(SELINUX_LABEL_DISABLE)]),
-        ..HostConfig::default()
-    }
-}
-
-fn fuse_device_mapping() -> DeviceMapping {
-    DeviceMapping {
-        path_on_host: Some(String::from(DEV_FUSE_PATH)),
-        path_in_container: Some(String::from(DEV_FUSE_PATH)),
-        cgroup_permissions: Some(String::from(FUSE_DEVICE_PERMISSIONS)),
     }
 }
 

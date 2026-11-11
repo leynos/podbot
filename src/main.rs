@@ -16,7 +16,9 @@ use clap::Parser;
 use eyre::{Report, Result as EyreResult};
 use mockable::DefaultClock;
 use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
-use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, StopArgs, TokenDaemonArgs};
+#[cfg(feature = "experimental")]
+use podbot::cli::StopArgs;
+use podbot::cli::{Cli, Commands, ExecArgs, HostArgs, TokenDaemonArgs};
 use podbot::config::{AppConfig, load_config};
 use podbot::error::ConfigError;
 use podbot::error::Result as PodbotResult;
@@ -74,9 +76,15 @@ fn run(cli: &Cli, config: &AppConfig) -> PodbotResult<CommandOutcome> {
             }
             .into())
         }
-        Commands::TokenDaemon(args) => run_token_daemon_cli(args),
-        Commands::Ps => list_containers_cli(),
-        Commands::Stop(args) => stop_container_cli(args),
+        Commands::TokenDaemon(args) => run_token_daemon_cli(config, args),
+        #[cfg(feature = "experimental")]
+        Commands::Ps => list_containers_cli(config),
+        #[cfg(not(feature = "experimental"))]
+        Commands::Ps => experimental_only("ps"),
+        #[cfg(feature = "experimental")]
+        Commands::Stop(args) => stop_container_cli(config, args),
+        #[cfg(not(feature = "experimental"))]
+        Commands::Stop(_args) => experimental_only("stop"),
         Commands::Exec(args) => exec_in_container_cli(config, args),
     }
 }
@@ -87,9 +95,7 @@ fn run_agent_cli(
     request: &podbot::api::RunRequest,
 ) -> PodbotResult<CommandOutcome> {
     print_run_agent_start(config, request);
-    let result = run_agent_api_with_observability(config, request, &DefaultClock)?;
-    print_run_agent_placeholder();
-    Ok(result)
+    run_agent_api_with_observability(config, request, &DefaultClock)
 }
 
 /// Show the selected run settings to the operator before request validation.
@@ -109,13 +115,6 @@ fn print_run_agent_start(config: &AppConfig, request: &podbot::api::RunRequest) 
     if let Some(ref image) = config.image {
         println!("Using image: {image}");
     }
-}
-
-/// Tell the operator that successful validation has not implemented orchestration.
-/// For example, validation success prints `Container orchestration not yet implemented.`
-#[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn print_run_agent_placeholder() {
-    println!("Container orchestration not yet implemented.");
 }
 
 /// Measure the API result with an injected clock; failed validation is recorded too.
@@ -196,7 +195,7 @@ fn record_run_agent_metrics(result: &PodbotResult<CommandOutcome>, elapsed: std:
 /// CLI adapter for hosted app-server execution.
 #[expect(
     dead_code,
-    reason = "FIXME(https://github.com/leynos/podbot/issues/51): temporarily disabled until stdout-safe diagnostics are implemented"
+    reason = "temporarily disabled until stdout-safe hosting diagnostics are implemented"
 )]
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
 fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
@@ -210,29 +209,32 @@ fn host_agent_cli(config: &AppConfig, _args: &HostArgs) -> CommandOutcome {
 
 /// CLI adapter for the token refresh daemon.
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn run_token_daemon_cli(args: &TokenDaemonArgs) -> PodbotResult<CommandOutcome> {
+fn run_token_daemon_cli(
+    config: &AppConfig,
+    args: &TokenDaemonArgs,
+) -> PodbotResult<CommandOutcome> {
     println!("Starting token daemon for container {}", args.container_id);
-    let result = run_token_daemon_api(&args.container_id)?;
-    println!("Token daemon not yet implemented.");
+    let result = run_token_daemon_api(config, &args.container_id)?;
+    println!("Token daemon stopped.");
     Ok(result)
 }
 
 /// CLI adapter for listing running podbot containers.
+#[cfg(feature = "experimental")]
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn list_containers_cli() -> PodbotResult<CommandOutcome> {
-    println!("Listing podbot containers...");
-    let result = list_containers_api()?;
-    println!("Container listing not yet implemented.");
-    Ok(result)
+fn list_containers_cli(config: &AppConfig) -> PodbotResult<CommandOutcome> {
+    let containers = list_containers_api(config)?;
+    println!("{}", podbot::cli::render_container_table(&containers));
+    Ok(CommandOutcome::Success)
 }
 
 /// CLI adapter for stopping a running container.
+#[cfg(feature = "experimental")]
 #[expect(clippy::print_stdout, reason = "CLI output is the intended behaviour")]
-fn stop_container_cli(args: &StopArgs) -> PodbotResult<CommandOutcome> {
-    println!("Stopping container {}", args.container);
-    let result = stop_container_api(&args.container)?;
-    println!("Container stop not yet implemented.");
-    Ok(result)
+fn stop_container_cli(config: &AppConfig, args: &StopArgs) -> PodbotResult<CommandOutcome> {
+    let outcome = stop_container_api(config, &args.container)?;
+    println!("Stopped container {}", args.container);
+    Ok(outcome)
 }
 
 /// CLI adapter for executing a command in a running container.
@@ -271,14 +273,20 @@ fn normalize_process_exit_code(code: i64) -> i32 {
     i32::try_from(code).unwrap_or(1)
 }
 
-/// Returns an `experimental`-feature-gate error for the given command name.
+/// Build the `experimental`-feature-gate error for the given command name.
 #[cfg(not(feature = "experimental"))]
-fn experimental_only(command: &str) -> PodbotResult<CommandOutcome> {
-    Err(ConfigError::InvalidValue {
+fn experimental_only_error(command: &str) -> podbot::error::PodbotError {
+    ConfigError::InvalidValue {
         field: String::from("command"),
         reason: format!("the {command} command requires feature = \"experimental\""),
     }
-    .into())
+    .into()
+}
+
+/// Returns an `experimental`-feature-gate error for the given command name.
+#[cfg(not(feature = "experimental"))]
+fn experimental_only(command: &str) -> PodbotResult<CommandOutcome> {
+    Err(experimental_only_error(command))
 }
 
 /// Delegate run-request validation to the experimental library API.
@@ -302,45 +310,31 @@ fn run_agent_api(
 }
 
 /// Delegate token-daemon requests to the experimental library API.
-/// For example, container `sandbox` currently returns `Success` without refreshing tokens.
+/// For example, the daemon refreshes tokens until the operator interrupts it.
 #[cfg(feature = "experimental")]
-fn run_token_daemon_api(container_id: &str) -> PodbotResult<CommandOutcome> {
-    podbot::api::run_token_daemon(container_id)
+fn run_token_daemon_api(config: &AppConfig, container_id: &str) -> PodbotResult<CommandOutcome> {
+    podbot::api::run_token_daemon(config, container_id, podbot::api::DaemonShutdown::new())
 }
 
 /// Reject token-daemon requests when experimental APIs are unavailable.
 /// For example, container `sandbox` returns an `InvalidValue` feature-gate error.
 #[cfg(not(feature = "experimental"))]
-fn run_token_daemon_api(_container_id: &str) -> PodbotResult<CommandOutcome> {
+fn run_token_daemon_api(_config: &AppConfig, _container_id: &str) -> PodbotResult<CommandOutcome> {
     experimental_only("token-daemon")
 }
 
 /// Delegate container-list requests to the experimental library API.
-/// For example, this placeholder returns `Success` without listing containers.
+/// For example, an empty engine returns an empty vector, rendered as an empty state.
 #[cfg(feature = "experimental")]
-fn list_containers_api() -> PodbotResult<CommandOutcome> {
-    podbot::api::list_containers()
-}
-
-/// Reject container-list requests when experimental APIs are unavailable.
-/// For example, a `ps` request returns an `InvalidValue` feature-gate error.
-#[cfg(not(feature = "experimental"))]
-fn list_containers_api() -> PodbotResult<CommandOutcome> {
-    experimental_only("ps")
+fn list_containers_api(config: &AppConfig) -> PodbotResult<Vec<podbot::api::ContainerSummary>> {
+    podbot::api::list_containers(config)
 }
 
 /// Delegate container-stop requests to the experimental library API.
-/// For example, container `sandbox` currently returns `Success` without stopping it.
+/// For example, stopping a managed running container returns `Success`.
 #[cfg(feature = "experimental")]
-fn stop_container_api(container: &str) -> PodbotResult<CommandOutcome> {
-    podbot::api::stop_container(container)
-}
-
-/// Reject container-stop requests when experimental APIs are unavailable.
-/// For example, container `sandbox` returns an `InvalidValue` feature-gate error.
-#[cfg(not(feature = "experimental"))]
-fn stop_container_api(_container: &str) -> PodbotResult<CommandOutcome> {
-    experimental_only("stop")
+fn stop_container_api(config: &AppConfig, container: &str) -> PodbotResult<CommandOutcome> {
+    podbot::api::stop_container(config, container)
 }
 
 #[cfg(test)]

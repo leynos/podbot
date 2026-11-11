@@ -142,6 +142,54 @@ For Podman: Use socket at /run/user/$UID/podman/podman.sock"
         /// A description of the runtime creation failure.
         message: String,
     },
+
+    /// The requested container does not exist.
+    #[error("container not found: {container}")]
+    NotFound {
+        /// The container identifier that could not be found.
+        container: String,
+    },
+
+    /// The container exists but is not managed by podbot.
+    #[error("container '{container}' is not managed by podbot")]
+    NotManaged {
+        /// The container identifier that lacks the managed label.
+        container: String,
+    },
+
+    /// Failed to stop a container.
+    #[error("failed to stop container '{container_id}': {message}")]
+    StopFailed {
+        /// The ID of the container that failed to stop.
+        container_id: String,
+        /// A description of the stop failure.
+        message: String,
+    },
+
+    /// Failed to remove a container.
+    #[error("failed to remove container '{container_id}': {message}")]
+    RemoveFailed {
+        /// The ID of the container that failed to be removed.
+        container_id: String,
+        /// A description of the removal failure.
+        message: String,
+    },
+
+    /// Failed to list containers.
+    #[error("failed to list containers: {message}")]
+    ListFailed {
+        /// A description of the listing failure.
+        message: String,
+    },
+
+    /// Failed to inspect a container.
+    #[error("failed to inspect container '{container_id}': {message}")]
+    InspectFailed {
+        /// The ID of the container that failed inspection.
+        container_id: String,
+        /// A description of the inspection failure.
+        message: String,
+    },
 }
 
 /// Errors that can occur during GitHub operations.
@@ -178,6 +226,31 @@ pub enum GitHubError {
     #[error("failed to refresh installation token: {message}")]
     TokenRefreshFailed {
         /// A description of the refresh failure.
+        message: String,
+    },
+
+    /// Failed to write the installation token to the host-side store.
+    #[error("failed to write installation token to '{path}': {message}")]
+    TokenStoreWriteFailed {
+        /// The token path that could not be written.
+        path: PathBuf,
+        /// A description of the failure.
+        message: String,
+    },
+
+    /// Failed to remove the host-side token store.
+    #[error("failed to remove token store '{path}': {message}")]
+    TokenStoreCleanupFailed {
+        /// The session directory that could not be removed.
+        path: PathBuf,
+        /// A description of the failure.
+        message: String,
+    },
+
+    /// The token refresh daemon stopped after exhausting its retry budget.
+    #[error("token refresh daemon failed: {message}")]
+    DaemonFailed {
+        /// A description of the terminal daemon failure.
         message: String,
     },
 }

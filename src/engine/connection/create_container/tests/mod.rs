@@ -11,8 +11,8 @@ use self::doubles::{
     call_count, clone_captured_body, clone_captured_options, failing_creator, success_creator,
 };
 use super::*;
-use crate::config::AppConfig;
-use crate::error::{ConfigError, ContainerError};
+use crate::config::{AppConfig, SandboxConfig};
+use crate::error::{ConfigError, ContainerError, PodbotError};
 
 fn io_error(message: impl Into<String>) -> std::io::Error {
     std::io::Error::other(message.into())
@@ -24,6 +24,116 @@ fn ensure(condition: bool, message: impl Into<String>) -> std::io::Result<()> {
     }
 
     Err(io_error(message))
+}
+
+#[rstest]
+fn create_container_maps_labels_mounts_and_working_dir(
+    runtime: std::io::Result<tokio::runtime::Runtime>,
+) {
+    use std::collections::HashMap;
+
+    use bollard::models::MountTypeEnum;
+
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    let (creator, captured) = success_creator("container-id");
+    let request = CreateContainerRequest::new(
+        "ghcr.io/example/sandbox:latest",
+        ContainerSecurityOptions::default(),
+    )
+    .expect("request construction should succeed")
+    .with_labels(vec![(
+        String::from(crate::engine::MANAGED_LABEL_KEY),
+        String::from(crate::engine::MANAGED_LABEL_VALUE),
+    )])
+    .with_mounts(vec![
+        BindMount::read_only(
+            "/run/user/1000/podbot/session/ghapp_token",
+            "/run/secrets/podbot",
+        )
+        .expect("read-only bind mount should validate"),
+    ])
+    .with_working_dir(Some(String::from("/workspace/owner/name")));
+
+    let _ = runtime_handle
+        .block_on(EngineConnector::create_container_async(&creator, &request))
+        .expect("container creation should succeed");
+
+    let body = clone_captured_body(&captured).expect("container body should be captured");
+
+    assert_eq!(
+        body.labels,
+        Some(HashMap::from([(
+            String::from("io.podbot.managed"),
+            String::from("true"),
+        )])),
+        "expected ownership labels in the create body"
+    );
+    assert_eq!(
+        body.working_dir.as_deref(),
+        Some("/workspace/owner/name"),
+        "expected the configured working directory"
+    );
+
+    let host_config = body.host_config.expect("host config should be set");
+    let mounts = host_config.mounts.expect("expected one bind mount");
+    assert_eq!(mounts.len(), 1, "expected exactly one mount");
+    let mount = mounts.first().expect("expected the bind mount");
+    assert_eq!(mount.typ, Some(MountTypeEnum::BIND));
+    assert_eq!(
+        mount.source.as_deref(),
+        Some("/run/user/1000/podbot/session/ghapp_token")
+    );
+    assert_eq!(mount.target.as_deref(), Some("/run/secrets/podbot"));
+    assert_eq!(mount.read_only, Some(true));
+}
+
+#[rstest]
+fn create_container_without_metadata_omits_optional_payload(
+    runtime: std::io::Result<tokio::runtime::Runtime>,
+) {
+    let runtime_handle = runtime.expect("tokio runtime should be created");
+    let (creator, captured) = success_creator("container-id");
+    let request = CreateContainerRequest::new(
+        "ghcr.io/example/sandbox:latest",
+        ContainerSecurityOptions::default(),
+    )
+    .expect("request construction should succeed");
+
+    let _ = runtime_handle
+        .block_on(EngineConnector::create_container_async(&creator, &request))
+        .expect("container creation should succeed");
+
+    let body = clone_captured_body(&captured).expect("container body should be captured");
+    assert!(body.labels.is_none(), "did not expect labels");
+    assert!(body.working_dir.is_none(), "did not expect a working dir");
+
+    let host_config = body.host_config.expect("host config should be set");
+    assert!(host_config.mounts.is_none(), "did not expect mounts");
+}
+
+#[rstest]
+fn bind_mount_rejects_relative_paths() {
+    let result = BindMount::read_only("relative/token", "/run/secrets/podbot");
+
+    assert!(
+        matches!(
+            result,
+            Err(PodbotError::Config(ConfigError::InvalidValue { ref field, .. }))
+                if field == "mount.source"
+        ),
+        "expected relative source rejection, got {result:?}"
+    );
+
+    let write_result = BindMount::read_write("/run/user/1000/token", "run/secrets/podbot");
+
+    assert!(
+        matches!(
+            write_result,
+            Err(PodbotError::Config(ConfigError::InvalidValue { ref field, .. }))
+                if field == "mount.target"
+        ),
+        "expected relative target rejection, got {write_result:?}"
+    );
 }
 
 #[fixture]

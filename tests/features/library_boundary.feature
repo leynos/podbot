@@ -22,7 +22,7 @@ Feature: Library boundary stability
     When the library exec function is called
     Then the error is a ContainerError variant
 
-  Scenario: Stub orchestration functions return success
+  Scenario: Orchestration functions reject incomplete configuration
     Given a run request for repository owner/name and branch main
-    When each stub orchestration function is called
-    Then all outcomes are success
+    When run and token-daemon orchestration are called with incomplete configuration
+    Then every outcome is an error

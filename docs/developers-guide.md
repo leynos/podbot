@@ -897,49 +897,73 @@ which produces `ContainerError::ExecFailed { container_id, message }`. Callers
 receive semantic errors they can inspect and handle. The CLI boundary converts
 these to `eyre::Report` for operator-facing display.
 
-### 9.1. `run_agent` and `run_token_daemon` validation contracts
+### 9.1. Orchestration contracts
+
+The experimental orchestration functions are implemented in `src/api` and
+delegate to engine and GitHub ports. They never print to stdout or stderr and
+return `PodbotResult<CommandOutcome>`.
 
 #### `run_agent`
 
-`run_agent(config: &AppConfig, request: &RunRequest)` performs credential
-validation before starting the agent loop. The request carries the library-owned
-`podbot run` repository and branch inputs, so embedders can construct the same
-operation without importing CLI or Clap types:
+`run_agent(config: &AppConfig, request: &RunRequest)` runs the full agent
+lifecycle. The request carries the library-owned `podbot run` repository and
+branch inputs, so embedders can construct the same operation without importing
+CLI or Clap types.
 
-1. The request is validated at the API boundary. `run.repository` must use
-   `owner/name` format, and `run.branch` must not contain whitespace.
-2. If none of `config.github.app_id`, `config.github.installation_id`, or
-   `config.github.private_key_path` is set (`is_partially_configured()` returns
-   `false`), the function returns `CommandOutcome::Success` immediately without
-   performing any network calls.
-3. If any field is set, `config.github.validate()` is called. This returns a
-   `PodbotError::Config(ConfigError::MissingRequired { .. })` if any required
-   field is absent or zero.
-4. If all three credential fields are present and non-zero, the function calls
-   `validate_agent_github_credentials`, which:
-   - Spawns a scoped helper thread so credential validation cannot nest
-     `block_on` inside a caller's Tokio runtime.
-   - Creates a single-thread Tokio runtime on that helper thread and calls
-     `crate::github::validate_app_credentials` on it.
-   - Maps thread-join failures to
-     `PodbotError::GitHub(GitHubError::AuthenticationFailed { .. })`.
-5. On success, returns `CommandOutcome::Success`.
-
-> **Note:** The agent execution loop beyond credential validation is currently a
-> stub. The function returns `CommandOutcome::Success` after successful
-> validation without launching a persistent process.
+1. Inputs are validated before any engine or network work. `run.repository`
+   must use `owner/name` format, `run.branch` must not contain whitespace, and
+   GitHub credentials must be complete when the workspace source requires a
+   token. Validation failures return `ConfigError` variants.
+2. `build_run_plan` derives the session identifier, container name, ownership
+   labels, workspace path, and token-store location.
+3. When a token is required, the first installation token is acquired and
+   written to the host token store before the container starts.
+4. The container is created and started. A start failure removes the container
+   before returning the error.
+5. Inside the container, the runner uploads allowlisted host credentials,
+   configures the Git identity, and clones the repository when
+   `workspace.source` is `GithubClone`.
+6. The agent command is executed with an attached TTY. Exit code 0 maps to
+   `CommandOutcome::Success`; any other code maps to
+   `CommandOutcome::CommandExit { code }`.
+7. While the agent runs, a scoped token-refresh thread renews the mounted
+   token. The thread is signalled to stop when the agent exits.
+8. Teardown always runs: the container is stopped and removed, and the host
+   token store is cleaned up. Teardown and cleanup failures are combined with
+   the primary result so the first error is preserved.
 
 The CLI adapter records `podbot.run_agent.validation.total` and
 `podbot.run_agent.validation.duration_seconds` around the `run_agent` API call.
 Both metrics are labelled with `operation` and `status` (`success` or
 `failure`) so operational side effects stay at the process boundary.
 
+#### `list_containers` and `stop_container`
+
+`list_containers(config: &AppConfig)` lists containers carrying the
+`io.podbot.managed=true` label and maps engine records into `ContainerSummary`,
+ordered newest first. `stop_container(config, container)` rejects blank
+identifiers, inspects the container, refuses containers without the managed
+label (`ContainerError::NotManaged`), and treats an already-stopped container
+as success. Both functions have `*_with_client` variants that accept an injected
+`ContainerLifecycleClient` and runtime handle for tests.
+
 #### `run_token_daemon`
 
-`run_token_daemon(container_id: &str)` is currently a stub. It accepts a
-container identifier, performs no validation, and returns
-`CommandOutcome::Success` unconditionally. Future implementations will start a
-token-refresh daemon for the named container.
+`run_token_daemon(config, container_id, shutdown)` validates the container
+identifier and GitHub credentials, resolves the host token store from
+`$XDG_RUNTIME_DIR`, and runs the shared refresh loop until `shutdown` fires or
+token acquisition fails closed. The store is removed on every exit path. The
+CLI adapter triggers `shutdown` on `SIGINT` (Ctrl-C) and `SIGTERM`.
+
+#### Live end-to-end coverage
+
+`run_agent` is covered by contract tests that inject every port, not by a
+testcontainers scenario. The production entry point reads `HOME` and attaches
+the calling process's terminal, so a live scenario would copy the operator's
+real `~/.claude` and `~/.codex` credentials into a test container and bind the
+test harness's stdin and stdout. The container lifecycle, token store, and
+teardown paths are exercised through the injected `ContainerLifecycleClient`,
+`ContainerExecClient`, and `GitHubInstallationTokenClient` doubles instead.
 
 ## 10. Cargo feature gating
 
