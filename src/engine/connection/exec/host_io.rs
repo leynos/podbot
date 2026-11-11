@@ -25,7 +25,7 @@ pub(super) const fn stdin_forwarding_disabled_for_tests() -> bool {
 /// suppress real stdin forwarding without a rebuild.
 #[cfg(not(test))]
 pub(super) fn stdin_forwarding_disabled_for_tests() -> bool {
-    stdin_forwarding_disabled_with_env(&mockable::DefaultEnv::new())
+    stdin_forwarding_disabled_with_env(&mockable::DefaultEnv)
 }
 
 /// Query the existing environment reader without broadening the override syntax.

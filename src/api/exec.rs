@@ -204,7 +204,7 @@ impl ExecContext {
         config: &AppConfig,
         runtime_handle: &tokio::runtime::Handle,
     ) -> PodbotResult<Self> {
-        let env = mockable::DefaultEnv::new();
+        let env = mockable::DefaultEnv;
         let resolver = SocketResolver::new(&env);
         let connector =
             EngineConnector::connect_with_fallback(config.engine_socket.as_deref(), &resolver)?;

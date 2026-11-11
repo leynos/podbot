@@ -258,7 +258,7 @@ pub(crate) fn exercise_case(mode: ExecMode, setting: &str) -> StepResult<CaseExe
     let case_name = thread
         .name()
         .ok_or_else(|| String::from("stdin regression has no libtest case name"))?;
-    let env = mockable::DefaultEnv::new();
+    let env = mockable::DefaultEnv;
     if env
         .raw(CHILD_CASE_ENV)
         .is_ok_and(|selected| selected == case_name)
