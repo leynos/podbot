@@ -1058,6 +1058,12 @@ Items not yet ready for stable embedding must be gated behind the
 `tests/ui/` fixtures to prove the gated surface compiles only when intended. Do
 not expose them via the three stable modules without a corresponding ADR update.
 
+The experimental stubs `list_containers`, `stop_container`, and
+`run_token_daemon` are `const fn`, and the binary's experimental forwarding
+wrappers are const as well, so callers may evaluate them in a const context.
+`src/engine` remains a hidden compatibility boundary: the unused internal
+`SocketPath` wrapper was removed from it without changing the exported API.
+
 See [podbot-design.md, Error handling](podbot-design.md#error-handling) for the
 full error hierarchy.
 

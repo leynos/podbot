@@ -1094,7 +1094,9 @@ without a major version bump.
   `feature = "experimental"`: `run_agent`, `list_containers`, `stop_container`,
   and `run_token_daemon`. Their signatures may change before stabilization.
 - `engine` and `github` are hidden compatibility surfaces and are not part of
-  the supported semver contract for embedders.
+  the supported semver contract for embedders. The unused private `SocketPath`
+  endpoint wrapper has been removed rather than retained with dead-code
+  expectations.
 - `cli` is the Clap adapter for the binary. It is gated behind the `cli` Cargo
   feature; library-only consumers can set `default-features = false` to hide
   module visibility.
