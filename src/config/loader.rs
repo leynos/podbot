@@ -100,7 +100,7 @@ fn load_config_file(path: &Utf8PathBuf, composer: &mut MergeComposer) -> Result<
 /// - Semantic validation failures (`ConfigError::InvalidValue`) such as illegal
 ///   `(command_intent, agent.mode)` combinations or missing host mount paths
 pub fn load_config(options: &ConfigLoadOptions) -> Result<AppConfig> {
-    let env = mockable::DefaultEnv::new();
+    let env = mockable::DefaultEnv;
     load_config_with_env(&env, options)
 }
 

@@ -21,6 +21,8 @@
 //! - Hidden support modules: internal and compatibility seams that are not part
 //!   of the documented stable boundary
 
+#![deny(rustdoc::missing_crate_level_docs)]
+
 pub mod api;
 #[cfg(feature = "cli")]
 pub mod cli;
