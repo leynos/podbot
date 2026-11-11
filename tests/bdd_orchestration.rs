@@ -3,6 +3,9 @@
 #![cfg(feature = "internal")]
 
 mod bdd_orchestration_helpers;
+/// Scoped stdin selection used only by this suite and orchestration/exec peers.
+#[path = "test_support/stdin_forwarding.rs"]
+mod stdin_forwarding;
 mod test_utils;
 
 use bdd_orchestration_helpers::{OrchestrationState, orchestration_state};
