@@ -177,7 +177,7 @@ impl GitHubAppClient for OctocrabAppClient {
             self.client
                 .get::<(), _, ()>("/app", None)
                 .await
-                .map_err(classify_github_api_error)?;
+                .map_err(|error| classify_github_api_error(&error))?;
             Ok(())
         })
     }
