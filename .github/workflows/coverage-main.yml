@@ -73,7 +73,7 @@ jobs:
           printf 'SCCACHE_ERROR_LOG=%s\n' "$SCCACHE_ERROR_LOG" >> "$GITHUB_ENV"
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
       # The UI verification tests resolve the MSRV toolchain through Rustup
       # and never install it. The pull-request lane happens to have it from
       # an earlier step; this lane runs coverage alone, so provision it.
@@ -89,7 +89,7 @@ jobs:
           case "$msrv" in *.*.*) ;; *) msrv="$msrv.0" ;; esac
           rustup toolchain install "$msrv" --profile minimal --no-self-update
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           features: internal
           output-path: lcov.info
@@ -127,7 +127,7 @@ jobs:
         # upload instead of failing the run.
         id: codescene-upload
         if: steps.codescene-token.outputs.available == 'true' && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@5a99aed78ce68dcebd3052b75c31e6f173162b1e
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           format: lcov
           mode: upload
