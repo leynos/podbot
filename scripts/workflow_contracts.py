@@ -77,6 +77,11 @@ WRAPPER_EXPORTING_PINS: typ.Final[frozenset[str]] = frozenset(
         # defaults to whitaker-installer 0.2.11 here, which builds the Dylint
         # driver from a verified Clippy snapshot.
         "5a99aed78ce68dcebd3052b75c31e6f173162b1e",
+        # 0eabb6bc07148981de5da395e30cd78d83f5c7c2, 2026-11-09. Verified
+        # descendant of `5a99aed7` (ahead by 21, behind by 0 on shared-actions'
+        # default branch); `install-whitaker` defaults to whitaker-installer
+        # 0.2.12 here.
+        "0eabb6bc07148981de5da395e30cd78d83f5c7c2",
     }
 )
 
