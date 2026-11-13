@@ -125,8 +125,8 @@ Current relevant implementation and design anchors:
   2.5.1 complete while 2.5.2 and later purity tasks remain open.
 - `docs/podbot-design.md` already commits Podbot hosting mode to strict stdout
   purity, `tty = false`, stderr-only diagnostics, and bounded buffering.
-- `docs/adr-002-define-the-hosted-session-api-and-control-channel.md` requires
-  protocol IO to stay separate from diagnostics at the type level.
+- `docs/adrs/adr-0002-define-the-hosted-session-api-and-control-channel.md`
+  requires protocol IO to stay separate from diagnostics at the type level.
 - `docs/mcp-server-hosting-design.md` reiterates that bridged stdio servers
   must preserve framing and keep stdout free of host-generated noise.
 

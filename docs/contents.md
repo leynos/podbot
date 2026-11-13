@@ -41,23 +41,23 @@ guide.
 
 ## Decision records
 
-- [ADR 001: Define the stable public library boundary](adr-001-define-the-stable-public-library-boundary.md)
+- [ADR 001: Define the stable public library boundary](adrs/adr-0001-define-the-stable-public-library-boundary.md)
   records the accepted public application programming interface (API) boundary.
-- [ADR 002: Define the hosted session API and control channel](adr-002-define-the-hosted-session-api-and-control-channel.md)
+- [ADR 002: Define the hosted session API and control channel](adrs/adr-0002-define-the-hosted-session-api-and-control-channel.md)
   records hosted-session control contracts.
-- [ADR 003: Define the hook execution primitive and suspend-ack protocol](adr-003-define-the-hook-execution-primitive-and-suspend-ack-protocol.md)
+- [ADR 003: Define the hook execution primitive and suspend-ack protocol](adrs/adr-0003-define-the-hook-execution-primitive-and-suspend-ack-protocol.md)
   records hook execution and suspend acknowledgement behaviour.
-- [ADR 004: Define skill bundle and prompt ingestion contracts](adr-004-define-skill-bundle-and-prompt-ingestion-contracts.md)
+- [ADR 004: Define skill bundle and prompt ingestion contracts](adrs/adr-0004-define-skill-bundle-and-prompt-ingestion-contracts.md)
   records skill and prompt ingestion contracts.
-- [ADR 005: Define prompt frontmatter and template rendering](adr-005-define-prompt-frontmatter-and-template-rendering.md)
+- [ADR 005: Define prompt frontmatter and template rendering](adrs/adr-0005-define-prompt-frontmatter-and-template-rendering.md)
   records prompt metadata and rendering rules.
-- [ADR 006: Define the validate surface and capability disposition model](adr-006-define-the-validate-surface-and-capability-disposition-model.md)
+- [ADR 006: Define the validate surface and capability disposition model](adrs/adr-0006-define-the-validate-surface-and-capability-disposition-model.md)
   records validation and capability disposition concepts.
-- [ADR 007: Define session composition and artefact materialization](adr-007-define-session-composition-and-artefact-materialization.md)
+- [ADR 007: Define session composition and artefact materialization](adrs/adr-0007-define-session-composition-and-artefact-materialization.md)
   records session composition and generated artefacts.
-- [ADR 008: Define secrets and trust boundaries for hooks, prompts, and validation](adr-008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md)
+- [ADR 008: Define secrets and trust boundaries for hooks, prompts, and validation](adrs/adr-0008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md)
   records secret-handling and trust-boundary rules.
-- [ADR 009: Define control-plane observability, recovery, and replay](adr-009-define-control-plane-observability-recovery-and-replay.md)
+- [ADR 009: Define control-plane observability, recovery, and replay](adrs/adr-0009-define-control-plane-observability-recovery-and-replay.md)
   records observability and replay expectations.
 
 ## Reference material

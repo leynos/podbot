@@ -243,12 +243,12 @@ The implementer should begin by reading the following files in this order:
    4.9, and 4.10.
 2. `docs/podbot-design.md`, especially the dual-delivery model and error
    handling boundary.
-3. `docs/adr-001-define-the-stable-public-library-boundary.md`.
-4. `docs/adr-002-define-the-hosted-session-api-and-control-channel.md`.
-5. `docs/adr-003-define-the-hook-execution-primitive-and-suspend-ack-protocol.md`.
-6. `docs/adr-006-define-the-validate-surface-and-capability-disposition-model.md`.
-7. `docs/adr-007-define-session-composition-and-artefact-materialization.md`.
-8. `docs/adr-008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md`.
+3. `docs/adrs/adr-0001-define-the-stable-public-library-boundary.md`.
+4. `docs/adrs/adr-0002-define-the-hosted-session-api-and-control-channel.md`.
+5. `docs/adrs/adr-0003-define-the-hook-execution-primitive-and-suspend-ack-protocol.md`.
+6. `docs/adrs/adr-0006-define-the-validate-surface-and-capability-disposition-model.md`.
+7. `docs/adrs/adr-0007-define-session-composition-and-artefact-materialization.md`.
+8. `docs/adrs/adr-0008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md`.
 9. `docs/mcp-server-hosting-design.md`, especially section 8.3.
 10. `docs/users-guide.md`, especially the current "Library API" section.
 
@@ -342,11 +342,12 @@ need `podbot::engine` imports to call the supported library API.
 
 Compare the hook and validation shapes in:
 
-- `docs/adr-003-define-the-hook-execution-primitive-and-suspend-ack-protocol.md`,
-- `docs/adr-006-define-the-validate-surface-and-capability-disposition-model.md`,
-- `docs/adr-008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md`,
-- `docs/adr-002-define-the-hosted-session-api-and-control-channel.md`,
-- `docs/adr-007-define-session-composition-and-artefact-materialization.md`, and
+- `docs/adrs/adr-0003-define-the-hook-execution-primitive-and-suspend-ack-protocol.md`,
+- `docs/adrs/adr-0006-define-the-validate-surface-and-capability-disposition-model.md`,
+- `docs/adrs/adr-0008-define-secrets-and-trust-boundaries-for-hooks-prompts-and-validation.md`,
+- `docs/adrs/adr-0002-define-the-hosted-session-api-and-control-channel.md`,
+- `docs/adrs/adr-0007-define-session-composition-and-artefact-materialization.md`,
+  and
 - `docs/corbusier-conformance-design-for-agents-mcp-wires-and-hooks.md`.
 
 Record every mismatch. The most obvious one today is validation taxonomy: ADR
