@@ -4,7 +4,8 @@
 //! dependency with a self-contained API surface. Each scenario exercises the
 //! public library boundary from a host-application perspective — loading
 //! configuration without CLI types, executing commands via the orchestration
-//! API, receiving semantic errors, and calling stub orchestration functions.
+//! API, receiving semantic errors, and rejecting incomplete orchestration
+//! configuration.
 //!
 //! Scenarios are defined in `tests/features/library_boundary.feature` and
 //! step definitions live in the `bdd_library_boundary_helpers` module.
@@ -43,9 +44,9 @@ fn library_exec_failure(library_boundary_state: LibraryBoundaryState) {
 
 #[scenario(
     path = "tests/features/library_boundary.feature",
-    name = "Stub orchestration functions return success"
+    name = "Orchestration functions reject incomplete configuration"
 )]
 #[cfg(feature = "experimental")]
-fn stub_functions_succeed(library_boundary_state: LibraryBoundaryState) {
+fn orchestration_rejects_incomplete_configuration(library_boundary_state: LibraryBoundaryState) {
     let _ = library_boundary_state;
 }

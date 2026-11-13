@@ -13,16 +13,18 @@
 mod classify;
 mod installation_token;
 mod pem_validation;
+mod private_key;
 mod retry_metrics;
+#[cfg(any(feature = "experimental", test))]
+mod token_daemon;
+#[cfg(any(feature = "experimental", test))]
+mod token_store;
 
 use std::future::Future;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 
 use camino::Utf8Path;
-use cap_std::ambient_authority;
-use cap_std::fs_utf8::Dir;
 use jsonwebtoken::EncodingKey;
 
 use octocrab::Octocrab;
@@ -32,42 +34,23 @@ use octocrab::service::middleware::retry::RetryConfig;
 use crate::error::GitHubError;
 use classify::classify_github_api_error;
 pub use installation_token::InstallationAccessToken;
-use pem_validation::parse_rsa_pem;
+pub use private_key::load_private_key;
+#[cfg(test)]
+pub(crate) use private_key::load_private_key_from_dir;
 use retry_metrics::PodbotOctocrabRetryMetrics;
+#[cfg(any(feature = "experimental", test))]
+pub use token_daemon::{
+    DEFAULT_EXPIRY_BUFFER, DaemonShutdown, DaemonShutdownSignal, RefreshContext, run_daemon,
+    run_daemon_with_token,
+};
+#[cfg(any(feature = "experimental", test))]
+pub use token_store::{CONTAINER_TOKEN_DIR, TOKEN_FILE_NAME, TokenStore};
 
 /// A boxed future for async trait methods.
 ///
 /// This type alias enables `mockall::automock` compatibility and trait object
 /// usage for async methods in [`GitHubAppClient`].
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
-/// Load a GitHub App RSA private key from the configured path.
-///
-/// Opens the parent directory of `key_path` using ambient authority,
-/// reads the file contents, and parses them as a PEM-encoded RSA
-/// private key suitable for JWT signing with RS256.
-///
-/// # Key format
-///
-/// The file must contain a PEM-encoded RSA private key in either PKCS#1
-/// (`RSA PRIVATE KEY`) or PKCS#8 (`PRIVATE KEY`) format. Ed25519 and
-/// ECDSA keys are rejected because GitHub App authentication requires
-/// RS256.
-///
-/// # Errors
-///
-/// Returns [`GitHubError::PrivateKeyLoadFailed`] if:
-/// - The parent directory cannot be opened.
-/// - The file cannot be read.
-/// - The file is empty.
-/// - The file contains a public key or certificate.
-/// - The file contains an encrypted private key.
-/// - The file contains an ECDSA or Ed25519 key.
-/// - The content is not a valid PEM-encoded RSA private key.
-pub fn load_private_key(key_path: &Utf8Path) -> Result<EncodingKey, GitHubError> {
-    let (dir, file_name) = open_key_directory(key_path)?;
-    load_private_key_from_dir(&dir, file_name, key_path)
-}
 
 /// Build an authenticated Octocrab client for GitHub App operations.
 ///
@@ -300,65 +283,6 @@ where
     let private_key = load_private_key(private_key_path)?;
     let client = factory(app_id, private_key)?;
     validate_with_client(&client).await
-}
-
-/// Load a private key from an already-opened directory capability.
-///
-/// Separated from [`load_private_key`] for testability: tests provide a
-/// `cap_std::fs_utf8::Dir` backed by a temporary directory.
-fn load_private_key_from_dir(
-    dir: &Dir,
-    file_name: &str,
-    display_path: &Utf8Path,
-) -> Result<EncodingKey, GitHubError> {
-    let pem_contents = read_key_file(dir, file_name, display_path)?;
-    parse_rsa_pem(&pem_contents, display_path)
-}
-
-/// Open the parent directory of the key path as a capability handle.
-fn open_key_directory(key_path: &Utf8Path) -> Result<(Dir, &str), GitHubError> {
-    let parent = key_path
-        .parent()
-        .filter(|p| !p.as_str().is_empty())
-        .unwrap_or_else(|| Utf8Path::new("."));
-    let file_name = key_path
-        .file_name()
-        .ok_or_else(|| GitHubError::PrivateKeyLoadFailed {
-            path: PathBuf::from(key_path.as_std_path()),
-            message: "path does not contain a filename".to_owned(),
-        })?;
-
-    let dir = Dir::open_ambient_dir(parent, ambient_authority()).map_err(|error| {
-        GitHubError::PrivateKeyLoadFailed {
-            path: PathBuf::from(key_path.as_std_path()),
-            message: format!("failed to open parent directory: {error}"),
-        }
-    })?;
-
-    Ok((dir, file_name))
-}
-
-/// Read the key file contents and validate non-empty.
-fn read_key_file(
-    dir: &Dir,
-    file_name: &str,
-    display_path: &Utf8Path,
-) -> Result<String, GitHubError> {
-    let contents =
-        dir.read_to_string(file_name)
-            .map_err(|error| GitHubError::PrivateKeyLoadFailed {
-                path: PathBuf::from(display_path.as_std_path()),
-                message: format!("failed to read file: {error}"),
-            })?;
-
-    if contents.trim().is_empty() {
-        return Err(GitHubError::PrivateKeyLoadFailed {
-            path: PathBuf::from(display_path.as_std_path()),
-            message: "file is empty".to_owned(),
-        });
-    }
-
-    Ok(contents)
 }
 
 /// Test helper: format a classified error message for a given HTTP status code.

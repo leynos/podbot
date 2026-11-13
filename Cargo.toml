@@ -61,6 +61,7 @@ mockable = { version = "0.1.4", default-features = false, features = ["clock"] }
 metrics = "0.24.6"
 
 [dev-dependencies]
+tokio = { version = "1.49.0", features = ["test-util"] }
 temp-env = "0.3.6"
 mockable = { version = "0.1.4", default-features = false, features = ["clock", "mock"] }
 mockall = "0.15.0"

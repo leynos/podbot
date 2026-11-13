@@ -28,11 +28,10 @@ Feature: Command-line interface
     Given the CLI is invoked with run --repo owner/name --branch main
     Then the invocation succeeds
 
-  Scenario: Run command dispatches to orchestration
+  Scenario: Run command reports incomplete GitHub configuration
     Given the CLI run command is executed with repository owner/name and branch main
-    Then the invocation succeeds
-    And stdout contains Container orchestration not yet implemented.
-    And stderr is empty
+    Then the invocation fails
+    And stderr contains github.app_id
 
   Scenario: Run command help documents required arguments
     Given the CLI is invoked with run --help

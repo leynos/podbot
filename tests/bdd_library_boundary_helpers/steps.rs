@@ -2,7 +2,8 @@
 //!
 //! Provides `given` and `when` step definitions that configure mock
 //! environments, construct library-facing load options, invoke exec
-//! orchestration with mock clients, and call stub orchestration functions.
+//! orchestration with mock clients, and call orchestration functions with
+//! incomplete configuration.
 
 use std::sync::Arc;
 
@@ -10,9 +11,9 @@ use bollard::container::LogOutput;
 use futures_util::stream;
 use mockable::MockEnv;
 use mockall::mock;
-use podbot::api::{ExecMode, ExecRequest, RunRequest};
 #[cfg(feature = "experimental")]
-use podbot::api::{list_containers, run_agent, run_token_daemon, stop_container};
+use podbot::api::{DaemonShutdown, run_agent, run_token_daemon};
+use podbot::api::{ExecMode, ExecRequest, RunRequest};
 #[cfg(feature = "experimental")]
 use podbot::config::AppConfig;
 use podbot::config::{ConfigLoadOptions, ConfigOverrides, load_config_with_env};
@@ -186,9 +187,11 @@ fn when_exec_called(library_boundary_state: &LibraryBoundaryState) -> StepResult
     Ok(())
 }
 
-#[when("each stub orchestration function is called")]
+#[when("run and token-daemon orchestration are called with incomplete configuration")]
 #[cfg(feature = "experimental")]
-fn when_stubs_called(library_boundary_state: &LibraryBoundaryState) -> StepResult<()> {
+fn when_orchestration_called_without_configuration(
+    library_boundary_state: &LibraryBoundaryState,
+) -> StepResult<()> {
     let config = AppConfig::default();
     let request = library_boundary_state
         .run_request
@@ -200,15 +203,7 @@ fn when_stubs_called(library_boundary_state: &LibraryBoundaryState) -> StepResul
         Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
         Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
     }
-    match list_containers() {
-        Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
-        Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
-    }
-    match stop_container("test-ctr") {
-        Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
-        Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
-    }
-    match run_token_daemon("test-ctr") {
+    match run_token_daemon(&config, "   ", DaemonShutdown::new()) {
         Ok(outcome) => results.push(LibraryResult::Ok(outcome)),
         Err(e) => results.push(LibraryResult::Err(Arc::new(e))),
     }

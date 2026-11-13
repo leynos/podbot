@@ -21,18 +21,25 @@ Feature: Command orchestration
     When exec orchestration is invoked
     Then the outcome is command exit with code 7
 
-  Scenario: Run stub returns success
+  Scenario: Run orchestration rejects incomplete GitHub configuration
     When run orchestration is invoked
-    Then the outcome is success
+    Then the outcome is an error mentioning github.app_id
 
-  Scenario: Stop stub returns success
+  Scenario: Stop orchestration stops a managed container
+    Given a mock lifecycle client with a running managed container
     When stop orchestration is invoked with container test-ctr
     Then the outcome is success
 
-  Scenario: List containers stub returns success
-    When list containers orchestration is invoked
-    Then the outcome is success
+  Scenario: Stop orchestration refuses an unmanaged container
+    Given a mock lifecycle client with a running unmanaged container
+    When stop orchestration is invoked with container test-ctr
+    Then the outcome is an error mentioning not managed
 
-  Scenario: Token daemon stub returns success
-    When token daemon orchestration is invoked with container test-ctr
-    Then the outcome is success
+  Scenario: List containers orchestration returns managed containers
+    Given a mock lifecycle client listing 2 managed containers
+    When list containers orchestration is invoked
+    Then the listing contains 2 containers
+
+  Scenario: Token daemon rejects a blank container identifier
+    When token daemon orchestration is invoked with a blank container
+    Then the outcome is an error mentioning container_id

@@ -1013,7 +1013,10 @@ src/
 ├── main.rs             # Thin CLI adapter over library APIs
 ├── error.rs            # Error types and conversions
 ├── api/                # Orchestration API: run, host, exec, stop, ps, token daemon
-│   ├── mod.rs          # CommandOutcome type, stub functions, re-exports
+│   ├── mod.rs          # CommandOutcome type and re-exports
+│   ├── containers/     # list_containers and stop_container orchestration
+│   ├── run_agent/      # Full agent lifecycle orchestration
+│   ├── token_daemon/   # run_token_daemon entry point
 │   ├── exec.rs         # Exec orchestration (extracted from main.rs)
 │   └── tests.rs        # Unit tests for API module
 ├── config/             # Configuration module (types + loader)
@@ -1023,8 +1026,11 @@ src/
 │   ├── loader.rs       # Layered loader implementation
 │   └── tests.rs        # Unit tests for configuration types and loading
 ├── engine/             # Bollard wrapper: connect, create, upload, exec
-├── github.rs           # Octocrab App authentication, token acquisition
-├── token_daemon.rs     # Token refresh loop, atomic file writes
+├── github/             # Octocrab App authentication and token management
+│   ├── mod.rs          # Client construction and credential validation
+│   ├── private_key.rs  # PEM private-key loading
+│   ├── token_daemon/   # Shared token refresh loop
+│   └── token_store/    # Atomic host-side token store
 ├── launch_plan.rs      # LaunchRequest/LaunchPlan normalization and validation
 ├── run_flow.rs         # Interactive orchestration internals
 └── host_flow.rs        # Protocol-hosting orchestration internals
@@ -1032,7 +1038,7 @@ src/
 
 The `engine/` module directory (exposed as `podbot::engine`) encapsulates all
 Bollard interactions, providing a testable abstraction over container
-operations. The `github.rs` module handles Octocrab configuration and token
+operations. The `github/` module handles Octocrab configuration and token
 acquisition without exposing API details to calling code.
 
 Public versus internal intent:
@@ -1045,7 +1051,8 @@ Public versus internal intent:
   reachable for tests and short-term compatibility, but they are not part of
   the documented stable embedding boundary.
 - Internal library modules (subject to refactor): `run_flow.rs`,
-  `host_flow.rs`, `launch_plan.rs`, and `token_daemon.rs`.
+  `host_flow.rs`, `launch_plan.rs`, `github::token_daemon/`, and
+  `github::token_store/`.
 
 ### Library API boundary requirements
 
@@ -1069,8 +1076,8 @@ The stable library boundary should follow these constraints:
   `podbot::api::{ExecRequest, ExecMode, ExecContext, exec}` rather than
   engine-owned traits or runtime handles.
 - `RunRequest` is the stable, library-owned request type for interactive run
-  sessions. The current `run_agent` orchestration function remains experimental
-  while the full agent lifecycle is still a stub.
+  sessions. `run_agent` is implemented and remains experimental until its
+  public signature is frozen.
 - Hook, validation, session, and MCP contracts remain experimental until their
   ADRs and consumer-facing integration notes converge on one request/response
   taxonomy.

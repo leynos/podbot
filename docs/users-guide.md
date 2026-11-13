@@ -60,6 +60,16 @@ the same request directly without using CLI parse types.
 | `--agent`      | No       | Config/defaults | Agent type: `claude`, `codex`, or `custom`           |
 | `--agent-mode` | No       | Config/defaults | Agent mode; `run` accepts only `podbot` semantically |
 
+A clone workspace requires complete GitHub App credentials (`github.app_id`,
+`github.installation_id`, and `github.private_key_path`). Podbot refuses to run
+without them, before any container work starts. The sandbox container is
+stopped and removed when the agent exits, whether the run succeeded or failed.
+
+A host-mounted workspace (`workspace.source = "host_mount"`) is mounted
+read-write at the configured container path. Path canonicalization, symlink
+escape checks, and allowlisted mount roots are not yet enforced; see roadmap
+item 4.2.2 before relying on host mounts for untrusted paths.
+
 #### `host`
 
 Host an app-server protocol for a long-lived agent runtime.
@@ -100,6 +110,12 @@ Run the GitHub token refresh daemon for a container.
 podbot token-daemon <container-id>
 ```
 
+The daemon requires complete GitHub App credentials (`app_id`,
+`installation_id`, and `private_key_path`). It writes refreshed tokens to
+`$XDG_RUNTIME_DIR/podbot/<container-id>/ghapp_token` and removes that directory
+when it exits. Press Ctrl-C or send `SIGTERM` to stop it; token values are
+never logged.
+
 #### `ps`
 
 List running podbot containers.
@@ -108,6 +124,10 @@ List running podbot containers.
 podbot ps
 ```
 
+Only containers carrying the `io.podbot.managed=true` label are listed, newest
+first. Each row shows the container name, image, state, and the repository and
+branch recorded at creation time.
+
 #### `stop`
 
 Stop a running container.
@@ -115,6 +135,10 @@ Stop a running container.
 ```bash
 podbot stop <container>
 ```
+
+Podbot inspects the container before stopping it and refuses containers it does
+not own, so a mistyped identifier cannot stop an unrelated workload. Stopping a
+container that is already stopped succeeds.
 
 #### `exec`
 
@@ -805,17 +829,19 @@ The following modules are public but gated behind Cargo features:
 
 The following functions remain available under `podbot::api`, but they are not
 part of the stable semver contract described in this guide. Podbot reserves the
-`experimental` Cargo feature for unstable library surfaces, and these stub
-entry points are available only when that feature is enabled.
+`experimental` Cargo feature for unstable library surfaces, so these entry
+points are available only when that feature is enabled.
 
-- `podbot::api::run_agent(config, request)` — validates GitHub credentials and
-  returns a stub success outcome for a `RunRequest`.
-- `podbot::api::stop_container(container)` — placeholder stop operation that
-  currently returns a stub success outcome.
-- `podbot::api::list_containers()` — placeholder list operation that currently
-  returns a stub success outcome.
-- `podbot::api::run_token_daemon(container_id)` — placeholder token-refresh
-  daemon entry point that currently returns a stub success outcome.
+- `podbot::api::run_agent(config, request)` — runs the agent lifecycle for a
+  `RunRequest`: it creates the sandbox container, injects credentials, prepares
+  the workspace, refreshes the GitHub App token, and launches the agent with an
+  attached terminal.
+- `podbot::api::stop_container(config, container)` — stops a running
+  podbot-managed container, refusing containers podbot does not own.
+- `podbot::api::list_containers(config)` — lists running podbot-managed
+  containers as `ContainerSummary` records.
+- `podbot::api::run_token_daemon(config, container_id, shutdown)` — refreshes
+  installation tokens for a running container until `shutdown` fires.
 
 Enable the experimental entry points with this dependency declaration:
 
@@ -841,17 +867,24 @@ fn start_agent() -> Result<(), podbot::error::PodbotError> {
 }
 ```
 
-`run_agent(config: &AppConfig, request: &RunRequest)` validates the GitHub
-credential fields in `AppConfig` and accepts the repository and branch through
-the library-owned request type. If any GitHub credential field is set, all
-required fields (`app_id`, `installation_id`, `private_key_path`) must be
-present; the function returns a `PodbotError` if validation fails. Call this
-function when you want to embed the full agent orchestration path rather than
-issuing individual exec commands.
+`run_agent(config: &AppConfig, request: &RunRequest)` validates the request and
+the GitHub credential fields in `AppConfig` before any engine work starts.
+GitHub App runs require `app_id`, `installation_id`, and `private_key_path`;
+the function returns a `PodbotError` if validation fails. Call this function
+when you want to embed the full agent orchestration path rather than issuing
+individual exec commands.
 
-> **Note:** The agent runtime is currently a stub; the function validates
-> credentials and returns `CommandOutcome::Success` without launching a
-> persistent agent loop.
+The lifecycle creates and starts a container labelled `io.podbot.managed=true`,
+uploads the selected credential families, configures Git identity, mounts the
+workspace, and clones the repository when the workspace source is
+`github_clone`. For clone-based workspaces the function writes an installation
+token to `$XDG_RUNTIME_DIR/podbot/<container-name>/ghapp_token` and refreshes
+it in the background for the lifetime of the agent session.
+
+The agent runs with an attached TTY. A zero exit code maps to
+`CommandOutcome::Success`; any other code maps to
+`CommandOutcome::CommandExit`. The container is stopped and removed on success
+and on every failure path, and the host token directory is always removed.
 
 ### `run_token_daemon`
 
@@ -859,22 +892,27 @@ issuing individual exec commands.
 > Enable `feature = "experimental"` before importing this function.
 
 ```rust,no_run
-use podbot::api::run_token_daemon;
+use podbot::api::{DaemonShutdown, run_token_daemon};
+use podbot::config::AppConfig;
 
-fn start_token_refresh(container_id: &str) -> Result<(), podbot::error::PodbotError> {
-    run_token_daemon(container_id)?;
+fn start_token_refresh(
+    config: &AppConfig,
+    container_id: &str,
+) -> Result<(), podbot::error::PodbotError> {
+    let shutdown = DaemonShutdown::new();
+    run_token_daemon(config, container_id, shutdown)?;
     Ok(())
 }
 ```
 
-`run_token_daemon(container_id: &str)` starts the token-refresh daemon for the
-named container. Supply the container identifier or name as returned by the
-container engine. The daemon periodically refreshes authentication tokens
-required by the agent.
+`run_token_daemon` takes the application config, the container identifier, and a
+`DaemonShutdown` handle. It refreshes installation tokens for the named
+container. Supply the container identifier or name as returned by the container
+engine. The daemon writes each token to
+`$XDG_RUNTIME_DIR/podbot/<container-id>/ghapp_token` and stops when `shutdown`
+fires or when token acquisition exhausts its bounded retry budget. The token
+directory is removed on every exit path.
 
-> **Note:** The token daemon is currently a stub and returns
-> `CommandOutcome::Success` immediately.
->
 ## Development
 
 ### Running tests

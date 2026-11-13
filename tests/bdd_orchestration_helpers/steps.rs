@@ -11,15 +11,27 @@
 //! keeps BDD scenarios focused on command behaviour while the mock utilities
 //! provide repeatable engine responses.
 
+use std::collections::HashMap;
+
 use bollard::container::LogOutput;
+use bollard::models::{
+    ContainerConfig, ContainerInspectResponse, ContainerState, ContainerSummary as EngineSummary,
+    ContainerSummaryStateEnum,
+};
 use futures_util::stream;
-use podbot::api::{CommandOutcome, ExecMode, ExecRequest};
+use mockall::mock;
+use podbot::api::{
+    CommandOutcome, ExecMode, ExecRequest, list_containers_with_client, stop_container_with_client,
+};
 #[cfg(feature = "experimental")]
-use podbot::api::{RunRequest, list_containers, run_agent, run_token_daemon, stop_container};
+use podbot::api::{DaemonShutdown, RunRequest, run_agent, run_token_daemon};
 #[cfg(feature = "experimental")]
 use podbot::config::AppConfig;
 use podbot::engine::{
-    ContainerExecClient, CreateExecFuture, InspectExecFuture, ResizeExecFuture, StartExecFuture,
+    ContainerExecClient, ContainerLifecycleClient, CreateExecFuture, InspectContainerFuture,
+    InspectExecFuture, ListContainersFuture, MANAGED_LABEL_KEY, MANAGED_LABEL_VALUE,
+    RemoveContainerFuture, ResizeExecFuture, StartContainerFuture, StartExecFuture,
+    StopContainerFuture,
 };
 use rstest_bdd_macros::{given, when};
 
@@ -53,10 +65,91 @@ crate::define_exec_client_mock! {
     exec_id = "orc-exec-id",
 }
 
+mock! {
+    LifecycleClient {}
+    impl ContainerLifecycleClient for LifecycleClient {
+        fn start_container(&self, container_id: &str) -> StartContainerFuture<'_>;
+        fn stop_container(
+            &self,
+            container_id: &str,
+            grace_seconds: i32,
+        ) -> StopContainerFuture<'_>;
+        fn remove_container(
+            &self,
+            container_id: &str,
+            force: bool,
+        ) -> RemoveContainerFuture<'_>;
+        fn inspect_container(
+            &self,
+            container_id: &str,
+        ) -> InspectContainerFuture<'_>;
+        fn list_containers(&self, label_filter: &str) -> ListContainersFuture<'_>;
+    }
+}
+
+/// Build an inspect response carrying the requested state and labels.
+fn inspect_response(managed: bool, running: bool) -> ContainerInspectResponse {
+    let labels = if managed {
+        HashMap::from([(
+            String::from(MANAGED_LABEL_KEY),
+            String::from(MANAGED_LABEL_VALUE),
+        )])
+    } else {
+        HashMap::new()
+    };
+
+    ContainerInspectResponse {
+        id: Some(String::from("test-ctr")),
+        state: Some(ContainerState {
+            running: Some(running),
+            ..ContainerState::default()
+        }),
+        config: Some(ContainerConfig {
+            labels: Some(labels),
+            ..ContainerConfig::default()
+        }),
+        ..ContainerInspectResponse::default()
+    }
+}
+
+/// Build one engine summary for a managed container.
+fn engine_summary(index: usize) -> EngineSummary {
+    EngineSummary {
+        id: Some(format!("ctr-{index}")),
+        names: Some(vec![format!("/podbot-{index}")]),
+        image: Some(String::from("podbot-sandbox:latest")),
+        state: Some(ContainerSummaryStateEnum::RUNNING),
+        status: Some(String::from("Up 1 minute")),
+        created: Some(i64::try_from(index).unwrap_or_default()),
+        labels: Some(HashMap::from([(
+            String::from(MANAGED_LABEL_KEY),
+            String::from(MANAGED_LABEL_VALUE),
+        )])),
+        ..EngineSummary::default()
+    }
+}
+
 #[given("a mock container engine")]
 fn given_mock_engine(orchestration_state: &OrchestrationState) {
     // State defaults already configure a working mock scenario.
     let _ = orchestration_state;
+}
+
+#[given("a mock lifecycle client with a running managed container")]
+fn given_running_managed_container(orchestration_state: &OrchestrationState) {
+    orchestration_state.managed.set(true);
+    orchestration_state.running.set(true);
+}
+
+#[given("a mock lifecycle client with a running unmanaged container")]
+fn given_running_unmanaged_container(orchestration_state: &OrchestrationState) {
+    orchestration_state.managed.set(false);
+    orchestration_state.running.set(true);
+}
+
+#[given("a mock lifecycle client listing {count} managed containers")]
+fn given_listed_containers(orchestration_state: &OrchestrationState, count: usize) {
+    orchestration_state.list_count.set(count);
 }
 
 #[given("exec mode is attached")]
@@ -128,21 +221,68 @@ fn when_run_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> 
 }
 
 #[when("stop orchestration is invoked with container {container}")]
-#[cfg(feature = "experimental")]
-fn when_stop_invoked(orchestration_state: &OrchestrationState, container: String) {
-    invoke_orchestration(orchestration_state, || stop_container(&container));
+fn when_stop_invoked(
+    orchestration_state: &OrchestrationState,
+    container: String,
+) -> StepResult<()> {
+    let managed = orchestration_state.managed.get().unwrap_or(true);
+    let running = orchestration_state.running.get().unwrap_or(true);
+    let mut client = MockLifecycleClient::new();
+    client
+        .expect_inspect_container()
+        .times(1)
+        .returning(move |_| {
+            let response = inspect_response(managed, running);
+            Box::pin(async move { Ok(response) })
+        });
+    if managed && running {
+        client
+            .expect_stop_container()
+            .times(1)
+            .returning(|_, _| Box::pin(async { Ok(()) }));
+    } else {
+        client.expect_stop_container().times(0);
+    }
+
+    let runtime = test_runtime()?;
+    invoke_orchestration(orchestration_state, || {
+        stop_container_with_client(&client, runtime.handle(), &container)
+    });
+    Ok(())
 }
 
 #[when("list containers orchestration is invoked")]
-#[cfg(feature = "experimental")]
-fn when_list_containers_invoked(orchestration_state: &OrchestrationState) {
-    invoke_orchestration(orchestration_state, list_containers);
+fn when_list_containers_invoked(orchestration_state: &OrchestrationState) -> StepResult<()> {
+    let count = orchestration_state.list_count.get().unwrap_or(0);
+    let mut client = MockLifecycleClient::new();
+    client
+        .expect_list_containers()
+        .times(1)
+        .returning(move |_| {
+            let summaries = (0..count).map(engine_summary).collect();
+            Box::pin(async move { Ok(summaries) })
+        });
+
+    let runtime = test_runtime()?;
+    match list_containers_with_client(&client, runtime.handle()) {
+        Ok(containers) => orchestration_state.listed.set(containers.len()),
+        Err(error) => return Err(format!("listing should succeed: {error}")),
+    }
+    Ok(())
 }
 
-#[when("token daemon orchestration is invoked with container {container}")]
+#[when("token daemon orchestration is invoked with a blank container")]
 #[cfg(feature = "experimental")]
-fn when_token_daemon_invoked(orchestration_state: &OrchestrationState, container: String) {
-    invoke_orchestration(orchestration_state, || run_token_daemon(&container));
+fn when_token_daemon_invoked(orchestration_state: &OrchestrationState) {
+    let config = AppConfig::default();
+    invoke_orchestration(orchestration_state, || {
+        run_token_daemon(&config, "   ", DaemonShutdown::new())
+    });
+}
+
+/// Build the runtime used to drive the injected lifecycle client.
+fn test_runtime() -> StepResult<tokio::runtime::Runtime> {
+    tokio::runtime::Runtime::new().map_err(|error| format!("failed to create runtime: {error}"))
 }
 
 /// Expects a single start-exec call appropriate to `mode`.

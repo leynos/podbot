@@ -29,6 +29,8 @@ use self::helpers::{
     map_start_exec_error, validate_command, validate_required_field,
 };
 use self::protocol::run_protocol_session_async_with_options;
+#[cfg(any(feature = "internal", feature = "experimental", test))]
+pub(crate) use self::runtime_helpers::block_on_runtime as block_on_runtime_handle;
 use self::runtime_helpers::{block_on_runtime, exec_failed};
 use self::session::{ExecSessionOptions, protocol_session_options};
 use self::terminal::{SystemTerminalSizeProvider, TerminalSizeProvider};

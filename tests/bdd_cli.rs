@@ -123,6 +123,28 @@ fn stderr_is_empty(cli_state: &CliState) -> StepResult<()> {
     Err(format!("Expected stderr to be empty, but got:\n{error}"))
 }
 
+#[then("stderr contains {text}")]
+fn stderr_contains(cli_state: &CliState, text: String) -> StepResult<()> {
+    let error = required_slot(cli_state.error.get(), "stderr")?;
+    if error.contains(&text) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "Expected stderr to contain '{text}', but got:\n{error}"
+    ))
+}
+
+#[then("the invocation fails")]
+fn invocation_fails(cli_state: &CliState) -> StepResult<()> {
+    let success = required_slot(cli_state.success.get(), "success")?;
+    if success {
+        return Err(String::from("Expected invocation to fail"));
+    }
+
+    Ok(())
+}
+
 #[then("an error is returned")]
 fn error_is_returned(cli_state: &CliState) -> StepResult<()> {
     let success = required_slot(cli_state.success.get(), "success")?;
@@ -265,10 +287,10 @@ fn run_succeeds_with_all_args(cli_state: CliState) {
 
 #[scenario(
     path = "tests/features/cli.feature",
-    name = "Run command dispatches to orchestration"
+    name = "Run command reports incomplete GitHub configuration"
 )]
 #[cfg(feature = "experimental")]
-fn run_dispatches_to_orchestration(cli_state: CliState) {
+fn run_reports_incomplete_github_configuration(cli_state: CliState) {
     let _ = cli_state;
 }
 
