@@ -69,7 +69,7 @@ lint, and formatting gates sequentially, and route long command output through
 `tee` into `/tmp`.
 
 The stable library boundary described in
-`docs/adr-001-define-the-stable-public-library-boundary.md` and
+`docs/adrs/adr-0001-define-the-stable-public-library-boundary.md` and
 `docs/developers-guide.md` must remain intact. Public modules may expose typed
 domain concepts, but must not expose engine, GitHub adapter, or command-line
 interface (CLI) internals.

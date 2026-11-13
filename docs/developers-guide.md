@@ -1041,7 +1041,7 @@ runtime handles are not part of the semver-stable API surface.
 For the design rationale and full constraint set, see
 [docs/execplans/5-3-1-stabilize-public-library-boundaries.md](execplans/5-3-1-stabilize-public-library-boundaries.md)
 and Architecture Decision Record (ADR) 001
-([adr-001-define-the-stable-public-library-boundary.md](adr-001-define-the-stable-public-library-boundary.md)).
+([adrs/adr-0001-define-the-stable-public-library-boundary.md](adrs/adr-0001-define-the-stable-public-library-boundary.md)).
 
 ### 11.1. Adding a new stable item
 
