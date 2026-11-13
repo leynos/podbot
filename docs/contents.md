@@ -39,6 +39,12 @@ guide.
 - [Corbusier conformance design for agents, MCP wires, and hooks](corbusier-conformance-design-for-agents-mcp-wires-and-hooks.md)
   records related conformance design for agents, MCP wires, and hooks.
 
+## Requests for comments
+
+- [RFC 0001: Add a Kubernetes execution backend](rfcs/0001-kubernetes-execution-backend.md)
+  proposes a portable runtime boundary, Kubernetes agent execution, and staged
+  conformance and recovery gates tracked in roadmap phase 10.
+
 ## Decision records
 
 - [ADR 001: Define the stable public library boundary](adr-001-define-the-stable-public-library-boundary.md)
