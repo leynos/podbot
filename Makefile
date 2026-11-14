@@ -26,11 +26,12 @@ WHITAKER ?= whitaker
 NIXIE ?= nixie
 UV ?= uv
 # The development build standard (concordat rule `rust-build-defaults`): the
-# mold linker on Linux. An assigned RUSTFLAGS replaces every `rustflags` table
-# in .cargo/config.toml, so each gate recipe that sets it adds the linker flag.
-# The pinned stable toolchain has no parallel frontend or Cranelift backend.
+# parallel rustc frontend and, on Linux, the mold linker. An assigned RUSTFLAGS
+# replaces every `rustflags` table in .cargo/config.toml, so each gate recipe
+# that sets it adds these flags. The pinned nightly takes the frontend flag; it
+# does not take the Cranelift backend (see the developers' guide, "Cranelift").
 BUILD_HOST_OS := $(shell uname -s)
-STANDARD_RUSTFLAGS := $(if $(filter Linux,$(BUILD_HOST_OS)),-Clink-arg=-fuse-ld=mold)
+STANDARD_RUSTFLAGS := -Zthreads=8$(if $(filter Linux,$(BUILD_HOST_OS)), -Clink-arg=-fuse-ld=mold)
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 
 # The CV-005 CodeScene contracts live in shared-actions and run from a full

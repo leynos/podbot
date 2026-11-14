@@ -1,13 +1,29 @@
 # Repository-wide Cargo defaults for the development build standard.
 #
-# The mold linker is the default on Linux. Cargo auto-discovers this file, so a
-# bare `cargo build` gets it. The toolchain is stable, so neither the parallel
-# `rustc` frontend nor the Cranelift backend applies (both need a nightly
-# `-Z` flag). Assigning `RUSTFLAGS` replaces every `rustflags` source below,
-# so the Makefile restates the linker flag where it assigns `RUSTFLAGS` for
-# the gate targets, and coverage takes the platform linker.
+# The parallel `rustc` frontend and, on Linux, the `mold` linker are the
+# defaults for every development build. Cargo auto-discovers this file, so a
+# bare `cargo build` gets them. The Cranelift backend is not selected (see the
+# developers' guide, "Cranelift"). Cargo selects a single `rustflags` source
+# rather than merging them, and an assigned `RUSTFLAGS` replaces all of them,
+# so the Makefile restates the flags where it assigns `RUSTFLAGS` for the gate
+# targets, and coverage takes the platform linker.
+#
+# The `-Z` flag and the `[unstable]` table need the pinned nightly. The
+# declared-MSRV check and the UI tests' MSRV children run stable Cargo, so they
+# run from outside the checkout or with `RUSTFLAGS` assigned, never reading the
+# flag from here.
+
+[build]
+rustflags = ["-Zthreads=8"]
 
 # mold ships for Linux only, so the linker flag lives in a Linux-only table.
-# Other platforms fall through to their default linker.
+# Other platforms fall through to `[build] rustflags` above and keep their
+# platform linker.
 [target.'cfg(target_os = "linux")']
-rustflags = ["-Clink-arg=-fuse-ld=mold"]
+rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]
+
+# Dependencies are built without embedded metadata (rule
+# `rust-dev-build-footprint`, DF-003). Dated nightlies from 2026-07-31 take the
+# native Cargo key.
+[unstable]
+embed-metadata = false

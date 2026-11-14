@@ -67,9 +67,9 @@ jobs:
         with:
           install-mold: 'true'
           # setup-rust exports RUSTFLAGS, which replaces .cargo/config.toml, so
-          # restate the linker next to the warning policy for make lint's cargo
-          # doc and clippy.
-          rustflags: '-D warnings -Clink-arg=-fuse-ld=mold'
+          # restate the frontend and linker next to the warning policy for make
+          # lint's cargo doc and clippy.
+          rustflags: '-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold'
       - name: Setup uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       # The contracts read `.github/workflows` and need no Rust build, so
@@ -171,3 +171,28 @@ jobs:
           cargo +1.95.0 install merman-cli --version '=0.7.0' --locked
       - name: Validate Mermaid diagrams
         run: make nixie
+
+  msrv:
+    # The declared `rust-version` must still build every target. The check runs
+    # on that stable toolchain from outside the checkout, so stable Cargo never
+    # reads the pinned nightly's configuration in `.cargo/config.toml`.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install the declared MSRV toolchain
+        run: |
+          msrv="$(sed -n 's/^rust-version *= *"\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          test -n "$msrv"
+          case "$msrv" in *.*.*) ;; *) msrv="$msrv.0" ;; esac
+          echo "MSRV=${msrv}" >> "$GITHUB_ENV"
+          rustup toolchain install "$msrv" --profile minimal --no-self-update
+      - name: Check all targets on the MSRV
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/msrv-target
+        run: |
+          cd "$RUNNER_TEMP"
+          cargo "+${MSRV}" check --all-targets --all-features --locked --manifest-path "$GITHUB_WORKSPACE/Cargo.toml"
