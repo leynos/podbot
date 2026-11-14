@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/setup-rust@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
       - name: Install cargo-audit
         env:
           GITHUB_TOKEN: ${{ github.token }}

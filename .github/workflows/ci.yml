@@ -63,7 +63,7 @@ jobs:
           printf 'SCCACHE_ERROR_LOG=%s\n' "$SCCACHE_ERROR_LOG" >> "$GITHUB_ENV"
       - name: Setup Rust
         id: setup-rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/setup-rust@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           install-mold: 'true'
           # setup-rust exports RUSTFLAGS, which replaces .cargo/config.toml, so
@@ -88,7 +88,7 @@ jobs:
         # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
         # first release with `--check` and `--git`.
         uses: >-
-          leynos/shared-actions/.github/actions/install-mdtablefix@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+          leynos/shared-actions/.github/actions/install-mdtablefix@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           version: '0.6.1'
       - name: Format
@@ -117,7 +117,7 @@ jobs:
         if: github.actor != 'dependabot[bot]'
         run: make audit
       - name: Install Whitaker
-        uses: leynos/shared-actions/.github/actions/install-whitaker@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/install-whitaker@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
       - name: Lint
         run: make lint
       - name: No-CLI compile check
@@ -136,7 +136,7 @@ jobs:
       # ratchet, which gates on this repository's own baseline, needs no
       # token, and applies to pull requests from forks too.
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
+        uses: leynos/shared-actions/.github/actions/generate-coverage@9ed445010fe26a7facb708d7a9ba4d5bd0fa57ca
         with:
           features: internal
           output-path: lcov.info
