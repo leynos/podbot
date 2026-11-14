@@ -59,6 +59,8 @@ RUNNERS: typ.Final[list[tuple[str, str, object]]] = [
         "|| github.event.pull_request.user.login == 'dependabot[bot]') "
         "&& 'ubuntu-latest' || 'ubicloud-standard-4' }}",
     ),
+    # Hosted on purpose: one `cargo check` on a minimal toolchain.
+    ("ci.yml", "msrv", "ubuntu-latest"),
     (
         "coverage-main.yml",
         "coverage-upload",

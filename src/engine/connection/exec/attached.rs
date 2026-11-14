@@ -311,10 +311,6 @@ async fn maybe_resize_exec_async<C: ContainerExecClient, P: TerminalSizeProvider
     clippy::too_many_arguments,
     reason = "stream and signal loop requires explicit IO and resize state"
 )]
-#[expect(
-    clippy::integer_division_remainder_used,
-    reason = "false positive triggered inside tokio::select! expansion"
-)]
 async fn run_output_loop_with_resize_async<C: ContainerExecClient, P: TerminalSizeProvider>(
     client: &C,
     request: &ExecRequest,

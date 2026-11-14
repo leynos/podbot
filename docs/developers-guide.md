@@ -181,7 +181,7 @@ the selected scope.
 
 UI children use the package minimum supported Rust version (MSRV), currently
 1.88, and LLVM, even when the parent harness uses a development nightly. The
-root toolchain file pins the stable `1.99.1` for ordinary setup, including CI,
+root toolchain file pins a dated nightly for ordinary setup, including CI,
 coverage and audit, so the minimum is a separate install: run
 `rustup toolchain install 1.88.0` before running either consumer. The private
 UI boundary converts a two-part `Cargo.toml` MSRV to its minimum patch (`1.88`
@@ -302,13 +302,14 @@ steps, rather than acting as a general workflow test helper.
 `.cargo/config.toml` holds the estate's development build defaults, so a bare
 `cargo build` gets them. The `mold` linker is the default on Linux, in a
 Linux-only target table; `mold` must be on `PATH` (CI installs it through
-`install-mold` on `setup-rust`). The repository pins stable `1.99.1`, so the
-parallel `rustc` frontend (`-Zthreads=8`) does not apply: it is a nightly flag.
+`install-mold` on `setup-rust`). The repository pins the dated nightly in
+`rust-toolchain.toml`, so the parallel `rustc` frontend (`-Zthreads=8`) applies
+beside the linker, and `[unstable] embed-metadata = false` is set.
 
 Assigning `RUSTFLAGS` replaces every `rustflags` source in the configuration, so
-`make test` and `make typecheck` add the linker flag through
-`STANDARD_RUSTFLAGS`. Coverage builds take the platform linker. The Whitaker
-route takes no repository development flags.
+`make test` and `make typecheck` add both flags through `STANDARD_RUSTFLAGS`.
+Coverage builds take the platform linker. The Whitaker route takes no
+repository development flags.
 
 `scripts/tests/make_dry_run.py` owns `dry_run_recipe`, the one helper that
 dry-runs a Make gate target (`make --dry-run`) and normalizes its output.
@@ -320,11 +321,17 @@ so the normalization stays in one place.
 
 #### 2.5.1. Cranelift
 
-Exception: Cranelift is not the development-profile backend, because Cranelift
-requires a nightly toolchain and this repository pins the stable `1.99.1`
-(recorded 2026-10-31; no measurement was taken, because a stable toolchain
-cannot select the backend). Revisit if the repository moves to a nightly pin,
-and re-measure the whole suite under Cranelift then.
+Exception: Cranelift is not the development-profile backend. Measured on
+`nightly-2026-11-13` on 2026-11-13, with the whole suite run under Cranelift
+(`make test` with the backend selected through the environment): the `podbot`
+lib test binary aborts with "fatal runtime error: failed to initiate panic,
+error 5, aborting", because a panic under Cranelift cannot unwind. The panic is
+a genuine `resume_unwind` in `src/engine/connection/exec/runtime_helpers.rs`,
+so the suite stops there. The same run showed no build-time benefit that would
+justify the exception's removal (all measures within -7% to +6%, inside noise
+under load). Revisit if Cranelift gains panic unwinding or that helper stops
+unwinding, and re-measure the whole suite then. The release is not affected: no
+release workflow builds this repository.
 
 ## 3. Repository layout (exec subsystem)
 
