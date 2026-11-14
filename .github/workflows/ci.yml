@@ -166,8 +166,15 @@ jobs:
         with:
           toolchain: '1.95.0'
       - name: Install Mermaid validation tools
+        env:
+          # setup-rust exports nightly-only flags (`-Zthreads=8`) as RUSTFLAGS,
+          # which stable Cargo refuses. The host tool installs on its own
+          # stable toolchain, with no flags and from outside the checkout, so
+          # it reads neither them nor the nightly configuration.
+          RUSTFLAGS: ''
         run: |
           uv tool install nixie-cli==1.1.0
+          cd "$RUNNER_TEMP"
           cargo +1.95.0 install merman-cli --version '=0.7.0' --locked
       - name: Validate Mermaid diagrams
         run: make nixie
