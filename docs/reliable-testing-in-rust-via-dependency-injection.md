@@ -28,9 +28,16 @@ ______________________________________________________________________
 
 ### 1. Add `mockable`
 
-First, add the crate to development dependencies in `Cargo.toml`.
+First, add the crate to `Cargo.toml`. Production code injects `DefaultEnv` and
+`DefaultClock`, so `mockable` is a regular dependency (with the `clock` feature
+for `Clock`); the `mock` feature, which provides `MockEnv` and `MockClock`, is
+enabled for tests only. The clock examples below also use `chrono` types.
 
 ```toml
+[dependencies]
+chrono = "0.4.43"
+mockable = { version = "3.0.0", default-features = false, features = ["clock"] }
+
 [dev-dependencies]
 mockable = { version = "3.0.0", default-features = false, features = ["clock", "mock"] }
 ```
