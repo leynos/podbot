@@ -271,9 +271,24 @@ pub(crate) fn exec_with_client<C: ContainerExecClient + Sync>(
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
+    exec_with_host_stdin_policy(connector, runtime_handle, request, false)
+}
+
+/// Run `request` through `connector`, optionally with host stdin disabled.
+fn exec_with_host_stdin_policy<C: ContainerExecClient + Sync>(
+    connector: &C,
+    runtime_handle: &tokio::runtime::Handle,
+    request: &ExecRequest,
+    disable_host_stdin: bool,
+) -> PodbotResult<CommandOutcome> {
     exec_with_runner(request, |engine_request| {
-        EngineConnector::exec(runtime_handle, connector, engine_request)
-            .map(|result| result.exit_code())
+        EngineConnector::exec_with_host_stdin_policy(
+            runtime_handle,
+            connector,
+            engine_request,
+            disable_host_stdin,
+        )
+        .map(|result| result.exit_code())
     })
 }
 
@@ -305,8 +320,5 @@ pub fn exec_with_client_for_tests<C: ContainerExecClient + Sync>(
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
-    exec_with_runner(request, |engine_request| {
-        EngineConnector::exec_without_host_stdin(runtime_handle, connector, engine_request)
-            .map(|result| result.exit_code())
-    })
+    exec_with_host_stdin_policy(connector, runtime_handle, request, true)
 }
