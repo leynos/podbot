@@ -3,7 +3,7 @@
 use mockable::{DefaultEnv, Env};
 use rstest::rstest;
 
-use super::{VerificationRoute, compatibility_toolchain, resolve_executables};
+use super::{VerificationRoute, compatibility_toolchain, resolve_executables, with_scoped_env};
 
 /// Partial manifest versions select their minimum patch, never a moving channel.
 #[rstest]
@@ -23,7 +23,7 @@ fn compatibility_selector_preserves_the_declared_minimum(
 /// Real Rustup resolution must work with no usable distribution endpoint.
 #[test]
 fn provisioned_exact_minimum_resolves_without_distribution_access() {
-    temp_env::with_vars(
+    with_scoped_env(
         [
             (
                 "RUSTUP_DIST_SERVER",

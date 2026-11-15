@@ -9,7 +9,6 @@ use podbot::engine::{
 use rstest_bdd_macros::{given, when};
 
 use super::state::{ExecutionOutcome, InteractiveExecState};
-use crate::test_utils::TestStdinForwardingGuard;
 
 pub type StepResult<T> = Result<T, String>;
 
@@ -101,8 +100,8 @@ fn execution_is_requested(interactive_exec_state: &InteractiveExecState) -> Step
 
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| format!("failed to create runtime: {error}"))?;
-    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
-    let execution_result = runtime.block_on(EngineConnector::exec_async(&client, &request));
+    let execution_result =
+        EngineConnector::exec_without_host_stdin(runtime.handle(), &client, &request);
 
     match execution_result {
         Ok(result) => interactive_exec_state

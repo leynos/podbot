@@ -342,8 +342,16 @@ impl EngineConnector {
 
         match (request.mode(), start_result) {
             (ExecMode::Attached, bollard::exec::StartExecResults::Attached { output, input }) => {
-                run_attached_session_async(client, request, &exec_id, output, input, size_provider)
-                    .await?;
+                run_attached_session_async(
+                    client,
+                    request,
+                    &exec_id,
+                    output,
+                    input,
+                    size_provider,
+                    options.host_stdin_disabled(),
+                )
+                .await?;
             }
             (ExecMode::Protocol, bollard::exec::StartExecResults::Attached { output, input }) => {
                 run_protocol_session_async_with_options(

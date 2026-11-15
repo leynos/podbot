@@ -496,6 +496,21 @@ the selected case is ignored or runs zero tests. Keep this harness private to
 interactive-exec regressions, reusing its mock scaffolding and the existing
 `Env` boundary; do not add a production engine hook, public API, or runner.
 
+In-process integration tests never set that variable. Tests must not change the
+process-wide environment or working directory, because doing so forces the
+runner to serialise them; `clippy.toml` disallows `std::env::set_var`,
+`remove_var`, `set_current_dir` and `temp_env`'s entry points, and a site that
+cannot yet migrate carries a reasoned
+`#[expect(clippy::disallowed_methods, reason = "...")]`. Mocked-daemon tests
+that must not read the harness's stdin call the hidden, `internal`-feature
+`EngineConnector::exec_without_host_stdin` (through
+`exec_with_client_for_tests`), which selects an empty host reader through the
+private exec-session options. Configuration tests inject a `mockable::Env`. The
+two remaining sanctioned sites are `with_scoped_env`, the UI verification
+harness's single wrapper around `temp_env` because trybuild reads the inherited
+environment, and the one-shot `DOCKER_HOST` write in the sandbox end-to-end
+helpers, because `testcontainers` offers no in-process alternative.
+
 For screen readers: The following class diagram summarizes the stable exec
 Application Programming Interface (API) request and outcome types, the cached
 `ExecContext` embedding handle, and the internal test seam used to drive exec

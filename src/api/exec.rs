@@ -271,20 +271,29 @@ pub(crate) fn exec_with_client<C: ContainerExecClient + Sync>(
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
+    exec_with_runner(request, |engine_request| {
+        EngineConnector::exec(runtime_handle, connector, engine_request)
+            .map(|result| result.exit_code())
+    })
+}
+
+/// Convert `request`, run it through `run`, and map the exit code to an outcome.
+fn exec_with_runner(
+    request: &ExecRequest,
+    run: impl FnOnce(&crate::engine::ExecRequest) -> PodbotResult<i64>,
+) -> PodbotResult<CommandOutcome> {
     let engine_request = crate::engine::ExecRequest::new(
         request.container(),
         request.command().to_vec(),
         request.mode().into(),
     )?
     .with_tty(request.tty());
-    let exec_result = EngineConnector::exec(runtime_handle, connector, &engine_request)?;
+    let exit_code = run(&engine_request)?;
 
-    if exec_result.exit_code() == 0 {
+    if exit_code == 0 {
         Ok(CommandOutcome::Success)
     } else {
-        Ok(CommandOutcome::CommandExit {
-            code: exec_result.exit_code(),
-        })
+        Ok(CommandOutcome::CommandExit { code: exit_code })
     }
 }
 
@@ -296,5 +305,8 @@ pub fn exec_with_client_for_tests<C: ContainerExecClient + Sync>(
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
-    exec_with_client(connector, runtime_handle, request)
+    exec_with_runner(request, |engine_request| {
+        EngineConnector::exec_without_host_stdin(runtime_handle, connector, engine_request)
+            .map(|result| result.exit_code())
+    })
 }

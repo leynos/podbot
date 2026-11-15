@@ -11,7 +11,7 @@ use rstest::rstest;
 
 use super::{
     CompatibilityExecutables, VerificationError, VerificationRoute, reject_profile_backends,
-    resolved_path, validate_executable_path, validate_version,
+    resolved_path, validate_executable_path, validate_version, with_scoped_env,
 };
 
 /// Host-native absolute executable spelling used only by resolver contracts.
@@ -78,7 +78,7 @@ fn route_with_flags(flags: &str) -> VerificationRoute {
 
 #[test]
 fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
-    temp_env::with_vars(PARENT_ENVIRONMENT, || {
+    with_scoped_env(PARENT_ENVIRONMENT, || {
         let reader = DefaultEnv;
         let observed = RefCell::new(None);
         let route = route_with_flags("verification-flags");
@@ -149,7 +149,7 @@ fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
 
 #[test]
 fn verification_scope_restores_the_parent_when_registration_panics() {
-    temp_env::with_vars([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
+    with_scoped_env([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
         let reader = DefaultEnv;
         let observed = RefCell::new(None);
         let route = VerificationRoute {
@@ -261,7 +261,7 @@ fn route_from_encoded_flags(
     flags: impl AsRef<std::ffi::OsStr> + Clone,
 ) -> Result<VerificationRoute, VerificationError> {
     with_isolated_profile_backends_returning(|| {
-        temp_env::with_vars(
+        with_scoped_env(
             [
                 ("CARGO_ENCODED_RUSTFLAGS", Some(flags)),
                 ("RUSTFLAGS", None),
@@ -308,12 +308,12 @@ pub(super) fn with_isolated_profile_backends(body: impl FnOnce()) {
 
 /// Like [`with_isolated_profile_backends`], but returns the body's result.
 fn with_isolated_profile_backends_returning<R>(body: impl FnOnce() -> R) -> R {
-    temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
+    with_scoped_env([] as [(&str, Option<&str>); 0], || {
         let overrides = std::env::vars_os()
             .filter(|(key, _)| key.to_str().is_some_and(super::is_profile_backend_key))
             .map(|(key, _)| (key, None::<OsString>))
             .collect::<Vec<_>>();
-        temp_env::with_vars(overrides, body)
+        with_scoped_env(overrides, body)
     })
 }
 
@@ -323,7 +323,7 @@ fn with_isolated_profile_backends_returning<R>(body: impl FnOnce() -> R) -> R {
 #[case::custom("CARGO_PROFILE_CUSTOM_CODEGEN_BACKEND")]
 #[case::empty_segment("CARGO_PROFILE__CODEGEN_BACKEND")]
 fn unknown_workspace_wrapper_is_refused_without_silently_bypassing_it(#[case] backend_key: &str) {
-    temp_env::with_vars(
+    with_scoped_env(
         [
             (backend_key, Some("cranelift")),
             (
