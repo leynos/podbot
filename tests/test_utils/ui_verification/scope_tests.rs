@@ -69,14 +69,19 @@ impl Drop for DropObservation<'_> {
     }
 }
 
+/// Construct a route carrying already-encoded verification flags.
+fn route_with_flags(flags: &str) -> VerificationRoute {
+    VerificationRoute {
+        encoded_flags: flags.to_owned(),
+    }
+}
+
 #[test]
 fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
     temp_env::with_vars(PARENT_ENVIRONMENT, || {
         let reader = DefaultEnv;
         let observed = RefCell::new(None);
-        let route = VerificationRoute {
-            encoded_flags: String::from("verification-flags"),
-        };
+        let route = route_with_flags("verification-flags");
         route.run(&compatibility_executables(), || {
             let _drop_observation = DropObservation {
                 observed: &observed,
@@ -248,27 +253,34 @@ fn failed_or_ambiguous_provisioning_is_refused(
     );
 }
 
-#[test]
-fn unsupported_caller_flags_fail_before_registration() {
-    with_isolated_profile_backends(|| {
+/// Resolve a route with only `CARGO_ENCODED_RUSTFLAGS` set to `flags`.
+///
+/// Profile-backend inputs are cleared and no workspace wrapper is present, so
+/// the outcome depends on the flags alone.
+fn route_from_encoded_flags(
+    flags: impl AsRef<std::ffi::OsStr> + Clone,
+) -> Result<VerificationRoute, VerificationError> {
+    with_isolated_profile_backends_returning(|| {
         temp_env::with_vars(
             [
-                ("CARGO_ENCODED_RUSTFLAGS", Some("--unknown-ui-route")),
+                ("CARGO_ENCODED_RUSTFLAGS", Some(flags)),
                 ("RUSTFLAGS", None),
                 ("RUSTC_WORKSPACE_WRAPPER", None),
             ],
-            || {
-                let reader = DefaultEnv;
-                assert!(
-                    matches!(
-                        VerificationRoute::from_environment(&reader),
-                        Err(VerificationError::UnsupportedFlags(_))
-                    ),
-                    "unrecognized input must not be silently discarded"
-                );
-            },
-        );
-    });
+            || VerificationRoute::from_environment(&DefaultEnv),
+        )
+    })
+}
+
+#[test]
+fn unsupported_caller_flags_fail_before_registration() {
+    assert!(
+        matches!(
+            route_from_encoded_flags("--unknown-ui-route"),
+            Err(VerificationError::UnsupportedFlags(_))
+        ),
+        "unrecognized input must not be silently discarded"
+    );
 }
 
 #[cfg(unix)]
@@ -277,25 +289,13 @@ fn non_unicode_flags_are_rejected_without_lossy_conversion() {
     use std::os::unix::ffi::OsStringExt;
 
     let non_unicode = OsString::from_vec(vec![0xff]);
-    with_isolated_profile_backends(|| {
-        temp_env::with_vars(
-            [
-                ("CARGO_ENCODED_RUSTFLAGS", Some(non_unicode)),
-                ("RUSTFLAGS", None),
-                ("RUSTC_WORKSPACE_WRAPPER", None),
-            ],
-            || {
-                let reader = DefaultEnv;
-                assert!(
-                    matches!(
-                        VerificationRoute::from_environment(&reader),
-                        Err(VerificationError::NonUnicode("CARGO_ENCODED_RUSTFLAGS"))
-                    ),
-                    "invalid Unicode must not silently disappear"
-                );
-            },
-        );
-    });
+    assert!(
+        matches!(
+            route_from_encoded_flags(non_unicode),
+            Err(VerificationError::NonUnicode("CARGO_ENCODED_RUSTFLAGS"))
+        ),
+        "invalid Unicode must not silently disappear"
+    );
 }
 
 /// Clear all profile-backend inputs only while exercising environment selection.
@@ -303,13 +303,18 @@ fn non_unicode_flags_are_rejected_without_lossy_conversion() {
 /// Only sibling UI scope/boundary tests use this fixture. It snapshots keys under
 /// temp-env's shared lock, including custom profiles, and restores them on unwind.
 pub(super) fn with_isolated_profile_backends(body: impl FnOnce()) {
+    with_isolated_profile_backends_returning(body);
+}
+
+/// Like [`with_isolated_profile_backends`], but returns the body's result.
+fn with_isolated_profile_backends_returning<R>(body: impl FnOnce() -> R) -> R {
     temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
         let overrides = std::env::vars_os()
             .filter(|(key, _)| key.to_str().is_some_and(super::is_profile_backend_key))
             .map(|(key, _)| (key, None::<OsString>))
             .collect::<Vec<_>>();
-        temp_env::with_vars(overrides, body);
-    });
+        temp_env::with_vars(overrides, body)
+    })
 }
 
 #[rstest]
