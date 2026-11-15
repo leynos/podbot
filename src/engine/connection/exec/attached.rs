@@ -28,6 +28,7 @@ use crate::error::PodbotError;
 /// `client`, `request`, and `exec_id` identify the active exec session.
 /// `output` and `input` carry daemon stream traffic for the attached process.
 /// `size_provider` supplies terminal dimensions used for resize propagation.
+/// `host_stdin_disabled` replaces the process's stdin with an empty reader.
 ///
 /// Returns `Ok(())` when stream forwarding completes successfully, otherwise a
 /// mapped `PodbotError` describing session, stream, or resize failures.
@@ -42,15 +43,21 @@ pub(super) async fn run_attached_session_async<C: ContainerExecClient, P: Termin
     mut output: Pin<Box<dyn Stream<Item = Result<LogOutput, BollardError>> + Send>>,
     input: Pin<Box<dyn AsyncWrite + Send>>,
     size_provider: &P,
+    host_stdin_disabled: bool,
 ) -> Result<(), PodbotError> {
     let mut stdout = tokio::io::stdout();
     let mut stderr = tokio::io::stderr();
+    let host_stdin: Pin<Box<dyn AsyncRead + Send>> = if host_stdin_disabled {
+        Box::pin(tokio::io::empty())
+    } else {
+        default_host_stdin()
+    };
     run_attached_session_with_io_async(
         client,
         request,
         exec_id,
         &mut output,
-        default_host_stdin(),
+        host_stdin,
         input,
         size_provider,
         &mut stdout,

@@ -1,6 +1,37 @@
 //! Internal exec-session options for protocol and test seams.
 
 use super::protocol::ProtocolSessionOptions;
+#[cfg(feature = "internal")]
+use super::runtime_helpers::block_on_runtime;
+#[cfg(feature = "internal")]
+use super::{ContainerExecClient, EngineConnector, ExecRequest, ExecResult};
+#[cfg(feature = "internal")]
+use crate::error::PodbotError;
+
+#[cfg(feature = "internal")]
+impl EngineConnector {
+    /// Execute a command without reading the process's stdin.
+    ///
+    /// With host stdin disabled, attached and protocol sessions read an empty
+    /// reader instead of the process's stdin, so in-process integration tests
+    /// neither consume the harness's stdin nor set an environment variable.
+    /// This hidden seam is for those tests.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`EngineConnector::exec_async`].
+    #[doc(hidden)]
+    pub fn exec_without_host_stdin<C: ContainerExecClient + Sync>(
+        runtime: &tokio::runtime::Handle,
+        client: &C,
+        request: &ExecRequest,
+    ) -> Result<ExecResult, PodbotError> {
+        let options = ExecSessionOptions::new().with_host_stdin_disabled(true);
+        block_on_runtime(runtime, async {
+            Self::exec_async_with_options(client, request, options).await
+        })
+    }
+}
 
 /// Capability-enforcement policy for Agentic Control Protocol (ACP) hosting.
 ///
@@ -22,6 +53,10 @@ pub(crate) struct ExecSessionOptions {
     /// `fs` capabilities before forwarding it, and `MaskAndDeny` also denies
     /// later requests that try to use those capabilities.
     capability_policy: CapabilityPolicy,
+    /// When `true`, attached sessions use an empty host stdin reader instead of
+    /// the process's real stdin. In-process integration tests set this through
+    /// the options rather than mutating the process environment.
+    disable_host_stdin: bool,
 }
 
 impl ExecSessionOptions {
@@ -31,7 +66,24 @@ impl ExecSessionOptions {
         Self {
             disable_protocol_stdin_forwarding: false,
             capability_policy: CapabilityPolicy::Disabled,
+            disable_host_stdin: false,
         }
+    }
+
+    /// Replace host stdin with an empty reader in attached and protocol
+    /// sessions.
+    #[cfg(any(test, feature = "internal"))]
+    #[must_use]
+    pub const fn with_host_stdin_disabled(mut self, disable: bool) -> Self {
+        self.disable_host_stdin = disable;
+        self.disable_protocol_stdin_forwarding = disable;
+        self
+    }
+
+    /// Report whether attached sessions must not read the process's stdin.
+    #[must_use]
+    pub const fn host_stdin_disabled(self) -> bool {
+        self.disable_host_stdin
     }
 
     /// Disable protocol stdin forwarding for tests that must avoid inherited

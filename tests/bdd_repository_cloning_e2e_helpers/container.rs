@@ -74,6 +74,10 @@ fn resolve_docker_host_endpoint() -> StepResult<String> {
 /// mirrors the resolved endpoint into the process environment exactly once,
 /// gated through a dedicated `OnceLock<()>` so the one-shot unsafe write is
 /// serialized across concurrent test threads.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "testcontainers reads DOCKER_HOST at client construction and has no in-process alternative"
+)]
 fn ensure_docker_host() -> StepResult<DockerHostSocket> {
     static ENV_INIT: OnceLock<()> = OnceLock::new();
     let endpoint = resolve_docker_host_endpoint()?;

@@ -25,7 +25,7 @@ use rstest_bdd_macros::{given, when};
 
 use super::StepResult;
 use super::state::{OrchestrationResult, OrchestrationState};
-use crate::test_utils::{TestStdinForwardingGuard, exec_outcome_with_client};
+use crate::test_utils::exec_outcome_with_client;
 
 /// Invoke an orchestration operation and capture its outcome in state.
 fn invoke_orchestration<F>(orchestration_state: &OrchestrationState, operation: F)
@@ -104,7 +104,6 @@ fn when_exec_orchestration_invoked(orchestration_state: &OrchestrationState) -> 
     configure_resize(&mut client, mode)?;
     configure_inspect(&mut client, Some(exit_code));
 
-    let _stdin_forwarding_guard = TestStdinForwardingGuard::disable();
     let runtime =
         tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
 

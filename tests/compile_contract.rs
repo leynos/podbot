@@ -86,7 +86,7 @@ fn ui_registration_runs_and_propagates_destructor_failure() {
         panic::{AssertUnwindSafe, catch_unwind},
     };
 
-    temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
+    ui_verification::with_scoped_env([] as [(&str, Option<&str>); 0], || {
         let reader = DefaultEnv;
         let parent_selector = reader.raw("RUSTUP_TOOLCHAIN");
         let registered = Cell::new(false);

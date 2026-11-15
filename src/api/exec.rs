@@ -271,20 +271,55 @@ pub(crate) fn exec_with_client<C: ContainerExecClient + Sync>(
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
+    exec_with_host_stdin(connector, runtime_handle, request, HostStdin::Inherit)
+}
+
+/// Where an exec session reads host stdin from.
+#[derive(Clone, Copy)]
+enum HostStdin {
+    /// The process's real stdin, as in production.
+    Inherit,
+    /// An empty reader, for in-process integration tests.
+    #[cfg(feature = "internal")]
+    Empty,
+}
+
+/// Run `request` through `connector` with the chosen host stdin.
+fn exec_with_host_stdin<C: ContainerExecClient + Sync>(
+    connector: &C,
+    runtime_handle: &tokio::runtime::Handle,
+    request: &ExecRequest,
+    host_stdin: HostStdin,
+) -> PodbotResult<CommandOutcome> {
+    exec_with_runner(request, |engine_request| {
+        let result = match host_stdin {
+            HostStdin::Inherit => EngineConnector::exec(runtime_handle, connector, engine_request),
+            #[cfg(feature = "internal")]
+            HostStdin::Empty => {
+                EngineConnector::exec_without_host_stdin(runtime_handle, connector, engine_request)
+            }
+        };
+        result.map(|executed| executed.exit_code())
+    })
+}
+
+/// Convert `request`, run it through `run`, and map the exit code to an outcome.
+fn exec_with_runner(
+    request: &ExecRequest,
+    run: impl FnOnce(&crate::engine::ExecRequest) -> PodbotResult<i64>,
+) -> PodbotResult<CommandOutcome> {
     let engine_request = crate::engine::ExecRequest::new(
         request.container(),
         request.command().to_vec(),
         request.mode().into(),
     )?
     .with_tty(request.tty());
-    let exec_result = EngineConnector::exec(runtime_handle, connector, &engine_request)?;
+    let exit_code = run(&engine_request)?;
 
-    if exec_result.exit_code() == 0 {
+    if exit_code == 0 {
         Ok(CommandOutcome::Success)
     } else {
-        Ok(CommandOutcome::CommandExit {
-            code: exec_result.exit_code(),
-        })
+        Ok(CommandOutcome::CommandExit { code: exit_code })
     }
 }
 
@@ -296,5 +331,5 @@ pub fn exec_with_client_for_tests<C: ContainerExecClient + Sync>(
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
-    exec_with_client(connector, runtime_handle, request)
+    exec_with_host_stdin(connector, runtime_handle, request, HostStdin::Empty)
 }

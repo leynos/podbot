@@ -22,6 +22,24 @@ mod toolchain_tests;
 #[cfg(test)]
 mod boundary_tests;
 
+/// Run `body` with `vars` applied to the process environment, restoring it after.
+///
+/// This is the single site in the UI verification harness that changes the
+/// process-wide environment: trybuild spawns Cargo with the inherited
+/// environment and has no injection point. Moving the verification into a
+/// subprocess would remove it.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "process-wide env scoping: trybuild reads the inherited environment; migrate to a subprocess"
+)]
+pub fn with_scoped_env<K, V, R>(vars: impl AsRef<[(K, Option<V>)]>, body: impl FnOnce() -> R) -> R
+where
+    K: AsRef<std::ffi::OsStr> + Clone + Eq + std::hash::Hash,
+    V: AsRef<std::ffi::OsStr> + Clone,
+{
+    temp_env::with_vars(vars, body)
+}
+
 /// Errors selecting a provisioned, compatible nested Cargo verification route.
 #[derive(Debug, Error)]
 pub enum VerificationError {
@@ -68,7 +86,7 @@ pub enum VerificationError {
 /// ```
 pub fn run_cases(register: impl FnOnce(&trybuild::TestCases)) -> Result<(), VerificationError> {
     // Capture caller inputs under temp-env's same lock used for the later scope.
-    temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
+    with_scoped_env([] as [(&str, Option<&str>); 0], || {
         let environment_reader = DefaultEnv;
         let route = VerificationRoute::from_environment(&environment_reader)?;
         let executables = resolve_executables(env!("CARGO_PKG_RUST_VERSION"))?;
@@ -116,7 +134,7 @@ impl VerificationRoute {
 
     /// Retain wrapper, profiling and target context while selecting the UI route.
     fn run(&self, executables: &CompatibilityExecutables, body: impl FnOnce()) {
-        temp_env::with_vars(
+        with_scoped_env(
             [
                 ("CARGO_ENCODED_RUSTFLAGS", Some(self.encoded_flags.as_str())),
                 ("RUSTUP_TOOLCHAIN", Some(executables.toolchain.as_str())),

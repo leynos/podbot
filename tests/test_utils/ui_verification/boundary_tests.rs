@@ -12,7 +12,7 @@ use rstest::rstest;
 use super::{
     VerificationError, VerificationRoute, has_workspace_wrapper,
     tests::{DropObservation, compatibility_executables, with_isolated_profile_backends},
-    unicode_variable,
+    unicode_variable, with_scoped_env,
 };
 
 /// Build the native payload shared only by the fixed-key reader policy tables.
@@ -152,7 +152,7 @@ fn workspace_wrapper_policy_checks_the_fixed_key_and_native_payload(
 #[case::compatible_llvm("CARGO_PROFILE_CUSTOM_CODEGEN_BACKEND", "llvm")]
 fn environment_boundary_enforces_profile_backend(#[case] key: &str, #[case] value: &str) {
     with_isolated_profile_backends(|| {
-        temp_env::with_vars(
+        with_scoped_env(
             [
                 (key, Some(value)),
                 ("RUSTC_WORKSPACE_WRAPPER", None),
@@ -186,7 +186,7 @@ fn environment_boundary_enforces_profile_backend(#[case] key: &str, #[case] valu
 /// The composition seam keeps every lifecycle phase inside the selected scope.
 #[test]
 fn registration_constructs_registers_and_drops_before_environment_restoration() {
-    temp_env::with_vars([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
+    with_scoped_env([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
         let reader = DefaultEnv;
         let created = Cell::new(false);
         let registered = Cell::new(false);
