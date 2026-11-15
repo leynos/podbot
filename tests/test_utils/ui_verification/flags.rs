@@ -12,6 +12,11 @@ const UNIT_SEPARATOR: char = '\u{1f}';
 /// String delimiter used when constructing the encoded rustflags value.
 const UNIT_SEPARATOR_TEXT: &str = "\u{1f}";
 
+/// Split rustc options whose following token is retained after validation.
+const CFG_OPTION: &str = "--cfg";
+const CODEGEN_OPTION: &str = "-C";
+const REMAP_OPTION: &str = "--remap-path-prefix";
+
 /// Required flags that reconstruct trybuild's harness invocation.
 const BASE_FLAGS: [&str; 6] = [
     "--cfg",
@@ -153,18 +158,34 @@ where
     I: Iterator<Item = &'a str>,
 {
     match argument.0 {
-        "--cfg" => retain_cfg(next_value(remaining, "--cfg")?, retained),
+        CFG_OPTION => retain_split_value(remaining, CFG_OPTION, retained, retain_cfg),
         "--verbose" | "--diagnostic-width=140" => Ok(()),
         "-A" => discard_expected_value(remaining, "-A", "dead_code"),
         "-D" => discard_expected_value(remaining, "-D", "warnings"),
-        "-C" => retain_codegen_flag(next_value(remaining, "-C")?, retained),
+        CODEGEN_OPTION => {
+            retain_split_value(remaining, CODEGEN_OPTION, retained, retain_codegen_flag)
+        }
         "-Z" => discard_development_value(remaining),
         "--diagnostic-width" => discard_expected_value(remaining, "--diagnostic-width", "140"),
-        "--remap-path-prefix" => {
-            retain_remap(next_value(remaining, "--remap-path-prefix")?, retained)
-        }
+        REMAP_OPTION => retain_split_value(remaining, REMAP_OPTION, retained, retain_remap),
         _ => retain_compact_argument(argument, retained),
     }
+}
+
+/// Signature shared by the retainers that accept one option value.
+type ValueRetainer = fn(FlagToken<'_>, &mut Vec<String>) -> Result<(), VerificationError>;
+
+/// Consume the value of a split option and hand it to `retain`.
+fn retain_split_value<'a, I>(
+    remaining: &mut I,
+    option: &str,
+    retained: &mut Vec<String>,
+    retain: ValueRetainer,
+) -> Result<(), VerificationError>
+where
+    I: Iterator<Item = &'a str>,
+{
+    retain(next_value(remaining, option)?, retained)
 }
 
 /// Consume one exact policy value only for the parser's split option forms.
