@@ -271,24 +271,35 @@ pub(crate) fn exec_with_client<C: ContainerExecClient + Sync>(
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
-    exec_with_host_stdin_policy(connector, runtime_handle, request, false)
+    exec_with_host_stdin(connector, runtime_handle, request, HostStdin::Inherit)
 }
 
-/// Run `request` through `connector`, optionally with host stdin disabled.
-fn exec_with_host_stdin_policy<C: ContainerExecClient + Sync>(
+/// Where an exec session reads host stdin from.
+#[derive(Clone, Copy)]
+enum HostStdin {
+    /// The process's real stdin, as in production.
+    Inherit,
+    /// An empty reader, for in-process integration tests.
+    #[cfg(feature = "internal")]
+    Empty,
+}
+
+/// Run `request` through `connector` with the chosen host stdin.
+fn exec_with_host_stdin<C: ContainerExecClient + Sync>(
     connector: &C,
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
-    disable_host_stdin: bool,
+    host_stdin: HostStdin,
 ) -> PodbotResult<CommandOutcome> {
     exec_with_runner(request, |engine_request| {
-        EngineConnector::exec_with_host_stdin_policy(
-            runtime_handle,
-            connector,
-            engine_request,
-            disable_host_stdin,
-        )
-        .map(|result| result.exit_code())
+        let result = match host_stdin {
+            HostStdin::Inherit => EngineConnector::exec(runtime_handle, connector, engine_request),
+            #[cfg(feature = "internal")]
+            HostStdin::Empty => {
+                EngineConnector::exec_without_host_stdin(runtime_handle, connector, engine_request)
+            }
+        };
+        result.map(|executed| executed.exit_code())
     })
 }
 
@@ -320,5 +331,5 @@ pub fn exec_with_client_for_tests<C: ContainerExecClient + Sync>(
     runtime_handle: &tokio::runtime::Handle,
     request: &ExecRequest,
 ) -> PodbotResult<CommandOutcome> {
-    exec_with_host_stdin_policy(connector, runtime_handle, request, true)
+    exec_with_host_stdin(connector, runtime_handle, request, HostStdin::Empty)
 }

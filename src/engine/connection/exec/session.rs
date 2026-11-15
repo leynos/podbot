@@ -1,48 +1,35 @@
 //! Internal exec-session options for protocol and test seams.
 
 use super::protocol::ProtocolSessionOptions;
+#[cfg(feature = "internal")]
 use super::runtime_helpers::block_on_runtime;
+#[cfg(feature = "internal")]
 use super::{ContainerExecClient, EngineConnector, ExecRequest, ExecResult};
+#[cfg(feature = "internal")]
 use crate::error::PodbotError;
 
+#[cfg(feature = "internal")]
 impl EngineConnector {
-    /// Execute a command, optionally without reading the process's stdin.
-    ///
-    /// With `disable_host_stdin` set, attached and protocol sessions read an
-    /// empty reader instead of the process's stdin, so in-process integration
-    /// tests neither consume the harness's stdin nor set an environment
-    /// variable. Otherwise this behaves like [`EngineConnector::exec`].
-    ///
-    /// # Errors
-    ///
-    /// Returns the same errors as [`EngineConnector::exec_async`].
-    pub(crate) fn exec_with_host_stdin_policy<C: ContainerExecClient + Sync>(
-        runtime: &tokio::runtime::Handle,
-        client: &C,
-        request: &ExecRequest,
-        disable_host_stdin: bool,
-    ) -> Result<ExecResult, PodbotError> {
-        let options = ExecSessionOptions::new().with_host_stdin_disabled(disable_host_stdin);
-        block_on_runtime(runtime, async {
-            Self::exec_async_with_options(client, request, options).await
-        })
-    }
-
     /// Execute a command without reading the process's stdin.
     ///
-    /// This hidden seam is for in-process integration tests.
+    /// With host stdin disabled, attached and protocol sessions read an empty
+    /// reader instead of the process's stdin, so in-process integration tests
+    /// neither consume the harness's stdin nor set an environment variable.
+    /// This hidden seam is for those tests.
     ///
     /// # Errors
     ///
     /// Returns the same errors as [`EngineConnector::exec_async`].
-    #[cfg(feature = "internal")]
     #[doc(hidden)]
     pub fn exec_without_host_stdin<C: ContainerExecClient + Sync>(
         runtime: &tokio::runtime::Handle,
         client: &C,
         request: &ExecRequest,
     ) -> Result<ExecResult, PodbotError> {
-        Self::exec_with_host_stdin_policy(runtime, client, request, true)
+        let options = ExecSessionOptions::new().with_host_stdin_disabled(true);
+        block_on_runtime(runtime, async {
+            Self::exec_async_with_options(client, request, options).await
+        })
     }
 }
 
@@ -85,6 +72,7 @@ impl ExecSessionOptions {
 
     /// Replace host stdin with an empty reader in attached and protocol
     /// sessions.
+    #[cfg(any(test, feature = "internal"))]
     #[must_use]
     pub const fn with_host_stdin_disabled(mut self, disable: bool) -> Self {
         self.disable_host_stdin = disable;
