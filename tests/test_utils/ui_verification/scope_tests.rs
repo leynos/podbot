@@ -72,7 +72,7 @@ impl Drop for DropObservation<'_> {
 #[test]
 fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
     temp_env::with_vars(PARENT_ENVIRONMENT, || {
-        let reader = DefaultEnv::new();
+        let reader = DefaultEnv;
         let observed = RefCell::new(None);
         let route = VerificationRoute {
             encoded_flags: String::from("verification-flags"),
@@ -145,7 +145,7 @@ fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
 #[test]
 fn verification_scope_restores_the_parent_when_registration_panics() {
     temp_env::with_vars([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
-        let reader = DefaultEnv::new();
+        let reader = DefaultEnv;
         let observed = RefCell::new(None);
         let route = VerificationRoute {
             encoded_flags: String::new(),
@@ -258,7 +258,7 @@ fn unsupported_caller_flags_fail_before_registration() {
                 ("RUSTC_WORKSPACE_WRAPPER", None),
             ],
             || {
-                let reader = DefaultEnv::new();
+                let reader = DefaultEnv;
                 assert!(
                     matches!(
                         VerificationRoute::from_environment(&reader),
@@ -285,7 +285,7 @@ fn non_unicode_flags_are_rejected_without_lossy_conversion() {
                 ("RUSTC_WORKSPACE_WRAPPER", None),
             ],
             || {
-                let reader = DefaultEnv::new();
+                let reader = DefaultEnv;
                 assert!(
                     matches!(
                         VerificationRoute::from_environment(&reader),
@@ -327,7 +327,7 @@ fn unknown_workspace_wrapper_is_refused_without_silently_bypassing_it(#[case] ba
             ),
         ],
         || {
-            let reader = DefaultEnv::new();
+            let reader = DefaultEnv;
             with_isolated_profile_backends(|| {
                 assert!(
                     matches!(

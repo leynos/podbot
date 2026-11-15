@@ -32,7 +32,7 @@ fn provisioned_exact_minimum_resolves_without_distribution_access() {
             ("RUSTUP_TOOLCHAIN", Some("nightly-parent")),
         ],
         || {
-            let reader = DefaultEnv::new();
+            let reader = DefaultEnv;
             let executables = resolve_executables(env!("CARGO_PKG_RUST_VERSION"))
                 .expect("the provisioned exact MSRV must resolve offline through Rustup");
             assert_eq!(executables.toolchain, "1.88.0", "resolve the exact minimum");

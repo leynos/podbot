@@ -87,7 +87,7 @@ fn ui_registration_runs_and_propagates_destructor_failure() {
     };
 
     temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
-        let reader = DefaultEnv::new();
+        let reader = DefaultEnv;
         let parent_selector = reader.raw("RUSTUP_TOOLCHAIN");
         let registered = Cell::new(false);
         let execution = catch_unwind(AssertUnwindSafe(|| {

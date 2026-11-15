@@ -160,7 +160,7 @@ fn environment_boundary_enforces_profile_backend(#[case] key: &str, #[case] valu
                 ("RUSTFLAGS", None),
             ],
             || {
-                let reader = DefaultEnv::new();
+                let reader = DefaultEnv;
                 let result = VerificationRoute::from_environment(&reader);
                 if value == "llvm" {
                     assert!(
@@ -187,7 +187,7 @@ fn environment_boundary_enforces_profile_backend(#[case] key: &str, #[case] valu
 #[test]
 fn registration_constructs_registers_and_drops_before_environment_restoration() {
     temp_env::with_vars([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
-        let reader = DefaultEnv::new();
+        let reader = DefaultEnv;
         let created = Cell::new(false);
         let registered = Cell::new(false);
         let dropped = RefCell::new(None);

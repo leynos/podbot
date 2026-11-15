@@ -69,7 +69,7 @@ pub enum VerificationError {
 pub fn run_cases(register: impl FnOnce(&trybuild::TestCases)) -> Result<(), VerificationError> {
     // Capture caller inputs under temp-env's same lock used for the later scope.
     temp_env::with_vars([] as [(&str, Option<&str>); 0], || {
-        let environment_reader = DefaultEnv::new();
+        let environment_reader = DefaultEnv;
         let route = VerificationRoute::from_environment(&environment_reader)?;
         let executables = resolve_executables(env!("CARGO_PKG_RUST_VERSION"))?;
         route.run_registration(&executables, trybuild::TestCases::new, register);
