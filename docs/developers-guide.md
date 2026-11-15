@@ -498,7 +498,7 @@ interactive-exec regressions, reusing its mock scaffolding and the existing
 
 In-process integration tests never set that variable. Tests must not change the
 process-wide environment or working directory, because doing so forces the
-runner to serialise them; `clippy.toml` disallows `std::env::set_var`,
+runner to serialize them; `clippy.toml` disallows `std::env::set_var`,
 `remove_var`, `set_current_dir` and `temp_env`'s entry points, and a site that
 cannot yet migrate carries a reasoned
 `#[expect(clippy::disallowed_methods, reason = "...")]`. Mocked-daemon tests
