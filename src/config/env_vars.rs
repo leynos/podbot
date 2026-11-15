@@ -180,6 +180,17 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
 fn validate_no_path_conflicts() {
     // First, check for empty paths (which would be silently dropped by
     // insert_at_path).
+    assert_no_empty_paths();
+    // Then check for path prefix conflicts.
+    assert_no_prefix_conflicts();
+}
+
+/// Assert that no entry in [`ENV_VAR_SPECS`] has an empty path.
+///
+/// # Panics
+///
+/// Panics if any entry has an empty path.
+fn assert_no_empty_paths() {
     for spec in ENV_VAR_SPECS {
         assert!(
             !spec.path.is_empty(),
@@ -187,8 +198,15 @@ fn validate_no_path_conflicts() {
             spec.env_var
         );
     }
+}
 
-    // Then check for path prefix conflicts, in both directions.
+/// Assert that no two entries in [`ENV_VAR_SPECS`] have paths where one is a
+/// prefix of the other, checking each pair in both directions.
+///
+/// # Panics
+///
+/// Panics if any two entries conflict (including identical paths).
+fn assert_no_prefix_conflicts() {
     for (i, spec_a) in ENV_VAR_SPECS.iter().enumerate() {
         for spec_b in ENV_VAR_SPECS.iter().skip(i + 1) {
             assert_not_path_prefix(spec_a, spec_b);
