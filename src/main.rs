@@ -10,6 +10,8 @@
 //! 3. Environment variables (`PODBOT_*`)
 //! 4. Command-line arguments
 
+#![deny(rustdoc::missing_crate_level_docs)]
+
 use std::io::IsTerminal;
 
 use clap::Parser;

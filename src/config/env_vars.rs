@@ -180,6 +180,17 @@ const ENV_VAR_SPECS: &[EnvVarSpec] = &[
 fn validate_no_path_conflicts() {
     // First, check for empty paths (which would be silently dropped by
     // insert_at_path).
+    assert_no_empty_paths();
+    // Then check for path prefix conflicts.
+    assert_no_prefix_conflicts();
+}
+
+/// Assert that no entry in [`ENV_VAR_SPECS`] has an empty path.
+///
+/// # Panics
+///
+/// Panics if any entry has an empty path.
+fn assert_no_empty_paths() {
     for spec in ENV_VAR_SPECS {
         assert!(
             !spec.path.is_empty(),
@@ -187,30 +198,38 @@ fn validate_no_path_conflicts() {
             spec.env_var
         );
     }
+}
 
-    // Then check for path prefix conflicts.
+/// Assert that no two entries in [`ENV_VAR_SPECS`] have paths where one is a
+/// prefix of the other, checking each pair in both directions.
+///
+/// # Panics
+///
+/// Panics if any two entries conflict (including identical paths).
+fn assert_no_prefix_conflicts() {
     for (i, spec_a) in ENV_VAR_SPECS.iter().enumerate() {
         for spec_b in ENV_VAR_SPECS.iter().skip(i + 1) {
-            // Check if spec_a.path is a prefix of spec_b.path
-            assert!(
-                !spec_b.path.starts_with(spec_a.path),
-                "ENV_VAR_SPECS path conflict: {} at {:?} is a prefix of {} at {:?}",
-                spec_a.env_var,
-                spec_a.path,
-                spec_b.env_var,
-                spec_b.path
-            );
-            // Check if spec_b.path is a prefix of spec_a.path
-            assert!(
-                !spec_a.path.starts_with(spec_b.path),
-                "ENV_VAR_SPECS path conflict: {} at {:?} is a prefix of {} at {:?}",
-                spec_b.env_var,
-                spec_b.path,
-                spec_a.env_var,
-                spec_a.path
-            );
+            assert_not_path_prefix(spec_a, spec_b);
+            assert_not_path_prefix(spec_b, spec_a);
         }
     }
+}
+
+/// Assert that `prefix`'s path is not a prefix of `longer`'s path.
+///
+/// # Panics
+///
+/// Panics if `prefix.path` is a prefix of `longer.path` (including identical
+/// paths).
+fn assert_not_path_prefix(prefix: &EnvVarSpec, longer: &EnvVarSpec) {
+    assert!(
+        !longer.path.starts_with(prefix.path),
+        "ENV_VAR_SPECS path conflict: {} at {:?} is a prefix of {} at {:?}",
+        prefix.env_var,
+        prefix.path,
+        longer.env_var,
+        longer.path
+    );
 }
 
 /// Returns the list of environment variable names recognized by the config

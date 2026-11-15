@@ -57,12 +57,12 @@ smart-default = "0.7.1"
 clap = { version = "4.5.60", features = ["derive"], optional = true }
 
 # Environment abstraction for testability
-mockable = { version = "0.1.4", default-features = false, features = ["clock"] }
+mockable = { version = "3.0.0", default-features = false, features = ["clock"] }
 metrics = "0.24.6"
 
 [dev-dependencies]
 temp-env = "0.3.6"
-mockable = { version = "0.1.4", default-features = false, features = ["clock", "mock"] }
+mockable = { version = "3.0.0", default-features = false, features = ["clock", "mock"] }
 mockall = "0.15.0"
 proptest = "1.9.0"
 snafu = "0.9.1"
@@ -142,9 +142,6 @@ result_large_err                    = "deny"
 
 [lints.rust]
 missing_docs                        = "deny"
-
-[lints.rustdoc]
-missing_crate_level_docs            = "deny"
 
 [[bin]]
 name = "podbot"

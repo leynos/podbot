@@ -161,7 +161,7 @@ const DEFAULT_SOCKET: &str = "npipe:////./pipe/docker_engine";
 /// use mockable::DefaultEnv;
 /// use podbot::engine::SocketResolver;
 ///
-/// let env = DefaultEnv::new();
+/// let env = DefaultEnv;
 /// let resolver = SocketResolver::new(&env);
 ///
 /// if let Some(socket) = resolver.resolve_from_env() {
