@@ -11,7 +11,9 @@ use podbot::error::{ConfigError, PodbotError};
 use rstest::rstest;
 
 #[cfg(feature = "experimental")]
-use super::run_agent_api_with_observability;
+use super::{
+    list_containers_api, run_agent_api_with_observability, run_token_daemon_api, stop_container_api,
+};
 use super::{normalize_process_exit_code, run};
 
 #[cfg(feature = "experimental")]
@@ -34,6 +36,25 @@ use observability_helpers::{
 #[case::most_positive(i64::MAX, 255)]
 fn normalize_process_exit_code_maps_codes_into_byte_range(#[case] raw: i64, #[case] expected: i32) {
     assert_eq!(normalize_process_exit_code(raw), expected);
+}
+
+/// The experimental forwarding wrappers stay const-evaluable and preserve the
+/// library stubs' constant-success contract.
+#[cfg(feature = "experimental")]
+#[test]
+fn experimental_forwarding_wrappers_are_const_evaluable() {
+    let outcomes = [
+        const { run_token_daemon_api("sandbox") },
+        const { list_containers_api() },
+        const { stop_container_api("sandbox") },
+    ];
+
+    for outcome in outcomes {
+        assert_eq!(
+            outcome.expect("stub should return Ok"),
+            CommandOutcome::Success
+        );
+    }
 }
 
 #[test]

@@ -824,6 +824,23 @@ Enable the experimental entry points with this dependency declaration:
 podbot = { version = "0.1.0", features = ["experimental"] }
 ```
 
+The three placeholder stubs (`list_containers`, `stop_container`, and
+`run_token_daemon`) are `const fn`, so they may be evaluated in a const
+context. The value is always the same constant success, which makes the stubs
+usable in static configuration without a runtime call:
+
+```rust
+use podbot::api::{CommandOutcome, list_containers};
+
+const STUB_OUTCOME: Result<CommandOutcome, podbot::error::PodbotError> =
+    list_containers();
+
+assert!(STUB_OUTCOME.is_ok());
+```
+
+This is an additive capability for the experimental surface only; the stubs'
+runtime behaviour and the stable API contract are unchanged.
+
 ### `run_agent`
 
 > **Experimental:** This function is not part of the stable API contract.
