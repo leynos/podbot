@@ -327,6 +327,13 @@ fn resolve_executable(
         .envs(rustup_variables.iter().copied())
         .output()
         .map_err(|error| VerificationError::Provisioning(error.to_string()))?;
+    if !resolution.status.success() {
+        return Err(VerificationError::Provisioning(format!(
+            "rustup which {name} for {toolchain} exited with {}: {}",
+            resolution.status,
+            String::from_utf8_lossy(&resolution.stderr).trim()
+        )));
+    }
     validate_executable_path(resolution.status.success(), &resolution.stdout, name)
 }
 
