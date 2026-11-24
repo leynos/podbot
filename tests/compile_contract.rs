@@ -116,6 +116,12 @@ fn ui_registration_runs_and_propagates_destructor_failure() {
             },
         );
     });
+    if ui_verification::running_in_child() {
+        // A destructor failure ends the child inside `run_cases`. Reaching this
+        // point means registration and destruction succeeded, so the child
+        // passes and the parent's `expect_err` below fails the sentinel.
+        return;
+    }
     let payload = execution
         .expect_err("a passing fixture registered as compile-fail must propagate its failure");
     let message = payload

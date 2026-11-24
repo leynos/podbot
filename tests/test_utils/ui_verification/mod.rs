@@ -86,7 +86,7 @@ pub fn run_cases(
     qualified_test: &str,
     register: impl FnOnce(&trybuild::TestCases),
 ) -> Result<(), VerificationError> {
-    if std::env::var_os(CHILD_MARKER).is_some() {
+    if running_in_child() {
         run_registration_in_child(trybuild::TestCases::new, register);
         return Ok(());
     }
@@ -124,6 +124,14 @@ fn replay_or_panic(qualified_test: &str, output: &std::process::Output) {
 
 /// Names the variable whose presence makes this binary run the fixtures itself.
 const CHILD_MARKER: &str = "PODBOT_UI_VERIFICATION_CHILD";
+
+/// Whether this process is the child started by `run_cases`.
+///
+/// A test whose assertions belong to the parent alone returns early when this
+/// holds, so the child's outcome reflects only the registration and the drop.
+pub fn running_in_child() -> bool {
+    std::env::var_os(CHILD_MARKER).is_some()
+}
 
 /// Compose construction, registration and destruction inside the child.
 ///
