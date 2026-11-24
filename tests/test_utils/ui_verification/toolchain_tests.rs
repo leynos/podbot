@@ -23,8 +23,15 @@ fn compatibility_selector_preserves_the_declared_minimum(
 ///
 /// The endpoint and a decoy parent selector are set on the Rustup children
 /// only; this process's environment is untouched.
+///
+/// Rustup installs a missing toolchain on first use, which the sibling
+/// registration tests also trigger, and they no longer hold a process-wide lock
+/// that ordered them first. A plain resolution therefore provisions the minimum
+/// before the offline one, so the contract no longer depends on test order.
 #[test]
 fn provisioned_exact_minimum_resolves_without_distribution_access() {
+    resolve_executables(env!("CARGO_PKG_RUST_VERSION"), &[])
+        .expect("the exact MSRV must be installable or already provisioned");
     let executables = resolve_executables(
         env!("CARGO_PKG_RUST_VERSION"),
         &[
