@@ -1,17 +1,17 @@
-//! Contracts for compatibility selection and synchronous environment lifetimes.
+//! Contracts for compatibility selection and the child-process route.
 
 use std::{
-    cell::RefCell,
-    ffi::OsString,
-    panic::{AssertUnwindSafe, catch_unwind},
+    collections::HashMap,
+    env::VarError,
+    ffi::{OsStr, OsString},
 };
 
-use mockable::{DefaultEnv, Env};
+use mockable::MockEnv;
 use rstest::rstest;
 
 use super::{
-    CompatibilityExecutables, VerificationError, VerificationRoute, reject_profile_backends,
-    resolved_path, validate_executable_path, validate_version, with_scoped_env,
+    CHILD_MARKER, CompatibilityExecutables, VerificationError, VerificationRoute, libtest_name,
+    reject_profile_backends, resolved_path, validate_executable_path, validate_version,
 };
 
 /// Host-native absolute executable spelling used only by resolver contracts.
@@ -27,20 +27,13 @@ const COVERAGE_FLAGS_KEY: &str = "__CARGO_LLVM_COV_RUSTC_WRAPPER_RUSTFLAGS";
 /// Original admission wrapper key, shared only by these scope contracts.
 const ADMISSION_WRAPPER_KEY: &str = "__CARGO_LLVM_COV_RUSTC_WRAPPER_PRE_EXISTING";
 
-/// Fixed parent environment used only by the scoped restoration contract.
-///
-/// Keeping this test data separate leaves every observation and assertion in
-/// the recognized test body; coverage and admission wrapper inputs stay intact.
-const PARENT_ENVIRONMENT: [(&str, Option<&str>); 9] = [
-    ("CARGO", Some("/parent/nightly/cargo")),
-    ("RUSTC", Some("/parent/nightly/rustc")),
-    ("RUSTUP_TOOLCHAIN", Some("nightly-parent")),
-    ("CARGO_ENCODED_RUSTFLAGS", Some("parent-flags")),
-    ("RUSTC_WRAPPER", Some("coverage-wrapper")),
-    (COVERAGE_FLAGS_KEY, Some("instrumentation-context")),
-    ("__CARGO_LLVM_COV_RUSTC_WRAPPER", Some("1")),
-    (ADMISSION_WRAPPER_KEY, Some("admission-wrapper")),
-    ("LLVM_PROFILE_FILE", Some("preserved-%p.profraw")),
+/// Inherited context the child route must neither override nor remove.
+const INHERITED_CONTEXT_KEYS: [&str; 5] = [
+    "RUSTC_WRAPPER",
+    COVERAGE_FLAGS_KEY,
+    "__CARGO_LLVM_COV_RUSTC_WRAPPER",
+    ADMISSION_WRAPPER_KEY,
+    "LLVM_PROFILE_FILE",
 ];
 
 /// Construct fixed executable paths only for the UI scope and lifecycle tests.
@@ -55,18 +48,21 @@ pub(super) fn compatibility_executables() -> CompatibilityExecutables {
     }
 }
 
-/// Observe the live route during destruction without caching its selector.
-pub(super) struct DropObservation<'a> {
-    /// Toolchain selector present when this value was destroyed.
-    pub(super) observed: &'a RefCell<Option<String>>,
-    /// Live reader used to observe the selector at destruction time.
-    pub(super) reader: &'a dyn Env,
-}
-
-impl Drop for DropObservation<'_> {
-    fn drop(&mut self) {
-        *self.observed.borrow_mut() = self.reader.raw("RUSTUP_TOOLCHAIN").ok();
-    }
+/// Build an injected reader over fixed variables, with every other key absent.
+///
+/// A value that is not valid Unicode is reported as `VarError::NotUnicode`.
+pub(super) fn reader_with(variables: Vec<(&'static str, OsString)>) -> MockEnv {
+    let mut reader = MockEnv::new();
+    reader.expect_raw().returning(move |key| {
+        match variables.iter().find(|(name, _)| *name == key) {
+            None => Err(VarError::NotPresent),
+            Some((_, value)) => value
+                .to_str()
+                .map(str::to_owned)
+                .ok_or_else(|| VarError::NotUnicode(value.clone())),
+        }
+    });
+    reader
 }
 
 /// Construct a route carrying already-encoded verification flags.
@@ -77,110 +73,50 @@ fn route_with_flags(flags: &str) -> VerificationRoute {
 }
 
 #[test]
-fn verification_scope_preserves_wrappers_and_restores_the_parent_after_drop() {
-    with_scoped_env(PARENT_ENVIRONMENT, || {
-        let reader = DefaultEnv;
-        let observed = RefCell::new(None);
-        let route = route_with_flags("verification-flags");
-        route.run(&compatibility_executables(), || {
-            let _drop_observation = DropObservation {
-                observed: &observed,
-                reader: &reader,
-            };
-            assert_eq!(
-                reader.raw("RUSTC").expect("scoped rustc exists"),
-                "/compatibility/rustc",
-                "absolute parent compiler must not leak"
-            );
-            assert_eq!(
-                reader.raw("CARGO").expect("scoped Cargo exists"),
-                "/compatibility/cargo",
-                "the compatibility Cargo override must be active"
-            );
-            assert_eq!(
-                reader.raw("CARGO_ENCODED_RUSTFLAGS").as_deref(),
-                Ok("verification-flags"),
-                "encoded verification flags must be active"
-            );
-            assert_eq!(
-                reader.raw("RUSTC_WRAPPER").expect("wrapper exists"),
-                "coverage-wrapper",
-                "coverage wrapper selection must be preserved"
-            );
-            assert_eq!(
-                reader.raw(COVERAGE_FLAGS_KEY).expect("context exists"),
-                "instrumentation-context",
-                "coverage instrumentation context must be preserved"
-            );
-            assert_eq!(
-                reader.raw(ADMISSION_WRAPPER_KEY).expect("admission exists"),
-                "admission-wrapper",
-                "compiler admission wrapper must be preserved"
-            );
-            assert_eq!(
-                reader.raw("LLVM_PROFILE_FILE").expect("profiling exists"),
-                "preserved-%p.profraw",
-                "coverage profile path must be preserved"
-            );
-        });
-        assert_eq!(observed.borrow().as_deref(), Some("1.88.0"));
+fn child_command_selects_the_route_and_leaves_inherited_context_intact() {
+    let route = route_with_flags("verification-flags");
+    let command = route
+        .child_command(&compatibility_executables(), "crate_name::module::a_test")
+        .expect("the test binary path should resolve");
+    let set: HashMap<&OsStr, Option<&OsStr>> = command.get_envs().collect();
+    for (key, expected) in [
+        ("CARGO_ENCODED_RUSTFLAGS", "verification-flags"),
+        ("RUSTUP_TOOLCHAIN", "1.88.0"),
+        ("CARGO", "/compatibility/cargo"),
+        ("RUSTC", "/compatibility/rustc"),
+        (CHILD_MARKER, "1"),
+    ] {
         assert_eq!(
-            reader.raw("RUSTC").expect("parent compiler restored"),
-            "/parent/nightly/rustc",
-            "parent compiler selection must be restored"
+            set.get(OsStr::new(key)).copied().flatten(),
+            Some(OsStr::new(expected)),
+            "the child must be given {key}"
         );
-        assert_eq!(
-            reader.raw("CARGO").expect("parent Cargo restored"),
-            "/parent/nightly/cargo",
-            "parent Cargo selection must be restored"
+    }
+    for key in INHERITED_CONTEXT_KEYS {
+        assert!(
+            !set.contains_key(OsStr::new(key)),
+            "{key} must be inherited unchanged, neither overridden nor removed"
         );
-        assert_eq!(
-            reader.raw("RUSTUP_TOOLCHAIN").as_deref(),
-            Ok("nightly-parent"),
-            "parent toolchain selection must be restored"
-        );
-        assert_eq!(
-            reader.raw("CARGO_ENCODED_RUSTFLAGS").as_deref(),
-            Ok("parent-flags"),
-            "parent encoded flags must be restored"
-        );
-    });
+    }
+    assert_eq!(
+        command.get_args().collect::<Vec<_>>(),
+        ["--exact", "module::a_test", "--nocapture"],
+        "the child must run the calling test alone"
+    );
 }
 
 #[test]
-fn verification_scope_restores_the_parent_when_registration_panics() {
-    with_scoped_env([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
-        let reader = DefaultEnv;
-        let observed = RefCell::new(None);
-        let route = VerificationRoute {
-            encoded_flags: String::new(),
-        };
-        let panic_result = catch_unwind(AssertUnwindSafe(|| {
-            route.run(&compatibility_executables(), || {
-                let _drop_observation = DropObservation {
-                    observed: &observed,
-                    reader: &reader,
-                };
-                panic!("intentional registration failure");
-            });
-        }));
-        assert!(
-            panic_result.is_err(),
-            "the registration panic must propagate"
-        );
-        assert_eq!(
-            observed.borrow().as_deref(),
-            Some("1.88.0"),
-            "unwinding destruction must see compatibility selection"
-        );
-        assert_eq!(
-            reader
-                .raw("RUSTUP_TOOLCHAIN")
-                .expect("parent toolchain restored"),
-            "nightly-parent",
-            "parent toolchain selection must be restored"
-        );
-    });
+fn libtest_name_drops_the_crate_segment() {
+    assert_eq!(
+        libtest_name("compile_contract::a_test"),
+        "a_test",
+        "the binary's own crate segment is not part of the libtest name"
+    );
+    assert_eq!(
+        libtest_name("bare"),
+        "bare",
+        "a name without a crate segment is used as given"
+    );
 }
 
 #[rstest]
@@ -253,23 +189,15 @@ fn failed_or_ambiguous_provisioning_is_refused(
     );
 }
 
-/// Resolve a route with only `CARGO_ENCODED_RUSTFLAGS` set to `flags`.
+/// Resolve a route from an injected reader holding only
+/// `CARGO_ENCODED_RUSTFLAGS` set to `flags`, with no profile-backend inputs.
 ///
-/// Profile-backend inputs are cleared and no workspace wrapper is present, so
-/// the outcome depends on the flags alone.
+/// No workspace wrapper is present, so the outcome depends on the flags alone.
 fn route_from_encoded_flags(
-    flags: impl AsRef<std::ffi::OsStr> + Clone,
+    flags: impl Into<OsString>,
 ) -> Result<VerificationRoute, VerificationError> {
-    with_isolated_profile_backends_returning(|| {
-        with_scoped_env(
-            [
-                ("CARGO_ENCODED_RUSTFLAGS", Some(flags)),
-                ("RUSTFLAGS", None),
-                ("RUSTC_WORKSPACE_WRAPPER", None),
-            ],
-            || VerificationRoute::from_environment(&DefaultEnv),
-        )
-    })
+    let reader = reader_with(vec![("CARGO_ENCODED_RUSTFLAGS", flags.into())]);
+    VerificationRoute::from_environment(&reader, [])
 }
 
 #[test]
@@ -298,63 +226,18 @@ fn non_unicode_flags_are_rejected_without_lossy_conversion() {
     );
 }
 
-/// Clear all profile-backend inputs only while exercising environment selection.
-///
-/// Only sibling UI scope/boundary tests use this fixture. It snapshots keys under
-/// temp-env's shared lock, including custom profiles, and restores them on unwind.
-pub(super) fn with_isolated_profile_backends(body: impl FnOnce()) {
-    with_isolated_profile_backends_returning(body);
-}
-
-/// Like [`with_isolated_profile_backends`], but returns the body's result.
-fn with_isolated_profile_backends_returning<R>(body: impl FnOnce() -> R) -> R {
-    with_scoped_env([] as [(&str, Option<&str>); 0], || {
-        let overrides = std::env::vars_os()
-            .filter(|(key, _)| key.to_str().is_some_and(super::is_profile_backend_key))
-            .map(|(key, _)| (key, None::<OsString>))
-            .collect::<Vec<_>>();
-        with_scoped_env(overrides, body)
-    })
-}
-
-#[rstest]
-#[case::development("CARGO_PROFILE_DEV_CODEGEN_BACKEND")]
-#[case::tests("CARGO_PROFILE_TEST_CODEGEN_BACKEND")]
-#[case::custom("CARGO_PROFILE_CUSTOM_CODEGEN_BACKEND")]
-#[case::empty_segment("CARGO_PROFILE__CODEGEN_BACKEND")]
-fn unknown_workspace_wrapper_is_refused_without_silently_bypassing_it(#[case] backend_key: &str) {
-    with_scoped_env(
-        [
-            (backend_key, Some("cranelift")),
-            (
-                "RUSTC_WORKSPACE_WRAPPER",
-                Some("unqualified-workspace-wrapper"),
-            ),
-        ],
-        || {
-            let reader = DefaultEnv;
-            with_isolated_profile_backends(|| {
-                assert!(
-                    matches!(
-                        VerificationRoute::from_environment(&reader),
-                        Err(VerificationError::WorkspaceWrapper)
-                    ),
-                    "an unknown wrapper must not defeat compiler selection"
-                );
-                assert_eq!(
-                    reader
-                        .raw("RUSTC_WORKSPACE_WRAPPER")
-                        .expect("wrapper remains present"),
-                    "unqualified-workspace-wrapper",
-                    "refusal must preserve the caller's topology"
-                );
-            });
-            assert_eq!(
-                reader.raw(backend_key).expect("profile backend restored"),
-                "cranelift",
-                "profile isolation must restore every inherited matching key"
-            );
-        },
+#[test]
+fn unknown_workspace_wrapper_is_refused_without_silently_bypassing_it() {
+    let reader = reader_with(vec![(
+        "RUSTC_WORKSPACE_WRAPPER",
+        OsString::from("unqualified-workspace-wrapper"),
+    )]);
+    assert!(
+        matches!(
+            VerificationRoute::from_environment(&reader, []),
+            Err(VerificationError::WorkspaceWrapper)
+        ),
+        "an unknown wrapper must not defeat compiler selection"
     );
 }
 

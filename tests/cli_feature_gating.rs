@@ -17,8 +17,11 @@ fn cli_module_unavailable_without_feature() {
         return;
     }
 
-    ui_verification::run_cases(|test_cases| {
-        test_cases.compile_fail("tests/cli_feature_gating/no_cli_feature.rs");
-    })
+    ui_verification::run_cases(
+        concat!(module_path!(), "::cli_module_unavailable_without_feature"),
+        |test_cases| {
+            test_cases.compile_fail("tests/cli_feature_gating/no_cli_feature.rs");
+        },
+    )
     .expect("UI verification requires the provisioned exact MSRV/LLVM route; see resolver error");
 }

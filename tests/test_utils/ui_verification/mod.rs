@@ -1,13 +1,24 @@
 //! Synchronous MSRV/LLVM routing for the two nested Cargo UI verification suites.
 
-use std::{ffi::OsString, process::Command};
+use std::{
+    ffi::OsString,
+    io::{self, Write as _},
+    process::Command,
+    sync::OnceLock,
+};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use mockable::{DefaultEnv, Env};
 use thiserror::Error;
 
 /// Pure verification flag selection without ambient environment access.
 mod flags;
+
+/// Pure checks on Rustup's and Cargo's answers during resolution.
+mod resolution_checks;
+#[cfg(test)]
+use resolution_checks::resolved_path;
+use resolution_checks::{validate_executable_path, validate_version};
 
 /// Compatibility selection and scoped lifetime contracts.
 #[cfg(test)]
@@ -21,24 +32,6 @@ mod toolchain_tests;
 /// Public profile selection and composed lifecycle contracts.
 #[cfg(test)]
 mod boundary_tests;
-
-/// Run `body` with `vars` applied to the process environment, restoring it after.
-///
-/// This is the single site in the UI verification harness that changes the
-/// process-wide environment: trybuild spawns Cargo with the inherited
-/// environment and has no injection point. Moving the verification into a
-/// subprocess would remove it.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "process-wide env scoping: trybuild reads the inherited environment; migrate to a subprocess"
-)]
-pub fn with_scoped_env<K, V, R>(vars: impl AsRef<[(K, Option<V>)]>, body: impl FnOnce() -> R) -> R
-where
-    K: AsRef<std::ffi::OsStr> + Clone + Eq + std::hash::Hash,
-    V: AsRef<std::ffi::OsStr> + Clone,
-{
-    temp_env::with_vars(vars, body)
-}
 
 /// Errors selecting a provisioned, compatible nested Cargo verification route.
 #[derive(Debug, Error)]
@@ -67,9 +60,15 @@ pub enum VerificationError {
 
 /// Resolve an installed compatibility Cargo and run complete fixture registration.
 ///
-/// `TestCases` is constructed and dropped inside the scoped environment: its
-/// destructor launches the actual Cargo work. Only the two UI suite consumers
-/// should call this boundary; registration must stay synchronous.
+/// `trybuild` spawns Cargo with the environment it inherits and has no
+/// injection point, and a test must not change its own process environment. The
+/// parent therefore re-executes the calling test alone in a child copy of the
+/// test binary, started with `Command::env` carrying the compatibility route;
+/// the child constructs `TestCases`, registers the fixtures and drops the cases,
+/// whose destructor launches the actual Cargo work. Only the two UI suite
+/// consumers should call this boundary; registration must stay synchronous.
+///
+/// `qualified_test` is the calling test's `concat!(module_path!(), "::", name)`.
 ///
 /// # Errors
 ///
@@ -77,22 +76,114 @@ pub enum VerificationError {
 ///
 /// # Panics
 ///
-/// Propagates registration or trybuild failures after restoring the environment.
+/// In the parent, panics with the child's output when the child fails; in the
+/// child, a registration or trybuild failure ends the process with a failing
+/// status after the panic message, so the failure reaches the parent even when
+/// the calling test catches the unwind.
 ///
 /// # Examples
 ///
 /// ```ignore
-/// run_cases(|cases| cases.pass("tests/ui/stable_exec_context_signatures.rs"))?;
+/// run_cases(
+///     concat!(module_path!(), "::stable_signatures_compile"),
+///     |cases| cases.pass("tests/ui/stable_exec_context_signatures.rs"),
+/// )?;
 /// ```
-pub fn run_cases(register: impl FnOnce(&trybuild::TestCases)) -> Result<(), VerificationError> {
-    // Capture caller inputs under temp-env's same lock used for the later scope.
-    with_scoped_env([] as [(&str, Option<&str>); 0], || {
-        let environment_reader = DefaultEnv;
-        let route = VerificationRoute::from_environment(&environment_reader)?;
-        let executables = resolve_executables(env!("CARGO_PKG_RUST_VERSION"))?;
-        route.run_registration(&executables, trybuild::TestCases::new, register);
-        Ok(())
-    })
+pub fn run_cases(
+    qualified_test: &str,
+    register: impl FnOnce(&trybuild::TestCases),
+) -> Result<(), VerificationError> {
+    if running_in_child() {
+        run_registration_in_child(trybuild::TestCases::new, register);
+        return Ok(());
+    }
+    let route = VerificationRoute::from_environment(&DefaultEnv, std::env::vars_os())?;
+    let executables = provisioned_executables()?;
+    let mut child = route.child_command(executables, qualified_test)?;
+    let output = child
+        .output()
+        .map_err(|error| VerificationError::Provisioning(error.to_string()))?;
+    replay_or_panic(qualified_test, &output);
+    Ok(())
+}
+
+/// Replay a successful child's output, or panic carrying a failed child's.
+///
+/// # Panics
+///
+/// Panics with the child's status and output when the child failed.
+fn replay_or_panic(qualified_test: &str, output: &std::process::Output) {
+    assert!(
+        output.status.success(),
+        "{qualified_test} failed in its UI verification child ({}):\n{}{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // Pass the child's progress output through, as an in-process run showed it.
+    io::stdout()
+        .write_all(&output.stdout)
+        .expect("the child's output should replay to stdout");
+    io::stderr()
+        .write_all(&output.stderr)
+        .expect("the child's output should replay to stderr");
+}
+
+/// Resolve the compatibility executables once for this test binary.
+///
+/// Rustup installs a missing toolchain on first use and does not tolerate two
+/// installs of the same toolchain at once, while the registration tests run in
+/// parallel. The first caller resolves, and installs when needed; the rest wait
+/// on the same result instead of racing it.
+///
+/// # Errors
+///
+/// Returns the first resolution's provisioning error to every caller.
+fn provisioned_executables() -> Result<&'static CompatibilityExecutables, VerificationError> {
+    static RESOLVED: OnceLock<Result<CompatibilityExecutables, String>> = OnceLock::new();
+    RESOLVED
+        .get_or_init(|| {
+            resolve_executables(env!("CARGO_PKG_RUST_VERSION"), &[]).map_err(|error| match error {
+                VerificationError::Provisioning(detail) => detail,
+                other => other.to_string(),
+            })
+        })
+        .as_ref()
+        .map_err(|detail| VerificationError::Provisioning(detail.clone()))
+}
+
+/// Names the variable whose presence makes this binary run the fixtures itself.
+const CHILD_MARKER: &str = "PODBOT_UI_VERIFICATION_CHILD";
+
+/// Whether this process is the child started by `run_cases`.
+///
+/// A test whose assertions belong to the parent alone returns early when this
+/// holds, so the child's outcome reflects only the registration and the drop.
+pub fn running_in_child() -> bool {
+    std::env::var_os(CHILD_MARKER).is_some()
+}
+
+/// Compose construction, registration and destruction inside the child.
+///
+/// A panic ends the child with a failing status: the calling test may catch the
+/// unwind, and the parent must still see the failure. The factory must not
+/// return cases that escape this synchronous lifetime.
+fn run_registration_in_child<T>(create: impl FnOnce() -> T, register: impl FnOnce(&T)) {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_registration(create, register);
+    }));
+    if outcome.is_err() {
+        std::process::exit(1);
+    }
+}
+
+/// Construct, register and explicitly drop, in that order.
+///
+/// Only the child path and the sibling lifecycle contracts use this seam.
+fn run_registration<T>(create: impl FnOnce() -> T, register: impl FnOnce(&T)) {
+    let cases = create();
+    register(&cases);
+    drop(cases);
 }
 
 /// Explicit inputs retained across a single synchronous verification lifetime.
@@ -103,8 +194,11 @@ struct VerificationRoute {
 
 impl VerificationRoute {
     /// Read ambient flags once at the integration boundary.
-    fn from_environment(environment_reader: &dyn Env) -> Result<Self, VerificationError> {
-        reject_profile_backends(std::env::vars_os())?;
+    fn from_environment(
+        environment_reader: &dyn Env,
+        process_variables: impl IntoIterator<Item = (OsString, OsString)>,
+    ) -> Result<Self, VerificationError> {
+        reject_profile_backends(process_variables)?;
         if has_workspace_wrapper(environment_reader) {
             return Err(VerificationError::WorkspaceWrapper);
         }
@@ -115,35 +209,47 @@ impl VerificationRoute {
         })
     }
 
-    /// Compose construction, registration and destruction within the UI scope.
+    /// The variables the child sets to select the UI route.
     ///
-    /// Only `run_cases` and its sibling lifecycle contracts use this seam; the
-    /// factory must not return cases that escape this synchronous lifetime.
-    fn run_registration<T>(
-        &self,
-        executables: &CompatibilityExecutables,
-        create: impl FnOnce() -> T,
-        register: impl FnOnce(&T),
-    ) {
-        self.run(executables, || {
-            let cases = create();
-            register(&cases);
-            drop(cases);
-        });
+    /// Every other inherited variable, including the coverage and admission
+    /// wrappers, the profiling path and the target context, is left intact.
+    fn route_variables<'a>(
+        &'a self,
+        executables: &'a CompatibilityExecutables,
+    ) -> [(&'static str, &'a str); 4] {
+        [
+            ("CARGO_ENCODED_RUSTFLAGS", self.encoded_flags.as_str()),
+            ("RUSTUP_TOOLCHAIN", executables.toolchain.as_str()),
+            ("CARGO", executables.cargo.as_str()),
+            ("RUSTC", executables.rustc.as_str()),
+        ]
     }
 
-    /// Retain wrapper, profiling and target context while selecting the UI route.
-    fn run(&self, executables: &CompatibilityExecutables, body: impl FnOnce()) {
-        with_scoped_env(
-            [
-                ("CARGO_ENCODED_RUSTFLAGS", Some(self.encoded_flags.as_str())),
-                ("RUSTUP_TOOLCHAIN", Some(executables.toolchain.as_str())),
-                ("CARGO", Some(executables.cargo.as_str())),
-                ("RUSTC", Some(executables.rustc.as_str())),
-            ],
-            body,
-        );
+    /// Build the command that re-runs `qualified_test` alone in this binary.
+    fn child_command(
+        &self,
+        executables: &CompatibilityExecutables,
+        qualified_test: &str,
+    ) -> Result<Command, VerificationError> {
+        let program = std::env::current_exe()
+            .map_err(|error| VerificationError::Provisioning(error.to_string()))?;
+        let mut command = Command::new(program);
+        command
+            .args(["--exact", libtest_name(qualified_test), "--nocapture"])
+            .env(CHILD_MARKER, "1");
+        for (key, value) in self.route_variables(executables) {
+            command.env(key, value);
+        }
+        Ok(command)
     }
+}
+
+/// The libtest name of a test, given its `module_path!()`-qualified name: the
+/// binary's own crate segment is not part of the name libtest filters on.
+fn libtest_name(qualified: &str) -> &str {
+    qualified
+        .split_once("::")
+        .map_or(qualified, |(_crate, rest)| rest)
 }
 
 /// Read one Unicode environment input without silently replacing invalid data.
@@ -199,10 +305,16 @@ struct CompatibilityExecutables {
 }
 
 /// Resolve both executables, then verify Cargo without invoking rustc directly.
-fn resolve_executables(msrv: &str) -> Result<CompatibilityExecutables, VerificationError> {
+///
+/// `rustup_variables` are set on each Rustup and Cargo child only, so a caller
+/// can constrain resolution without changing its own process environment.
+fn resolve_executables(
+    msrv: &str,
+    rustup_variables: &[(&str, &str)],
+) -> Result<CompatibilityExecutables, VerificationError> {
     let toolchain = compatibility_toolchain(msrv);
-    let cargo = resolve_executable(&toolchain, "cargo")?;
-    let rustc = resolve_executable(&toolchain, "rustc")?;
+    let cargo = resolve_executable(&toolchain, "cargo", rustup_variables)?;
+    let rustc = resolve_executable(&toolchain, "rustc", rustup_variables)?;
     if cargo.parent() != rustc.parent() {
         return Err(VerificationError::Provisioning(
             "Cargo and rustc resolve to different toolchains".into(),
@@ -210,6 +322,7 @@ fn resolve_executables(msrv: &str) -> Result<CompatibilityExecutables, Verificat
     }
     let version = Command::new(cargo.as_str())
         .arg("--version")
+        .envs(rustup_variables.iter().copied())
         .env("RUSTUP_TOOLCHAIN", &toolchain)
         .output()
         .map_err(|error| VerificationError::Provisioning(error.to_string()))?;
@@ -234,69 +347,22 @@ fn compatibility_toolchain(msrv: &str) -> String {
 }
 
 /// Resolve one trusted Rustup toolchain executable without executing a compiler.
-fn resolve_executable(toolchain: &str, name: &str) -> Result<Utf8PathBuf, VerificationError> {
+fn resolve_executable(
+    toolchain: &str,
+    name: &str,
+    rustup_variables: &[(&str, &str)],
+) -> Result<Utf8PathBuf, VerificationError> {
     let resolution = Command::new("rustup")
         .args(["which", "--toolchain", toolchain, name])
+        .envs(rustup_variables.iter().copied())
         .output()
         .map_err(|error| VerificationError::Provisioning(error.to_string()))?;
+    if !resolution.status.success() {
+        return Err(VerificationError::Provisioning(format!(
+            "rustup which {name} for {toolchain} exited with {}: {}",
+            resolution.status,
+            String::from_utf8_lossy(&resolution.stderr).trim()
+        )));
+    }
     validate_executable_path(resolution.status.success(), &resolution.stdout, name)
-}
-
-/// Require the expected executable basename after lossless absolute-path parsing.
-fn validate_executable_path(
-    success: bool,
-    output: &[u8],
-    name: &str,
-) -> Result<Utf8PathBuf, VerificationError> {
-    let executable = resolved_path(success, output)?;
-    let expected_name = if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_owned()
-    };
-    if executable.file_name() != Some(expected_name.as_str()) {
-        return Err(VerificationError::Provisioning(format!(
-            "Rustup did not resolve the requested {name} executable"
-        )));
-    }
-    Ok(executable)
-}
-
-/// Reject failed, relative or multiline executable resolutions.
-fn resolved_path(success: bool, output: &[u8]) -> Result<Utf8PathBuf, VerificationError> {
-    let text = std::str::from_utf8(output)
-        .map_err(|_| VerificationError::Provisioning("non-Unicode Cargo path".into()))?;
-    let path = Utf8PathBuf::from(text.trim());
-    if !success || !is_single_absolute_path(&path) {
-        return Err(VerificationError::Provisioning(
-            "Rustup did not return an absolute Cargo path".into(),
-        ));
-    }
-    Ok(path)
-}
-
-/// Accept only one absolute executable spelling after UTF-8 decoding and trimming.
-fn is_single_absolute_path(path: &Utf8Path) -> bool {
-    path.is_absolute() && !path.as_str().contains(['\n', '\r'])
-}
-
-/// Require the exact stable minimum selected for the compatibility route.
-fn validate_version(
-    success: bool,
-    output: &[u8],
-    toolchain: &str,
-) -> Result<(), VerificationError> {
-    let version = std::str::from_utf8(output)
-        .map_err(|_| VerificationError::Provisioning("non-Unicode Cargo version".into()))?;
-    let compatible = version
-        .strip_prefix("cargo ")
-        .and_then(|value| value.split_whitespace().next())
-        == Some(toolchain);
-    if !success || !compatible {
-        return Err(VerificationError::Provisioning(format!(
-            "expected Cargo {toolchain}, got {}",
-            version.trim()
-        )));
-    }
-    Ok(())
 }
