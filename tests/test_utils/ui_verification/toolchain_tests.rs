@@ -2,7 +2,7 @@
 
 use rstest::rstest;
 
-use super::{compatibility_toolchain, resolve_executables};
+use super::{compatibility_toolchain, provisioned_executables, resolve_executables};
 
 /// Partial manifest versions select their minimum patch, never a moving channel.
 #[rstest]
@@ -25,13 +25,12 @@ fn compatibility_selector_preserves_the_declared_minimum(
 /// only; this process's environment is untouched.
 ///
 /// Rustup installs a missing toolchain on first use, which the sibling
-/// registration tests also trigger, and they no longer hold a process-wide lock
-/// that ordered them first. A plain resolution therefore provisions the minimum
-/// before the offline one, so the contract no longer depends on test order.
+/// registration tests also trigger. The shared once-per-binary resolution
+/// provisions the minimum before the offline one, so the contract neither
+/// depends on test order nor races their install.
 #[test]
 fn provisioned_exact_minimum_resolves_without_distribution_access() {
-    resolve_executables(env!("CARGO_PKG_RUST_VERSION"), &[])
-        .expect("the exact MSRV must be installable or already provisioned");
+    provisioned_executables().expect("the exact MSRV must be installable or already provisioned");
     let executables = resolve_executables(
         env!("CARGO_PKG_RUST_VERSION"),
         &[

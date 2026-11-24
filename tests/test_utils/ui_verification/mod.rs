@@ -4,14 +4,21 @@ use std::{
     ffi::OsString,
     io::{self, Write as _},
     process::Command,
+    sync::OnceLock,
 };
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use mockable::{DefaultEnv, Env};
 use thiserror::Error;
 
 /// Pure verification flag selection without ambient environment access.
 mod flags;
+
+/// Pure checks on Rustup's and Cargo's answers during resolution.
+mod resolution_checks;
+#[cfg(test)]
+use resolution_checks::resolved_path;
+use resolution_checks::{validate_executable_path, validate_version};
 
 /// Compatibility selection and scoped lifetime contracts.
 #[cfg(test)]
@@ -91,8 +98,8 @@ pub fn run_cases(
         return Ok(());
     }
     let route = VerificationRoute::from_environment(&DefaultEnv, std::env::vars_os())?;
-    let executables = resolve_executables(env!("CARGO_PKG_RUST_VERSION"), &[])?;
-    let mut child = route.child_command(&executables, qualified_test)?;
+    let executables = provisioned_executables()?;
+    let mut child = route.child_command(executables, qualified_test)?;
     let output = child
         .output()
         .map_err(|error| VerificationError::Provisioning(error.to_string()))?;
@@ -120,6 +127,29 @@ fn replay_or_panic(qualified_test: &str, output: &std::process::Output) {
     io::stderr()
         .write_all(&output.stderr)
         .expect("the child's output should replay to stderr");
+}
+
+/// Resolve the compatibility executables once for this test binary.
+///
+/// Rustup installs a missing toolchain on first use and does not tolerate two
+/// installs of the same toolchain at once, while the registration tests run in
+/// parallel. The first caller resolves, and installs when needed; the rest wait
+/// on the same result instead of racing it.
+///
+/// # Errors
+///
+/// Returns the first resolution's provisioning error to every caller.
+fn provisioned_executables() -> Result<&'static CompatibilityExecutables, VerificationError> {
+    static RESOLVED: OnceLock<Result<CompatibilityExecutables, String>> = OnceLock::new();
+    RESOLVED
+        .get_or_init(|| {
+            resolve_executables(env!("CARGO_PKG_RUST_VERSION"), &[]).map_err(|error| match error {
+                VerificationError::Provisioning(detail) => detail,
+                other => other.to_string(),
+            })
+        })
+        .as_ref()
+        .map_err(|detail| VerificationError::Provisioning(detail.clone()))
 }
 
 /// Names the variable whose presence makes this binary run the fixtures itself.
@@ -335,63 +365,4 @@ fn resolve_executable(
         )));
     }
     validate_executable_path(resolution.status.success(), &resolution.stdout, name)
-}
-
-/// Require the expected executable basename after lossless absolute-path parsing.
-fn validate_executable_path(
-    success: bool,
-    output: &[u8],
-    name: &str,
-) -> Result<Utf8PathBuf, VerificationError> {
-    let executable = resolved_path(success, output)?;
-    let expected_name = if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_owned()
-    };
-    if executable.file_name() != Some(expected_name.as_str()) {
-        return Err(VerificationError::Provisioning(format!(
-            "Rustup did not resolve the requested {name} executable"
-        )));
-    }
-    Ok(executable)
-}
-
-/// Reject failed, relative or multiline executable resolutions.
-fn resolved_path(success: bool, output: &[u8]) -> Result<Utf8PathBuf, VerificationError> {
-    let text = std::str::from_utf8(output)
-        .map_err(|_| VerificationError::Provisioning("non-Unicode Cargo path".into()))?;
-    let path = Utf8PathBuf::from(text.trim());
-    if !success || !is_single_absolute_path(&path) {
-        return Err(VerificationError::Provisioning(
-            "Rustup did not return an absolute Cargo path".into(),
-        ));
-    }
-    Ok(path)
-}
-
-/// Accept only one absolute executable spelling after UTF-8 decoding and trimming.
-fn is_single_absolute_path(path: &Utf8Path) -> bool {
-    path.is_absolute() && !path.as_str().contains(['\n', '\r'])
-}
-
-/// Require the exact stable minimum selected for the compatibility route.
-fn validate_version(
-    success: bool,
-    output: &[u8],
-    toolchain: &str,
-) -> Result<(), VerificationError> {
-    let version = std::str::from_utf8(output)
-        .map_err(|_| VerificationError::Provisioning("non-Unicode Cargo version".into()))?;
-    let compatible = version
-        .strip_prefix("cargo ")
-        .and_then(|value| value.split_whitespace().next())
-        == Some(toolchain);
-    if !success || !compatible {
-        return Err(VerificationError::Provisioning(format!(
-            "expected Cargo {toolchain}, got {}",
-            version.trim()
-        )));
-    }
-    Ok(())
 }
