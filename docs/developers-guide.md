@@ -89,11 +89,6 @@ decoding. `test_runner_cargo.py` re-exports its parser for existing runner
 callers and retains executable selection and runtime-environment restoration.
 The parser remains a runner-local helper rather than a general Cargo API.
 
-The workflow concurrency suite keeps its discovery and expression queries in
-`tests/workflow_contracts/concurrency_rules.py`, composed with the existing
-strict workflow reader. The test module retains workflow discovery execution
-and every parametrized assertion; these queries remain local to that suite.
-
 Windows has no standard-library binding for Job Objects, so the required
 `ctypes` interop is confined to `scripts/test_runner_windows_process.py`. The
 module remains importable across platforms; `create()` loads Windows libraries
@@ -1947,8 +1942,6 @@ The modules that remain in `tests/workflow_contracts/` are:
 | Module                     | Subject                                                        |
 | -------------------------- | -------------------------------------------------------------- |
 | `workflow_reading.py`      | Strict parsing, trigger forms, push filters and workflow files |
-| `concurrency_rules.py`     | Workflow discovery and concurrency rule queries                |
-| `concurrency_test.py`      | Executing discovery and asserting concurrency behaviour        |
 | `markdown_wiring_*.py`     | The Markdown gates' wiring into CI                             |
 | `gitignore_test.py`        | The ignored coverage file the spelling gate writes             |
 | `workflow_reading_test.py` | The reader, driven on documents this repository lacks          |
@@ -2212,20 +2205,6 @@ any other event would mean the grouping has regressed.
 repository to carry a token, and the ones here automate pull-request
 housekeeping rather than building, so cancelling one mid-flight is a hazard
 with no minutes to win.
-
-### 21.1. The cancellation contract
-
-`tests/workflow_contracts/concurrency_rules.py` reads `.github/workflows`
-through the existing strict reader and owns workflow discovery and the queries
-used to inspect concurrency settings.
-`tests/workflow_contracts/concurrency_test.py` executes discovery and asserts,
-for every workflow declaring a `pull_request` trigger, that it declares a
-concurrency group, that the group names no per-run expression, that the group
-names something that varies per pull request, and that `cancel-in-progress` is
-exactly the expression above. A further test asserts that discovery still finds
-the workflows it is expected to, so a broken read cannot empty the list and
-turn the rest into a vacuous pass. Run the binding contract with
-`make test-workflow-contracts`.
 
 ## Markdown formatting
 
