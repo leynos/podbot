@@ -92,14 +92,23 @@ selector. Already provisioned tooling can therefore resolve without refreshing
 a partial tracking channel. Missing tooling fails with an explicit installation
 hint.
 
-The boundary captures inputs under temp-env's shared lock, selects compatible
-encoded flags, resolves Cargo and rustc from the same provisioned toolchain,
-and replaces `CARGO`, `RUSTC`, and `RUSTUP_TOOLCHAIN` only for the verification
-scope. It constructs `trybuild::TestCases`, invokes the caller's registration
-callback, and drops the cases before restoring the environment. Trybuild
-launches its nested compilation during destruction, so registration must stay
-synchronous and must not retain the cases. Restoration also runs when
-registration or trybuild panics; the failure still propagates.
+The boundary reads its inputs through an injected `mockable::Env` reader and an
+injected iterator of process variables, selects compatible encoded flags, and
+resolves Cargo and rustc from the same provisioned toolchain. Trybuild reads
+the environment it inherits and offers no injection point, and a test must not
+change its own process environment, so the parent re-executes the calling test
+alone in a child copy of the test binary (`--exact`, `--nocapture`). The child
+is started with `Command::env` setting `CARGO_ENCODED_RUSTFLAGS`, `CARGO`,
+`RUSTC`, `RUSTUP_TOOLCHAIN` and a child marker; every other inherited variable
+is left as it was. The calling test passes its own
+`concat!(module_path!(), "::name")` so the child can select it. In the child,
+`run_cases` constructs `trybuild::TestCases`, invokes the caller's registration
+callback and drops the cases. Trybuild launches its nested compilation during
+destruction, so registration must stay synchronous and must not retain the
+cases. A panic in the child ends it with a failing status, even when the
+calling test catches the unwind, and the parent panics with the child's status
+and output, so the failure still propagates. The parent's environment is never
+changed, so nothing needs restoring.
 
 Encoded flags take precedence over ordinary flags. The private parser removes
 only recognized development backend, frontend, linker and warning-policy
@@ -111,28 +120,30 @@ private context, compiler-admission wrapper, target context and profiling path
 remain intact. The [developer's guide](developers-guide.md) records the
 supported option forms and provisioning commands.
 
-`VerificationRoute::run_registration` is a private composition seam used by
-`run_cases`: its factory, registration callback and explicit destruction all
-run inside `VerificationRoute::run`. The generic factory exists only to let the
-sibling boundary contracts observe the same composition with a destructor
-probe; consumers must not call it directly or retain factory output. The real
-trybuild sentinel still exercises the public boundary, so the probe does not
-replace actual fixture execution.
+`run_registration` is a private composition seam used by the child path of
+`run_cases`: its factory, registration callback and explicit destruction run in
+that order. The generic factory exists only to let the sibling boundary
+contracts observe the same composition with a destructor probe; consumers must
+not call it directly or retain factory output. The real trybuild sentinel still
+exercises the public boundary, so the probe does not replace actual fixture
+execution.
 
 This boundary and its private helpers belong only to the two UI consumers; they
-are not general process or environment APIs. `scope_tests.rs` isolates all
-matching profile-backend keys under the same lock when testing
-workspace-wrapper rejection, including custom and empty profile segments. Its
-callback fixture restores those keys after completion or unwinding. Only the
-sibling scope and boundary contracts may use that fixture, the fixed-executable
-constructor and the destructor observation probe. `boundary_tests.rs` checks
-profile policy through the environment-reading boundary and observes
-construction, registration and destruction inside the selected scope.
+are not general process or environment APIs. `scope_tests.rs` checks, from the
+command's own `get_envs`, that the child is given the route variables and that
+the coverage and admission wrappers and the profiling path are neither
+overridden nor removed; it tests workspace-wrapper and profile-backend
+rejection through an injected reader and an injected variable iterator, so no
+test touches the process environment. Only the sibling scope and boundary
+contracts may use its injected-reader builder and the fixed-executable
+constructor. `boundary_tests.rs` checks profile policy through the
+environment-reading boundary and the construct, register, drop order.
 `toolchain_tests.rs` owns exact-selector and actual offline Rustup resolution
-contracts. The compile-contract orchestration sentinel deliberately registers
-an existing known passing fixture as compile-fail, requiring both callback
-invocation and the destructor's failure; no-op orchestration cannot satisfy
-that contract.
+contracts; it passes the offline distribution endpoint to the Rustup children
+only. The compile-contract orchestration sentinel deliberately registers an
+existing known passing fixture as compile-fail, requiring both callback
+invocation (a marker the callback prints after asserting the exact selector)
+and the destructor's failure; no-op orchestration cannot satisfy that contract.
 
 ## 4. Process ownership and terminal outcomes
 

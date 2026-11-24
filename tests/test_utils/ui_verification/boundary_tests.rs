@@ -1,18 +1,13 @@
 //! Public profile selection and composed create/register/drop UI contracts.
 
-use std::{
-    cell::{Cell, RefCell},
-    env::VarError,
-    ffi::OsString,
-};
+use std::{cell::RefCell, env::VarError, ffi::OsString};
 
-use mockable::{DefaultEnv, Env, MockEnv};
+use mockable::MockEnv;
 use rstest::rstest;
 
 use super::{
-    VerificationError, VerificationRoute, has_workspace_wrapper,
-    tests::{DropObservation, compatibility_executables, with_isolated_profile_backends},
-    unicode_variable, with_scoped_env,
+    VerificationError, VerificationRoute, has_workspace_wrapper, run_registration,
+    tests::reader_with, unicode_variable,
 };
 
 /// Build the native payload shared only by the fixed-key reader policy tables.
@@ -151,81 +146,50 @@ fn workspace_wrapper_policy_checks_the_fixed_key_and_native_payload(
 #[case::empty_segment("CARGO_PROFILE__CODEGEN_BACKEND", "cranelift")]
 #[case::compatible_llvm("CARGO_PROFILE_CUSTOM_CODEGEN_BACKEND", "llvm")]
 fn environment_boundary_enforces_profile_backend(#[case] key: &str, #[case] value: &str) {
-    with_isolated_profile_backends(|| {
-        with_scoped_env(
-            [
-                (key, Some(value)),
-                ("RUSTC_WORKSPACE_WRAPPER", None),
-                ("CARGO_ENCODED_RUSTFLAGS", Some("")),
-                ("RUSTFLAGS", None),
-            ],
-            || {
-                let reader = DefaultEnv;
-                let result = VerificationRoute::from_environment(&reader);
-                if value == "llvm" {
-                    assert!(
-                        result.is_ok(),
-                        "compatible LLVM must pass environment selection"
-                    );
-                } else {
-                    assert!(
-                        matches!(result, Err(VerificationError::ProfileBackend(ref actual)) if actual == key),
-                        "the boundary must identify the exact incompatible profile key"
-                    );
-                }
-                assert_eq!(
-                    reader.raw(key).expect("the scoped backend remains present"),
-                    value,
-                    "selection must inspect without rewriting the backend value"
-                );
-            },
+    let reader = reader_with(vec![("CARGO_ENCODED_RUSTFLAGS", OsString::new())]);
+    let result = VerificationRoute::from_environment(
+        &reader,
+        [(OsString::from(key), OsString::from(value))],
+    );
+    if value == "llvm" {
+        assert!(
+            result.is_ok(),
+            "compatible LLVM must pass environment selection"
         );
-    });
+    } else {
+        assert!(
+            matches!(result, Err(VerificationError::ProfileBackend(ref actual)) if actual == key),
+            "the boundary must identify the exact incompatible profile key"
+        );
+    }
 }
 
-/// The composition seam keeps every lifecycle phase inside the selected scope.
+/// The composition seam constructs, registers and drops, in that order.
 #[test]
-fn registration_constructs_registers_and_drops_before_environment_restoration() {
-    with_scoped_env([("RUSTUP_TOOLCHAIN", Some("nightly-parent"))], || {
-        let reader = DefaultEnv;
-        let created = Cell::new(false);
-        let registered = Cell::new(false);
-        let dropped = RefCell::new(None);
-        let route = VerificationRoute {
-            encoded_flags: String::new(),
-        };
-        route.run_registration(
-            &compatibility_executables(),
-            || {
-                created.set(reader.raw("RUSTUP_TOOLCHAIN").ok().as_deref() == Some("1.88.0"));
-                DropObservation {
-                    observed: &dropped,
-                    reader: &reader,
-                }
-            },
-            |_| {
-                registered.set(reader.raw("RUSTUP_TOOLCHAIN").ok().as_deref() == Some("1.88.0"));
-            },
-        );
-        assert!(
-            created.get(),
-            "construction must see the exact compatibility scope"
-        );
-        assert!(
-            registered.get(),
-            "registration must see the exact compatibility scope"
-        );
-        assert_eq!(
-            dropped.borrow().as_deref(),
-            Some("1.88.0"),
-            "destruction must precede environment restoration"
-        );
-        assert_eq!(
-            reader
-                .raw("RUSTUP_TOOLCHAIN")
-                .expect("parent selector restored"),
-            "nightly-parent",
-            "the parent selector must be restored after the composed lifetime"
-        );
-    });
+fn registration_constructs_registers_and_drops_in_order() {
+    let events = RefCell::new(Vec::new());
+    run_registration(
+        || {
+            events.borrow_mut().push("create");
+            DropProbe { events: &events }
+        },
+        |_| events.borrow_mut().push("register"),
+    );
+    assert_eq!(
+        *events.borrow(),
+        ["create", "register", "drop"],
+        "destruction must follow registration, which must follow construction"
+    );
+}
+
+/// Records its destruction in the shared event log.
+struct DropProbe<'a> {
+    /// Ordered phase names observed so far.
+    events: &'a RefCell<Vec<&'static str>>,
+}
+
+impl Drop for DropProbe<'_> {
+    fn drop(&mut self) {
+        self.events.borrow_mut().push("drop");
+    }
 }

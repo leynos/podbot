@@ -165,14 +165,16 @@ construct or consume these types; they must not become general CLI parsers or
 bypass first-error ordering by validating all tokens in advance. Its private
 profile-key predicate belongs only to the same environment boundary; it
 recognizes Cargo's exact profile prefix and backend suffix. Callers register
-fixtures inside its closure, and the helper constructs and drops
-`trybuild::TestCases` before restoring the environment. The private
-fixed-executable constructor, profile-isolation fixture and destructor probe in
+fixtures inside its closure and pass their own
+`concat!(module_path!(), "::name")`; the helper re-executes that test alone in
+a child copy of the test binary, started with `Command::env`, and the child
+constructs and drops `trybuild::TestCases`. The parent's environment is never
+changed. The private fixed-executable constructor and injected-reader builder in
 `scope_tests.rs` serve only the sibling UI scope and boundary contracts; they
 must not resolve tooling or absorb assertions. The private `run_registration`
-composition seam is used by `run_cases` and those lifecycle contracts only; its
-factory, registration callback and explicit destruction must all remain inside
-the selected scope.
+composition seam is used by the child path of `run_cases` and the lifecycle
+contract only; its factory, registration callback and explicit destruction must
+run in that order.
 
 The boundary creates one `mockable::DefaultEnv` reader per synchronous run, and
 passes it by reference to its private routing and flag helpers. Fixed-key reads
@@ -181,13 +183,12 @@ Unicode value, and a non-Unicode native value, including its payload; flag
 handling retains its existing named-error behaviour for the last case. The
 private `has_workspace_wrapper` query applies only the policy for
 `RUSTC_WORKSPACE_WRAPPER` and is used by this boundary and its sibling policy
-tests. It is not a general environment adapter. Lifecycle tests borrow the same
-reader for `DropObservation`, which reads `RUSTUP_TOOLCHAIN` when the
-observation is dropped so the real scoped restoration remains observable. These
-helpers follow the ownership limits for shared test utilities in
+tests. It is not a general environment adapter. Policy tests inject a mock
+reader instead of changing the process environment. These helpers follow the
+ownership limits for shared test utilities in
 [section 8.2.4](#824-shared-integration-test-utilities). Profile-backend
-rejection still enumerates inherited profile keys; the fixed-key reader does
-not replace that separate requirement.
+rejection still enumerates the process variables, passed in as an iterator; the
+fixed-key reader does not replace that separate requirement.
 
 UI children use the package minimum supported Rust version (MSRV), currently
 1.88, and LLVM, even when the parent harness uses a development nightly. The
@@ -501,10 +502,11 @@ that must not read the harness's stdin call the hidden, `internal`-feature
 `EngineConnector::exec_without_host_stdin` (through
 `exec_with_client_for_tests`), which selects an empty host reader through the
 private exec-session options. Configuration tests inject a `mockable::Env`. The
-two remaining sanctioned sites are `with_scoped_env`, the UI verification
-harness's single wrapper around `temp_env` because trybuild reads the inherited
-environment, and the one-shot `DOCKER_HOST` write in the sandbox end-to-end
-helpers, because `testcontainers` offers no in-process alternative.
+UI verification harness runs trybuild in a child copy of the test binary
+started with `Command::env`, because trybuild reads the inherited environment.
+The one remaining sanctioned site is the one-shot `DOCKER_HOST` write in the
+sandbox end-to-end helpers, because `testcontainers` offers no in-process
+alternative.
 
 For screen readers: The following class diagram summarizes the stable exec
 Application Programming Interface (API) request and outcome types, the cached

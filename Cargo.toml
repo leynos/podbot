@@ -61,7 +61,6 @@ mockable = { version = "3.0.0", default-features = false, features = ["clock"] }
 metrics = "0.24.6"
 
 [dev-dependencies]
-temp-env = "0.3.6"
 mockable = { version = "3.0.0", default-features = false, features = ["clock", "mock"] }
 mockall = "0.15.0"
 proptest = "1.9.0"
