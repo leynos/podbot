@@ -27,10 +27,9 @@ impl<'a> RetryEventContext<'a> {
         }
     }
 
-    // The two `tracing::warn!` arms expand into many branches that inflate
-    // clippy's cognitive-complexity score, but merging them is the point of
-    // this function and splitting them back out would defeat that.
-    #[expect(clippy::cognitive_complexity, reason = "macro-expansion artefact")]
+    // The two `tracing::warn!` arms expand into many branches, which the
+    // macro-aware cognitive-complexity lint does not count; merging them is
+    // the point of this function.
     fn log_warn(&self, message: &'static str, waiting_seconds: Option<u64>) {
         if let Some(secs) = waiting_seconds {
             tracing::warn!(
