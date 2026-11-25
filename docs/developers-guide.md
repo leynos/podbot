@@ -1386,8 +1386,8 @@ CodeScene's ceiling. `dylint.toml` opts in with
 `[whitaker] experimental = ["macro_aware_cognitive_complexity"]`. Fix a finding
 by extracting named helpers, never by raising the threshold. A Whitaker suite
 installed before the lint existed (v0.2.12 or earlier) does not register it and
-silently leaves the gate inactive, so rerun `whitaker-installer --cranelift` to
-refresh the suite after updating a checkout.
+silently leaves the gate inactive, so rerun `whitaker-installer` to refresh the
+suite after updating a checkout.
 
 ### 15.5. En-GB-oxendict spelling
 
