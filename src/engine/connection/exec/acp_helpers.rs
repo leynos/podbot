@@ -191,10 +191,6 @@ where
 /// `params.clientCapabilities`, then re-serializes the JSON preserving the
 /// original line ending. Returns the original frame unchanged on any parse or
 /// serialization failure, or if no capabilities were removed.
-#[expect(
-    clippy::cognitive_complexity,
-    reason = "inline parse and serialize fallback tracing keeps this review-required flow local"
-)]
 pub(super) fn mask_acp_initialize_frame(frame: &[u8]) -> Vec<u8> {
     let (payload, line_ending) = split_frame_line_ending(frame);
 
