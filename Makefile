@@ -20,13 +20,18 @@ RUST_FLAGS ?= -D warnings
 CARGO_FLAGS ?= --all-targets --all-features
 CLIPPY_FLAGS ?= $(CARGO_FLAGS) -- $(RUST_FLAGS)
 TEST_FLAGS ?= $(CARGO_FLAGS)
-# What the trybuild warm-up runs: the two harnesses (or the `--test` selection the
-# pass names itself) with the pass's own flags (features, jobs). Empty when the
-# pass narrows to library, binary, example, bench or doc targets, which never
-# reach the harnesses.
+# What the trybuild warm-up runs: only the harnesses the full pass reaches (the
+# `--test NAME` or `--test=NAME` selection the pass names itself, else both) with
+# the pass's own build flags (features, jobs). The target selectors are dropped
+# from the warm-up's flags so it never runs ordinary tests twice. A pass that
+# narrows to library, binary, example, bench or doc targets without naming a
+# `--test` never reaches the harnesses, so it has no warm-up.
 WARM_NARROWING ?= --doc --lib --bin --bins --example --examples --bench --benches
-WARM_SELECTION = $(if $(filter --test,$(TEST_FLAGS)),,--test compile_contract --test cli_feature_gating)
-WARM_FLAGS ?= $(if $(filter $(WARM_NARROWING),$(TEST_FLAGS)),,$(WARM_SELECTION) $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(filter-out --all-targets,$(TEST_FLAGS)))
+WARM_SELECTORS ?= --all-targets --tests $(WARM_NARROWING)
+WARM_NAMED = $(filter --test --test=%,$(TEST_FLAGS))
+WARM_SELECTION = $(if $(WARM_NAMED),,--test compile_contract --test cli_feature_gating)
+WARM_IS_NARROWED = $(if $(WARM_NAMED),,$(filter $(WARM_NARROWING),$(TEST_FLAGS)))
+WARM_FLAGS ?= $(if $(WARM_IS_NARROWED),,$(WARM_SELECTION) $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(filter-out $(WARM_SELECTORS),$(TEST_FLAGS)))
 TEST_TIMEOUT ?=$(if $(PODBOT_TEST_TIMEOUT),$(PODBOT_TEST_TIMEOUT),1800)
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 WHITAKER ?= whitaker
