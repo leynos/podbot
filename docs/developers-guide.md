@@ -152,20 +152,22 @@ test. Doctests remain a separate phase, and empty phases are reported as
 skipped.
 
 `make test` runs the runner twice unless `TEST_FLAGS` narrows the selection.
-The first call (`WARM_FLAGS` in the Makefile) selects only those two trybuild
-targets (or the `--test` selection `TEST_FLAGS` names itself) with the pass's
-own flags (`TEST_FLAGS` without `--all-targets`, `RUST_FLAGS` and
-`BUILD_JOBS`), so the trybuild build trees under `target/tests/trybuild` are
-filled before the full run. It covers the default `--all-targets`, a
-feature-only selection such as `--features internal`, and the explicit CI
-selections. Each runner call has its own `--timeout`, so the cold build of
-those trees is not charged to the full run's deadline. The warm-up is
-preparation only: if it fails, the full run still follows and reports the
-failure itself, so `--no-fail-fast` keeps its meaning. A selection that narrows
-to `--doc`, `--lib`, `--bin(s)`, `--example(s)` or `--bench(es)` never reaches
-the harnesses and runs once, as asked, with no warm-up. Keep the two calls'
-flags in step. The UI tests need the provisioned exact MSRV toolchain and
-refuse a workspace rustc wrapper, so unset `RUSTC_WORKSPACE_WRAPPER` when
+The first call (`WARM_FLAGS` in the Makefile) selects only the registered
+trybuild targets the full pass reaches, with the pass's own build flags
+(`RUST_FLAGS`, `BUILD_JOBS` and the features and other options of `TEST_FLAGS`,
+without its target selectors), so the trybuild build trees under
+`target/tests/trybuild` are filled before the full run. Selectors combine as
+the runner combines them: a broad selector (`--all-targets`, `--tests`) reaches
+both harnesses whatever sits beside it; otherwise a named `--test NAME` or
+`--test=NAME` reaches what it names; otherwise a narrow selector (`--doc`,
+`--lib`, `--bin(s)`, `--example(s)`, `--bench(es)`) reaches neither, so the run
+is once, as asked, with no warm-up; a feature-only selection such as
+`--features internal` reaches both. Each runner call has its own `--timeout`,
+so the cold build of those trees is not charged to the full run's deadline. The
+warm-up is preparation only: if it fails, the full run still follows and
+reports the failure itself, so `--no-fail-fast` keeps its meaning. Keep the two
+calls' flags in step. The UI tests need the provisioned exact MSRV toolchain
+and refuse a workspace rustc wrapper, so unset `RUSTC_WORKSPACE_WRAPPER` when
 running them locally.
 
 The two UI verification consumers, `compile_contract` and `cli_feature_gating`,

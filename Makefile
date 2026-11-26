@@ -20,18 +20,28 @@ RUST_FLAGS ?= -D warnings
 CARGO_FLAGS ?= --all-targets --all-features
 CLIPPY_FLAGS ?= $(CARGO_FLAGS) -- $(RUST_FLAGS)
 TEST_FLAGS ?= $(CARGO_FLAGS)
-# What the trybuild warm-up runs: only the harnesses the full pass reaches (the
-# `--test NAME` or `--test=NAME` selection the pass names itself, else both) with
-# the pass's own build flags (features, jobs). The target selectors are dropped
-# from the warm-up's flags so it never runs ordinary tests twice. A pass that
-# narrows to library, binary, example, bench or doc targets without naming a
-# `--test` never reaches the harnesses, so it has no warm-up.
-WARM_NARROWING ?= --doc --lib --bin --bins --example --examples --bench --benches
-WARM_SELECTORS ?= --all-targets --tests $(WARM_NARROWING)
-WARM_NAMED = $(filter --test --test=%,$(TEST_FLAGS))
-WARM_SELECTION = $(if $(WARM_NAMED),,--test compile_contract --test cli_feature_gating)
-WARM_IS_NARROWED = $(if $(WARM_NAMED),,$(filter $(WARM_NARROWING),$(TEST_FLAGS)))
-WARM_FLAGS ?= $(if $(WARM_IS_NARROWED),,$(WARM_SELECTION) $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(filter-out $(WARM_SELECTORS),$(TEST_FLAGS)))
+# What the trybuild warm-up runs: only the registered harnesses the full pass
+# reaches, with the pass's own build flags (features, jobs) and none of its
+# target selectors, so it never runs ordinary tests twice. Selectors combine, as
+# the runner combines them:
+#   - a broad selector (`--all-targets`, `--tests`) reaches both harnesses,
+#     whatever narrow or named selectors sit beside it;
+#   - otherwise a named `--test NAME` or `--test=NAME` reaches what it names;
+#   - otherwise a narrow selector (`--doc`, `--lib`, `--bin(s)`, `--example(s)`,
+#     `--bench(es)`, attached values included) reaches neither, and no warm-up runs;
+#   - otherwise (a feature-only selection) both harnesses are reached.
+WARM_HARNESSES ?= compile_contract cli_feature_gating
+WARM_BROAD ?= --all-targets --tests
+WARM_NARROW ?= --doc --lib --bin --bins --example --examples --bench --benches --bin=% --example=% --bench=%
+WARM_PAIRED ?= --test --bin --example --bench
+# The words of $(1) with every paired selector and the value after it dropped.
+warm_without_pairs = $(if $(1),$(if $(filter $(WARM_PAIRED),$(firstword $(1))),$(call warm_without_pairs,$(wordlist 3,$(words $(1)),$(1))),$(firstword $(1)) $(call warm_without_pairs,$(wordlist 2,$(words $(1)),$(1)))))
+# The values after `--test` in $(1).
+warm_named = $(if $(1),$(if $(filter --test,$(firstword $(1))),$(word 2,$(1)) )$(call warm_named,$(wordlist 2,$(words $(1)),$(1))))
+WARM_NAMED = $(strip $(call warm_named,$(TEST_FLAGS)) $(patsubst --test=%,%,$(filter --test=%,$(TEST_FLAGS))))
+WARM_TARGETS = $(strip $(if $(filter $(WARM_BROAD),$(TEST_FLAGS)),$(WARM_HARNESSES),$(if $(WARM_NAMED),$(WARM_NAMED),$(if $(filter $(WARM_NARROW),$(TEST_FLAGS)),,$(WARM_HARNESSES)))))
+WARM_BUILD_FLAGS = $(filter-out $(WARM_BROAD) $(WARM_NARROW) --test=%,$(call warm_without_pairs,$(TEST_FLAGS)))
+WARM_FLAGS ?= $(if $(WARM_TARGETS),$(addprefix --test ,$(WARM_TARGETS)) $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(WARM_BUILD_FLAGS))
 TEST_TIMEOUT ?=$(if $(PODBOT_TEST_TIMEOUT),$(PODBOT_TEST_TIMEOUT),1800)
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 WHITAKER ?= whitaker
