@@ -151,6 +151,14 @@ of the parent build process, including the no-default-features CLI boundary
 test. Doctests remain a separate phase, and empty phases are reported as
 skipped.
 
+`make test` runs the runner twice. The first call selects only those two
+trybuild targets with the pass's own flags (`TEST_FLAGS` without
+`--all-targets`, `RUST_FLAGS` and `BUILD_JOBS`), so the trybuild build trees
+under `target/tests/trybuild` are filled before the full run, whose nested
+phase runs under the runner's `--timeout`. Keep the two calls' flags in step.
+The UI tests need the provisioned exact MSRV toolchain and refuse a workspace
+rustc wrapper, so unset `RUSTC_WORKSPACE_WRAPPER` when running them locally.
+
 The two UI verification consumers, `compile_contract` and `cli_feature_gating`,
 share only the synchronous boundary in
 `tests/test_utils/ui_verification/mod.rs`. This helper owns compiler selection

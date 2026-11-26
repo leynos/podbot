@@ -128,6 +128,14 @@ clean: ## Remove build artefacts
 	rm -rf .uv-cache .uv-tools
 
 test: ## Run tests with warnings treated as errors
+	@# Pay for the trybuild builds before the timed pass: the runner builds and runs
+	@# the two registered nested-Cargo targets once, with the flags of the pass, so
+	@# the full run below finds trybuild build trees warm.
+	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
+		python scripts/test_runner.py --cargo "$(CARGO)" \
+		--timeout "$(TEST_TIMEOUT)" -- \
+		--test compile_contract --test cli_feature_gating \
+		$(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(filter-out --all-targets,$(TEST_FLAGS))
 	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		python scripts/test_runner.py --cargo "$(CARGO)" \
 		--timeout "$(TEST_TIMEOUT)" -- \
