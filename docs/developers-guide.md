@@ -151,13 +151,17 @@ of the parent build process, including the no-default-features CLI boundary
 test. Doctests remain a separate phase, and empty phases are reported as
 skipped.
 
-`make test` runs the runner twice. The first call selects only those two
-trybuild targets with the pass's own flags (`TEST_FLAGS` without
-`--all-targets`, `RUST_FLAGS` and `BUILD_JOBS`), so the trybuild build trees
-under `target/tests/trybuild` are filled before the full run, whose nested
-phase runs under the runner's `--timeout`. Keep the two calls' flags in step.
-The UI tests need the provisioned exact MSRV toolchain and refuse a workspace
-rustc wrapper, so unset `RUSTC_WORKSPACE_WRAPPER` when running them locally.
+When `TEST_FLAGS` selects every target (the default, `--all-targets`),
+`make test` runs the runner twice. The first call (`WARM_FLAGS` in the
+Makefile) selects only those two trybuild targets with the pass's own flags
+(`TEST_FLAGS` without `--all-targets`, `RUST_FLAGS` and `BUILD_JOBS`), so the
+trybuild build trees under `target/tests/trybuild` are filled before the full
+run. Each runner call has its own `--timeout`, so the cold build of those trees
+is not charged to the full run's deadline. A narrower selection (`--doc`,
+`--lib`, an explicit `--test`) runs once, as asked, with no warm-up. Keep the
+two calls' flags in step. The UI tests need the provisioned exact MSRV
+toolchain and refuse a workspace rustc wrapper, so unset
+`RUSTC_WORKSPACE_WRAPPER` when running them locally.
 
 The two UI verification consumers, `compile_contract` and `cli_feature_gating`,
 share only the synchronous boundary in
