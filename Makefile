@@ -39,7 +39,11 @@ warm_without_pairs = $(if $(1),$(if $(filter $(WARM_PAIRED),$(firstword $(1))),$
 # The values after `--test` in $(1).
 warm_named = $(if $(1),$(if $(filter --test,$(firstword $(1))),$(word 2,$(1)) )$(call warm_named,$(wordlist 2,$(words $(1)),$(1))))
 WARM_NAMED = $(strip $(call warm_named,$(TEST_FLAGS)) $(patsubst --test=%,%,$(filter --test=%,$(TEST_FLAGS))))
-WARM_TARGETS = $(strip $(if $(filter $(WARM_BROAD),$(TEST_FLAGS)),$(WARM_HARNESSES),$(if $(WARM_NAMED),$(WARM_NAMED),$(if $(filter $(WARM_NARROW),$(TEST_FLAGS)),,$(WARM_HARNESSES)))))
+# The registered harnesses a named selection matches (`*` stands for any text, as
+# Cargo's `--test` globs do, one to a pattern); other named targets are ordinary
+# tests the full pass runs and the warm-up leaves alone.
+WARM_MATCHED = $(sort $(foreach h,$(WARM_HARNESSES),$(if $(filter $(subst *,%,$(WARM_NAMED)),$(h)),$(h))))
+WARM_TARGETS = $(strip $(if $(filter $(WARM_BROAD),$(TEST_FLAGS)),$(WARM_HARNESSES),$(if $(WARM_NAMED),$(WARM_MATCHED),$(if $(filter $(WARM_NARROW),$(TEST_FLAGS)),,$(WARM_HARNESSES)))))
 WARM_BUILD_FLAGS = $(filter-out $(WARM_BROAD) $(WARM_NARROW) --test=%,$(call warm_without_pairs,$(TEST_FLAGS)))
 WARM_FLAGS ?= $(if $(WARM_TARGETS),$(addprefix --test ,$(WARM_TARGETS)) $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(WARM_BUILD_FLAGS))
 TEST_TIMEOUT ?=$(if $(PODBOT_TEST_TIMEOUT),$(PODBOT_TEST_TIMEOUT),1800)
