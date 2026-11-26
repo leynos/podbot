@@ -20,7 +20,41 @@ RUST_FLAGS ?= -D warnings
 CARGO_FLAGS ?= --all-targets --all-features
 CLIPPY_FLAGS ?= $(CARGO_FLAGS) -- $(RUST_FLAGS)
 TEST_FLAGS ?= $(CARGO_FLAGS)
-TEST_TIMEOUT ?= $(if $(PODBOT_TEST_TIMEOUT),$(PODBOT_TEST_TIMEOUT),1800)
+# What the trybuild warm-up runs: only the registered harnesses the full pass
+# reaches, with the pass's own build flags (features, jobs) and none of its
+# target selectors, so it never runs ordinary tests twice. Selectors combine, as
+# the runner combines them:
+#   - a broad selector (`--all-targets`, `--tests`) reaches both harnesses,
+#     whatever narrow or named selectors sit beside it;
+#   - otherwise a named `--test NAME` or `--test=NAME` reaches what it names;
+#   - otherwise a narrow selector (`--doc`, `--lib`, `--bin(s)`, `--example(s)`,
+#     `--bench(es)`, attached values included) reaches neither, and no warm-up runs;
+#   - otherwise (a feature-only selection) both harnesses are reached.
+WARM_HARNESSES ?= compile_contract cli_feature_gating
+WARM_BROAD ?= --all-targets --tests
+WARM_NARROW ?= --doc --lib --bin --bins --example --examples --bench --benches --bin=% --example=% --bench=%
+WARM_PAIRED ?= --test --bin --example --bench
+# The words of $(1) before a `--`: what follows it is for the test binary, never a
+# Cargo selector.
+warm_head = $(if $(1),$(if $(filter --,$(firstword $(1))),,$(firstword $(1)) $(call warm_head,$(wordlist 2,$(words $(1)),$(1)))))
+WARM_HEAD = $(call warm_head,$(TEST_FLAGS))
+# The words of $(1) with every paired selector and the value after it dropped.
+warm_without_pairs = $(if $(1),$(if $(filter $(WARM_PAIRED),$(firstword $(1))),$(call warm_without_pairs,$(wordlist 3,$(words $(1)),$(1))),$(firstword $(1)) $(call warm_without_pairs,$(wordlist 2,$(words $(1)),$(1)))))
+# The values after `--test` in $(1).
+warm_named = $(if $(1),$(if $(filter --test,$(firstword $(1))),$(word 2,$(1)) )$(call warm_named,$(wordlist 2,$(words $(1)),$(1))))
+# The shell removes the quotes around a value (`--test "compile_contract"`) before
+# Cargo sees it, so they are removed here before the names are matched.
+WARM_NAMED = $(subst ",,$(subst ',,$(strip $(call warm_named,$(WARM_HEAD)) $(patsubst --test=%,%,$(filter --test=%,$(WARM_HEAD))))))
+# The registered harnesses a named selection matches. A plain name matches itself;
+# a name with a glob character (`*`, `?`, `[`: the runner matches with `fnmatch`,
+# which Make's `%` cannot express) may match either, so both are warmed. Other
+# named targets are ordinary tests the full pass runs and the warm-up leaves alone.
+WARM_GLOBBED = $(findstring *,$(WARM_NAMED))$(findstring ?,$(WARM_NAMED))$(findstring [,$(WARM_NAMED))
+WARM_MATCHED = $(if $(WARM_GLOBBED),$(WARM_HARNESSES),$(sort $(filter $(WARM_HARNESSES),$(WARM_NAMED))))
+WARM_TARGETS = $(strip $(if $(filter $(WARM_BROAD),$(WARM_HEAD)),$(WARM_HARNESSES),$(if $(WARM_NAMED),$(WARM_MATCHED),$(if $(filter $(WARM_NARROW),$(WARM_HEAD)),,$(WARM_HARNESSES)))))
+WARM_BUILD_FLAGS = $(filter-out $(WARM_BROAD) $(WARM_NARROW) --test=%,$(call warm_without_pairs,$(WARM_HEAD)))
+WARM_FLAGS ?= $(if $(WARM_TARGETS),$(addprefix --test ,$(WARM_TARGETS)) $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(WARM_BUILD_FLAGS))
+TEST_TIMEOUT ?=$(if $(PODBOT_TEST_TIMEOUT),$(PODBOT_TEST_TIMEOUT),1800)
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 WHITAKER ?= whitaker
 NIXIE ?= nixie
@@ -128,6 +162,19 @@ clean: ## Remove build artefacts
 	rm -rf .uv-cache .uv-tools
 
 test: ## Run tests with warnings treated as errors
+	@# Pay for the trybuild builds before the full pass, under a runner call (and
+	@# so a deadline) of their own: the runner builds and runs the two registered
+	@# nested-Cargo targets once, with the flags of the pass, so the full run below
+	@# finds their build trees warm. A pass that narrows to `--doc`, `--lib` or
+	@# another target kind that never reaches them runs as asked, with no warm-up.
+	@# The warm-up is preparation only: if it fails, the full run still follows and
+	@# reports the failure itself, so `--no-fail-fast` keeps its meaning.
+	@# The guard is decided by Make, never by a shell test: the flags may carry
+	@# quotes (`--features "a b"`) that a shell test would misread.
+	$(if $(strip $(WARM_FLAGS)),RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
+		python scripts/test_runner.py --cargo "$(CARGO)" \
+		--timeout "$(TEST_TIMEOUT)" -- $(WARM_FLAGS) \
+		|| echo 'warning: the trybuild warm-up failed; the full run follows' >&2)
 	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		python scripts/test_runner.py --cargo "$(CARGO)" \
 		--timeout "$(TEST_TIMEOUT)" -- \
