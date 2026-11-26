@@ -164,12 +164,14 @@ both harnesses whatever sits beside it; otherwise a named `--test NAME` or
 has no warm-up); otherwise a narrow selector (`--doc`, `--lib`, `--bin(s)`,
 `--example(s)`, `--bench(es)`) reaches neither, so the run is once, as asked,
 with no warm-up; a feature-only selection such as `--features internal` reaches
-both. Each runner call has its own `--timeout`, so the cold build of those
-trees is not charged to the full run's deadline. The warm-up is preparation
-only: if it fails, the full run still follows and reports the failure itself, so
-`--no-fail-fast` keeps its meaning. Keep the two calls' flags in step. The UI
-tests need the provisioned exact MSRV toolchain and refuse a workspace rustc
-wrapper, so unset `RUSTC_WORKSPACE_WRAPPER` when running them locally.
+both. Arguments after a `--` are for the test binary and are never read as
+selectors or forwarded to the warm-up. Each runner call has its own
+`--timeout`, so the cold build of those trees is not charged to the full run's
+deadline. The warm-up is preparation only: if it fails, the full run still
+follows and reports the failure itself, so `--no-fail-fast` keeps its meaning.
+Keep the two calls' flags in step. The UI tests need the provisioned exact MSRV
+toolchain and refuse a workspace rustc wrapper, so unset
+`RUSTC_WORKSPACE_WRAPPER` when running them locally.
 
 The two UI verification consumers, `compile_contract` and `cli_feature_gating`,
 share only the synchronous boundary in
