@@ -167,12 +167,12 @@ test: ## Run tests with warnings treated as errors
 	@# another target kind that never reaches them runs as asked, with no warm-up.
 	@# The warm-up is preparation only: if it fails, the full run still follows and
 	@# reports the failure itself, so `--no-fail-fast` keeps its meaning.
-	if [ -n "$(WARM_FLAGS)" ]; then \
-		RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
-			python scripts/test_runner.py --cargo "$(CARGO)" \
-			--timeout "$(TEST_TIMEOUT)" -- $(WARM_FLAGS) \
-			|| echo 'warning: the trybuild warm-up failed; the full run follows' >&2; \
-	fi
+	@# The guard is decided by Make, never by a shell test: the flags may carry
+	@# quotes (`--features "a b"`) that a shell test would misread.
+	$(if $(strip $(WARM_FLAGS)),RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
+		python scripts/test_runner.py --cargo "$(CARGO)" \
+		--timeout "$(TEST_TIMEOUT)" -- $(WARM_FLAGS) \
+		|| echo 'warning: the trybuild warm-up failed; the full run follows' >&2)
 	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		python scripts/test_runner.py --cargo "$(CARGO)" \
 		--timeout "$(TEST_TIMEOUT)" -- \
