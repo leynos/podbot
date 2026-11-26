@@ -259,8 +259,11 @@ report its normal error. A private selector helper applies that exception only
 within `_unique_selected_targets`; plural category selectors continue to filter
 against enabled features.
 
-The run has one bounded deadline. Set `TEST_TIMEOUT` as a Make variable, or
-`PODBOT_TEST_TIMEOUT` in the environment; the default is 1800 seconds. A
+Each runner call has one bounded deadline, so a `make test` that runs the
+trybuild warm-up first can take up to twice the value, each call against its
+own budget. Set `TEST_TIMEOUT` as a Make variable, or `PODBOT_TEST_TIMEOUT` in
+the environment; the default is 1800 seconds. The cold trybuild build measured
+in this repository's CI is far below it (the warm-up call took about 454 s). A
 timeout exits with status 124. An interrupt exits with 128 plus the signal
 number. Periodic and terminal diagnostics include the command, process ancestry
 and elapsed time, toolchain details, and recognized Cargo cache or target-lock
