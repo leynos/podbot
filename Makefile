@@ -34,19 +34,23 @@ WARM_HARNESSES ?= compile_contract cli_feature_gating
 WARM_BROAD ?= --all-targets --tests
 WARM_NARROW ?= --doc --lib --bin --bins --example --examples --bench --benches --bin=% --example=% --bench=%
 WARM_PAIRED ?= --test --bin --example --bench
+# The words of $(1) before a `--`: what follows it is for the test binary, never a
+# Cargo selector.
+warm_head = $(if $(1),$(if $(filter --,$(firstword $(1))),,$(firstword $(1)) $(call warm_head,$(wordlist 2,$(words $(1)),$(1)))))
+WARM_HEAD = $(call warm_head,$(TEST_FLAGS))
 # The words of $(1) with every paired selector and the value after it dropped.
 warm_without_pairs = $(if $(1),$(if $(filter $(WARM_PAIRED),$(firstword $(1))),$(call warm_without_pairs,$(wordlist 3,$(words $(1)),$(1))),$(firstword $(1)) $(call warm_without_pairs,$(wordlist 2,$(words $(1)),$(1)))))
 # The values after `--test` in $(1).
 warm_named = $(if $(1),$(if $(filter --test,$(firstword $(1))),$(word 2,$(1)) )$(call warm_named,$(wordlist 2,$(words $(1)),$(1))))
-WARM_NAMED = $(strip $(call warm_named,$(TEST_FLAGS)) $(patsubst --test=%,%,$(filter --test=%,$(TEST_FLAGS))))
+WARM_NAMED = $(strip $(call warm_named,$(WARM_HEAD)) $(patsubst --test=%,%,$(filter --test=%,$(WARM_HEAD))))
 # The registered harnesses a named selection matches. A plain name matches itself;
 # a name with a glob character (`*`, `?`, `[`: the runner matches with `fnmatch`,
 # which Make's `%` cannot express) may match either, so both are warmed. Other
 # named targets are ordinary tests the full pass runs and the warm-up leaves alone.
 WARM_GLOBBED = $(findstring *,$(WARM_NAMED))$(findstring ?,$(WARM_NAMED))$(findstring [,$(WARM_NAMED))
 WARM_MATCHED = $(if $(WARM_GLOBBED),$(WARM_HARNESSES),$(sort $(filter $(WARM_HARNESSES),$(WARM_NAMED))))
-WARM_TARGETS = $(strip $(if $(filter $(WARM_BROAD),$(TEST_FLAGS)),$(WARM_HARNESSES),$(if $(WARM_NAMED),$(WARM_MATCHED),$(if $(filter $(WARM_NARROW),$(TEST_FLAGS)),,$(WARM_HARNESSES)))))
-WARM_BUILD_FLAGS = $(filter-out $(WARM_BROAD) $(WARM_NARROW) --test=%,$(call warm_without_pairs,$(TEST_FLAGS)))
+WARM_TARGETS = $(strip $(if $(filter $(WARM_BROAD),$(WARM_HEAD)),$(WARM_HARNESSES),$(if $(WARM_NAMED),$(WARM_MATCHED),$(if $(filter $(WARM_NARROW),$(WARM_HEAD)),,$(WARM_HARNESSES)))))
+WARM_BUILD_FLAGS = $(filter-out $(WARM_BROAD) $(WARM_NARROW) --test=%,$(call warm_without_pairs,$(WARM_HEAD)))
 WARM_FLAGS ?= $(if $(WARM_TARGETS),$(addprefix --test ,$(WARM_TARGETS)) $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(WARM_BUILD_FLAGS))
 TEST_TIMEOUT ?=$(if $(PODBOT_TEST_TIMEOUT),$(PODBOT_TEST_TIMEOUT),1800)
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
