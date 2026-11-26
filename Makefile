@@ -42,7 +42,9 @@ WARM_HEAD = $(call warm_head,$(TEST_FLAGS))
 warm_without_pairs = $(if $(1),$(if $(filter $(WARM_PAIRED),$(firstword $(1))),$(call warm_without_pairs,$(wordlist 3,$(words $(1)),$(1))),$(firstword $(1)) $(call warm_without_pairs,$(wordlist 2,$(words $(1)),$(1)))))
 # The values after `--test` in $(1).
 warm_named = $(if $(1),$(if $(filter --test,$(firstword $(1))),$(word 2,$(1)) )$(call warm_named,$(wordlist 2,$(words $(1)),$(1))))
-WARM_NAMED = $(strip $(call warm_named,$(WARM_HEAD)) $(patsubst --test=%,%,$(filter --test=%,$(WARM_HEAD))))
+# The shell removes the quotes around a value (`--test "compile_contract"`) before
+# Cargo sees it, so they are removed here before the names are matched.
+WARM_NAMED = $(subst ",,$(subst ',,$(strip $(call warm_named,$(WARM_HEAD)) $(patsubst --test=%,%,$(filter --test=%,$(WARM_HEAD))))))
 # The registered harnesses a named selection matches. A plain name matches itself;
 # a name with a glob character (`*`, `?`, `[`: the runner matches with `fnmatch`,
 # which Make's `%` cannot express) may match either, so both are warmed. Other
