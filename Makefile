@@ -20,9 +20,13 @@ RUST_FLAGS ?= -D warnings
 CARGO_FLAGS ?= --all-targets --all-features
 CLIPPY_FLAGS ?= $(CARGO_FLAGS) -- $(RUST_FLAGS)
 TEST_FLAGS ?= $(CARGO_FLAGS)
-# What the trybuild warm-up runs: the two harnesses with the pass's own flags
-# (features, jobs), and only when the pass selects every target. Empty otherwise.
-WARM_FLAGS ?= $(if $(filter --all-targets,$(TEST_FLAGS)),--test compile_contract --test cli_feature_gating $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(filter-out --all-targets,$(TEST_FLAGS)))
+# What the trybuild warm-up runs: the two harnesses (or the `--test` selection the
+# pass names itself) with the pass's own flags (features, jobs). Empty when the
+# pass narrows to library, binary, example, bench or doc targets, which never
+# reach the harnesses.
+WARM_NARROWING ?= --doc --lib --bin --bins --example --examples --bench --benches
+WARM_SELECTION = $(if $(filter --test,$(TEST_FLAGS)),,--test compile_contract --test cli_feature_gating)
+WARM_FLAGS ?= $(if $(filter $(WARM_NARROWING),$(TEST_FLAGS)),,$(WARM_SELECTION) $(if $(strip $(BUILD_JOBS)),$(BUILD_JOBS) )$(filter-out --all-targets,$(TEST_FLAGS)))
 TEST_TIMEOUT ?=$(if $(PODBOT_TEST_TIMEOUT),$(PODBOT_TEST_TIMEOUT),1800)
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 WHITAKER ?= whitaker
@@ -134,12 +138,15 @@ test: ## Run tests with warnings treated as errors
 	@# Pay for the trybuild builds before the full pass, under a runner call (and
 	@# so a deadline) of their own: the runner builds and runs the two registered
 	@# nested-Cargo targets once, with the flags of the pass, so the full run below
-	@# finds their build trees warm. Only a pass that selects every target needs
-	@# it; `--doc`, `--lib` or an explicit `--test` selection runs as asked.
+	@# finds their build trees warm. A pass that narrows to `--doc`, `--lib` or
+	@# another target kind that never reaches them runs as asked, with no warm-up.
+	@# The warm-up is preparation only: if it fails, the full run still follows and
+	@# reports the failure itself, so `--no-fail-fast` keeps its meaning.
 	if [ -n "$(WARM_FLAGS)" ]; then \
 		RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
 			python scripts/test_runner.py --cargo "$(CARGO)" \
-			--timeout "$(TEST_TIMEOUT)" -- $(WARM_FLAGS); \
+			--timeout "$(TEST_TIMEOUT)" -- $(WARM_FLAGS) \
+			|| echo 'warning: the trybuild warm-up failed; the full run follows' >&2; \
 	fi
 	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(UV_ENV) $(UV) run --no-project --python 3.14 \
 		python scripts/test_runner.py --cargo "$(CARGO)" \
